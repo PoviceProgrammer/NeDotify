@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Montserrat:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="js/lucide.min.js?v=3"></script>
+    <link rel="icon" type="image/png" href="logo.png">
     <link rel="stylesheet" href="css/themes.css?v=2">
     <link rel="stylesheet" href="css/styles.css?v=7">
 </head>
@@ -20,7 +21,10 @@
 <!-- Title Bar (Frameless window) -->
 <div id="title-bar">
     <div class="pywebview-drag-region" style="position:absolute; top:0; left:0; bottom:0; right:150px; z-index:1;"></div>
-    <span class="title-text" id="title-text" style="z-index:2; position:relative; pointer-events:none;">NeDotify</span>
+    <span class="title-text" id="title-text" style="z-index:2; position:relative; pointer-events:none; display:flex; align-items:center; gap:8px;">
+        <img src="logo.png" style="width:18px;height:18px;border-radius:4px;object-fit:cover;">
+        NeDotify
+    </span>
     <div class="window-controls" style="z-index:2; position:relative;">
         <button id="btn-mini-player" title="Компактный мини-плеер"><i data-lucide="picture-in-picture-2" style="width:14px;height:14px"></i></button>
         <button id="btn-minimize" title=""><i data-lucide="minus" style="width:14px;height:14px"></i></button>
@@ -43,8 +47,8 @@
     
     <!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђ Sidebar в•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
     <aside id="sidebar">
-        <div class="sidebar-logo">
-            <i data-lucide="music" style="width:24px;height:24px"></i>
+        <div class="sidebar-logo" style="display:flex; align-items:center; gap:10px;">
+            <img src="logo.png" style="width:28px;height:28px;border-radius:8px;object-fit:cover;">
             NeDotify
         </div>
 

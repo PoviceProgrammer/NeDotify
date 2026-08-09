@@ -15,7 +15,7 @@ def run_cmd(cmd):
 def main():
     print("=== Step 1: Building Uninstaller ===")
     uninstaller_cmd = (
-        'python -m PyInstaller --noconfirm --onefile --windowed '
+        'python -m PyInstaller --noconfirm --onefile --windowed --icon=icon.ico '
         '--name "uninstall" '
         'uninstaller_gui.py'
     )
@@ -38,7 +38,7 @@ def main():
         
     print("=== Step 3: Building Setup Executable (NeDotify_Setup.exe) ===")
     installer_cmd = (
-        'python -m PyInstaller --noconfirm --onefile --windowed '
+        'python -m PyInstaller --noconfirm --onefile --windowed --icon=icon.ico '
         '--name "NeDotify_Setup" '
         '--add-data "dist/NeDotify.exe;." '
         '--add-data "dist/uninstall.exe;." '
