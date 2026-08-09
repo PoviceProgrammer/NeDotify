@@ -26,6 +26,16 @@ backups/
 *.exe
 *.msi
 
+# Tests & Dev Artifacts
+test_*.py
+tests/
+.test_runs/
+.vite/
+user_prompts*.md
+out*.txt
+prompt*.txt
+*.log
+
 # Extraction artifacts (DO NOT COMMIT)
 NeDotify.exe_extracted/
 AURA_Music.exe_extracted/
