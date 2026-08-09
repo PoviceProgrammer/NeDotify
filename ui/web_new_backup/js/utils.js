@@ -305,7 +305,7 @@ function getSourceIcon(source) {
         case 'youtube': return '<i data-lucide="youtube" style="width:12px;height:12px"></i>';
         case 'soundcloud': return '<i data-lucide="cloud" style="width:12px;height:12px"></i>';
         case 'yandex': return '<strong style="font-size:10px;line-height:1">Я</strong>';
-
+        case 'vk': return '<strong style="font-size:10px;line-height:1">VK</strong>';
         case 'local': return '<i data-lucide="folder" style="width:12px;height:12px"></i>';
         default: return '';
     }

@@ -1,4 +1,4 @@
-// NeDotify - Queue Module
+﻿// NeDotify - Queue Module
 import { formatTime, renderIcons, getCoverUrl } from './utils.js?v=19';
 import { getCurrentTrack, playTrack } from './player.js?v=19';
 
@@ -88,13 +88,11 @@ function renderQueue(tracks, currentIndex) {
                 isDraggingThis = false;
                 return;
             }
-            if (item.classList.contains('playing')) {
-                return; // Already playing
-            }
 
             if (window.pywebview?.api?.play_track) {
                 window.pywebview.api.play_track(track, currentQueue);
             }
+            playTrack(track, track.stream_url);
         });
 
         // Drag & Drop Events

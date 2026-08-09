@@ -54,13 +54,8 @@ function adjustLyricsOffset(deltaMs) {
     const track = getCurrentTrack();
     if (track) {
         const trackKey = String(track.source_id || track.id || track.title || '');
-        if (trackKey) {
-            try {
-                localStorage.setItem(`nedotify_lyrics_offset_${trackKey}`, currentOffsetMs);
-            } catch(e) {}
-            if (window.pywebview?.api?.save_setting) {
-                window.pywebview.api.save_setting(`lyrics_offset_${trackKey}`, currentOffsetMs, 'lyrics');
-            }
+        if (trackKey && window.pywebview?.api?.save_setting) {
+            window.pywebview.api.save_setting(`lyrics_offset_${trackKey}`, currentOffsetMs, 'lyrics');
         }
     }
     currentLineIndex = -1;
@@ -69,7 +64,7 @@ function adjustLyricsOffset(deltaMs) {
 
 export function initLyrics() {
     const btn = document.getElementById('pp-btn-lyrics');
-    const closeBtn = document.getElementById('btn-close-lyrics');
+    const closeBtn = document.getElementById('lyrics-close');
     const overlay = document.getElementById('lyrics-overlay');
 
     window.NeDotify = window.NeDotify || {};
@@ -161,38 +156,17 @@ function loadCurrentTrackLyrics() {
     currentOffsetMs = 0;
 
     const trackKey = String(track.source_id || track.id || track.title || '');
-    if (trackKey) {
-        try {
-            const saved = localStorage.getItem(`nedotify_lyrics_offset_${trackKey}`);
-            if (saved) currentOffsetMs = parseInt(saved) || 0;
-        } catch(e) {
-            currentOffsetMs = 0;
-        }
+    if (trackKey && window.pywebview?.api?.get_setting) {
+        window.pywebview.api.get_setting(`lyrics_offset_${trackKey}`, 0, 'lyrics').then(val => {
+            currentOffsetMs = parseInt(val) || 0;
+        }).catch(() => { currentOffsetMs = 0; });
     }
     
     if (window.pywebview?.api) {
-        let p;
         if (track.file_path) {
-            p = window.pywebview.api.get_lyrics(track.title, track.artist, track.duration ? track.duration * 1000 : 0, track.file_path);
+            window.pywebview.api.get_lyrics(track.title, track.artist, track.duration ? track.duration * 1000 : 0, track.file_path);
         } else {
-            p = window.pywebview.api.get_lyrics(track.title, track.artist, track.duration ? track.duration * 1000 : 0);
-        }
-        
-        if (p && p.then) {
-            p.then(res => {
-                if (res) {
-                    renderLyrics({
-                        syncedLyrics: res.synced_lyrics,
-                        plainLyrics: res.plain_lyrics,
-                        instrumental: res.instrumental
-                    });
-                } else {
-                    renderLyrics(null);
-                }
-            }).catch(err => {
-                console.error("get_lyrics error:", err);
-                renderLyrics(null);
-            });
+            window.pywebview.api.get_lyrics(track.title, track.artist, track.duration ? track.duration * 1000 : 0);
         }
     }
 }

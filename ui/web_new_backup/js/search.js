@@ -32,21 +32,6 @@ export function initSearch() {
     const activeIconSpan = document.getElementById('search-platform-active-icon');
 
     if (input) {
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                input.blur();
-                const query = e.target.value.trim();
-                if (query.length > 0) {
-                    clearTimeout(searchDebounce);
-                    showLoading();
-                    allResults = [];
-                    currentSearchQuery = query;
-                    api('search', query, currentSource, currentType === 'all' ? null : currentType);
-                }
-            }
-        });
-
         input.addEventListener('input', (e) => {
             isViewingArtistProfile = false;
             const query = e.target.value.trim();
@@ -59,7 +44,7 @@ export function initSearch() {
                 searchDebounce = setTimeout(() => {
                     allResults = [];
                     currentSearchQuery = query;
-                    api('search', query, currentSource, currentType === 'all' ? null : currentType);
+                    api('search', query, currentSource);
                 }, 300);
             } else {
                 currentSearchQuery = '';
@@ -122,7 +107,7 @@ export function initSearch() {
                 allResults = [];
                 currentSearchQuery = query;
                 showLoading();
-                api('search', query, currentSource, currentType === 'all' ? null : currentType);
+                api('search', query, currentSource);
             }
         });
     });
@@ -145,19 +130,11 @@ export function initSearch() {
                 } else {
                     const container = document.getElementById('search-results');
                     if (container) {
-                        container.innerHTML = '<div class="empty-state">Введите имя артиста для поиска</div>';
+                        container.innerHTML = '<div class="empty-state">Введите имя артиста для поиска профиля</div>';
                     }
                 }
-            } else {
-                const query = input?.value.trim() || currentSearchQuery;
-                if (query) {
-                    showLoading();
-                    allResults = [];
-                    currentSearchQuery = query;
-                    api('search', query, currentSource, currentType === 'all' ? null : currentType);
-                } else {
-                    showPlaceholder();
-                }
+            } else if (allResults.length > 0) {
+                renderResults(allResults);
             }
         });
     });

@@ -506,6 +506,7 @@ export function applySettingsFromBackend(settings) {
 
         if (settings.theme && settings.theme.font_family !== undefined) {
             const selectFont = document.getElementById('select-font-family');
+            if (selectFont) selectFont.value = settings.theme.font_family;
             document.documentElement.style.setProperty('--font-family', settings.theme.font_family);
         }
 
@@ -1736,7 +1737,7 @@ function setupPlayerSettingsPanel() {
     // Mini-player position buttons
     const mpPosGroup = document.getElementById('opt-mp-pos');
     if (mpPosGroup) {
-        mpPosGroup.querySelectorAll('.opt-card-btn').forEach(btn => {
+        mpPosGroup.querySelectorAll('.opt-card').forEach(btn => {
             btn.addEventListener('click', () => {
                 mpPosGroup.querySelectorAll('.opt-card-btn').forEach(b => {
                     b.classList.remove('active');

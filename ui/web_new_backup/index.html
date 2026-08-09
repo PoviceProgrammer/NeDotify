@@ -211,7 +211,7 @@
 
                     <!-- Platform Selector Dropdown -->
                     <div class="search-platform-wrapper">
-                        <button id="search-platform-btn" class="search-platform-btn" title="Источник поиска">
+                        <button id="search-platform-btn" class="search-platform-btn" title="сточник поиска">
                             <span id="search-platform-active-icon">
                                 <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20">
                                     <circle cx="12" cy="12" r="10" fill="#FF0000"/>
@@ -403,9 +403,6 @@
 
                     <!-- Mini Controls -->
                     <div class="player-full-controls player-card-controls">
-                        <button class="btn-ctrl" id="pp-btn-queue" title="Очередь" aria-label="Queue">
-                            <i data-lucide="list-music" style="width:20px;height:20px"></i>
-                        </button>
                         <button class="btn-ctrl" id="pp-btn-prev" title="Предыдущий">
                             <i data-lucide="skip-back" style="width:20px;height:20px"></i>
                         </button>
@@ -414,9 +411,6 @@
                         </button>
                         <button class="btn-ctrl" id="pp-btn-next" title="">
                             <i data-lucide="skip-forward" style="width:20px;height:20px"></i>
-                        </button>
-                        <button class="btn-ctrl" id="pp-btn-lyrics" title="Текст песни" aria-label="Lyrics">
-                            <i data-lucide="mic" style="width:20px;height:20px"></i>
                         </button>
                     </div>
                 </div>
@@ -646,7 +640,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="settings-section" style="display: none;">
+                        <div class="settings-section">
                             <div class="settings-section-title">Полупрозрачность окна</div>
                             <div class="setting-row">
                                 <div>
@@ -1364,7 +1358,7 @@
                             <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 12px; border-bottom: none;">
                                 <div style="width: 100%;">
                                     <div class="setting-label" style="margin-bottom:4px">Ссылка на внешнеый плейлист</div>
-                                    <div class="setting-sublabel" style="margin-bottom:8px">Поддерживаются Яндекс Музыка, YouTube и Spotify</div>
+                                    <div class="setting-sublabel" style="margin-bottom:8px">Поддерживаются Яндекс Музыка, YouTube, Spotify и VK</div>
                                     <input type="text" class="settings-input" id="input-import-playlist-url" placeholder="https://music.yandex.ru/users/.../playlists/...">
                                 </div>
                                 <div style="width: 100%;">
@@ -1630,7 +1624,7 @@
         </div>
         <div class="glass-modal-body" style="display:flex; flex-direction:column; gap:12px;">
             <div>
-                <label class="glass-modal-label" style="display:block; margin-bottom:6px; font-size:12px; color:var(--text-sec);">Ссылка на плейлист (YouTube, Spotify, Yandex)</label>
+                <label class="glass-modal-label" style="display:block; margin-bottom:6px; font-size:12px; color:var(--text-sec);">Ссылка на плейлист (YouTube, Spotify, Yandex, VK)</label>
                 <input type="text" id="modal-ip-url" class="glass-modal-input" placeholder="https://..." autocomplete="off">
             </div>
             <div>
@@ -1790,7 +1784,7 @@
                 <div style="font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 15px;">Шаг 3: Медиатека</div>
                 <div class="setting-info" style="margin-bottom: 15px;">
                     <div class="setting-label">Импортировать плейлист</div>
-                    <div class="setting-sublabel">Вставьте ссылку на плейлист (Spotify, Яндекс, YouTube), чтобы сразу загрузить любимую музыку.</div>
+                    <div class="setting-sublabel">Вставьте ссылку на плейлист (Spotify, VK, Яндекс, YouTube), чтобы сразу загрузить любимую музыку.</div>
                 </div>
                 <div style="margin: 0; width: 100%; height: 48px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; display: flex; align-items: center; padding: 0 14px; gap: 12px;">
                     <div style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
@@ -1855,6 +1849,14 @@
             <button id="queue-drawer-close" class="icon-btn" style="color: white; border:none; background:transparent;"><i data-lucide="x"></i></button>
         </div>
         <div id="queue-drawer-content"></div>
+    </div>
+
+    <!-- KARAOKE LYRICS OVERLAY -->
+    <div id="lyrics-overlay">
+        <button id="lyrics-close"><i data-lucide="x"></i></button>
+        <div id="lyrics-content">
+            <!-- Lyrics lines go here -->
+        </div>
     </div>
 
     <!-- CUSTOM CONTEXT MENU -->

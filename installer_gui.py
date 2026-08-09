@@ -41,6 +41,7 @@ Set Shortcut = WshShell.CreateShortcut("{shortcut_path}")
 Shortcut.TargetPath = "{target}"
 Shortcut.WorkingDirectory = "{work_dir}"
 Shortcut.Description = "{description}"
+Shortcut.IconLocation = "{target},0"
 Shortcut.Save
 '''
         vbs_file = os.path.join(os.environ["TEMP"], "create_nedotify_sc.vbs")
@@ -140,12 +141,12 @@ class InstallerApp:
 
         cb3 = tk.Checkbutton(
             opts_frame, 
-            text="Сбросить старый ключ и данные (требовать ключ при запуске)", 
+            text="Очистить кэш и временные данные прошлых версий", 
             variable=self.clean_var,
             onvalue=True,
             offvalue=False,
-            font=('Segoe UI', 10, 'bold'),
-            fg='#d97706',
+            font=('Segoe UI', 10),
+            fg='#4b5563',
             anchor='w',
             activebackground=root.cget('bg')
         )

@@ -2133,10 +2133,10 @@ select option {
     gap: 8px;
 }
 .eq-band-slider {
-    appearance: slider-vertical; /* Standard */
+    writing-mode: bt-lr; /* IE */
     -webkit-appearance: slider-vertical; /* WebKit */
     height: 100px;
-    width: 8px; /* Slightly wider */
+    width: 4px;
 }
 .eq-label {
     font-size: 10px;
