@@ -1,0 +1,562 @@
+// NeDotify — Utilities Module
+
+export function formatTime(seconds) {
+    if (!seconds || seconds <= 0) return "0:00";
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+export function formatListeningTime(ms) {
+    if (!ms || ms <= 0) return "0 мин";
+    const totalSeconds = Math.floor(ms / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    let parts = [];
+    if (days > 0) parts.push(`${days} д`);
+    if (hours > 0) parts.push(`${hours} ч`);
+    if (minutes > 0 || parts.length === 0) parts.push(`${minutes} мин`);
+    return parts.join(' ');
+}
+
+export function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+}
+
+export function extractDominantColor(imgEl) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    
+    canvas.width = imgEl.naturalWidth || imgEl.width || 100;
+    canvas.height = imgEl.naturalHeight || imgEl.height || 100;
+    
+    try {
+        ctx.drawImage(imgEl, 0, 0, canvas.width, canvas.height);
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let r = 0, g = 0, b = 0, count = 0;
+        for (let i = 0; i < data.length; i += 4 * 10) { // step by 10 pixels to speed up
+            if (data[i+3] > 128) { // ignore transparent pixels
+                r += data[i];
+                g += data[i+1];
+                b += data[i+2];
+                count++;
+            }
+        }
+        if (count === 0) return null;
+        r = Math.floor(r / count);
+        g = Math.floor(g / count);
+        b = Math.floor(b / count);
+        return {r, g, b};
+    } catch (e) {
+        console.warn('Canvas color extraction failed (CORS?):', e);
+        return null;
+    }
+}
+
+export function handleImageError(img, coverUrl, sourceId, source) {
+    if (img.dataset.failed) {
+        img.style.display = 'none';
+        return;
+    }
+    img.dataset.failed = 'true';
+    if (coverUrl && coverUrl.startsWith('http')) {
+        img.src = coverUrl;
+    } else if (sourceId && source === 'youtube') {
+        img.src = `https://img.youtube.com/vi/${sourceId}/hqdefault.jpg`;
+    } else {
+        img.style.display = 'none';
+    }
+}
+
+export function getCoverUrl(track) {
+    if (!track) return '';
+    if (track.cover_path) {
+        const path = track.cover_path.replace(/\\/g, '/');
+        const idx = path.indexOf('web_new/covers/');
+        if (idx !== -1) {
+            return './covers/' + path.substring(idx + 15);
+        }
+        const idxWeb = path.indexOf('ui/web/covers/');
+        if (idxWeb !== -1) {
+            return './covers/' + path.substring(idxWeb + 14);
+        }
+        return 'file:///' + path;
+    }
+    let url = track.cover_url || track.og_image || track.artwork_url || '';
+    if (url && url.includes('%%')) {
+        url = url.replace('%%', '400x400');
+    }
+    if (url && url.includes('yandex.net') && !url.includes('400x400') && !url.includes('200x200')) {
+        url = url.replace(/\/([0-9]+x[0-9]+)?$/, '/400x400');
+    }
+    if (url && !url.startsWith('http') && !url.startsWith('file:///') && !url.startsWith('./') && !url.startsWith('data:')) {
+        url = 'https://' + url;
+    }
+    return url;
+}
+
+export function createTrackElement(track, index, tracksArray, currentTrack) {
+    const item = document.createElement('div');
+    const isCurrentlyPlaying = currentTrack && ((currentTrack.id && track.id && currentTrack.id === track.id) || currentTrack.source_id === track.source_id);
+    item.className = `track-item${isCurrentlyPlaying ? ' playing' : ''}`;
+    item.style.animationDelay = `${Math.min(index * 0.03, 0.5)}s`;
+    item.dataset.trackSourceId = String(track.source_id || track.id || '');
+
+    const coverSrc = getCoverUrl(track);
+    const isFav = track.is_favorite;
+    const title = track.title || 'Unknown';
+    let hash = 0;
+    for (let i = 0; i < title.length; i++) {
+        hash = ((hash << 5) - hash) + title.charCodeAt(i);
+        hash |= 0;
+    }
+    const gradientColors = [
+        'linear-gradient(135deg, #f53d3d 0%, #ff803b 100%)',
+        'linear-gradient(135deg, #7b2cbf 0%, #e0aaff 100%)',
+        'linear-gradient(135deg, #240b36 0%, #c31432 100%)',
+        'linear-gradient(135deg, #0f2027 0%, #203a43 100%)',
+        'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+        'linear-gradient(135deg, #ff007f 0%, #ff80b3 100%)',
+        'linear-gradient(135deg, #0052d4 0%, #4364f7 100%)',
+        'linear-gradient(135deg, #fc4a1a 0%, #f7b733 100%)',
+        'linear-gradient(135deg, #1a2a6c 0%, #b21f1f 100%)',
+        'linear-gradient(135deg, #8a2387 0%, #e94057 100%)'
+    ];
+    const grad = gradientColors[Math.abs(hash) % gradientColors.length];
+
+    item.innerHTML = `
+        <div class="track-cover-wrap fallback-gradient" style="background: ${grad}">
+            <svg class="fallback-note-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40%;height:40%;opacity:0.6;position:relative;z-index:1;"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+            ${coverSrc ? `<img src="${coverSrc}" alt="" onerror="window.NeDotify.handleImageError(this, '${track.cover_url || ''}', '${track.source_id || ''}', '${track.source || ''}')" loading="lazy">` : ''}
+            <div class="track-cover-overlay">
+                <i data-lucide="play" style="width:16px;height:16px;color:white"></i>
+            </div>
+            ${track.source ? `<div class="source-badge source-${track.source}" title="${track.source}">${getSourceIcon(track.source)}</div>` : ''}
+        </div>
+        <div class="track-info">
+            <div class="track-title">${track.title || 'Unknown'}</div>
+            <div class="track-artist clickable-artist">${track.artist || 'Unknown'}</div>
+        </div>
+        <div class="track-actions">
+            <button class="icon-btn download-btn ${track.is_downloaded || track.source === 'local' ? 'downloaded' : ''}" title="${track.is_downloaded || track.source === 'local' ? 'Скачан' : 'Скачать'}">
+                <i data-lucide="${track.is_downloaded || track.source === 'local' ? 'check' : 'download'}" style="width:14px;height:14px"></i>
+            </button>
+            <button class="icon-btn like-btn ${isFav ? 'liked' : ''}" title="Нравится">
+                <i data-lucide="heart" style="width:14px;height:14px;${isFav ? 'fill:currentColor' : ''}"></i>
+            </button>
+            <button class="icon-btn add-btn" title="Добавить в плейлист">
+                <i data-lucide="plus" style="width:14px;height:14px"></i>
+            </button>
+        </div>
+        <div class="track-duration-container">
+            <span class="track-duration">${formatTime(track.duration)}</span>
+            <button class="icon-btn track-more-btn" title="Опции">
+                <i data-lucide="more-horizontal" style="width:16px;height:16px"></i>
+            </button>
+        </div>
+    `;
+
+    // Play handler: Entire track row clickable except action buttons, more button and artist link
+    item.addEventListener('click', (e) => {
+        if (e.target.closest('.like-btn') || e.target.closest('.add-btn') || e.target.closest('.download-btn') || e.target.closest('.track-more-btn') || e.target.closest('.clickable-artist')) {
+            return;
+        }
+        if (window.pywebview && window.pywebview.api) {
+            window.pywebview.api.play_track(track, tracksArray);
+        }
+    });
+
+    // Download handler: show spinning animation, trigger download, update state on completion
+    const downloadBtn = item.querySelector('.download-btn');
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (downloadBtn.classList.contains('downloaded') || downloadBtn.classList.contains('downloading')) {
+                return;
+            }
+            downloadBtn.classList.add('downloading');
+            downloadBtn.innerHTML = '<i data-lucide="loader-2" class="spin-icon" style="width:14px;height:14px"></i>';
+            renderIcons(item);
+            showToast(`Скачивание '${track.title || 'трека'}'...`, 'info');
+
+            if (window.NeDotify?.downloadTrack) {
+                window.NeDotify.downloadTrack(track);
+            } else if (window.pywebview?.api?.download_track) {
+                try {
+                    await window.pywebview.api.download_track(track);
+                } catch(err) {
+                    downloadBtn.classList.remove('downloading');
+                    downloadBtn.innerHTML = '<i data-lucide="download" style="width:14px;height:14px"></i>';
+                    renderIcons(item);
+                    showToast('Ошибка скачивания', 'error');
+                }
+            }
+        });
+    }
+
+    // Artist click navigation handler: ONLY fires on artist text
+    const artistEl = item.querySelector('.track-artist');
+    if (artistEl && track.artist && track.artist !== 'Unknown') {
+        artistEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (window.searchArtistProfile) {
+                window.searchArtistProfile(track.artist);
+            }
+        });
+    }
+
+    // Like handler: Instant UI toggle + localStorage persistence + pywebview API
+    const likeBtn = item.querySelector('.like-btn');
+    if (likeBtn) {
+        likeBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            track.is_favorite = !track.is_favorite;
+            likeBtn.classList.toggle('liked', track.is_favorite);
+            const icon = likeBtn.querySelector('i');
+            if (icon) {
+                icon.style.fill = track.is_favorite ? 'currentColor' : 'none';
+            }
+
+            // Sync with localStorage
+            try {
+                let favs = JSON.parse(localStorage.getItem('nedotify_favorites') || '[]');
+                const tId = track.id || track.source_id;
+                if (track.is_favorite) {
+                    if (!favs.some(f => (f.id || f.source_id) === tId)) {
+                        favs.push(track);
+                    }
+                } else {
+                    favs = favs.filter(f => (f.id || f.source_id) !== tId);
+                }
+                localStorage.setItem('nedotify_favorites', JSON.stringify(favs));
+            } catch (err) {}
+
+            if (window.pywebview?.api?.toggle_favorite) {
+                try {
+                    await window.pywebview.api.toggle_favorite(track);
+                } catch (err) {}
+            }
+        });
+    }
+
+    // Add to playlist handler
+    const addBtn = item.querySelector('.add-btn');
+    if (addBtn) {
+        addBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (window.NeDotify && window.NeDotify.openPlaylistMenu) {
+                window.NeDotify.openPlaylistMenu(track, e.clientX, e.clientY);
+            }
+        });
+    }
+
+    // Three horizontal dots button click handler (Screenshot 1 menu)
+    const moreBtn = item.querySelector('.track-more-btn');
+    if (moreBtn) {
+        moreBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            showTrackContextMenu(track, e, tracksArray);
+        });
+    }
+
+    // Right-click context menu handler on track item
+    item.addEventListener('contextmenu', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        showTrackContextMenu(track, e, tracksArray);
+    });
+
+    return item;
+}
+
+export function renderIcons(targetEl) {
+    if (window.lucide) {
+        if (targetEl && (targetEl.nodeType === 1 || targetEl.nodeType === 9)) {
+            try {
+                window.lucide.createIcons({
+                    nameAttr: 'data-lucide',
+                    attrs: {},
+                    root: targetEl
+                });
+            } catch(e) {
+                window.lucide.createIcons();
+            }
+        } else {
+            window.lucide.createIcons();
+        }
+    }
+}
+
+function getSourceIcon(source) {
+    switch (source) {
+        case 'youtube': return '<i data-lucide="youtube" style="width:12px;height:12px"></i>';
+        case 'soundcloud': return '<i data-lucide="cloud" style="width:12px;height:12px"></i>';
+        case 'yandex': return '<strong style="font-size:10px;line-height:1">Я</strong>';
+        case 'vk': return '<strong style="font-size:10px;line-height:1">VK</strong>';
+        case 'local': return '<i data-lucide="folder" style="width:12px;height:12px"></i>';
+        default: return '';
+    }
+}
+
+document.addEventListener('nedotify:track_downloaded', (e) => {
+    const data = e.detail;
+    if (!data) return;
+    const targetId = String(data.track_id || data.source_id || '');
+    document.querySelectorAll('.track-item').forEach(el => {
+        if (el.dataset.trackSourceId && targetId && el.dataset.trackSourceId.includes(targetId)) {
+            const btn = el.querySelector('.download-btn');
+            if (btn) {
+                btn.classList.remove('downloading');
+                btn.classList.add('downloaded');
+                btn.title = 'Скачан';
+                btn.innerHTML = '<i data-lucide="check" style="width:14px;height:14px"></i>';
+            }
+        }
+    });
+    renderIcons();
+});
+
+let activeRichMenu = null;
+
+export function showTrackContextMenu(track, e, tracksArray) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    if (activeRichMenu) {
+        activeRichMenu.remove();
+        activeRichMenu = null;
+    }
+
+    const menu = document.createElement('div');
+    menu.className = 'rich-track-menu visible';
+
+    const coverUrl = getCoverUrl(track);
+    const isFav = !!track.is_favorite;
+
+    menu.innerHTML = `
+        <div class="rich-menu-header">
+            ${coverUrl ? `<div class="rich-menu-header-bg" style="background-image: url('${coverUrl}')"></div>` : ''}
+            <img class="rich-menu-cover" src="${coverUrl || './assets/default_cover.png'}" onerror="this.style.opacity='0.4'">
+            <div class="rich-menu-title-col">
+                <div class="rich-menu-title-row">
+                    <span class="rich-menu-title">${track.title || 'Неизвестный трек'}</span>
+                    <i data-lucide="info" class="rich-menu-info-icon" style="width:15px;height:15px"></i>
+                </div>
+                <div class="rich-menu-artist">${track.artist || 'Неизвестный исполнитель'}</div>
+            </div>
+        </div>
+
+        <button class="rich-menu-item" data-action="play_next">
+            <i data-lucide="play-circle" style="width:16px;height:16px"></i>
+            <span>Следующим</span>
+        </button>
+        <button class="rich-menu-item" data-action="add_queue">
+            <i data-lucide="list-plus" style="width:16px;height:16px"></i>
+            <span>Добавить в очередь</span>
+        </button>
+        <button class="rich-menu-item" data-action="wave">
+            <i data-lucide="radio" style="width:16px;height:16px"></i>
+            <span>Волна по треку</span>
+        </button>
+
+        <div class="rich-menu-divider"></div>
+
+        <button class="rich-menu-item ${isFav ? 'red-action' : ''}" data-action="favorite">
+            <i data-lucide="heart" style="width:16px;height:16px;${isFav ? 'fill:currentColor' : ''}"></i>
+            <span>${isFav ? 'Удалить из избранного' : 'Добавить в избранное'}</span>
+        </button>
+        <button class="rich-menu-item orange-action" data-action="dislike">
+            <i data-lucide="thumbs-down" style="width:16px;height:16px"></i>
+            <span>Убрать из «Не интересно»</span>
+        </button>
+
+        <div class="rich-menu-divider"></div>
+
+        <button class="rich-menu-item" data-action="share">
+            <i data-lucide="share-2" style="width:16px;height:16px"></i>
+            <span>Поделиться</span>
+        </button>
+
+        <div class="rich-menu-divider"></div>
+
+        <button class="rich-menu-item" data-action="download">
+            <i data-lucide="download" style="width:16px;height:16px"></i>
+            <span>Скачать</span>
+        </button>
+        <button class="rich-menu-item" data-action="cache">
+            <i data-lucide="hard-drive" style="width:16px;height:16px"></i>
+            <span>Кешировать</span>
+        </button>
+
+        <div class="rich-menu-divider"></div>
+
+        <button class="rich-menu-item" data-action="pin">
+            <i data-lucide="pin" style="width:16px;height:16px"></i>
+            <span>Закрепить в профиле</span>
+        </button>
+
+        <div class="rich-menu-divider"></div>
+
+        <button class="rich-menu-item red-action" data-action="remove_queue">
+            <i data-lucide="minus-circle" style="width:16px;height:16px"></i>
+            <span>Удалить из очереди</span>
+        </button>
+    `;
+
+    document.body.appendChild(menu);
+    activeRichMenu = menu;
+    renderIcons();
+
+    // Calculate position relative to mouse or button
+    const menuWidth = 270;
+    const menuHeight = menu.offsetHeight || 420;
+    let clickX = e ? e.clientX : window.innerWidth / 2;
+    let clickY = e ? e.clientY : window.innerHeight / 2;
+
+    if (clickX + menuWidth > window.innerWidth - 10) {
+        clickX = window.innerWidth - menuWidth - 14;
+    }
+    if (clickY + menuHeight > window.innerHeight - 10) {
+        clickY = window.innerHeight - menuHeight - 14;
+    }
+    if (clickY < 10) clickY = 10;
+    if (clickX < 10) clickX = 10;
+
+    menu.style.left = `${clickX}px`;
+    menu.style.top = `${clickY}px`;
+
+    // Click Actions
+    menu.addEventListener('click', (evt) => {
+        const itemBtn = evt.target.closest('.rich-menu-item');
+        const infoIcon = evt.target.closest('.rich-menu-info-icon');
+
+        if (infoIcon) {
+            evt.stopPropagation();
+            showToast(`Трек: ${track.title || ''} • ${track.artist || ''}`, 'info');
+            closeMenu();
+            return;
+        }
+
+        if (!itemBtn) return;
+        evt.stopPropagation();
+        const action = itemBtn.dataset.action;
+
+        switch(action) {
+            case 'play_next':
+                if (window.NeDotify?.playNext) {
+                    window.NeDotify.playNext(track);
+                }
+                showToast(`'${track.title || 'Трек'}' будет сыгран следующим`, 'success');
+                break;
+            case 'add_queue':
+                if (window.NeDotify?.addToQueue) {
+                    window.NeDotify.addToQueue(track);
+                }
+                showToast(`'${track.title || 'Трек'}' добавлен в очередь`, 'success');
+                break;
+            case 'wave':
+                showToast(`Запуск Волны по треку '${track.title || ''}'...`, 'info');
+                if (window.searchArtistProfile) {
+                    window.searchArtistProfile(track.artist || track.title);
+                }
+                break;
+            case 'favorite':
+                track.is_favorite = !track.is_favorite;
+                if (window.pywebview?.api?.toggle_favorite) {
+                    window.pywebview.api.toggle_favorite(track);
+                }
+                showToast(track.is_favorite ? 'Добавлено в избранное!' : 'Удалено из избранного', 'info');
+                break;
+            case 'dislike':
+                showToast(`Трек '${track.title || ''}' скрыт из рекомендаций`, 'info');
+                break;
+            case 'share':
+                const shareStr = `${track.title || ''} - ${track.artist || ''}`;
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(shareStr);
+                }
+                showToast('Название трека скопировано в буфер!', 'success');
+                break;
+            case 'download':
+                if (window.NeDotify?.downloadTrack) {
+                    window.NeDotify.downloadTrack(track);
+                } else if (window.pywebview?.api?.download_track) {
+                    window.pywebview.api.download_track(track);
+                }
+                showToast(`Скачивание '${track.title || ''}' начато`, 'info');
+                break;
+            case 'cache':
+                showToast(`Трек '${track.title || ''}' закеширован!`, 'success');
+                break;
+            case 'pin':
+                if (window.pywebview?.api?.save_setting) {
+                    window.pywebview.api.save_setting('pinned_track', track, 'profile');
+                }
+                showToast(`'${track.title || ''}' закреплен в профиле!`, 'success');
+                break;
+            case 'remove_queue':
+                showToast(`Трек '${track.title || ''}' удален из очереди`, 'info');
+                break;
+        }
+
+        closeMenu();
+    });
+
+    function closeMenu() {
+        if (activeRichMenu) {
+            activeRichMenu.remove();
+            activeRichMenu = null;
+        }
+        document.removeEventListener('click', onDocumentClick);
+        document.removeEventListener('keydown', onKeyDown);
+    }
+
+    function onDocumentClick(evt) {
+        if (activeRichMenu && !activeRichMenu.contains(evt.target)) {
+            closeMenu();
+        }
+    }
+
+    function onKeyDown(evt) {
+        if (evt.key === 'Escape') {
+            closeMenu();
+        }
+    }
+
+    setTimeout(() => {
+        document.addEventListener('click', onDocumentClick);
+        document.addEventListener('keydown', onKeyDown);
+    }, 50);
+}
+
+
+
+export function getSkeletonGrid(count = 10) {
+    let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px;">';
+    for (let i = 0; i < count; i++) {
+        html += `
+            <div style="padding: 15px; border-radius: 8px; background: rgba(255,255,255,0.02);">
+                <div class="skeleton skeleton-cover" style="width: 100%; aspect-ratio: 1/1; height: auto; border-radius: 8px; margin-bottom: 12px;"></div>
+                <div class="skeleton skeleton-text" style="width: 80%;"></div>
+                <div class="skeleton skeleton-text" style="width: 50%;"></div>
+            </div>
+        `;
+    }
+    html += '</div>';
+    return html;
+}

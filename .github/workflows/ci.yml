@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  python-tests:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: Run Python tests (test_recommendation.py)
+      run: |
+        pytest -v tests/test_recommendation.py
+
+    - name: Run Python tests (test_nedotify.py via run_tests.py)
+      run: |
+        python run_tests.py
+
+

@@ -1,0 +1,49 @@
+# Secrets
+.env
+*.env.local
+secrets/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+*.spec
+*.db
+*.db-shm
+*.db-wal
+scratch/
+ui_backup/
+.agents/
+.scratch*/
+backups/
+*.zip
+*.pkg
+*.exe
+*.msi
+
+# Extraction artifacts (DO NOT COMMIT)
+NeDotify.exe_extracted/
+AURA_Music.exe_extracted/
+pyinstxtractor.py
+search_transcript.py
+extract_license.py
+api_dis.txt
+transcript_output.txt
+transcript_search.txt
+git_phase0.py
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Legacy dead UI (intentionally deleted)
+ui/web/
