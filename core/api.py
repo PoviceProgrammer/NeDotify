@@ -85,6 +85,26 @@ class AppApi:
         if hasattr(self._window, 'events'):
             self._window.events.minimized += self._on_minimized
             self._window.events.restored += self._on_restored
+            
+        try:
+            import threading
+            def _set_icon():
+                import time
+                time.sleep(0.2)
+                try:
+                    if getattr(self._window, 'native', None):
+                        import os
+                        import clr
+                        clr.AddReference('System.Drawing')
+                        from System.Drawing import Icon
+                        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icon.ico")
+                        if os.path.exists(icon_path):
+                            self._window.native.Icon = Icon(icon_path)
+                except Exception as ex:
+                    logger.warning(f"Could not set native window icon: {ex}")
+            threading.Thread(target=_set_icon, daemon=True).start()
+        except Exception:
+            pass
 
     def _on_minimized(self):
         pass
