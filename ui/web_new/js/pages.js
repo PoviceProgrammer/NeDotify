@@ -1,4 +1,4 @@
-﻿// NeDotify вЂ” Pages Navigation Module
+// NeDotify вЂ” Pages Navigation Module
 import { renderIcons } from './utils.js?v=19';
 
 const pageTitles = {
@@ -90,6 +90,7 @@ export function showPage(pageId) {
     }
 
     renderIcons();
+    window.dispatchEvent(new CustomEvent('nedotify:page_changed', { detail: pageId }));
 }
 
 export function closeSettings() {

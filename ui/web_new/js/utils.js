@@ -483,14 +483,14 @@ export function showTrackContextMenu(track, e, tracksArray) {
                 showToast(track.is_favorite ? 'Добавлено в избранное!' : 'Удалено из избранного', 'info');
                 break;
             case 'dislike':
-                showToast(`Трек '${track.title || ''}' скрыт из рекомендаций`, 'info');
+                showToast(`Функция пока недоступна (Не интересно)`, 'info');
                 break;
             case 'share':
                 const shareStr = `${track.title || ''} - ${track.artist || ''}`;
                 if (navigator.clipboard) {
                     navigator.clipboard.writeText(shareStr);
                 }
-                showToast('Название трека скопировано в буфер!', 'success');
+                showToast('Ссылка скопирована в буфер!', 'success');
                 break;
             case 'download':
                 if (window.NeDotify?.downloadTrack) {
@@ -498,10 +498,10 @@ export function showTrackContextMenu(track, e, tracksArray) {
                 } else if (window.pywebview?.api?.download_track) {
                     window.pywebview.api.download_track(track);
                 }
-                showToast(`Скачивание '${track.title || ''}' начато`, 'info');
+                showToast(`Загрузка '${track.title || ''}' начата`, 'info');
                 break;
             case 'cache':
-                showToast(`Трек '${track.title || ''}' закеширован!`, 'success');
+                showToast(`Функция пока недоступна (Кэшировать)`, 'info');
                 break;
             case 'pin':
                 if (window.pywebview?.api?.save_setting) {

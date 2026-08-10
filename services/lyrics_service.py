@@ -10,13 +10,25 @@ import json
 import time
 import re
 import html
+import ssl
 import concurrent.futures
 
 logger = logging.getLogger(__name__)
 
+ssl_ctx = ssl.create_default_context()
+ssl_ctx.check_hostname = False
+ssl_ctx.verify_mode = ssl.CERT_NONE
+
 class LyricsService:
     def __init__(self, settings=None):
         self.settings = settings
+
+    def _open_url(self, req_or_url, headers=None, timeout=3.5):
+        if isinstance(req_or_url, str):
+            req = urllib.request.Request(req_or_url, headers=headers or {'User-Agent': 'Mozilla/5.0'})
+        else:
+            req = req_or_url
+        return urllib.request.urlopen(req, timeout=timeout, context=ssl_ctx)
         
     def translate_lyrics(self, lyrics: str, target_lang="ru") -> str:
         if not lyrics:
@@ -48,21 +60,27 @@ class LyricsService:
             self._fetch_duckduckgo
         ]
         
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=len(fetchers))
+        future_to_name = {executor.submit(f, track, artist): f.__name__ for f in fetchers}
+        not_done = set(future_to_name.keys())
+        
         best_weight_2 = None
-        timeout = 4.0 # Wait up to 4 seconds for a Weight 1 result
+        weight2_found_time = None
+        timeout = 2.5
         start_time = time.time()
         
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(fetchers)) as executor:
-            future_to_name = {executor.submit(f, track, artist): f.__name__ for f in fetchers}
-            not_done = set(future_to_name.keys())
-            
+        try:
             while not_done:
                 elapsed = time.time() - start_time
-                time_left = timeout - elapsed
-                
-                if time_left <= 0:
-                    break # Timeout reached
+                if elapsed >= timeout:
+                    break
                     
+                # Fast exit: If plain lyrics found (weight 2) and 0.6s passed with no synced lyrics, return immediately
+                if best_weight_2 and (time.time() - weight2_found_time) >= 0.6:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    return best_weight_2
+
+                time_left = min(0.2, timeout - elapsed)
                 done, not_done = concurrent.futures.wait(
                     not_done, 
                     timeout=time_left, 
@@ -75,30 +93,74 @@ class LyricsService:
                         if res:
                             w = res.get('weight', 3)
                             if w == 1:
-                                return res # Immediate WIN, threads will gracefully die in background
+                                executor.shutdown(wait=False, cancel_futures=True)
+                                return res # Immediate WIN
                             elif w == 2 and not best_weight_2:
-                                best_weight_2 = res # Save best weight 2 and keep waiting
-                    except Exception as e:
+                                best_weight_2 = res
+                                weight2_found_time = time.time()
+                    except Exception:
                         pass
-                        
+        finally:
+            try:
+                executor.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass
+                
         if best_weight_2:
             return best_weight_2
             
         return {"syncedLyrics": None, "plainLyrics": None, "instrumental": False, "weight": 3}
 
     def _make_result(self, synced, plain):
-        if synced and '[00:' in synced:
+        if synced and re.search(r'\[\d{2}:\d{2}', synced):
             return {"syncedLyrics": synced, "plainLyrics": plain or synced, "weight": 1}
-        elif plain or synced:
+        elif plain or (synced and len(synced.strip()) > 0):
             return {"syncedLyrics": None, "plainLyrics": plain or synced, "weight": 2}
         return None
 
+    def _clean_str(self, text):
+        if not text:
+            return ""
+        text = re.sub(r'\(feat\.[^\)]+\)', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'\[[^\]]+\]', '', text)
+        text = re.sub(r'\(prod\.[^\)]+\)', '', text, flags=re.IGNORECASE)
+        return text.strip()
+
     def _fetch_lrclib(self, track, artist):
-        url = f"https://lrclib.net/api/get?artist_name={urllib.parse.quote(artist)}&track_name={urllib.parse.quote(track)}"
-        req = urllib.request.Request(url, headers={'User-Agent': 'AURA-Music/1.0'})
-        with urllib.request.urlopen(req, timeout=3.5) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            return self._make_result(data.get("syncedLyrics"), data.get("plainLyrics"))
+        c_track = self._clean_str(track)
+        c_artist = artist.split(',')[0].split('&')[0].strip() if artist else ""
+        
+        # 1. Try exact /api/get
+        try:
+            url = f"https://lrclib.net/api/get?artist_name={urllib.parse.quote(c_artist)}&track_name={urllib.parse.quote(c_track)}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'AURA-Music/1.0'})
+            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
+                res = self._make_result(data.get("syncedLyrics"), data.get("plainLyrics"))
+                if res:
+                    return res
+        except Exception:
+            pass
+
+        # 2. Fallback to /api/search
+        try:
+            q = f"{c_artist} {c_track}".strip()
+            url = f"https://lrclib.net/api/search?q={urllib.parse.quote(q)}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'AURA-Music/1.0'})
+            with urllib.request.urlopen(req, timeout=3.5) as resp:
+                results = json.loads(resp.read().decode('utf-8', errors='ignore'))
+                if isinstance(results, list) and results:
+                    for item in results:
+                        res = self._make_result(item.get("syncedLyrics"), item.get("plainLyrics"))
+                        if res and res.get('weight') == 1:
+                            return res
+                    first_res = self._make_result(results[0].get("syncedLyrics"), results[0].get("plainLyrics"))
+                    if first_res:
+                        return first_res
+        except Exception:
+            pass
+
+        return None
 
     def _fetch_netease(self, track, artist):
         query = f"{artist} {track}".strip()

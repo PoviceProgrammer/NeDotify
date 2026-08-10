@@ -3,6 +3,7 @@ import { renderIcons } from './utils.js?v=19';
 import { initParticles, stopParticles, setParticlesFps } from './particles.js?v=19';
 import { setVisualizerFps } from './visualizer.js?v=19';
 import { initOnboarding } from './onboarding.js?v=19';
+import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js?v=19';
 
 // Helper: read a localStorage setting that was saved by saveSetting()
 function getLocalSetting(key, defaultVal) {
@@ -256,9 +257,16 @@ export function initSettings() {
                 statusEl.innerHTML = '⏳ Запрос кода авторизации...';
                 statusEl.style.color = 'var(--text-sec)';
             }
-            btnYandexAuth.disabled = true;
-            btnYandexAuth.textContent = '⏳ Ожидание...';
-            window.pywebview.api.yandex_device_auth();
+            if (window.pywebview && window.pywebview.api && window.pywebview.api.yandex_device_auth) {
+                window.pywebview.api.yandex_device_auth();
+            } else {
+                showToast('Функция пока недоступна (Yandex Auth)', 'info');
+                if (statusEl) {
+                    statusEl.style.display = 'none';
+                }
+                btnYandexAuth.disabled = false;
+                btnYandexAuth.textContent = '🔑 Получить токен';
+            }
         });
     }
 
@@ -420,6 +428,7 @@ function setupToggle(id, key, category, onChange) {
 
         // Apply immediately
         if (key === 'particles_enabled') {
+            if (window.settings && window.settings.ui) window.settings.ui.particles_enabled = isOn;
             if (isOn) {
                 initParticles();
             } else {
@@ -465,9 +474,12 @@ export function applySettingsFromBackend(settings) {
         }
         if (settings.ui.particles_enabled !== undefined) {
             const toggle = document.getElementById('toggle-particles');
-            if (toggle) toggle.classList.toggle('on', settings.ui.particles_enabled);
-            const bg = document.getElementById('particles-bg');
-            if (bg) bg.style.display = settings.ui.particles_enabled ? 'block' : 'none';
+            if (toggle) toggle.classList.toggle('on', !!settings.ui.particles_enabled);
+            if (settings.ui.particles_enabled) {
+                initParticles();
+            } else {
+                stopParticles();
+            }
         }
         if (settings.ui.cover_visualizer !== undefined) {
             const toggle = document.getElementById('toggle-visualizer');
@@ -486,10 +498,6 @@ export function applySettingsFromBackend(settings) {
             document.querySelectorAll('.particle-shape-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.shape === settings.ui.particles_shape);
             });
-        }
-        // Re-initialize particles if they are enabled
-        if (settings.ui.particles_enabled !== false) {
-            initParticles();
         }
     }
 
@@ -573,7 +581,7 @@ export function applySettingsFromBackend(settings) {
     }
 
     if (settings.optimization) {
-        if (settings.optimization.performance_preset) applyPerformancePreset(settings.optimization.performance_preset);
+        if (settings.optimization.performance_preset) applyPerformancePreset(settings.optimization.performance_preset, true);
         if (settings.optimization.blur_quality) applyBlurQuality(settings.optimization.blur_quality);
         if (settings.optimization.glow_quality) applyGlowSettings(settings.optimization.glow_quality);
         if (settings.optimization.fps_particles !== undefined) setParticlesFps(settings.optimization.fps_particles);
@@ -618,6 +626,8 @@ export function applySettingsFromBackend(settings) {
             inputOauthClientId.value = settings.auth.oauth_client_id;
         }
         
+        // SECURITY WARNING: OAuth client secret must not be stored or transmitted in frontend.
+        // Use PKCE flow or backend token exchange.
         const inputOauthClientSecret = document.getElementById('input-oauth-client-secret');
         if (inputOauthClientSecret && settings.auth.oauth_client_secret !== undefined) {
             inputOauthClientSecret.value = settings.auth.oauth_client_secret;
@@ -651,6 +661,10 @@ export function onStorageInfo(data) {
 }
 
 function saveSetting(key, value, category) {
+    if (window.settings && category) {
+        if (!window.settings[category]) window.settings[category] = {};
+        window.settings[category][key] = value;
+    }
     try {
         localStorage.setItem(`nedotify_${category}_${key}`, JSON.stringify(value));
     } catch (e) {}
@@ -696,73 +710,10 @@ export function applyFontSize(val) {
     }
 }
 
-const DEFAULT_KEYBINDS = [
-    { id: 'play_pause', label: 'Воспроизведение / Пауза', defaultKey: 'Space' },
-    { id: 'next_track', label: 'Следующий трек', defaultKey: 'ArrowRight' },
-    { id: 'prev_track', label: 'Предыдущий трек', defaultKey: 'ArrowLeft' },
-    { id: 'volume_up', label: 'Увеличить громкость (+5%)', defaultKey: 'ArrowUp' },
-    { id: 'volume_down', label: 'Уменьшить громкость (-5%)', defaultKey: 'ArrowDown' },
-    { id: 'toggle_mute', label: 'Вкл / Выкл звук', defaultKey: 'KeyM' },
-    { id: 'toggle_lyrics', label: 'Открыть / закрыть текст', defaultKey: 'KeyL' },
-    { id: 'toggle_mini', label: 'Компактный мини-плеер', defaultKey: 'KeyP' }
-];
-
-let activeKeybinds = {};
-let listeningKeybindId = null;
 
 export function initKeybinds() {
-    DEFAULT_KEYBINDS.forEach(kb => {
-        activeKeybinds[kb.id] = kb.defaultKey;
-    });
-
-    const localSaved = localStorage.getItem('nedotify_keybinds');
-    if (localSaved) {
-        try { Object.assign(activeKeybinds, JSON.parse(localSaved)); } catch(e) {}
-    }
-
-    if (window.pywebview?.api?.get_settings_by_category) {
-        window.pywebview.api.get_settings_by_category('keybinds').then(saved => {
-            if (saved && typeof saved === 'object') {
-                Object.assign(activeKeybinds, saved);
-                saveKeybindsToStorage(activeKeybinds);
-            }
-            renderKeybindsList();
-        }).catch(() => renderKeybindsList());
-    } else {
-        renderKeybindsList();
-    }
-
-    // Global Keydown Listener
-    window.addEventListener('keydown', (e) => {
-        if (listeningKeybindId) {
-            e.preventDefault();
-            e.stopPropagation();
-            const keyName = e.code || e.key;
-            if (keyName && keyName !== 'Escape') {
-                activeKeybinds[listeningKeybindId] = keyName;
-                saveSetting(listeningKeybindId, keyName, 'keybinds');
-                saveKeybindsToStorage(activeKeybinds);
-            }
-            listeningKeybindId = null;
-            renderKeybindsList();
-            return;
-        }
-
-        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
-        if (activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable) {
-            return;
-        }
-
-        const pressedCode = e.code || e.key;
-
-        for (const [actionId, key] of Object.entries(activeKeybinds)) {
-            if (key === pressedCode || (key === 'Space' && (e.code === 'Space' || e.key === ' '))) {
-                e.preventDefault();
-                triggerKeybindAction(actionId);
-                break;
-            }
-        }
-    });
+    window.renderKeybindsList = renderKeybindsList;
+    renderKeybindsList();
 
     const resetBtn = document.getElementById('btn-reset-keybinds');
     if (resetBtn) {
@@ -771,7 +722,7 @@ export function initKeybinds() {
                 activeKeybinds[kb.id] = kb.defaultKey;
                 saveSetting(kb.id, kb.defaultKey, 'keybinds');
             });
-            listeningKeybindId = null;
+            setListeningKeybind(null);
             renderKeybindsList();
             window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Горячие клавиши сброшены!', type: 'info' } }));
         });
@@ -858,7 +809,7 @@ function renderKeybindsList() {
         row.style.justifyContent = 'space-between';
         row.style.alignItems = 'center';
         
-        const isListening = listeningKeybindId === kb.id;
+        const isListening = getListeningKeybindId() === kb.id;
         const rawKey = activeKeybinds[kb.id] || kb.defaultKey;
         const currentKeyDisplay = formatKeyName(rawKey);
 
@@ -873,10 +824,10 @@ function renderKeybindsList() {
 
         const btn = row.querySelector('.keybind-record-btn');
         btn.addEventListener('click', () => {
-            if (listeningKeybindId === kb.id) {
-                listeningKeybindId = null;
+            if (getListeningKeybindId() === kb.id) {
+                setListeningKeybind(null);
             } else {
-                listeningKeybindId = kb.id;
+                setListeningKeybind(kb.id);
             }
             renderKeybindsList();
         });
@@ -886,7 +837,7 @@ function renderKeybindsList() {
 }
 
 // в"Ђв"Ђв"Ђ Exported so applySettingsFromBackend can restore preset on load в"Ђв"Ђв"Ђ
-export function applyPerformancePreset(preset) {
+export function applyPerformancePreset(preset, skipSave = false) {
     const root = document.documentElement;
     root.classList.remove('perf-medium', 'perf-low');
 
@@ -904,7 +855,9 @@ export function applyPerformancePreset(preset) {
         _setSlidersForPreset(30, 24);
     }
 
-    saveSetting('performance_preset', preset, 'optimization');
+    if (!skipSave) {
+        saveSetting('performance_preset', preset, 'optimization');
+    }
 }
 
 function _setSlidersForPreset(vizFps, particlesFps) {
@@ -1057,7 +1010,7 @@ function setupOptimizationPanel() {
         syncGroup('opt-blur-quality', blur);
         syncGroup('opt-glow-quality', glow);
 
-        applyPerformancePreset(preset);
+        applyPerformancePreset(preset, true);
         const root = document.documentElement;
         root.classList.remove('limit-state-off', 'limit-state-minimize', 'limit-state-focus');
         root.classList.add(`limit-state-${limitState}`);
@@ -1567,6 +1520,16 @@ export function applyIconPack(packId) {
     setIcon('#pp-btn-prev', map.prev);
     setIcon('#pp-btn-shuffle', map.shuffle);
     setIcon('#pp-btn-repeat', map.repeat);
+    setIcon('#pp-volume-btn', map.volume);
+    setIcon('#fs-volume-btn', map.volume);
+
+    // Mini-player transport controls
+    setIcon('#mp-btn-play', map.play);
+    setIcon('#mp-btn-next', map.next);
+    setIcon('#mp-btn-prev', map.prev);
+    setIcon('#btn-mini-play', map.play);
+    setIcon('#btn-mini-next', map.next);
+    setIcon('#btn-mini-prev', map.prev);
 
     // Sidebar navigation icons
     setIcon('.nav-item[data-page="home"]', map.home);
@@ -1702,8 +1665,13 @@ export function applyMpShape(shape) {
 
 export function applyMpPos(pos) {
     const root = document.documentElement;
-    root.classList.remove('mp-pos-top-left', 'mp-pos-bottom-right', 'mp-pos-top-right', 'mp-pos-bottom-left', 'mp-pos-center');
+    root.classList.remove('mp-pos-top-left', 'mp-pos-top-center', 'mp-pos-top-right', 'mp-pos-bottom-left', 'mp-pos-bottom-center', 'mp-pos-bottom-right', 'mp-pos-center');
     root.classList.add(`mp-pos-${pos}`);
+    if (window.pywebview?.api?.set_mini_player_position) {
+        try {
+            window.pywebview.api.set_mini_player_position(pos);
+        } catch(e) {}
+    }
 }
 
 function setupPlayerSettingsPanel() {
@@ -1782,6 +1750,12 @@ function setupPlayerSettingsPanel() {
         }
     };
 
+    // Sync toggle visual states from saved values
+    const syncToggleVisual = (id, val) => {
+        const t = document.getElementById(id);
+        if (t) t.classList.toggle('on', !!val);
+    };
+
     syncActiveCard('opt-title-align', saved.align);
     syncActiveCard('opt-player-style', saved.style);
     syncActiveCard('opt-slider-type', saved.slider);
@@ -1790,6 +1764,11 @@ function setupPlayerSettingsPanel() {
     syncActiveCard('opt-mp-progress', saved.mpProg);
     syncActiveCard('opt-mp-cover-shape', saved.mpCover);
     syncActiveCard('opt-mp-shape', saved.mpShape);
+
+    // Sync toggle visuals (HTML defaults them all to 'on', must correct from storage)
+    syncToggleVisual('toggle-show-queue', saved.showQueue);
+    syncToggleVisual('toggle-compact-queue-btn', saved.compactQueue);
+    syncToggleVisual('toggle-next-track-preview', saved.nextPreview);
 
     if (mpPosGroup) {
         mpPosGroup.querySelectorAll('.opt-card-btn').forEach(b => {
@@ -1814,6 +1793,7 @@ function setupPlayerSettingsPanel() {
     applyMpShape(saved.mpShape);
     applyMpPos(saved.mpPos);
 }
+
 
 // ─── WORKSHOP (МАСТЕРСКАЯ) MODULE ───
 export const WORKSHOP_ITEMS = [

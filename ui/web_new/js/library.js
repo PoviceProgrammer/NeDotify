@@ -69,14 +69,31 @@ export function initLibrary() {
         if (submitBtn) submitBtn.disabled = true;
 
         if (window.pywebview?.api?.import_external_playlist) {
-            window.pywebview.api.import_external_playlist(url, name);
-        }
-
-        setTimeout(() => {
+            try {
+                const res = await window.pywebview.api.import_external_playlist(url, name);
+                if (res && res.success) {
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { 
+                        detail: { msg: `Импортирован плейлист "${res.name || 'Импортированный'}" (${res.count || 0} треков)`, type: 'success' } 
+                    }));
+                    closeIP();
+                    if (urlInput) urlInput.value = '';
+                    if (nameInput) nameInput.value = '';
+                    loadPlaylists();
+                    refreshActiveLibraryView();
+                } else {
+                    const errMsg = res?.error || 'Не удалось импортировать плейлист';
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: errMsg, type: 'error' } }));
+                    if (statusEl) statusEl.style.display = 'none';
+                    if (submitBtn) submitBtn.disabled = false;
+                }
+            } catch(err) {
+                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка при импорте плейлиста', type: 'error' } }));
+                if (statusEl) statusEl.style.display = 'none';
+                if (submitBtn) submitBtn.disabled = false;
+            }
+        } else {
             closeIP();
-            if (urlInput) urlInput.value = '';
-            if (nameInput) nameInput.value = '';
-        }, 1500);
+        }
     });
 
     // Add playlist from sidebar input
@@ -165,7 +182,25 @@ export async function loadLibrarySummary() {
     } catch (e) {}
 }
 
+let currentActiveSection = 'favorites';
+let currentSelectedPlaylistData = null;
+
+export function refreshActiveLibraryView() {
+    loadLibrarySummary();
+    if (currentActiveSection === 'favorites') {
+        selectSection('favorites');
+    } else if (currentActiveSection === 'offline') {
+        selectSection('offline');
+    } else if (currentActiveSection === 'playlist' && currentSelectedPlaylistData) {
+        selectSection('playlist', currentSelectedPlaylistData);
+    }
+}
+window.refreshActiveLibraryView = refreshActiveLibraryView;
+
 export async function selectSection(type, data = null) {
+    currentActiveSection = type;
+    if (data) currentSelectedPlaylistData = data;
+
     const emptyEl = document.getElementById('lib-empty-selection');
     const activeView = document.getElementById('lib-active-view');
     const titleEl = document.getElementById('lib-active-title');
@@ -175,7 +210,7 @@ export async function selectSection(type, data = null) {
     if (!activeView || !tracksContainer) return;
 
     if (emptyEl) emptyEl.style.display = 'none';
-    activeView.style.display = 'flex';
+    activeView.style.display = 'block';
     tracksContainer.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
 
     // Reset active highlights
@@ -200,8 +235,8 @@ export async function selectSection(type, data = null) {
 
         const combined = [...localFavs];
         backendFavs.forEach(bt => {
-            const bId = bt.id || bt.source_id;
-            if (!combined.some(lt => (lt.id || lt.source_id) === bId)) {
+            const bId = String(bt.id || bt.source_id);
+            if (!combined.some(lt => String(lt.id || lt.source_id) === bId)) {
                 combined.push(bt);
             }
         });
@@ -230,11 +265,11 @@ export async function selectSection(type, data = null) {
             downloaded = await window.pywebview.api.get_downloaded_tracks() || [];
         }
 
-        // Deduplicate tracks by title and artist
+        // Deduplicate tracks by id / source_id
         const seen = new Set();
         const uniqueDownloaded = [];
         downloaded.forEach(t => {
-            const key = `${(t.title || '').toLowerCase().trim()}___${(t.artist || '').toLowerCase().trim()}`;
+            const key = String(t.id || t.source_id || `${(t.title || '').toLowerCase().trim()}___${(t.artist || '').toLowerCase().trim()}`);
             if (!seen.has(key)) {
                 seen.add(key);
                 uniqueDownloaded.push(t);
@@ -264,11 +299,11 @@ export async function selectSection(type, data = null) {
             tracks = await window.pywebview.api.get_playlist_tracks(data.id) || [];
         }
 
-        // Deduplicate tracks by title and artist
+        // Deduplicate tracks by id / source_id
         const seen = new Set();
         const uniqueTracks = [];
         tracks.forEach(t => {
-            const key = `${(t.title || '').toLowerCase().trim()}___${(t.artist || '').toLowerCase().trim()}`;
+            const key = String(t.id || t.source_id || `${(t.title || '').toLowerCase().trim()}___${(t.artist || '').toLowerCase().trim()}`);
             if (!seen.has(key)) {
                 seen.add(key);
                 uniqueTracks.push(t);
@@ -293,25 +328,19 @@ export async function selectSection(type, data = null) {
 }
 
 export async function loadFavorites() {
-    loadLibrarySummary();
-    const activeView = document.getElementById('lib-active-view');
-    if (activeView && activeView.style.display !== 'none') {
-        const titleEl = document.getElementById('lib-active-title');
-        if (titleEl && titleEl.textContent === 'Любимые треки') {
-            return selectSection('favorites');
-        }
-    }
+    refreshActiveLibraryView();
 }
 
 export async function loadDownloaded() {
-    loadLibrarySummary();
-    const activeView = document.getElementById('lib-active-view');
-    if (activeView && activeView.style.display !== 'none') {
-        const titleEl = document.getElementById('lib-active-title');
-        if (titleEl && titleEl.textContent === 'Оффлайн треки') {
-            return selectSection('offline');
-        }
-    }
+    refreshActiveLibraryView();
+}
+
+// ─── Playlist Order (persisted in localStorage) ───
+function getPlaylistOrder() {
+    try { return JSON.parse(localStorage.getItem('nedotify_playlist_order') || 'null'); } catch { return null; }
+}
+function savePlaylistOrder(ids) {
+    localStorage.setItem('nedotify_playlist_order', JSON.stringify(ids));
 }
 
 export async function loadPlaylists() {
@@ -325,32 +354,302 @@ export async function loadPlaylists() {
             return;
         }
 
+        // Apply saved order (only for non-locked playlists)
+        const locked = playlists.filter(p => p.name === 'Скачанное');
+        const movable = playlists.filter(p => p.name !== 'Скачанное');
+        const savedOrder = getPlaylistOrder();
+        let ordered = movable;
+        if (savedOrder) {
+            const byId = Object.fromEntries(movable.map(p => [String(p.id ?? p.ID), p]));
+            const sorted = savedOrder.map(id => byId[String(id)]).filter(Boolean);
+            const unseen = movable.filter(p => !savedOrder.includes(String(p.id ?? p.ID)) && !savedOrder.includes(p.id ?? p.ID));
+            ordered = [...sorted, ...unseen];
+        }
+        const sortedPlaylists = [...locked, ...ordered];
+
         sidebarList.innerHTML = '';
-        playlists.forEach(pl => {
+
+        sortedPlaylists.forEach(pl => {
             const id = pl.id !== undefined ? pl.id : pl.ID;
             const item = document.createElement('div');
             item.className = 'lib-playlist-item';
             item.setAttribute('data-pl-id', id);
 
-            const isDownloadedPl = pl.name === 'Скачанное';
-            const iconName = isDownloadedPl ? 'download' : 'music';
-            const iconColor = isDownloadedPl ? 'var(--primary)' : 'var(--text-sec)';
+            const isLocked = pl.name === 'Скачанное';
+            const iconName = isLocked ? 'download' : 'music';
+            const iconColor = isLocked ? 'var(--primary)' : 'var(--text-sec)';
 
             item.innerHTML = `
+                ${!isLocked ? `<span class="pl-drag-handle" title="Зажми для перемещения"><i data-lucide="grip-vertical" style="width:13px;height:13px;color:var(--primary);flex-shrink:0;cursor:grab;"></i></span>` : '<span style="width:13px;flex-shrink:0;"></span>'}
                 <i data-lucide="${iconName}" style="width:14px;height:14px;color:${iconColor};flex-shrink:0;"></i>
-                <span class="truncate" style="${isDownloadedPl ? 'font-weight:600;' : ''}">${pl.name}</span>
+                <span class="truncate" style="${isLocked ? 'font-weight:600;' : ''}">${pl.name}</span>
+                ${!isLocked ? `<button class="btn-del-pl" title="Удалить плейлист" style="margin-left:auto; background:none; border:none; color:var(--text-dim); cursor:pointer; padding:2px; opacity:0; transition:opacity 0.18s;"><i data-lucide="trash-2" style="width:12px;height:12px;"></i></button>` : ''}
             `;
-            item.addEventListener('click', () => {
+
+            item.addEventListener('click', (e) => {
+                if (e.target.closest('.btn-del-pl') || e.target.closest('.pl-drag-handle')) return;
                 document.querySelectorAll('.lib-playlist-item').forEach(i => i.classList.remove('active'));
                 item.classList.add('active');
                 selectSection('playlist', { id, name: pl.name });
             });
+
+            const delBtn = item.querySelector('.btn-del-pl');
+
+            if (delBtn) {
+                item.addEventListener('mouseenter', () => {
+                    delBtn.style.opacity = '1';
+                });
+                item.addEventListener('mouseleave', () => {
+                    delBtn.style.opacity = '0';
+                });
+                delBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const confirmed = await showDeletePlaylistModal(pl.name);
+                    if (confirmed) {
+                        if (window.pywebview?.api?.delete_playlist) {
+                            // Animate out
+                            item.style.transition = 'transform 0.25s ease, opacity 0.25s ease, max-height 0.3s ease';
+                            item.style.opacity = '0';
+                            item.style.transform = 'translateX(-20px)';
+                            item.style.maxHeight = item.offsetHeight + 'px';
+                            setTimeout(() => {
+                                item.style.maxHeight = '0';
+                                item.style.marginBottom = '0';
+                                item.style.overflow = 'hidden';
+                            }, 50);
+                            setTimeout(async () => {
+                                await window.pywebview.api.delete_playlist(id);
+                                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Плейлист "${pl.name}" удалён`, type: 'info' } }));
+                                if (currentSelectedPlaylistData?.id === id) {
+                                    selectSection('favorites');
+                                }
+                                loadPlaylists();
+                            }, 320);
+                        }
+                    }
+                });
+            }
+
+            if (!isLocked) {
+                setupPlaylistDrag(item, sidebarList);
+            }
+
             sidebarList.appendChild(item);
         });
+
         renderIcons();
+
+        // Animate items in
+        const items = sidebarList.querySelectorAll('.lib-playlist-item');
+        items.forEach((el, i) => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateX(-12px)';
+            el.style.transition = 'none';
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    el.style.transition = 'opacity 0.22s ease, transform 0.22s ease';
+                    el.style.opacity = '1';
+                    el.style.transform = 'translateX(0)';
+                }, i * 40);
+            });
+        });
+
     } catch (e) {
         console.error("Load playlists error:", e);
     }
+}
+
+// ─── Custom Delete Playlist Modal ───
+function showDeletePlaylistModal(playlistName) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('modal-delete-playlist');
+        const nameEl = document.getElementById('modal-dpl-name');
+        const btnConfirm = document.getElementById('modal-dpl-confirm');
+        const btnCancel = document.getElementById('modal-dpl-cancel');
+        if (!modal) { resolve(window.confirm(`Удалить плейлист "${playlistName}"?`)); return; }
+
+        nameEl.textContent = `«${playlistName}» будет удалён без возможности восстановления.`;
+
+        // Animate in
+        const card = modal.querySelector('.glass-modal-card');
+        modal.style.display = 'flex';
+        if (card) {
+            card.style.transform = 'scale(0.9)';
+            card.style.opacity = '0';
+            card.style.transition = 'none';
+            requestAnimationFrame(() => {
+                card.style.transition = 'transform 0.22s cubic-bezier(0.16,1,0.3,1), opacity 0.22s ease';
+                card.style.transform = 'scale(1)';
+                card.style.opacity = '1';
+            });
+        }
+
+        // Re-render icons inside modal
+        if (window.lucide) setTimeout(() => window.lucide.createIcons(), 10);
+
+        const close = (result) => {
+            if (card) {
+                card.style.transition = 'transform 0.18s ease, opacity 0.18s ease';
+                card.style.transform = 'scale(0.92)';
+                card.style.opacity = '0';
+            }
+            setTimeout(() => {
+                modal.style.display = 'none';
+                if (card) { card.style.transform = ''; card.style.opacity = ''; }
+            }, 180);
+            btnConfirm.removeEventListener('click', onConfirm);
+            btnCancel.removeEventListener('click', onCancel);
+            modal.removeEventListener('click', onOverlay);
+            resolve(result);
+        };
+
+        const onConfirm = () => close(true);
+        const onCancel = () => close(false);
+        const onOverlay = (e) => { if (e.target === modal) close(false); };
+
+        btnConfirm.addEventListener('click', onConfirm);
+        btnCancel.addEventListener('click', onCancel);
+        modal.addEventListener('click', onOverlay);
+    });
+}
+
+// ─── Drag-and-Drop Logic ───
+function setupPlaylistDrag(item, list) {
+    const handle = item.querySelector('.pl-drag-handle');
+    if (!handle) return;
+
+    let dragGhost = null;
+    let startY = 0;
+    let origIndex = 0;
+    let isDragging = false;
+    let placeholder = null;
+
+    const onPointerDown = (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+
+        startY = e.clientY;
+        origIndex = [...list.children].indexOf(item);
+        isDragging = false;
+
+        const onPointerMove = (e2) => {
+            const dy = Math.abs(e2.clientY - startY);
+            if (!isDragging && dy > 6) {
+                isDragging = true;
+                startDrag(item, list, e2.clientY);
+            }
+            if (isDragging) {
+                moveDrag(e2.clientY, list, item);
+            }
+        };
+
+        const onPointerUp = () => {
+            document.removeEventListener('pointermove', onPointerMove);
+            document.removeEventListener('pointerup', onPointerUp);
+            if (isDragging) endDrag(item, list);
+        };
+
+        document.addEventListener('pointermove', onPointerMove);
+        document.addEventListener('pointerup', onPointerUp);
+    };
+
+    handle.addEventListener('pointerdown', onPointerDown);
+}
+
+let _dragItem = null;
+let _dragGhost = null;
+let _placeholder = null;
+let _dragOffsetY = 0;
+
+function startDrag(item, list, clientY) {
+    _dragItem = item;
+
+    const rect = item.getBoundingClientRect();
+    _dragOffsetY = clientY - rect.top;
+
+    // Placeholder
+    _placeholder = document.createElement('div');
+    _placeholder.className = 'pl-drag-placeholder';
+    _placeholder.style.height = rect.height + 'px';
+    _placeholder.style.transition = 'none';
+    list.insertBefore(_placeholder, item);
+
+    // Ghost
+    _dragGhost = item.cloneNode(true);
+    _dragGhost.className = 'lib-playlist-item pl-drag-ghost';
+    _dragGhost.style.cssText = `
+        position:fixed; left:${rect.left}px; top:${rect.top}px;
+        width:${rect.width}px; z-index:9999; pointer-events:none;
+        box-shadow:0 8px 32px rgba(0,0,0,0.55); opacity:0.95;
+        transform:scale(1.03); border-radius:10px;
+        background:var(--bg-card); transition:box-shadow 0.15s;
+    `;
+    document.body.appendChild(_dragGhost);
+
+    item.classList.add('pl-dragging');
+    document.body.style.userSelect = 'none';
+}
+
+function moveDrag(clientY, list, item) {
+    if (!_dragGhost || !_placeholder) return;
+
+    _dragGhost.style.top = (clientY - _dragOffsetY) + 'px';
+
+    const items = [...list.querySelectorAll('.lib-playlist-item:not(.pl-dragging)')];
+    let insertBefore = null;
+
+    for (const el of items) {
+        const elRect = el.getBoundingClientRect();
+        if (clientY < elRect.top + elRect.height / 2) {
+            insertBefore = el;
+            break;
+        }
+    }
+
+    if (insertBefore) {
+        if (_placeholder.nextSibling !== insertBefore) {
+            list.insertBefore(_placeholder, insertBefore);
+        }
+    } else {
+        if (list.lastChild !== _placeholder) {
+            list.appendChild(_placeholder);
+        }
+    }
+}
+
+function endDrag(item, list) {
+    if (!_dragGhost || !_placeholder) return;
+
+    // Animate ghost into placeholder position
+    const targetRect = _placeholder.getBoundingClientRect();
+    _dragGhost.style.transition = 'top 0.18s cubic-bezier(0.16,1,0.3,1), left 0.18s cubic-bezier(0.16,1,0.3,1), transform 0.18s, opacity 0.18s';
+    _dragGhost.style.top = targetRect.top + 'px';
+    _dragGhost.style.left = targetRect.left + 'px';
+    _dragGhost.style.transform = 'scale(1)';
+    _dragGhost.style.opacity = '0';
+
+    setTimeout(() => {
+        list.insertBefore(item, _placeholder);
+        _placeholder.remove();
+        _dragGhost.remove();
+        item.classList.remove('pl-dragging');
+        document.body.style.userSelect = '';
+        _dragGhost = null;
+        _placeholder = null;
+        _dragItem = null;
+
+        // Persist new order (only draggable items, skip locked)
+        const allItems = [...list.querySelectorAll('.lib-playlist-item')];
+        const ids = allItems
+            .filter(el => el.querySelector('.pl-drag-handle'))
+            .map(el => el.getAttribute('data-pl-id'));
+        savePlaylistOrder(ids);
+
+        // Flash item
+        item.style.transition = 'background 0.3s';
+        item.style.background = 'rgba(var(--primary-rgb, 59,130,246), 0.15)';
+        setTimeout(() => { item.style.background = ''; }, 400);
+    }, 200);
 }
 
 // в”Ђв”Ђв”Ђ Playlist Context Menu в”Ђв”Ђв”Ђ

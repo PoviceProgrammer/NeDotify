@@ -402,7 +402,9 @@ function createFeedCard(track) {
     `;
     card.addEventListener('click', () => {
         if (window.pywebview?.api) {
-            window.pywebview.api.play_track(track);
+            const trackObj = { ...track };
+            if (trackObj.track_id) trackObj.id = trackObj.track_id;
+            window.pywebview.api.play_track(trackObj);
         }
     });
     return card;
@@ -473,9 +475,14 @@ export function renderTopArtists(artists) {
             window.appConfig = window.appConfig || {};
             window.appConfig.searchQuery = artist.artist;
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            const searchNav = document.querySelector('[data-view="search"]');
+            const searchNav = document.querySelector('[data-page="search"]');
             if (searchNav) searchNav.classList.add('active');
-            if (window.loadView) window.loadView('search');
+            if (window.NeDotify && window.NeDotify.showPage) {
+                window.NeDotify.showPage('search');
+            } else {
+                const searchTab = document.getElementById('tab-search');
+                if (searchTab) searchTab.click();
+            }
         };
         container.appendChild(card);
     });

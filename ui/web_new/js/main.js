@@ -1,5 +1,5 @@
-// NeDotify РІР‚" Main Entry Point
-import { initPlayer, applySettings } from './player.js?v=19';
+// NeDotify - Main Entry Point
+import { initPlayer, applySettings, playTrack } from './player.js?v=19';
 import { initPages, showPage } from './pages.js?v=19';
 import { initSearch } from './search.js?v=19';
 import { loadHome } from './home.js?v=19';
@@ -8,7 +8,7 @@ import { initSettings, applySettingsFromBackend, loadSettings } from './settings
 import { initParticles } from './particles.js?v=19';
 import { initVisualizer } from './visualizer.js?v=19';
 import { initEvents } from './events.js?v=19';
-import { renderIcons, handleImageError } from './utils.js?v=19';
+import { renderIcons, handleImageError, showTrackContextMenu } from './utils.js?v=19';
 import { initLyrics } from './lyrics.js?v=19';
 import { initEqualizer } from './equalizer.js?v=19';
 import { initQueue } from './queue.js?v=19';
@@ -26,16 +26,68 @@ window.NeDotify = {
     createPlaylist: createPlaylist,
     loadHome: loadHome,
     loadLibrary: loadLibrary,
-    loadProfile: loadProfile,
+    loadProfile: window.loadProfile,
     loadSettings: loadSettings,
     handleImageError: handleImageError,
+    showTrackContextMenu: showTrackContextMenu,
+    showPage: showPage,
+    playTrack: playTrack,
+    playNext: (track) => {
+        if (window.pywebview?.api?.play_next) {
+            window.pywebview.api.play_next(track);
+        }
+    },
+    addToQueue: (track) => {
+        if (window.pywebview?.api?.add_to_queue) {
+            window.pywebview.api.add_to_queue(track);
+        }
+    },
     downloadTrack: (track) => {
         if (!track) return;
         if (window.pywebview?.api?.download_track) {
             window.pywebview.api.download_track(track);
         }
-    }
+    },
+    toggleMiniPlayerMode: toggleMiniPlayerMode
 };
+
+export async function toggleMiniPlayerMode(targetState) {
+    const isCurrentlyMini = document.body.classList.contains('mini-player-active');
+    if (targetState === undefined) targetState = !isCurrentlyMini;
+
+    if (targetState) {
+        // Entering Mini Mode
+        document.body.classList.add('mini-player-entering');
+        const mpCard = document.getElementById('mini-player-overlay');
+        if (mpCard) mpCard.classList.remove('expanded');
+
+        setTimeout(async () => {
+            document.body.classList.add('mini-player-active');
+            if (window.pywebview?.api?.toggle_mini_player) {
+                try { await window.pywebview.api.toggle_mini_player(true); } catch(e) {}
+            }
+            setTimeout(() => {
+                document.body.classList.remove('mini-player-entering');
+            }, 200);
+        }, 120);
+    } else {
+        // Exiting Mini Mode
+        document.body.classList.add('mini-player-exiting');
+        const mpCard = document.getElementById('mini-player-overlay');
+        if (mpCard) mpCard.classList.remove('expanded');
+
+        setTimeout(async () => {
+            document.body.classList.remove('mini-player-active');
+            if (window.pywebview?.api?.toggle_mini_player) {
+                try { await window.pywebview.api.toggle_mini_player(false); } catch(e) {}
+            }
+            setTimeout(() => {
+                document.body.classList.remove('mini-player-exiting');
+            }, 220);
+        }, 100);
+    }
+}
+window.toggleMiniPlayerMode = toggleMiniPlayerMode;
 
 // Instant restoration of Theme, Particles, Blur & Transparency on boot
 (function restorePreferences() {
@@ -49,6 +101,12 @@ window.NeDotify = {
 
         const glassBlur = JSON.parse(localStorage.getItem('nedotify_theme_glass_blur') ?? '20');
         document.documentElement.style.setProperty('--glass-blur', `${glassBlur}px`);
+
+        const customPrimary = localStorage.getItem('nedotify_theme_custom_primary');
+        if (customPrimary) {
+            const parsed = JSON.parse(customPrimary);
+            if (parsed) document.documentElement.style.setProperty('--primary', parsed);
+        }
 
         const transEnabled = JSON.parse(localStorage.getItem('nedotify_theme_transparency_enabled') ?? 'true');
         const transLevel = JSON.parse(localStorage.getItem('nedotify_theme_transparency_level') ?? '80');
@@ -203,21 +261,8 @@ async function init() {
         initEfficiency();
 
         // Window controls (frameless) - Initialize first to ensure app can always be closed
-        document.getElementById('btn-mini-player')?.addEventListener('click', async () => {
-            const isCurrentlyMini = document.body.classList.contains('mini-player-active');
-            const targetState = !isCurrentlyMini;
-            document.body.classList.toggle('mini-player-active', targetState);
-            if (window.pywebview?.api?.toggle_mini_player) {
-                setTimeout(() => {
-                    try {
-                        window.pywebview.api.toggle_mini_player(targetState).then(actualState => {
-                            if (typeof actualState === 'boolean') {
-                                document.body.classList.toggle('mini-player-active', actualState);
-                            }
-                        }).catch(e => console.warn(e));
-                    } catch(e) {}
-                }, 50);
-            }
+        document.getElementById('btn-mini-player')?.addEventListener('click', () => {
+            toggleMiniPlayerMode();
         });
         document.getElementById('btn-minimize')?.addEventListener('click', () => {
             if (window.pywebview?.api) window.pywebview.api.minimize_window();
@@ -347,6 +392,23 @@ async function loadProfile() {
         el('profile-stat-time', formatListeningTimeShort(data.total_listening_time_ms || 0));
         el('profile-stat-favorites', data.favorite_count || 0);
 
+        // Pinned track
+        const pinnedTrack = window.settings?.personalization?.pinned_track || window.settings?.app?.pinned_track;
+        const pinnedSection = document.getElementById('profile-pinned-section');
+        const pinnedTrackList = document.getElementById('profile-pinned-track');
+        if (pinnedSection && pinnedTrackList) {
+            if (pinnedTrack) {
+                pinnedSection.style.display = 'block';
+                pinnedTrackList.innerHTML = '';
+                const { createTrackElement, renderIcons } = await import('./utils.js');
+                const { getCurrentTrack } = await import('./player.js');
+                pinnedTrackList.appendChild(createTrackElement(pinnedTrack, 0, [pinnedTrack], getCurrentTrack()));
+                renderIcons();
+            } else {
+                pinnedSection.style.display = 'none';
+            }
+        }
+
         // Most played
         if (data.most_played && data.most_played.length > 0) {
             const container = document.getElementById('profile-top-tracks');
@@ -439,10 +501,17 @@ function setupProfileAndGreeting() {
         });
     }
 
+    function formatFileUrl(path) {
+        if (!path) return '';
+        const clean = path.replace(/\\/g, '/');
+        if (clean.startsWith('file://')) return encodeURI(clean);
+        return `file:///${encodeURI(clean.replace(/^\//, ''))}`;
+    }
+
     if (avatarImg && avatarIcon) {
-        const currentAvatar = window.settings?.personalization?.avatar_path;
+        const currentAvatar = window.settings?.personalization?.avatar_path || window.settings?.app?.avatar_path;
         if (currentAvatar) {
-            avatarImg.src = `file:///${currentAvatar}`;
+            avatarImg.src = formatFileUrl(currentAvatar);
             avatarImg.style.display = 'block';
             avatarIcon.style.display = 'none';
         }
@@ -456,7 +525,7 @@ function setupProfileAndGreeting() {
                     if (!window.settings.personalization) window.settings.personalization = {};
                     window.settings.personalization.avatar_path = newAvatar;
                     if (avatarImg && avatarIcon) {
-                        avatarImg.src = `file:///${newAvatar}`;
+                        avatarImg.src = formatFileUrl(newAvatar);
                         avatarImg.style.display = 'block';
                         avatarIcon.style.display = 'none';
                     }

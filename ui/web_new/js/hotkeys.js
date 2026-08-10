@@ -1,96 +1,176 @@
 import { togglePlayPause } from './player.js?v=19';
 
-export function initHotkeys() {
-    document.addEventListener('keydown', (e) => {
-        // Ignore if user is typing in an input
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+export const DEFAULT_KEYBINDS = [
+    { id: 'play_pause', label: 'Воспроизведение / Пауза', defaultKey: 'Space' },
+    { id: 'next_track', label: 'Следующий трек', defaultKey: 'ArrowRight' },
+    { id: 'prev_track', label: 'Предыдущий трек', defaultKey: 'ArrowLeft' },
+    { id: 'volume_up', label: 'Увеличить громкость (+5%)', defaultKey: 'ArrowUp' },
+    { id: 'volume_down', label: 'Уменьшить громкость (-5%)', defaultKey: 'ArrowDown' },
+    { id: 'toggle_mute', label: 'Вкл / Выкл звук', defaultKey: 'KeyM' },
+    { id: 'toggle_lyrics', label: 'Открыть / закрыть текст', defaultKey: 'KeyL' },
+    { id: 'toggle_mini', label: 'Компактный мини-плеер', defaultKey: 'KeyP' },
+    { id: 'search', label: 'Фокус на поиск', defaultKey: 'Slash' },
+    { id: 'like', label: 'Нравится трек', defaultKey: 'KeyK' }
+];
 
-        // Spacebar is a hardcoded fallback
-        if (e.code === 'Space') {
+export const activeKeybinds = {};
+let listeningKeybindId = null;
+
+export function setListeningKeybind(id) {
+    listeningKeybindId = id;
+}
+
+export function getListeningKeybindId() {
+    return listeningKeybindId;
+}
+
+export function saveKeybindsToStorage(keybinds) {
+    try {
+        localStorage.setItem('nedotify_keybinds', JSON.stringify(keybinds));
+    } catch(e) {}
+}
+
+export function parseKeyEventCombo(e) {
+    const parts = [];
+    if (e.ctrlKey) parts.push('Ctrl');
+    if (e.altKey) parts.push('Alt');
+    if (e.shiftKey) parts.push('Shift');
+    if (e.metaKey) parts.push('Meta');
+
+    let keyName = e.code || e.key;
+    if (keyName === ' ' || e.key === ' ') keyName = 'Space';
+    if (keyName === '/' || e.key === '/') keyName = 'Slash';
+    
+    // Ignore standalone modifier keypresses
+    if (['ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight', 'Control', 'Alt', 'Shift', 'Meta'].includes(keyName)) {
+        return null;
+    }
+
+    parts.push(keyName);
+    return parts.join('+');
+}
+
+export function initHotkeys() {
+    // 1. Set default keybinds
+    DEFAULT_KEYBINDS.forEach(kb => {
+        activeKeybinds[kb.id] = kb.defaultKey;
+    });
+
+    // 2. Load local storage fallback
+    const localSaved = localStorage.getItem('nedotify_keybinds');
+    if (localSaved) {
+        try { Object.assign(activeKeybinds, JSON.parse(localSaved)); } catch(e) {}
+    }
+
+    // 3. Load backend keybinds category settings
+    if (window.pywebview?.api?.get_settings_by_category) {
+        window.pywebview.api.get_settings_by_category('keybinds').then(saved => {
+            if (saved && typeof saved === 'object') {
+                Object.assign(activeKeybinds, saved);
+                saveKeybindsToStorage(activeKeybinds);
+            }
+            if (window.renderKeybindsList) window.renderKeybindsList();
+        }).catch(() => {
+            if (window.renderKeybindsList) window.renderKeybindsList();
+        });
+    }
+
+    // SINGLE AUTHORITATIVE GLOBAL KEYDOWN LISTENER (Eliminates double toggle on Space)
+    window.addEventListener('keydown', (e) => {
+        // Rebinding Mode inside Settings UI
+        if (listeningKeybindId) {
             e.preventDefault();
-            togglePlayPause();
+            e.stopPropagation();
+            const combo = parseKeyEventCombo(e);
+            if (combo && e.code !== 'Escape') {
+                activeKeybinds[listeningKeybindId] = combo;
+                saveKeybindsToStorage(activeKeybinds);
+                if (window.pywebview?.api?.save_setting) {
+                    window.pywebview.api.save_setting(listeningKeybindId, combo, 'keybinds');
+                }
+            }
+            listeningKeybindId = null;
+            if (window.renderKeybindsList) window.renderKeybindsList();
             return;
         }
 
-        if (!window.pywebview || !window.pywebview.api) return;
+        // Ignore if user is typing in an input or editable element
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+        if (activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable || e.target.matches('input, textarea, select, [contenteditable="true"]')) {
+            return;
+        }
 
-        // Fetch settings or just use the API if needed.
-        // Actually, we can just send the pressed key combination to python
-        // and let python decide, OR check against local settings.
-        
-        let keys = [];
-        if (e.ctrlKey) keys.push('Ctrl');
-        if (e.shiftKey) keys.push('Shift');
-        if (e.altKey) keys.push('Alt');
-        
-        // Convert JS key names to match python setting format like "Ctrl+Right"
-        let keyName = e.key;
-        if (keyName === 'ArrowRight') keyName = 'Right';
-        else if (keyName === 'ArrowLeft') keyName = 'Left';
-        else if (keyName === 'ArrowUp') keyName = 'Up';
-        else if (keyName === 'ArrowDown') keyName = 'Down';
-        else if (keyName.length === 1) keyName = keyName.toUpperCase(); // e.g. 'm' -> 'M'
-        
-        if (['Control', 'Shift', 'Alt', 'Meta'].includes(keyName)) return;
-        
-        keys.push(keyName);
-        const combo = keys.join('+');
-        
-        // Handle Media Keys natively (no modifier needed)
+        // Handle native Media Keys
         if (e.key === 'MediaPlayPause') { e.preventDefault(); togglePlayPause(); return; }
-        if (e.key === 'MediaTrackNext') { e.preventDefault(); window.pywebview.api.next_track(); return; }
-        if (e.key === 'MediaTrackPrevious') { e.preventDefault(); window.pywebview.api.prev_track(); return; }
-        
-        // Get hotkeys config from backend directly
-        window.pywebview.api.get_settings_by_category('hotkeys').then(hotkeys => {
-            if (!hotkeys) return;
-            
-            for (const [action, bind] of Object.entries(hotkeys)) {
-                if (bind === combo) {
-                    e.preventDefault();
-                    executeAction(action);
-                    break;
-                }
+        if (e.key === 'MediaTrackNext') { e.preventDefault(); if (window.pywebview?.api) window.pywebview.api.next_track(); return; }
+        if (e.key === 'MediaTrackPrevious') { e.preventDefault(); if (window.pywebview?.api) window.pywebview.api.prev_track(); return; }
+
+        const pressedCombo = parseKeyEventCombo(e);
+        if (!pressedCombo) return;
+
+        // Exact combo match against active keybinds
+        for (const [actionId, key] of Object.entries(activeKeybinds)) {
+            const isMatch = (key === pressedCombo) || 
+                            (key === 'Space' && (pressedCombo === 'Space' || e.code === 'Space' || e.key === ' '));
+            if (isMatch) {
+                e.preventDefault();
+                executeHotkeysAction(actionId);
+                break;
             }
-        });
+        }
     });
 }
 
-function executeAction(action) {
-    if (!window.pywebview || !window.pywebview.api) return;
-    
-    switch (action) {
+export function executeHotkeysAction(actionId) {
+    switch (actionId) {
         case 'play_pause':
             togglePlayPause();
             break;
         case 'next_track':
-            window.pywebview.api.next_track();
+            if (window.pywebview?.api?.next_track) window.pywebview.api.next_track();
             break;
         case 'prev_track':
-            window.pywebview.api.prev_track();
+            if (window.pywebview?.api?.prev_track) window.pywebview.api.prev_track();
             break;
         case 'volume_up':
-            // we should ideally read volume from JS but it's simpler to send to python or change JS audio
-            window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Громкость +' } }));
+            if (window.NeDotify?.adjustVolume) {
+                window.NeDotify.adjustVolume(5);
+            }
             break;
         case 'volume_down':
-            window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Громкость -' } }));
+            if (window.NeDotify?.adjustVolume) {
+                window.NeDotify.adjustVolume(-5);
+            }
             break;
+        case 'toggle_mute':
         case 'mute':
-            window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Без звука' } }));
+            const volBtn = document.getElementById('pb-volume-btn');
+            if (volBtn) volBtn.click();
             break;
         case 'like':
-            const btnLike = document.getElementById('btn-like');
+            const btnLike = document.getElementById('pp-btn-like') || document.getElementById('btn-like');
             if (btnLike) btnLike.click();
             break;
-        case 'search':
-            const searchInput = document.getElementById('search-input');
-            if (searchInput) {
-                // switch tab if needed
-                const tabSearch = document.getElementById('tab-search');
-                if (tabSearch) tabSearch.click();
-                searchInput.focus();
+        case 'toggle_lyrics':
+            const lyricsBtn = document.getElementById('pp-btn-lyrics');
+            if (lyricsBtn) lyricsBtn.click();
+            break;
+        case 'toggle_mini':
+            if (window.NeDotify?.toggleMiniPlayerMode) {
+                window.NeDotify.toggleMiniPlayerMode();
+            } else if (window.toggleMiniPlayerMode) {
+                window.toggleMiniPlayerMode();
             }
+            break;
+        case 'search':
+            if (window.NeDotify?.showPage) window.NeDotify.showPage('home');
+            setTimeout(() => {
+                const searchInput = document.getElementById('search-input') || document.getElementById('global-search-input');
+                if (searchInput) {
+                    searchInput.focus();
+                    if (searchInput.select) searchInput.select();
+                }
+            }, 50);
             break;
     }
 }

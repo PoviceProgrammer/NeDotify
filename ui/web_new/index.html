@@ -403,8 +403,14 @@
 
                     <!-- Mini Controls -->
                     <div class="player-full-controls player-card-controls">
-                        <button class="btn-ctrl" id="pp-btn-queue" title="Очередь" aria-label="Queue">
-                            <i data-lucide="list-music" style="width:20px;height:20px"></i>
+                        <button class="btn-ctrl" id="pp-btn-like" title="Лайк" aria-label="Like">
+                            <i data-lucide="heart" style="width:20px;height:20px"></i>
+                        </button>
+                        <button class="btn-ctrl" id="pp-btn-shuffle" title="Перемешать" aria-label="Shuffle">
+                            <i data-lucide="shuffle" style="width:20px;height:20px"></i>
+                        </button>
+                        <button class="btn-ctrl" id="pp-btn-repeat" title="Повтор" aria-label="Repeat">
+                            <i data-lucide="repeat" style="width:20px;height:20px"></i>
                         </button>
                         <button class="btn-ctrl" id="pp-btn-prev" title="Предыдущий">
                             <i data-lucide="skip-back" style="width:20px;height:20px"></i>
@@ -412,11 +418,14 @@
                         <button class="btn-play-large" id="pp-btn-play" title="Воспроизведение" style="width:48px;height:48px;font-size:20px;">
                             <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
                         </button>
-                        <button class="btn-ctrl" id="pp-btn-next" title="">
+                        <button class="btn-ctrl" id="pp-btn-next" title="Следующий">
                             <i data-lucide="skip-forward" style="width:20px;height:20px"></i>
                         </button>
                         <button class="btn-ctrl" id="pp-btn-lyrics" title="Текст песни" aria-label="Lyrics">
                             <i data-lucide="mic" style="width:20px;height:20px"></i>
+                        </button>
+                        <button class="btn-ctrl" id="pp-btn-queue" title="Очередь" aria-label="Queue">
+                            <i data-lucide="list-music" style="width:20px;height:20px"></i>
                         </button>
                     </div>
                 </div>
@@ -862,22 +871,31 @@
                             <!-- 12. Позиция мини-плеера -->
                             <div class="setting-card-group" id="opt-mp-pos" style="margin-top: 20px;">
                                 <div class="setting-label">Позиция мини-плеера</div>
-                                <div class="setting-sublabel" style="margin-bottom:10px;">Выберите, где будет отображаться мини-плеер</div>
-                                <div style="display:flex; gap:12px; align-items:center;" id="mp-pos-btn-group">
-                                    <button class="opt-card-btn" data-pos="top-left" title=" " style="width:42px; height:42px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; justify-content:center; cursor:pointer;">
-                                        <i data-lucide="panel-top-close" style="width:18px;height:18px"></i>
+                                <div class="setting-sublabel" style="margin-bottom:12px;">Выберите, в какой части экрана будет располагаться мини-плеер</div>
+                                <div style="display:flex; flex-wrap:wrap; gap:10px; width:100%;" id="mp-pos-btn-group">
+                                    <button class="opt-card-btn" data-pos="top-left" title="Вверху слева" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <i data-lucide="arrow-up-left" style="width:18px;height:18px"></i>
+                                        <span style="font-size:12px; font-weight:500;">Вверху слева</span>
                                     </button>
-                                    <button class="opt-card-btn active" data-pos="bottom-right" title=" " style="width:42px; height:42px; border-radius:10px; border:1px solid var(--primary); background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer;">
-                                        <i data-lucide="panel-bottom-close" style="width:18px;height:18px"></i>
+                                    <button class="opt-card-btn" data-pos="top-center" title="Вверху по центру" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <i data-lucide="arrow-up" style="width:18px;height:18px"></i>
+                                        <span style="font-size:12px; font-weight:500;">Вверху по центру</span>
                                     </button>
-                                    <button class="opt-card-btn" data-pos="top-right" title=" " style="width:42px; height:42px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; justify-content:center; cursor:pointer;">
-                                        <i data-lucide="panel-top" style="width:18px;height:18px"></i>
+                                    <button class="opt-card-btn" data-pos="top-right" title="Вверху справа" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <i data-lucide="arrow-up-right" style="width:18px;height:18px"></i>
+                                        <span style="font-size:12px; font-weight:500;">Вверху справа</span>
                                     </button>
-                                    <button class="opt-card-btn" data-pos="bottom-left" title=" " style="width:42px; height:42px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; justify-content:center; cursor:pointer;">
-                                        <i data-lucide="panel-bottom" style="width:18px;height:18px"></i>
+                                    <button class="opt-card-btn" data-pos="bottom-left" title="Внизу слева" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <i data-lucide="arrow-down-left" style="width:18px;height:18px"></i>
+                                        <span style="font-size:12px; font-weight:500;">Внизу слева</span>
                                     </button>
-                                    <button class="opt-card-btn" data-pos="center" title="По центру" style="width:42px; height:42px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; justify-content:center; cursor:pointer;">
+                                    <button class="opt-card-btn active" data-pos="bottom-right" title="Внизу справа" style="padding:10px 14px; border-radius:12px; border:1px solid var(--primary); background:var(--primary); color:#fff; display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <i data-lucide="arrow-down-right" style="width:18px;height:18px"></i>
+                                        <span style="font-size:12px; font-weight:500;">Внизу справа</span>
+                                    </button>
+                                    <button class="opt-card-btn" data-pos="center" title="По центру" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
                                         <i data-lucide="maximize-2" style="width:18px;height:18px"></i>
+                                        <span style="font-size:12px; font-weight:500;">По центру</span>
                                     </button>
                                 </div>
                             </div>
@@ -933,7 +951,11 @@
                             </div>
 
                             <!-- Filter & Sort Bar -->
-                            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px;">
+                              <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:18px;">
+                                  <div style="width: 100%;">
+                                      <input type="text" id="workshop-search-input" class="settings-input" placeholder="Поиск по мастерской..." autocomplete="off">
+                                  </div>
+                                  <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; width: 100%;">
                                 <div style="display:flex; gap:8px; flex-wrap:wrap;" id="workshop-tags-container">
                                     <button class="tag-btn active" data-tag="all">Все</button>
                                     <button class="tag-btn" data-tag="anime">Аниме</button>
@@ -947,7 +969,8 @@
                                     <option value="popular">🔥 По популярности</option>
                                     <option value="downloads">📥 По скачиваниям</option>
                                 </select>
-                            </div>
+                                  </div>
+                              </div>
 
                             <!-- Workshop Cards Grid -->
                             <div class="workshop-grid" id="workshop-cards-grid">
@@ -1131,9 +1154,20 @@
                             </div>
                         </div>
                         <div class="settings-section">
-                            <div class="settings-section-title" style="display:flex; justify-content:space-between; align-items:center;">
+                            <div class="settings-section-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
                                 <span>Эквалайзер</span>
-                                <button id="btn-eq-reset" class="filter-btn"></button>
+                                <div style="display:flex; gap:8px; align-items:center;">
+                                    <select id="eq-preset-select" class="settings-select" style="padding: 4px 8px; font-size:12px; height:28px;">
+                                        <option value="flat">Пресет: Сброс (Flat)</option>
+                                        <option value="bass_boost">Пресет: Усиление баса</option>
+                                        <option value="treble_boost">Пресет: Усиление высоких</option>
+                                        <option value="vocal">Пресет: Вокал</option>
+                                        <option value="rock">Пресет: Рок</option>
+                                        <option value="pop">Пресет: Поп</option>
+                                        <option value="jazz">Пресет: Джаз</option>
+                                    </select>
+                                    <button id="btn-eq-reset" class="filter-btn" style="padding: 4px 12px; font-size:12px;">Сброс</button>
+                                </div>
                             </div>
                             <div class="setting-row" style="flex-direction:column; align-items:flex-start; padding-bottom: 24px;">
                                 <div style="display:flex; justify-content:space-between; width:100%; margin-bottom: 8px;">
@@ -1181,27 +1215,27 @@
                             <div class="settings-section-title">Форма частиц</div>
                             <div class="select-grid" style="grid-template-columns:repeat(4,1fr)">
                                 <button class="select-card particle-shape-btn active" data-shape="dot">● Круг</button>
-                                <button class="select-card particle-shape-btn" data-shape="heart"> </button>
-                                <button class="select-card particle-shape-btn" data-shape="star">⭐ Звезды</button>
-                                <button class="select-card particle-shape-btn" data-shape="snow"> </button>
-                                <button class="select-card particle-shape-btn" data-shape="flag_rf" title=" ">
+                                <button class="select-card particle-shape-btn" data-shape="heart">❤️ Сердце</button>
+                                <button class="select-card particle-shape-btn" data-shape="star">⭐ Звёзды</button>
+                                <button class="select-card particle-shape-btn" data-shape="snow">❄️ Снег</button>
+                                <button class="select-card particle-shape-btn" data-shape="flag_rf" title="Флаг РФ">
                                     <span style="display:inline-flex; align-items:center; gap:6px;">
                                         <span style="display:inline-block; width:18px; height:12px; border-radius:2px; overflow:hidden; border:1px solid rgba(255,255,255,0.3); vertical-align:middle; line-height:0; flex-shrink:0;">
                                             <span style="display:block; height:4px; background:#ffffff;"></span>
                                             <span style="display:block; height:4px; background:#0039a6;"></span>
                                             <span style="display:block; height:4px; background:#d52b1e;"></span>
                                         </span>
-                                        <span> </span>
+                                        <span>Флаг РФ</span>
                                     </span>
                                 </button>
-                                <button class="select-card particle-shape-btn" data-shape="coat_rf" title=" ">
+                                <button class="select-card particle-shape-btn" data-shape="coat_rf" title="Герб РФ">
                                     <span style="display:inline-flex; align-items:center; gap:6px;">
-                                        <span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:14px; background:#cc0000; border:1px solid #ffd700; border-radius:2px; color:#ffd700; font-size:10px; flex-shrink:0; line-height:1;">рџ¦…</span>
-                                        <span> </span>
+                                        <span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:14px; background:#cc0000; border:1px solid #ffd700; border-radius:2px; color:#ffd700; font-size:10px; flex-shrink:0; line-height:1;">🦅</span>
+                                        <span>Герб РФ</span>
                                     </span>
                                 </button>
                                 <button class="select-card particle-shape-btn" data-shape="note">🎵 Ноты</button>
-                                <button class="select-card particle-shape-btn" data-shape="sparkle">✨ Блестки</button>
+                                <button class="select-card particle-shape-btn" data-shape="sparkle">✨ Блёстки</button>
                             </div>
                         </div>
                     </div>
@@ -1255,6 +1289,102 @@
                             </div>
 
                         </div>
+
+                        <div class="settings-section">
+                            <div class="settings-section-title">Оптимизация и Производительность</div>
+                            
+                            <!-- 1. Пресет производительности -->
+                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+                                <div class="setting-label" style="font-weight:600">Пресет производительности</div>
+                                <div style="display:flex; gap:8px; width:100%;" id="opt-perf-preset">
+                                    <button class="opt-card filter-btn" data-val="low" style="flex:1; padding:8px;">Низкий (Low)</button>
+                                    <button class="opt-card filter-btn" data-val="balanced" style="flex:1; padding:8px;">Баланс (Balanced)</button>
+                                    <button class="opt-card filter-btn active" data-val="high" style="flex:1; padding:8px;">Высокий (High)</button>
+                                </div>
+                            </div>
+
+                            <!-- 2. Лимит фоновой активности -->
+                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:8px; margin-top:12px;">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">Лимит фоновой активности</div>
+                                    <div class="setting-sublabel">Когда экономить ресурсы процессора и видеокарты</div>
+                                </div>
+                                <div style="display:flex; gap:8px; width:100%;" id="opt-limit-state">
+                                    <button class="opt-card filter-btn" data-val="off" style="flex:1; padding:8px;">Отключен</button>
+                                    <button class="opt-card filter-btn active" data-val="minimize" style="flex:1; padding:8px;">При сворачивании</button>
+                                    <button class="opt-card filter-btn" data-val="focus" style="flex:1; padding:8px;">При потере фокуса</button>
+                                </div>
+                            </div>
+
+                            <!-- 3. Качество Blur -->
+                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:8px; margin-top:12px;">
+                                <div class="setting-label" style="font-weight:600">Качество эффекта размытия (Blur)</div>
+                                <div style="display:flex; gap:8px; width:100%;" id="opt-blur-quality">
+                                    <button class="opt-card filter-btn" data-val="off" style="flex:1; padding:8px;">Выкл</button>
+                                    <button class="opt-card filter-btn" data-val="lq" style="flex:1; padding:8px;">Низкое (LQ)</button>
+                                    <button class="opt-card filter-btn active" data-val="hq" style="flex:1; padding:8px;">Высокое (HQ)</button>
+                                </div>
+                            </div>
+
+                            <!-- 4. Качество Glow -->
+                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:8px; margin-top:12px;">
+                                <div class="setting-label" style="font-weight:600">Качество фонового свечения (Glow)</div>
+                                <div style="display:flex; gap:8px; width:100%;" id="opt-glow-quality">
+                                    <button class="opt-card filter-btn" data-val="off" style="flex:1; padding:8px;">Выкл</button>
+                                    <button class="opt-card filter-btn" data-val="subtle" style="flex:1; padding:8px;">Умеренное</button>
+                                    <button class="opt-card filter-btn active" data-val="full" style="flex:1; padding:8px;">Полное</button>
+                                </div>
+                            </div>
+
+                            <!-- 5. FPS Sliders -->
+                            <div class="setting-row" style="margin-top:12px;">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">FPS частичек</div>
+                                    <div class="setting-sublabel">Частота кадров летающих частиц</div>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:12px">
+                                    <input type="range" class="slider-input" id="slider-fps-particles" min="5" max="30" step="1" value="24" style="width:140px">
+                                    <span id="label-fps-particles" style="font-size:12px; font-weight:700; color:var(--primary); min-width:48px">24 FPS</span>
+                                </div>
+                            </div>
+
+                            <div class="setting-row" style="margin-top:8px;">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">FPS визуализатора</div>
+                                    <div class="setting-sublabel">Частота кадров звукового визуализатора</div>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:12px">
+                                    <input type="range" class="slider-input" id="slider-fps-visualizer" min="10" max="60" step="5" value="30" style="width:140px">
+                                    <span id="label-fps-visualizer" style="font-size:12px; font-weight:700; color:var(--primary); min-width:48px">30 FPS</span>
+                                </div>
+                            </div>
+
+                            <div class="setting-row" style="margin-top:8px;">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">FPS интерфейса</div>
+                                    <div class="setting-sublabel">Частота плавных анимаций интерфейса</div>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:12px">
+                                    <input type="range" class="slider-input" id="slider-fps-ui" min="15" max="60" step="5" value="60" style="width:140px">
+                                    <span id="label-fps-ui" style="font-size:12px; font-weight:700; color:var(--primary); min-width:48px">60 FPS</span>
+                                </div>
+                            </div>
+
+                            <!-- 6. Активные ресурсы -->
+                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:8px; margin-top:16px;">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">Активные ресурсы и модули</div>
+                                    <div class="setting-sublabel">Переключатели активности визуальных компонентов</div>
+                                </div>
+                                <div style="display:flex; flex-wrap:wrap; gap:8px; width:100%;" id="opt-active-resources">
+                                    <button class="opt-toggle-btn filter-btn active" data-resource="bg" style="padding:6px 12px;">Фон</button>
+                                    <button class="opt-toggle-btn filter-btn active" data-resource="particles" style="padding:6px 12px;">Частицы</button>
+                                    <button class="opt-toggle-btn filter-btn active" data-resource="covers" style="padding:6px 12px;">Обложки</button>
+                                    <button class="opt-toggle-btn filter-btn active" data-resource="visualizers" style="padding:6px 12px;">Визуализатор</button>
+                                    <button class="opt-toggle-btn filter-btn active" data-resource="blur" style="padding:6px 12px;">Размытие</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div id="settings-auth" class="settings-panel">
@@ -1275,6 +1405,28 @@
                                 <div id="yandex-auth-warning" class="warning-box" style="display: none;">
                                     <i data-lucide="alert-triangle" style="width:16px;height:16px"></i>
                                     <span>Ошибка авторизации Яндекс Музыка. Доступ ограничен 30 сек.</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <div class="settings-section-title">YouTube Music (Скоро)</div>
+                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px; border-bottom: none;">
+                                <div>
+                                    <div class="setting-label">OAuth 2.0 Client ID</div>
+                                    <div class="setting-sublabel">ID клиента для API YouTube Data v3</div>
+                                </div>
+                                <input type="text" class="settings-input" id="input-oauth-client-id" placeholder="Client ID..." disabled title="Функция пока недоступна">
+                                
+                                <div style="margin-top: 8px;">
+                                    <div class="setting-label">OAuth 2.0 Client Secret</div>
+                                    <div class="setting-sublabel">Секрет клиента для API YouTube Data v3 <span style="opacity:0.75;font-size:11px;">(⚠️ Client Secret не отправляется с фронтенда)</span></div>
+                                </div>
+                                <input type="password" class="settings-input" id="input-oauth-client-secret" placeholder="Client Secret..." disabled title="Функция пока недоступна">
+                                
+                                <div style="display:flex;gap:8px;align-items:center;width:100%;margin-top:8px">
+                                    <button id="btn-ytmusic-oauth" disabled title="Поддержка YouTube Music пока недоступна" style="padding:8px 16px;border-radius:8px;background:var(--primary);color:var(--bg-main);border:none;cursor:not-allowed;font-weight:600;font-size:13px;opacity:0.5">
+                                        Подключить YouTube Music
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -1448,6 +1600,11 @@
                 </div>
             </div>
 
+            <div class="feed-section" id="profile-pinned-section" style="display:none">
+                <div class="feed-title">📌 Закрепленный трек</div>
+                <div class="track-list" id="profile-pinned-track"></div>
+            </div>
+
             <div class="feed-section">
                 <div class="feed-title">Топ треков</div>
                 <div class="track-list" id="profile-top-tracks">
@@ -1607,7 +1764,7 @@
 <div id="modal-create-playlist" class="modal-overlay" style="display: none;">
     <div class="glass-modal-card">
         <div class="glass-modal-header">
-            <h3 class="glass-modal-title"> </h3>
+            <h3 class="glass-modal-title">Создать плейлист</h3>
             <button class="glass-modal-close" id="modal-cp-close"><i data-lucide="x" style="width:16px;height:16px"></i></button>
         </div>
         <div class="glass-modal-body">
@@ -1616,7 +1773,29 @@
         </div>
         <div class="glass-modal-footer">
             <button class="filter-btn" id="modal-cp-cancel">Отмена</button>
-            <button class="btn-primary" id="modal-cp-submit"></button>
+            <button class="btn-primary" id="modal-cp-submit" style="padding: 8px 18px; border-radius: 8px; font-weight: 600; cursor: pointer;">Создать</button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Playlist Confirmation Modal -->
+<div id="modal-delete-playlist" class="modal-overlay" style="display:none;">
+    <div class="glass-modal-card" style="max-width:360px; text-align:center;">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:16px; padding:8px 0 4px;">
+            <div style="width:52px; height:52px; border-radius:50%; background:rgba(239,68,68,0.15); border:1.5px solid rgba(239,68,68,0.35); display:flex; align-items:center; justify-content:center;">
+                <i data-lucide="trash-2" style="width:24px;height:24px;color:#ef4444;"></i>
+            </div>
+            <div>
+                <div style="font-size:16px; font-weight:700; color:var(--text-main); margin-bottom:6px;">Удалить плейлист?</div>
+                <div id="modal-dpl-name" style="font-size:13px; color:var(--text-sec); line-height:1.5;">Это действие нельзя отменить.</div>
+            </div>
+        </div>
+        <div class="glass-modal-footer" style="margin-top:8px;">
+            <button class="filter-btn" id="modal-dpl-cancel" style="flex:1;">Отмена</button>
+            <button id="modal-dpl-confirm" style="flex:1; padding:9px 0; border-radius:10px; border:none; background:rgba(239,68,68,0.85); color:#fff; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:background 0.2s;">
+                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                Удалить
+            </button>
         </div>
     </div>
 </div>
@@ -1649,8 +1828,8 @@
     </div>
 </div>
 
-<!-- в”Ђв”Ђв”Ђв”Ђв”Ђ COMPACT MINI PLAYER OVERLAY в”Ђв”Ђв”Ђв”Ђв”Ђ -->
-<div id="mini-player-overlay" class="mini-player-card">
+<!-- ───── COMPACT MINI PLAYER OVERLAY ───── -->
+<div id="mini-player-overlay" class="mini-player-card pywebview-drag-region">
     <!-- Top Header Bar (Appears on Hover): Title, Artist & Window Actions -->
     <div class="mp-top-bar">
         <div class="mp-info">
@@ -1686,8 +1865,11 @@
             <button id="mp-btn-play" class="btn-ctrl btn-play-mini" title="Воспроизведение">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
             </button>
-            <button id="mp-btn-next" class="btn-ctrl" title="Следующий">
+            <button id="mp-btn-next" class="btn-ctrl" title="Следующий" aria-label="Next">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+            </button>
+            <button id="mp-btn-stop" class="btn-ctrl" title="Остановить" aria-label="Stop">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" stroke="none"><rect x="4" y="4" width="16" height="16"></rect></svg>
             </button>
         </div>
 
@@ -1857,9 +2039,6 @@
         <div id="queue-drawer-content"></div>
     </div>
 
-    <!-- CUSTOM CONTEXT MENU -->
-    <div id="custom-context-menu">
-        <div class="context-menu-item" id="cmenu-playnext"><i data-lucide="corner-down-right"></i> Play Next</div>
         <div class="context-menu-item" id="cmenu-addplaylist"><i data-lucide="plus"></i> Add to Playlist</div>
         <div class="context-menu-item" id="cmenu-info"><i data-lucide="info"></i> Info</div>
         <div class="context-menu-item" id="cmenu-download"><i data-lucide="download"></i> Download</div>

@@ -411,3 +411,10 @@ window.addEventListener('nedotify:efficiency_state', (e) => {
         frameInterval = 1000 / targetFps;
     }
 });
+window.addEventListener('nedotify:page_changed', () => {
+    hasDrawnIdle = false;
+    if (isEnabled && documentVisible && !animFrameId) {
+        lastFrameTime = performance.now();
+        animFrameId = requestAnimationFrame(draw);
+    }
+});

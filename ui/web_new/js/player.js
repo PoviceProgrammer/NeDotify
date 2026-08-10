@@ -68,11 +68,11 @@ function initAudioContext() {
         
         // Add limiter/compressor to prevent digital clipping/distortion
         compressorNode = audioCtx.createDynamicsCompressor();
-        compressorNode.threshold.value = -0.5;
-        compressorNode.knee.value = 6;
-        compressorNode.ratio.value = 12;
+        compressorNode.threshold.value = -6.0;
+        compressorNode.knee.value = 12;
+        compressorNode.ratio.value = 4;
         compressorNode.attack.value = 0.003;
-        compressorNode.release.value = 0.1;
+        compressorNode.release.value = 0.25;
         
         prevNode.connect(compressorNode);
         compressorNode.connect(analyserNode);
@@ -285,7 +285,17 @@ export function getVolume() { return isMuted ? 0 : currentVolume; }
 
 export function togglePlayPause() {
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-    if (!activeAudio || !activeAudio.src) return;
+
+    const hasValidSrc = activeAudio && activeAudio.src && activeAudio.src !== '' && !activeAudio.src.endsWith('about:blank');
+    if (!hasValidSrc) {
+        if (currentTrack) {
+            if (window.pywebview?.api?.play_track) {
+                window.pywebview.api.play_track(currentTrack);
+            }
+        }
+        return;
+    }
+
     if (activeAudio.paused) {
         activeAudio.play().catch(e => console.error("Play error:", e));
     } else {
@@ -373,6 +383,12 @@ export function initPlayer() {
         }
     });
 
+    const ppQueue = document.getElementById('pp-btn-queue');
+    if (ppQueue) ppQueue.addEventListener('click', () => {
+        const queueDrawer = document.getElementById('queue-drawer') || document.getElementById('queue-overlay');
+        if (queueDrawer) queueDrawer.classList.toggle('open');
+    });
+
     // Mini Player Controls
     const mpPlay = document.getElementById('mp-btn-play');
     const mpStop = document.getElementById('mp-btn-stop');
@@ -433,30 +449,30 @@ export function initPlayer() {
 
     if (mpExpand) mpExpand.addEventListener('click', (e) => {
         e.stopPropagation();
-        document.body.classList.remove('mini-player-active');
-        const mpCard = document.getElementById('mini-player-overlay');
-        if (mpCard) mpCard.classList.remove('expanded');
-        if (window.pywebview?.api?.toggle_mini_player) {
-            setTimeout(() => {
-                try {
-                    window.pywebview.api.toggle_mini_player(false);
-                } catch(e) {}
-            }, 50);
+        if (window.NeDotify?.toggleMiniPlayerMode) {
+            window.NeDotify.toggleMiniPlayerMode(false);
+        } else if (window.toggleMiniPlayerMode) {
+            window.toggleMiniPlayerMode(false);
         }
     });
 
     const mpCard = document.getElementById('mini-player-overlay');
     if (mpCard) {
+        mpCard.addEventListener('mousedown', (e) => {
+            if (e.target.closest('button, input, select, a, .btn-ctrl, .icon-btn, .mp-progress-bar-wrap, .progress-track')) {
+                return;
+            }
+            if (window.pywebview?.api?.start_drag) {
+                window.pywebview.api.start_drag();
+            }
+        });
+
         mpCard.addEventListener('click', (e) => {
-            if (e.target.closest('button') || e.target.closest('.progress-track') || e.target.closest('input')) {
+            if (e.target.closest('button, input, select, a, .btn-ctrl, .icon-btn, .mp-progress-bar-wrap, .progress-track')) {
                 return;
             }
             const targetExpanded = !mpCard.classList.contains('expanded');
-            if (targetExpanded) {
-                mpCard.classList.add('expanded');
-            } else {
-                mpCard.classList.remove('expanded');
-            }
+            mpCard.classList.toggle('expanded', targetExpanded);
             if (window.pywebview?.api?.resize_mini_window) {
                 try {
                     window.pywebview.api.resize_mini_window(targetExpanded);
@@ -1030,15 +1046,30 @@ function api(method, ...args) {
     return Promise.resolve(null);
 }
 
+export function setProgressFill(id, val) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const pct = typeof val === 'number' ? val : parseFloat(val);
+    if (!isNaN(pct)) {
+        el.style.transform = `translateX(${pct - 100}%)`;
+    }
+}
+
+export function setVolumeFill(id, val) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const pct = typeof val === 'number' ? val : parseFloat(val);
+    if (!isNaN(pct)) {
+        el.style.width = `${pct}%`;
+    }
+}
+
 function setEl(id, prop, val) {
     const el = document.getElementById(id);
     if (!el) return;
-    if (prop === 'width' && typeof val === 'string' && val.endsWith('%') && id.includes('fill')) {
-        const pct = parseFloat(val);
-        if (!isNaN(pct)) {
-            el.style.transform = `translateX(${pct - 100}%)`;
-            return;
-        }
+    if (prop === 'width' && typeof val === 'string' && val.endsWith('%') && id.includes('progress-fill')) {
+        setProgressFill(id, parseFloat(val));
+        return;
     }
     el.style[prop] = val;
 }

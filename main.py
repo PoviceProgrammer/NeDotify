@@ -89,7 +89,7 @@ def main():
             
     window.events.loaded += on_loaded
 
-    # Start the application loop (debug=False to disable DevTools resize tooltip)
+    # Start the application loop (debug=False to disable DevTools)
     webview.start(http_server=True, debug=False)
 
     # Save session before exit

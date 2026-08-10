@@ -86,10 +86,12 @@ export function initOnboarding() {
     }
 
     async function finishOnboarding(isSkip = false) {
+        const optPreset = selectedPreset === 'beauty' ? 'high' : 'low';
         const settingsData = {
             theme_mode: 'dark',
             accent_color: colorPicker ? colorPicker.value : '#a855f7',
             particles_enabled: selectedPreset === 'beauty',
+            performance_preset: optPreset,
             audio_device: document.getElementById('ob-audio-device') ? document.getElementById('ob-audio-device').value : 'default',
             crossfade_enabled: document.getElementById('ob-crossfade') ? document.getElementById('ob-crossfade').checked : false,
             volume_normalization: document.getElementById('ob-volume-norm') ? document.getElementById('ob-volume-norm').checked : false,
@@ -99,8 +101,19 @@ export function initOnboarding() {
 
         if (isSkip) {
             settingsData.particles_enabled = true;
+            settingsData.performance_preset = 'high';
             settingsData.autostart = false;
         }
+
+        try {
+            localStorage.setItem('nedotify_theme_custom_primary', JSON.stringify(settingsData.accent_color));
+            localStorage.setItem('nedotify_ui_particles_enabled', JSON.stringify(settingsData.particles_enabled));
+            localStorage.setItem('nedotify_optimization_performance_preset', JSON.stringify(settingsData.performance_preset));
+            // Apply perf class immediately so UI reflects choice without restart
+            const root = document.documentElement;
+            root.classList.remove('perf-medium', 'perf-low');
+            if (settingsData.performance_preset === 'low') root.classList.add('perf-low');
+        } catch(e) {}
 
         if (window.pywebview && window.pywebview.api) {
             await window.pywebview.api.complete_onboarding(settingsData);

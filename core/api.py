@@ -67,6 +67,8 @@ class AppApi:
         self._window = None
         self._main_window = None
         self._mini_window = None
+        self._is_mini_active = False
+        self._saved_mini_pos = "bottom-right"
 
         # Dedicated search executor for non-blocking provider and DB searches
         from concurrent.futures import ThreadPoolExecutor
@@ -154,35 +156,34 @@ class AppApi:
         """Switch view between main window and mini player window."""
         logger.info(f"toggle_mini_player called with enable={enable}")
         try:
+            self._is_mini_active = enable
+            target_win = self._mini_window or self._window
             if enable:
-                if self._window:
-                    mini_w, mini_h = 360, 140
+                if target_win:
+                    mini_w, mini_h = 240, 85
+                    try:
+                        if hasattr(target_win, 'on_top'):
+                            target_win.on_top = True
+                        target_win.resize(mini_w, mini_h)
+                        self.set_mini_player_position(self._saved_mini_pos)
+                    except Exception as err:
+                        logger.debug(f"Failed setting mini size: {err}")
+            else:
+                if target_win:
+                    logger.info("Resizing window to 1100x800")
+                    target_win.resize(1100, 800)
+                    if hasattr(target_win, 'on_top'):
+                        target_win.on_top = False
+                    # Center main window on screen
                     try:
                         import ctypes
                         user32 = ctypes.windll.user32
                         screen_w = user32.GetSystemMetrics(0)
-                        x = (screen_w - mini_w) // 2
-                        y = 20
-                        
-                        self._window.on_top = True
-                        self._window.resize(mini_w, mini_h)
-                        self._window.move(x, y)
-                        
-                        import threading
-                        def _move():
-                            import time
-                            for _ in range(5):
-                                time.sleep(0.05)
-                                self._set_window_pos_native(x, y, mini_w, mini_h, topmost=True)
-                        threading.Thread(target=_move, daemon=True).start()
-                    except:
+                        screen_h = user32.GetSystemMetrics(1)
+                        if hasattr(target_win, 'move'):
+                            target_win.move((screen_w - 1100) // 2, (screen_h - 800) // 2)
+                    except Exception:
                         pass
-            else:
-                if self._window:
-                    logger.info("Resizing window to 1100x800")
-                    self._window.resize(1100, 800)
-                    if hasattr(self._window, 'on_top'):
-                        self._window.on_top = False
             return enable
         except Exception as e:
             logger.error(f"Error toggling mini player: {e}")
@@ -190,27 +191,57 @@ class AppApi:
     def resize_mini_window(self, expanded: bool):
         """Resize mini player window dynamically."""
         logger.info(f"resize_mini_window called with expanded={expanded}")
-        if self._window:
-            w, h = (360, 420) if expanded else (360, 140)
+        target_win = self._mini_window or self._window
+        if target_win:
+            w, h = (260, 135) if expanded else (240, 85)
             try:
                 logger.info(f"Resizing mini window to {w}x{h}")
-                self._window.resize(w, h)
-                
-                import threading
-                def _force_resize():
-                    import time
-                    for _ in range(5):
-                        time.sleep(0.05)
-                        try:
-                            import ctypes
-                            screen_w = ctypes.windll.user32.GetSystemMetrics(0)
-                            x = (screen_w - w) // 2
-                            self._set_window_pos_native(x, 20, w, h, topmost=True)
-                        except:
-                            pass
-                threading.Thread(target=_force_resize, daemon=True).start()
+                target_win.resize(w, h)
             except Exception as e:
                 logger.error(f"Failed to resize mini window: {e}")
+
+    def set_mini_player_position(self, pos: str):
+        """Move mini player window natively to screen position (top-left, top-right, bottom-left, bottom-right, center)."""
+        if pos:
+            self._saved_mini_pos = pos
+
+        # CRITICAL GUARD: Only move native window if mini-player mode is active!
+        if not self._is_mini_active and not self._mini_window:
+            return
+
+        target_win = self._mini_window or self._window
+        if not target_win:
+            return
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            screen_w = user32.GetSystemMetrics(0)
+            screen_h = user32.GetSystemMetrics(1)
+            
+            w, h = 240, 85
+            margin = 30
+            
+            if pos == 'top-left':
+                x, y = margin, margin
+            elif pos == 'top-center':
+                x, y = (screen_w - w) // 2, margin
+            elif pos == 'top-right':
+                x, y = screen_w - w - margin, margin
+            elif pos == 'bottom-left':
+                x, y = margin, screen_h - h - margin - 40
+            elif pos == 'bottom-center':
+                x, y = (screen_w - w) // 2, screen_h - h - margin - 40
+            elif pos == 'bottom-right':
+                x, y = screen_w - w - margin, screen_h - h - margin - 40
+            elif pos == 'center':
+                x, y = (screen_w - w) // 2, (screen_h - h) // 2
+            else:
+                x, y = screen_w - w - margin, margin
+            
+            if hasattr(target_win, 'move'):
+                target_win.move(x, y)
+        except Exception as e:
+            logger.debug(f"Failed to move window to position {pos}: {e}")
 
     def set_windows(self, main_window, mini_window):
         """Register dual window references for main player and mini player."""
@@ -254,33 +285,12 @@ class AppApi:
 
     def start_drag(self):
         """Trigger native frameless window drag."""
-        if self._window and hasattr(self._window, "start_drag"):
+        target_win = self._mini_window or self._window
+        if target_win and hasattr(target_win, "start_drag"):
             try:
-                self._window.start_drag()
+                target_win.start_drag()
             except Exception as e:
                 logger.debug(f"Native drag failed: {e}")
-
-    def resize_mini_window(self, expanded: bool):
-        """Resize mini player window dynamically."""
-        if self._mini_window:
-            w, h = (380, 520) if expanded else (340, 130)
-            try:
-                self._mini_window.resize(w, h)
-            except Exception as e:
-                logger.error(f"Failed to resize mini window: {e}")
-
-    def toggle_mini_player(self, enable: bool):
-        """Switch view between main window and mini player window."""
-        try:
-            if enable:
-                if self._window:
-                    self._window.resize(380, 520)
-            else:
-                if self._window:
-                    self._window.resize(1100, 800)
-            return enable
-        except Exception as e:
-            logger.error(f"Error toggling mini player: {e}")
 
     def open_url(self, url: str):
         """Open web URL in user's default browser."""
@@ -344,6 +354,13 @@ class AppApi:
     def play_track(self, track: dict, track_list: list = None, index: int = 0):
         """Play given track data object."""
         logger.info(f"api.py -> play_track called! track={track.get('title')}, has_track_list={bool(track_list)}")
+        if isinstance(track, dict) and track.get("track_id"):
+            track["id"] = track["track_id"]
+        if track_list and isinstance(track_list, list):
+            for t in track_list:
+                if isinstance(t, dict) and t.get("track_id"):
+                    t["id"] = t["track_id"]
+
         if track_list:
             if index == 0 and track:
                 # Try to find the actual index of the clicked track
@@ -642,6 +659,15 @@ class AppApi:
         self._emit("playlists_updated", self.get_playlists())
         return pid
 
+    def delete_playlist(self, playlist_id: int):
+        """Delete user playlist."""
+        try:
+            res = self._core.db.delete_playlist(int(playlist_id))
+            self._emit("playlists_updated", self.get_playlists())
+            return {"success": True, "res": res}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def get_playlists(self):
         """Get list of user playlists."""
         return self._core.db.get_playlists()
@@ -691,11 +717,25 @@ class AppApi:
         return True
 
     def complete_onboarding(self, settings_data: dict):
-        """Mark onboarding complete and save preferences."""
-        self._core.settings.set("app", "onboarding_completed", True)
+        """Mark onboarding complete and save preferences into their real categories."""
+        self._core.settings.set("general", "first_launch_done", True)
+        self._core.settings.set("personalization", "onboarding_completed", True)
         if isinstance(settings_data, dict):
+            mapping = {
+                "theme_mode": ("theme", "mode"),
+                "accent_color": ("theme", "accent_color"),
+                "particles_enabled": ("ui", "particles_enabled"),
+                "crossfade_enabled": ("audio", "crossfade_enabled"),
+                "volume_normalization": ("audio", "volume_normalization"),
+                "autostart": ("general", "autostart"),
+                "minimize_to_tray": ("general", "minimize_to_tray"),
+                "audio_device": ("audio", "output_device"),
+                "performance_preset": ("optimization", "performance_preset"),
+            }
             for k, v in settings_data.items():
-                self._core.settings.set("app", k, v)
+                target = mapping.get(k)
+                if target:
+                    self._core.settings.set(target[0], target[1], v)
         return True
 
     def update_autostart(self, enabled: bool):
@@ -831,8 +871,12 @@ class AppApi:
 
     def get_home_data(self):
         """Get home feed dashboard statistics and data."""
+        history = self._core.db.get_history(limit=10) or []
+        for h in history:
+            if isinstance(h, dict) and h.get("track_id"):
+                h["id"] = h["track_id"]
         return {
-            "history": self._core.db.get_history(limit=10),
+            "history": history,
             "favorites_count": len(self.get_favorite_tracks()),
             "total_listening_ms": self._core.db.get_total_listening_time(),
             "total_tracks": len(self._core.db.get_all_tracks()),
@@ -869,8 +913,9 @@ class AppApi:
 
     def get_profile_stats(self):
         """Get profile stats."""
+        history = self._core.db.get_history(limit=10000)
         return {
-            "total_tracks": len(self._core.db.get_all_tracks()),
+            "total_tracks": len(history) if history else len(self._core.db.get_all_tracks()),
             "favorite_count": len(self.get_favorite_tracks()),
             "playlist_count": len(self.get_playlists()),
             "total_listening_time_ms": self._core.db.get_total_listening_time(),
@@ -891,6 +936,7 @@ class AppApi:
                 ext = os.path.splitext(src)[1]
                 dest = os.path.join(avatars_dir, f"avatar_{int(time.time())}{ext}")
                 shutil.copy(src, dest)
+                self._core.settings.set("personalization", "avatar_path", dest)
                 self._core.settings.set("app", "avatar_path", dest)
                 return dest
         except Exception as e:

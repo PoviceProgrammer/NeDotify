@@ -2942,14 +2942,14 @@ select option {
     top: 0 !important;
     left: 50% !important;
     transform: translateX(-50%) !important;
-    width: 340px !important;
+    width: 240px !important;
     height: auto !important;
-    min-height: 140px !important;
+    min-height: 85px !important;
     z-index: 999999 !important;
     background: rgba(16, 16, 18, 0.97) !important;
     color: #ffffff !important;
-    padding: 10px 14px !important;
-    border-radius: 18px !important;
+    padding: 6px 10px !important;
+    border-radius: 14px !important;
     box-sizing: border-box !important;
     flex-direction: column !important;
     justify-content: center !important;
@@ -2959,17 +2959,18 @@ select option {
     border: 1px solid rgba(255, 255, 255, 0.12) !important;
     cursor: pointer;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8) !important;
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    transition: all 0.25s ease !important;
     backdrop-filter: blur(20px) !important;
 }
 
 body.mini-player-active #mini-player-overlay.expanded {
-    border-radius: 16px !important;
-    padding: 10px 14px !important;
+    border-radius: 14px !important;
+    padding: 8px 10px !important;
     border: 1px solid rgba(255, 255, 255, 0.2) !important;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8) !important;
-    width: 360px !important;
-    height: 420px !important;
+    width: 100% !important;
+    height: 100% !important;
+    justify-content: space-between !important;
 }
 
 body.mini-player-active #mini-player-overlay {
@@ -4109,7 +4110,7 @@ html.slider-type-wave .volume-fill {
 }
 
 /* 5. Queue Position */
-html.queue-pos-left #queue-overlay {
+html.queue-pos-left #queue-drawer {
     left: 0 !important;
     right: auto !important;
     top: 0 !important;
@@ -4119,9 +4120,10 @@ html.queue-pos-left #queue-overlay {
     background: color-mix(in srgb, var(--bg-main) 95%, transparent) !important;
     transform: translateX(-100%) !important;
 }
-html.queue-pos-left #queue-overlay.visible { transform: translateX(0) !important; }
+html.queue-pos-left #queue-drawer.visible,
+html.queue-pos-left #queue-drawer.open { transform: translateX(0) !important; }
 
-html.queue-pos-right #queue-overlay {
+html.queue-pos-right #queue-drawer {
     right: 0 !important;
     left: auto !important;
     top: 0 !important;
@@ -4131,42 +4133,43 @@ html.queue-pos-right #queue-overlay {
     background: color-mix(in srgb, var(--bg-main) 95%, transparent) !important;
     transform: translateX(100%) !important;
 }
-html.queue-pos-right #queue-overlay.visible { transform: translateX(0) !important; }
+html.queue-pos-right #queue-drawer.visible,
+html.queue-pos-right #queue-drawer.open { transform: translateX(0) !important; }
 
 /* 6. Queue View Mode */
-html.queue-view-expanded #queue-content .track-item {
+html.queue-view-expanded #queue-drawer-content .track-item {
     padding: 12px 16px !important;
     gap: 16px !important;
 }
-html.queue-view-expanded #queue-content .track-item img {
+html.queue-view-expanded #queue-drawer-content .track-item img {
     width: 48px !important;
     height: 48px !important;
     border-radius: 8px !important;
 }
 
 /* 7. Mini-Player Modifications */
-html.mp-progress-bg #mini-player {
+html.mp-progress-bg #mini-player-overlay {
     background-size: cover;
     position: relative;
     overflow: hidden;
 }
 
-html.mp-cover-circle #mini-player .mp-cover-img,
-html.mp-cover-circle #mini-player img {
+html.mp-cover-circle #mini-player-overlay .mp-cover-wrap,
+html.mp-cover-circle #mini-player-overlay img {
     border-radius: 50% !important;
 }
 
-html.mp-shape-capsule #mini-player {
+html.mp-shape-capsule #mini-player-overlay {
     border-radius: 50px !important;
     padding: 8px 20px !important;
 }
 
 /* Mini Player Position */
-html.mp-pos-top-left #mini-player { top: 20px !important; left: 20px !important; right: auto !important; bottom: auto !important; }
-html.mp-pos-top-right #mini-player { top: 20px !important; right: 20px !important; left: auto !important; bottom: auto !important; }
-html.mp-pos-bottom-left #mini-player { bottom: 100px !important; left: 20px !important; right: auto !important; top: auto !important; }
-html.mp-pos-bottom-right #mini-player { bottom: 100px !important; right: 20px !important; left: auto !important; top: auto !important; }
-html.mp-pos-center #mini-player { top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important; right: auto !important; bottom: auto !important; }
+html.mp-pos-top-left #mini-player-overlay { top: 20px !important; left: 20px !important; right: auto !important; bottom: auto !important; }
+html.mp-pos-top-right #mini-player-overlay { top: 20px !important; right: 20px !important; left: auto !important; bottom: auto !important; }
+html.mp-pos-bottom-left #mini-player-overlay { bottom: 100px !important; left: 20px !important; right: auto !important; top: auto !important; }
+html.mp-pos-bottom-right #mini-player-overlay { bottom: 100px !important; right: 20px !important; left: auto !important; top: auto !important; }
+html.mp-pos-center #mini-player-overlay { top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important; right: auto !important; bottom: auto !important; }
 
 /* Next track preview badge */
 .next-track-preview-badge {
@@ -4623,11 +4626,77 @@ body.unfocused-animations-disabled .cover-image-container img {
 }
 
 /* ─── MINI PLAYER OVERRIDES & MARQUEE ─── */
+#app-container,
+#title-bar {
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease, filter 0.25s ease !important;
+}
+
+body.mini-player-entering #app-container,
+body.mini-player-entering #title-bar {
+    transform: scale(0.92) !important;
+    opacity: 0 !important;
+    filter: blur(6px) !important;
+}
+
+body.mini-player-entering #mini-player-overlay {
+    display: flex !important;
+    animation: miniPlayerPopIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
+}
+
+@keyframes miniPlayerPopIn {
+    0% {
+        transform: scale(0.75) !important;
+        opacity: 0 !important;
+        filter: blur(8px) !important;
+    }
+    100% {
+        transform: scale(1) !important;
+        opacity: 1 !important;
+        filter: blur(0px) !important;
+    }
+}
+
+body.mini-player-exiting #mini-player-overlay {
+    animation: miniPlayerPopOut 0.22s cubic-bezier(0.4, 0, 1, 1) forwards !important;
+}
+
+@keyframes miniPlayerPopOut {
+    0% {
+        transform: scale(1) !important;
+        opacity: 1 !important;
+        filter: blur(0px) !important;
+    }
+    100% {
+        transform: scale(0.75) !important;
+        opacity: 0 !important;
+        filter: blur(8px) !important;
+    }
+}
+
+body.mini-player-exiting #app-container,
+body.mini-player-exiting #title-bar {
+    display: flex !important;
+    transform: scale(0.96) !important;
+    opacity: 0.3 !important;
+}
+
 html.mini-player-active,
 body.mini-player-active {
-    background: transparent !important;
-    background-color: transparent !important;
+    background: var(--bg-main, #0f0f14) !important;
+    background-color: var(--bg-main, #0f0f14) !important;
     overflow: hidden !important;
+}
+
+body.mini-player-active #mini-player-overlay {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    border-radius: 12px !important;
+    top: 0 !important;
+    left: 0 !important;
+    transform: none !important;
+    box-shadow: none !important;
 }
 
 body.mini-player-active #particles-bg,
@@ -4691,4 +4760,91 @@ body.mini-player-active #title-bar {
 }
 .network-banner.reconnecting {
     background: rgba(59, 130, 246, 0.9); /* Blue */
+}
+
+/* Background Activity Limit States */
+html.limit-state-minimize.unfocused-minimized #particles-bg,
+html.limit-state-minimize.unfocused-minimized #visualizer-canvas,
+html.limit-state-minimize.unfocused-minimized #home-visualizer-canvas {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+html.limit-state-focus.unfocused-blur #particles-bg,
+html.limit-state-focus.unfocused-blur #visualizer-canvas,
+html.limit-state-focus.unfocused-blur #home-visualizer-canvas,
+html.limit-state-focus.unfocused-minimized #particles-bg,
+html.limit-state-focus.unfocused-minimized #visualizer-canvas,
+html.limit-state-focus.unfocused-minimized #home-visualizer-canvas {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* =============================================
+   Playlist Drag-and-Drop
+   ============================================= */
+.lib-playlist-item {
+    transition: background 0.15s, opacity 0.15s, transform 0.15s;
+}
+
+.lib-playlist-item.pl-dragging {
+    opacity: 0 !important;
+    pointer-events: none;
+}
+
+.pl-drag-placeholder {
+    background: rgba(var(--primary-rgb, 59, 130, 246), 0.10);
+    border: 1.5px dashed rgba(var(--primary-rgb, 59, 130, 246), 0.45);
+    border-radius: 10px;
+    margin: 2px 0;
+    transition: height 0.12s ease;
+}
+
+.pl-drag-ghost {
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(var(--primary-rgb, 59, 130, 246), 0.3) !important;
+}
+
+/* Grip handle — always visible in theme color */
+.pl-drag-handle {
+    display: flex;
+    align-items: center;
+    padding: 0 2px;
+    flex-shrink: 0;
+}
+
+.pl-drag-handle i,
+.pl-drag-handle svg {
+    cursor: grab !important;
+    color: var(--primary) !important;
+    opacity: 0.45;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.lib-playlist-item:hover .pl-drag-handle i,
+.lib-playlist-item:hover .pl-drag-handle svg {
+    opacity: 1;
+}
+
+.pl-drag-handle:active i,
+.pl-drag-handle:active svg {
+    cursor: grabbing !important;
+    transform: scale(1.2);
+    opacity: 1;
+}
+
+/* Delete button */
+.btn-del-pl {
+    transition: opacity 0.18s ease, color 0.18s ease !important;
+}
+
+.btn-del-pl:hover i,
+.btn-del-pl:hover svg {
+    color: #ef4444 !important;
+}
+
+/* Delete modal confirm button hover */
+#modal-dpl-confirm:hover {
+    background: #ef4444 !important;
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4);
 }

@@ -52,6 +52,20 @@ export function stopParticles() {
 }
 
 export function initParticles() {
+    const toggle = document.getElementById('toggle-particles');
+    if (toggle) {
+        if (!toggle.classList.contains('on')) {
+            stopParticles();
+            return;
+        }
+    } else {
+        const currSettings = window.settings || {};
+        if (currSettings.ui && currSettings.ui.particles_enabled === false) {
+            stopParticles();
+            return;
+        }
+    }
+
     const container = document.getElementById('particles-bg');
     if (!container) return;
 
@@ -118,7 +132,7 @@ export function initParticles() {
 
     // Read settings
     const countSlider = document.getElementById('slider-particles-count');
-    particleCount = countSlider ? Math.min(parseInt(countSlider.value) || 30, 60) : 30;
+    particleCount = countSlider ? Math.min(parseInt(countSlider.value) || 30, 80) : 30;
 
     const speedSlider = document.getElementById('slider-particles-speed');
     particleSpeed = speedSlider ? parseInt(speedSlider.value) || 2 : 2;
@@ -321,7 +335,8 @@ window.addEventListener('nedotify:efficiency_state', (e) => {
         }
     } else {
         // Resumed
-        if (settings && settings.ui && settings.ui.particles_enabled !== false) {
+        const currSettings = window.settings || {};
+        if (currSettings.ui?.particles_enabled !== false) {
             lastFrameTime = performance.now();
             if (!animFrameId) animFrameId = requestAnimationFrame(animate);
         }
@@ -331,7 +346,15 @@ window.addEventListener('nedotify:efficiency_state', (e) => {
         // Throttle FPS if not fully paused
         frameInterval = 1000 / (state.fps_limit || 15);
     } else {
-        // Restore standard FPS
+        frameInterval = 1000 / targetFps;
+    }
+});
+
+window.addEventListener('nedotify:battery_saver_changed', (e) => {
+    const isBattery = !!e.detail?.isBatteryMode;
+    if (isBattery) {
+        frameInterval = 1000 / 15;
+    } else {
         frameInterval = 1000 / targetFps;
     }
 });

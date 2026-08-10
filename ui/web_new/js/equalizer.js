@@ -1,10 +1,20 @@
-﻿// NeDotify - Equalizer Module
+// NeDotify - Equalizer Module
 import { renderIcons } from './utils.js?v=19';
 import { setEq } from './player.js?v=19';
 
 let eqPreamp = 0;
 let eqBands = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-const freqs = ['31', '62', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'];
+let saveTimeout = null;
+
+const PRESETS = {
+    flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    bass_boost: [6, 5, 3, 1, 0, 0, 0, 0, 0, 0],
+    treble_boost: [0, 0, 0, 0, 0, 1, 3, 5, 6, 7],
+    vocal: [-2, -1, 1, 3, 4, 4, 3, 1, 0, -1],
+    rock: [4, 3, 2, 0, -1, -1, 1, 3, 4, 5],
+    pop: [-1, 1, 3, 4, 4, 3, 1, 0, 1, 2],
+    jazz: [3, 2, 1, 2, -1, -1, 0, 1, 2, 3]
+};
 
 export async function initEqualizer() {
     const container = document.getElementById('eq-bands-container');
@@ -21,7 +31,18 @@ export async function initEqualizer() {
     threeBands.forEach((band) => {
         const col = document.createElement('div');
         col.className = 'eq-band-col';
+        col.style.display = 'flex';
+        col.style.flexDirection = 'column';
+        col.style.alignItems = 'center';
+        col.style.gap = '6px';
         
+        const valLabel = document.createElement('span');
+        valLabel.className = 'eq-val-label';
+        valLabel.id = `eq-val-group-${band.index}`;
+        valLabel.style.fontSize = '11px';
+        valLabel.style.color = 'var(--text-sec)';
+        valLabel.textContent = '0 dB';
+
         const slider = document.createElement('input');
         slider.type = 'range';
         slider.min = -20;
@@ -30,12 +51,23 @@ export async function initEqualizer() {
         slider.value = 0;
         slider.className = 'eq-band-slider eq-slider';
         slider.dataset.index = band.index;
-        slider.style.appearance = 'slider-vertical'; // Webkit vertical support
+        
+        // Standard Chromium / WebView2 Vertical Slider CSS
+        slider.style.writingMode = 'vertical-lr';
+        slider.style.direction = 'rtl';
+        slider.style.appearance = 'slider-vertical';
+        slider.style.webkitAppearance = 'slider-vertical';
+        slider.style.height = '90px';
+        slider.style.width = '24px';
+        slider.style.cursor = 'pointer';
         
         const label = document.createElement('span');
         label.className = 'eq-label';
+        label.style.fontSize = '12px';
+        label.style.fontWeight = '500';
         label.textContent = band.label;
 
+        col.appendChild(valLabel);
         col.appendChild(slider);
         col.appendChild(label);
         container.appendChild(col);
@@ -45,6 +77,7 @@ export async function initEqualizer() {
             band.bands.forEach(idx => {
                 eqBands[idx] = val;
             });
+            valLabel.textContent = formatDbVal(val);
             applyEq();
         });
     });
@@ -53,7 +86,7 @@ export async function initEqualizer() {
     if (preampSlider) {
         preampSlider.addEventListener('input', (e) => {
             eqPreamp = parseFloat(e.target.value);
-            document.getElementById('eq-val-preamp').textContent = `${eqPreamp.toFixed(1)} dB`;
+            document.getElementById('eq-val-preamp').textContent = formatDbVal(eqPreamp);
             applyEq();
         });
     }
@@ -63,8 +96,22 @@ export async function initEqualizer() {
         resetBtn.addEventListener('click', () => {
             eqPreamp = 0;
             eqBands = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+            const presetSelect = document.getElementById('eq-preset-select');
+            if (presetSelect) presetSelect.value = 'flat';
             updateEqUI();
             applyEq();
+        });
+    }
+
+    const presetSelect = document.getElementById('eq-preset-select');
+    if (presetSelect) {
+        presetSelect.addEventListener('change', (e) => {
+            const presetKey = e.target.value;
+            if (PRESETS[presetKey]) {
+                eqBands = [...PRESETS[presetKey]];
+                updateEqUI();
+                applyEq();
+            }
         });
     }
 
@@ -95,11 +142,16 @@ export async function initEqualizer() {
     }
 }
 
+function formatDbVal(val) {
+    const num = parseFloat(val) || 0;
+    return `${num > 0 ? '+' : ''}${num.toFixed(1)} dB`;
+}
+
 function updateEqUI() {
     const preampSlider = document.getElementById('eq-preamp');
     if (preampSlider) {
         preampSlider.value = eqPreamp;
-        document.getElementById('eq-val-preamp').textContent = `${eqPreamp.toFixed(1)} dB`;
+        document.getElementById('eq-val-preamp').textContent = formatDbVal(eqPreamp);
     }
     const bands = document.querySelectorAll('.eq-band-slider');
     const threeBandsMapping = [
@@ -113,24 +165,30 @@ function updateEqUI() {
             const group = threeBandsMapping[idx];
             let sum = 0;
             group.forEach(gIdx => { sum += eqBands[gIdx]; });
-            b.value = sum / group.length;
+            const avg = sum / group.length;
+            b.value = avg;
+            const valLabel = document.getElementById(`eq-val-group-${idx}`);
+            if (valLabel) valLabel.textContent = formatDbVal(avg);
         }
     });
 }
 
 function applyEq() {
+    // 1. Instant AudioNode update
     setEq(eqPreamp, eqBands);
-    try {
-        localStorage.setItem('nedotify_equalizer', JSON.stringify({ preamp: eqPreamp, bands: eqBands }));
-    } catch(e) {}
-    
-    // Also save to backend for persistence
-    if (window.pywebview?.api) {
-        window.pywebview.api.set_equalizer(eqPreamp, eqBands).catch(() => {});
-    }
-}
 
-// Initialization is handled by main.js
+    // 2. Debounced save to avoid IPC & I/O spam
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+        try {
+            localStorage.setItem('nedotify_equalizer', JSON.stringify({ preamp: eqPreamp, bands: eqBands }));
+        } catch(e) {}
+        
+        if (window.pywebview?.api?.set_equalizer) {
+            window.pywebview.api.set_equalizer(eqPreamp, eqBands).catch(() => {});
+        }
+    }, 200);
+}
 
 
 

@@ -141,6 +141,7 @@ function mapStaticTracks(staticArray, albumName) {
     });
 }
 
+// TODO: Replace this mock data with backend API calls once the backend implements artist profiles
 const MOCK_ARTISTS = {
     'pharaoh': {
         name: 'PHARAOH',
@@ -325,8 +326,15 @@ export class ArtistPhotoComponent {
         
         const overlay = document.createElement('div');
         overlay.className = 'artist-photo-overlay';
+        const isMock = this.artistData.isMock !== false;
+        const isDebug = window.APP_DEBUG || document.body.classList.contains('debug');
+        const mockBadge = (isMock && isDebug) ? `<span style="background:rgba(239, 68, 68, 0.8);color:white;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:6px;vertical-align:middle;text-transform:uppercase;letter-spacing:1px;font-weight:bold;" title="Данные артиста пока загружены из заглушки">MOCK (DEV)</span>` : '';
+        
         overlay.innerHTML = `
-            <span class="artist-genres-badge">${this.artistData.genres}</span>
+            <div style="display:flex;align-items:center;">
+                <span class="artist-genres-badge">${this.artistData.genres}</span>
+                ${mockBadge}
+            </div>
             <h2 class="artist-name-title">${this.artistData.name}</h2>
         `;
         container.appendChild(overlay);

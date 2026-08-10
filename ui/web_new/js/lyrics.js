@@ -171,19 +171,15 @@ function loadCurrentTrackLyrics() {
     }
     
     if (window.pywebview?.api) {
-        let p;
-        if (track.file_path) {
-            p = window.pywebview.api.get_lyrics(track.title, track.artist, track.duration ? track.duration * 1000 : 0, track.file_path);
-        } else {
-            p = window.pywebview.api.get_lyrics(track.title, track.artist, track.duration ? track.duration * 1000 : 0);
-        }
+        const durMs = track.duration ? (track.duration > 10000 ? track.duration : Math.round(track.duration * 1000)) : 0;
+        const p = window.pywebview.api.get_lyrics(track.title, track.artist, durMs, track.file_path);
         
         if (p && p.then) {
             p.then(res => {
                 if (res) {
                     renderLyrics({
-                        syncedLyrics: res.synced_lyrics,
-                        plainLyrics: res.plain_lyrics,
+                        syncedLyrics: res.syncedLyrics || res.synced_lyrics || (typeof res === 'string' ? res : null),
+                        plainLyrics: res.plainLyrics || res.plain_lyrics || (typeof res === 'string' ? res : null),
                         instrumental: res.instrumental
                     });
                 } else {
@@ -198,11 +194,12 @@ function loadCurrentTrackLyrics() {
 }
 
 function cleanPlainLyrics(plainText) {
+    if (!plainText) return [];
     return plainText.split('\n')
         .map(l => l.replace(/^\[.*?\]\s*/g, '').trim())
         .map(l => l.replace(/^\d*\s*Contributors/i, '').trim())
         .map(l => l.replace(/\d*\s*Embed$/i, '').trim())
-        .filter(l => l.length > 0);
+        .filter(l => l.length > 0 && !l.startsWith('[ti:') && !l.startsWith('[ar:') && !l.startsWith('[al:') && !l.startsWith('[by:') && !l.startsWith('[la:'));
 }
 
 let lastLyricsData = null;

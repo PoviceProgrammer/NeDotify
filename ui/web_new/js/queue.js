@@ -12,21 +12,44 @@ export function initQueue() {
     const closeBtn = document.getElementById('queue-drawer-close');
     const overlay = document.getElementById('queue-drawer');
 
+    // Create a transparent backdrop for clicking outside
+    let backdrop = document.getElementById('queue-backdrop');
+    if (!backdrop) {
+        backdrop = document.createElement('div');
+        backdrop.id = 'queue-backdrop';
+        backdrop.style.cssText = `
+            position: fixed; inset: 0;
+            z-index: 999;
+            background: transparent;
+            display: none;
+            cursor: default;
+        `;
+        document.body.appendChild(backdrop);
+    }
+
+    const closeQueue = () => {
+        isQueueVisible = false;
+        if (overlay) overlay.classList.remove('open');
+        backdrop.style.display = 'none';
+    };
+
     const openQueue = () => {
         isQueueVisible = true;
-        overlay.classList.add('open');
+        if (overlay) overlay.classList.add('open');
+        backdrop.style.display = 'block';
         loadQueue();
     };
 
+    backdrop.addEventListener('click', closeQueue);
+
     if (btnPP) btnPP.addEventListener('click', openQueue);
     if (btnPB) btnPB.addEventListener('click', openQueue);
+    if (closeBtn) closeBtn.addEventListener('click', closeQueue);
 
-    if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
-            isQueueVisible = false;
-            overlay.classList.remove('open');
-        });
-    }
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isQueueVisible) closeQueue();
+    });
 
     // Listen to queue updates from python
     window.addEventListener('pywebviewready', () => {

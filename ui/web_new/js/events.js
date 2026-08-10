@@ -20,15 +20,21 @@ export function initEvents() {
                 break;
 
             case 'state_changed':
-                onStateChanged(data);
+                // Normalize payload which could be string or { state: "..." }
+                const state = (typeof data === 'object' && data !== null && 'state' in data) ? data.state : data;
+                onStateChanged(state);
                 break;
 
             case 'position_changed':
-                onPositionChanged(data.pos, data.duration);
-                document.dispatchEvent(new CustomEvent('nedotify:position_changed', { detail: data }));
+                // Normalize payload: { position_ms: ... } or { pos: ..., duration: ... }
+                let pos = data.pos !== undefined ? data.pos : (data.position_ms ? data.position_ms / 1000 : 0);
+                let duration = data.duration !== undefined ? data.duration : 0;
+                onPositionChanged(pos, duration);
+                document.dispatchEvent(new CustomEvent('nedotify:position_changed', { detail: { pos, duration } }));
                 break;
 
             case 'search_results':
+            case 'search_completed':
                 onSearchResults(data);
                 window.dispatchEvent(new CustomEvent('app:search_results', { detail: data }));
                 break;
@@ -39,30 +45,20 @@ export function initEvents() {
                 }
                 break;
                 
-            case 'smart_home_ready':
-                if (data && data.sections) {
-                    const greetingEl = document.getElementById('home-greeting');
-                    if (greetingEl && data.greeting) {
-                        greetingEl.textContent = data.greeting;
-                    }
-                    renderAuthenticHome(data.sections);
-                }
-                break;
-                
             case 'yt_playlist_ready':
                 if (data && data.tracks && data.tracks.length > 0) {
                     if (window.pywebview && window.pywebview.api && window.pywebview.api.play_track) {
                         window.pywebview.api.play_track(data.tracks[0], data.tracks);
                     }
                 } else {
-                    showToast('Не удалось загрузить треки микса', 'error');
+                    showToast('Не удалось получить треки', 'error');
                 }
                 break;
                 
             case 'authentic_home_error':
                 const authContainer = document.getElementById('home-authentic-feed');
                 if (authContainer) {
-                    authContainer.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-sec);">Ошибка загрузки: ${data.error}</div>`;
+                    authContainer.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-sec);">Ошибка: ${data.error}</div>`;
                 }
                 break;
 
@@ -112,21 +108,41 @@ export function initEvents() {
                 break;
 
             case 'library_updated':
+            case 'favorites_updated':
             case 'playlists_updated':
+            case 'playlist_changed':
                 loadLibrary();
                 loadPlaylists();
                 loadHome(isNextTrackChange);
+                if (window.refreshActiveLibraryView) window.refreshActiveLibraryView();
                 isNextTrackChange = false;
                 break;
 
             case 'mini_player_toggled':
                 document.body.classList.toggle('mini-player-active', !!data?.is_mini);
+                window.dispatchEvent(new CustomEvent('nedotify:mini_player_toggled', { detail: data }));
                 break;
 
             case 'track_downloaded':
                 loadDownloaded();
                 loadPlaylists();
+                if (window.refreshActiveLibraryView) window.refreshActiveLibraryView();
                 document.dispatchEvent(new CustomEvent('nedotify:track_downloaded', { detail: data }));
+                break;
+
+            case 'queue_updated':
+                // Will be handled by queue.js listening to pywebview event directly, or we can dispatch
+                document.dispatchEvent(new CustomEvent('nedotify:queue_updated', { detail: data }));
+                break;
+
+            case 'shuffle_changed':
+                const btnShuffle = document.getElementById('pp-btn-shuffle');
+                if (btnShuffle) btnShuffle.classList.toggle('active', !!data?.state);
+                break;
+
+            case 'repeat_changed':
+                const ppRepeat = document.getElementById('pp-btn-repeat');
+                if (ppRepeat) ppRepeat.classList.toggle('active', data?.state !== 'off');
                 break;
 
             case 'setting_changed':
@@ -149,52 +165,26 @@ export function initEvents() {
                 document.dispatchEvent(new CustomEvent('nedotify:lyrics_ready', { detail: data }));
                 break;
 
+            // ================= FUTURE EVENTS / DEPRECATED =================
+            case 'smart_home_ready':
             case 'yandex_auth_error':
-                setYandexWarning(!!data);
-                if (data) {
-                    showToast('Ошибка авторизации Яндекс Музыка. Ограничение 30 сек.', 'error');
-                }
+            case 'yandex_device_auth_code':
+            case 'yandex_device_auth_result':
+                logFutureEvent(eventName, data);
                 break;
-
-            case 'yandex_device_auth_code': {
-                const statusEl = document.getElementById('yandex-device-status');
-                if (statusEl && data) {
-                    statusEl.style.display = 'block';
-                    statusEl.innerHTML = `Откройте <a href="#" onclick="if(window.pywebview){window.pywebview.api.open_url('${data.url}')}" style="color:var(--primary);text-decoration:underline;cursor:pointer">${data.url}</a> и введите код: <b style="color:var(--primary);font-size:14px;letter-spacing:1px">${data.user_code}</b>`;
-                }
-                break;
-            }
-
-            case 'yandex_device_auth_result': {
-                const statusEl2 = document.getElementById('yandex-device-status');
-                const btn = document.getElementById('btn-yandex-auth');
-                if (data && data.success) {
-                    if (statusEl2) {
-                        statusEl2.innerHTML = '✅ Токен получен! Яндекс Музыка подключена.';
-                        statusEl2.style.color = 'var(--primary)';
-                    }
-                    const tokenInput = document.getElementById('input-yandex-token');
-                    if (tokenInput) tokenInput.value = data.token;
-                    setYandexWarning(false);
-                    showToast('Яндекс Музыка авторизована! Полный доступ к трекам.', 'success');
-                } else if (data && data.error) {
-                    if (statusEl2) {
-                        statusEl2.innerHTML = 'вќЊ ' + data.error;
-                        statusEl2.style.color = 'var(--error)';
-                    }
-                    showToast(data.error, 'error');
-                }
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = '🔑 Получить токен';
-                }
-                break;
-            }
 
             default:
                 console.log('Unknown event:', eventName);
         }
     };
+}
+
+const loggedFutureEvents = new Set();
+function logFutureEvent(eventName, data) {
+    if (!loggedFutureEvents.has(eventName)) {
+        console.info(`[NeDotify] Future/deprecated event ignored: ${eventName}`, data || '');
+        loggedFutureEvents.add(eventName);
+    }
 }
 
 
