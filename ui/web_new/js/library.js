@@ -21,9 +21,22 @@ export function initLibrary() {
     // Sidebar Action Buttons
     const btnImport = document.getElementById('lib-btn-import');
     if (btnImport) {
-        btnImport.addEventListener('click', () => {
+        btnImport.addEventListener('click', async () => {
             if (window.pywebview?.api?.open_local_file) {
-                window.pywebview.api.open_local_file();
+                try {
+                    const res = await window.pywebview.api.open_local_file();
+                    if (res && (res.success || res.count > 0)) {
+                        const count = typeof res === 'object' && res.count !== undefined ? res.count : 1;
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Импортировано треков: ${count}`, type: 'success' } }));
+                        loadLibrary();
+                        refreshActiveLibraryView();
+                        if (window.pywebview.api.get_storage_info) {
+                            window.pywebview.api.get_storage_info();
+                        }
+                    }
+                } catch (e) {
+                    console.error('Import error:', e);
+                }
             }
         });
     }
@@ -73,13 +86,16 @@ export function initLibrary() {
                 const res = await window.pywebview.api.import_external_playlist(url, name);
                 if (res && res.success) {
                     window.dispatchEvent(new CustomEvent('nedotify:toast', { 
-                        detail: { msg: `Импортирован плейлист "${res.name || 'Импортированный'}" (${res.count || 0} треков)`, type: 'success' } 
+                        detail: { msg: `Импортирован плейлист "${res.playlist_name || res.name || 'Импортированный'}" (${res.imported_count || res.count || 0} треков)`, type: 'success' } 
                     }));
                     closeIP();
                     if (urlInput) urlInput.value = '';
                     if (nameInput) nameInput.value = '';
                     loadPlaylists();
                     refreshActiveLibraryView();
+                    if (window.pywebview.api.get_storage_info) {
+                        window.pywebview.api.get_storage_info();
+                    }
                 } else {
                     const errMsg = res?.error || 'Не удалось импортировать плейлист';
                     window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: errMsg, type: 'error' } }));
@@ -98,14 +114,10 @@ export function initLibrary() {
 
     // Add playlist from sidebar input
     const addPlBtn = document.getElementById('lib-btn-add-playlist');
-    const plInput = document.getElementById('lib-quick-pl-input');
-
+    const plInput = document.getElementById('lib-input-add-playlist') || document.getElementById('lib-quick-pl-input');
     const handleCreateQuick = async () => {
         const name = plInput ? plInput.value.trim() : '';
-        if (!name) {
-            if (window.NeDotify?.createPlaylist) window.NeDotify.createPlaylist();
-            return;
-        }
+        if (!name) return;
         if (window.pywebview?.api?.create_playlist) {
             try {
                 await window.pywebview.api.create_playlist(name);
@@ -124,14 +136,20 @@ export function initLibrary() {
         });
     }
 
-    // Play all button in active view
+    // Play all / toggle play-pause button in active view
     const playAllBtn = document.getElementById('lib-btn-play-all');
     if (playAllBtn) {
         playAllBtn.addEventListener('click', () => {
-            if (currentActiveTracks && currentActiveTracks.length > 0) {
-                if (window.NeDotify?.playTrack) {
-                    window.NeDotify.playTrack(currentActiveTracks[0], currentActiveTracks);
-                }
+            if (!currentActiveTracks || currentActiveTracks.length === 0) return;
+            const current = getCurrentTrack();
+            const isPlayingFromCurrentList = current && currentActiveTracks.some(t => String(t.id) === String(current.id));
+
+            if (isPlayingFromCurrentList && window.pywebview?.api?.play_pause) {
+                window.pywebview.api.play_pause();
+            } else if (window.pywebview?.api?.play_track) {
+                window.pywebview.api.play_track(currentActiveTracks[0], currentActiveTracks, 0);
+            } else if (window.NeDotify?.playTrack) {
+                window.NeDotify.playTrack(currentActiveTracks[0], currentActiveTracks);
             }
         });
     }

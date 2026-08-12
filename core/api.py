@@ -334,12 +334,26 @@ class AppApi:
         self.minimize()
 
     def maximize(self):
-        """Toggle maximize/restore window state."""
-        if self._window:
-            self._window.toggle_fullscreen()
+        """Toggle maximize/restore frameless window state while keeping Windows taskbar visible."""
+        if not self._window:
+            return
+        try:
+            is_max = getattr(self, "_is_maximized", False)
+            if is_max:
+                if hasattr(self._window, "restore"):
+                    self._window.restore()
+                self._is_maximized = False
+            else:
+                if hasattr(self._window, "maximize"):
+                    self._window.maximize()
+                elif hasattr(self._window, "toggle_fullscreen"):
+                    self._window.maximize()
+                self._is_maximized = True
+        except Exception as e:
+            logger.error(f"Maximize window error: {e}")
 
     def toggle_fullscreen(self):
-        """Toggle window full-screen mode."""
+        """F11 key handler: Frameless window maximize (taskbar visible)."""
         self.maximize()
 
     def start_drag(self):
@@ -530,6 +544,33 @@ class AppApi:
         mode = self._core.engine.toggle_repeat()
         self._emit("repeat_changed", {"state": mode})
         return mode
+
+    def get_next_track(self) -> Optional[dict]:
+        """Return metadata and stream URL for the upcoming track in the queue without advancing index."""
+        try:
+            if not self._core.engine.queue.tracks:
+                return None
+            current_idx = self._core.engine.queue._current_index
+            next_idx = (current_idx + 1) % len(self._core.engine.queue.tracks)
+            if next_idx < len(self._core.engine.queue.tracks):
+                track = self._core.engine.queue.tracks[next_idx].copy()
+                if not track.get("stream_url"):
+                    if track.get("source") == "local":
+                        track["stream_url"] = track.get("url") or track.get("file_path")
+                    elif track.get("file_path") and os.path.exists(track["file_path"]):
+                        track["stream_url"] = track["file_path"]
+                    elif self._core.engine.proxy and getattr(self._core.engine.proxy, "port", None):
+                        import urllib.parse
+                        t_id = track.get("id") or 0
+                        src = track.get("source") or "youtube"
+                        src_id = urllib.parse.quote(str(track.get("source_id") or ""))
+                        title = urllib.parse.quote(str(track.get("title") or ""))
+                        artist = urllib.parse.quote(str(track.get("artist") or ""))
+                        track["stream_url"] = f"http://127.0.0.1:{self._core.engine.proxy.port}/api/stream?track_id={t_id}&source={src}&source_id={src_id}&title={title}&artist={artist}"
+                return track
+        except Exception as e:
+            logger.error(f"get_next_track error: {e}")
+        return None
 
     def search(self, query: str, source: str = "all", result_type: str = None):
         """Search without blocking the UI bridge. Providers run in parallel with 6s timeout each."""
@@ -886,16 +927,66 @@ class AppApi:
         return True
 
     def get_storage_info(self):
-        """Get cache & downloaded storage size info."""
+        """Get cache, covers & downloaded storage size info."""
         try:
-            cache_dir = self._core.cache.cache_dir
-            total_bytes = 0
-            for root, dirs, files in os.walk(cache_dir):
-                for f in files:
-                    total_bytes += os.path.getsize(os.path.join(root, f))
-            return {"total_size_mb": round(total_bytes / (1024 * 1024), 2), "cache_dir": cache_dir}
+            cache_dir = getattr(self._core.cache, "cache_dir", os.path.expanduser("~/.nedotify/cache"))
+            covers_dir = getattr(self._core.scanner, "_covers_dir", os.path.join(os.getcwd(), "ui", "web_new", "covers"))
+
+            cache_bytes = 0
+            if os.path.exists(cache_dir):
+                for root, _, files in os.walk(cache_dir):
+                    for f in files:
+                        try:
+                            cache_bytes += os.path.getsize(os.path.join(root, f))
+                        except Exception:
+                            pass
+
+            covers_bytes = 0
+            covers_count = 0
+            if os.path.exists(covers_dir):
+                for root, _, files in os.walk(covers_dir):
+                    for f in files:
+                        covers_count += 1
+                        try:
+                            covers_bytes += os.path.getsize(os.path.join(root, f))
+                        except Exception:
+                            pass
+
+            downloaded_tracks = self._core.db.get_downloaded_tracks() or []
+            track_bytes = 0
+            track_count = len(downloaded_tracks)
+            for tr in downloaded_tracks:
+                fp = tr.get("file_path")
+                if fp and os.path.exists(fp):
+                    try:
+                        track_bytes += os.path.getsize(fp)
+                    except Exception:
+                        pass
+
+            total_bytes = cache_bytes + covers_bytes + track_bytes
+            total_mb = round(total_bytes / (1024 * 1024), 2)
+            track_mb = round(track_bytes / (1024 * 1024), 2)
+            cover_mb = round(covers_bytes / (1024 * 1024), 2)
+
+            res = {
+                "total": total_mb,
+                "total_mb": total_mb,
+                "tracks": {"count": track_count, "size": f"{track_mb} MB"},
+                "covers": {"count": covers_count, "size": f"{cover_mb} MB"},
+                "cache_dir": cache_dir
+            }
+            self._emit("storage_info", res)
+            return res
         except Exception as e:
-            return {"total_size_mb": 0, "error": str(e)}
+            err_res = {
+                "total": 0.0,
+                "total_mb": 0.0,
+                "tracks": {"count": 0, "size": "0 MB"},
+                "covers": {"count": 0, "size": "0 MB"},
+                "error": str(e)
+            }
+            self._emit("storage_info", err_res)
+            return err_res
 
     def clear_storage(self, storage_type: str = "cache"):
         """Clear cache or storage folder."""
@@ -950,12 +1041,20 @@ class AppApi:
         for h in history:
             if isinstance(h, dict) and h.get("track_id"):
                 h["id"] = h["track_id"]
+        total_time_ms = self._core.db.get_total_listening_time() or 0
+        top_tracks = self._core.db.get_most_played(limit=10) or []
+        top_artists = self._core.db.get_top_artists(limit=10) or []
         return {
             "history": history,
             "favorites_count": len(self.get_favorite_tracks()),
-            "total_listening_ms": self._core.db.get_total_listening_time(),
+            "total_listening_ms": total_time_ms,
             "total_tracks": len(self._core.db.get_all_tracks()),
-            "playlists": self.get_playlists()
+            "playlists": self.get_playlists(),
+            "analytics": {
+                "total_time_seconds": total_time_ms / 1000,
+                "top_tracks": top_tracks,
+                "top_artists": top_artists,
+            }
         }
 
     def get_popular_tracks(self, region: str = "US"):
@@ -1125,18 +1224,20 @@ class AppApi:
         """Toggle DPI bypass Zapret service."""
         try:
             if enabled:
-                res = self._core.zapret.start(mode=mode, custom_args=custom_args, binary_path=binary_path)
+                success, msg = self._core.zapret.start(mode=mode, custom_args=custom_args, binary_path=binary_path)
             else:
-                res = self._core.zapret.stop()
+                success, msg = self._core.zapret.stop()
             self._core.settings.set("zapret", "enabled", enabled)
             self._core.settings.set("zapret", "mode", mode)
-            return {"success": res}
+            return {"success": success, "message": msg, "error": None if success else msg}
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": str(e), "message": str(e)}
 
     def get_zapret_status(self):
         """Get current Zapret service status."""
         try:
-            return {"running": self._core.zapret.is_running(), "mode": self._core.settings.get("zapret", "mode", "youtube_discord")}
+            status = self._core.zapret.get_status()
+            status["mode"] = self._core.settings.get("zapret", "mode", "youtube_discord")
+            return status
         except Exception as e:
-            return {"running": False, "error": str(e)}
+            return {"running": False, "error": str(e), "message": "Ошибка получения статуса Zapret"}

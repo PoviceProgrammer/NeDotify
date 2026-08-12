@@ -100,6 +100,17 @@ export function initHotkeys() {
             return;
         }
 
+        // F11: Frameless Window Maximize (keeps taskbar visible)
+        if (e.key === 'F11' || e.code === 'F11') {
+            e.preventDefault();
+            if (window.pywebview?.api?.maximize) {
+                window.pywebview.api.maximize();
+            } else if (window.pywebview?.api?.toggle_fullscreen) {
+                window.pywebview.api.toggle_fullscreen();
+            }
+            return;
+        }
+
         // Handle native Media Keys
         if (e.key === 'MediaPlayPause') { e.preventDefault(); togglePlayPause(); return; }
         if (e.key === 'MediaTrackNext') { e.preventDefault(); if (window.pywebview?.api) window.pywebview.api.next_track(); return; }

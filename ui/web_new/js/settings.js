@@ -71,9 +71,14 @@ export function initSettings() {
     // Toggles
     setupToggle('toggle-crossfade', 'crossfade_enabled', 'audio');
     setupToggle('toggle-gapless', 'gapless_playback', 'audio');
+    setupToggle('toggle-normalization', 'volume_normalization', 'audio');
     setupToggle('toggle-autoplay', 'autoplay', 'audio');
     setupToggle('toggle-particles', 'particles_enabled', 'ui');
     setupToggle('toggle-visualizer', 'cover_visualizer', 'ui');
+
+    setupSlider('slider-crossfade-sec', 'crossfade_sec', 'audio', (v) => {
+        setElText('label-crossfade-sec', `${v} сек`);
+    });
 
     // Sliders
     setupSlider('slider-particles-count', 'particles_count', 'ui', (v) => {
@@ -357,7 +362,7 @@ function renderThemePresets() {
         card.className = `theme-card${isActive ? ' active' : ''}`;
         card.dataset.theme = t.id;
         card.innerHTML = `
-            ${isActive ? '<div class="theme-card-badge">вњ"</div>' : ''}
+            ${isActive ? '<div class="theme-card-badge">✓</div>' : ''}
             <div class="theme-dots-row">
                 <div class="theme-dot" style="background:${t.colors[0]}"></div>
                 <div class="theme-dot" style="background:${t.colors[1]}"></div>
@@ -374,7 +379,7 @@ function renderThemePresets() {
             card.classList.add('active');
             const badge = document.createElement('div');
             badge.className = 'theme-card-badge';
-            badge.textContent = 'вњ"';
+            badge.textContent = '✓';
             card.appendChild(badge);
 
             document.documentElement.setAttribute('data-theme', t.id);
@@ -696,12 +701,9 @@ export function applyFontSize(val) {
     const scale = size / 16;
     setElText('label-font-size', `${size}px`);
     document.documentElement.style.fontSize = `${size}px`;
+    document.documentElement.style.setProperty('--font-size-base', `${size}px`);
     document.documentElement.style.setProperty('--app-font-scale', scale);
 
-    const appContainer = document.getElementById('app-container');
-    if (appContainer) {
-        appContainer.style.zoom = scale;
-    }
     const slider = document.getElementById('slider-font-size');
     if (slider) {
         slider.value = size;

@@ -487,13 +487,10 @@
                     <h1 class="page-title" style="margin-bottom:0">Настройки</h1>
                 </div>
 
-            <div class="settings-layout">
-                <!-- Settings Nav -->
-                <div class="settings-nav">
-                    <div class="settings-nav-section-label">АККАУНТ И ПОДПИСКА</div>
-
-
-                    <div class="settings-nav-section-label" style="margin-top: 10px;">ОФОРМЛЕНИЕ</div>
+                <div class="settings-layout">
+                    <!-- Settings Nav -->
+                    <div class="settings-nav">
+                    <div class="settings-nav-section-label">ОФОРМЛЕНИЕ</div>
                     <button class="settings-nav-btn active" data-panel="appearance">
                         <i data-lucide="palette" style="width:16px;height:16px"></i>
                         Оформление
@@ -1101,12 +1098,26 @@
                                 </div>
                                 <button class="toggle-switch" id="toggle-crossfade"><div class="toggle-dot"></div></button>
                             </div>
+                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                                <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+                                    <div class="setting-label">Длительность кроссфейда</div>
+                                    <span id="label-crossfade-sec" style="font-size:12px; color:var(--text-sec)">3 сек</span>
+                                </div>
+                                <input type="range" id="slider-crossfade-sec" class="slider-input" min="1" max="12" value="3" style="width:100%">
+                            </div>
                             <div class="setting-row">
                                 <div>
                                     <div class="setting-label">Gapless playback</div>
-                                    <div class="setting-sublabel">Воспроизведение без пауз</div>
+                                    <div class="setting-sublabel">Воспроизведение без пауз и задержек</div>
                                 </div>
                                 <button class="toggle-switch on" id="toggle-gapless"><div class="toggle-dot"></div></button>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Нормализация громкости (EBU R128)</div>
+                                    <div class="setting-sublabel">Выравнивание громкости и защитное ограничение пиков</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-normalization"><div class="toggle-dot"></div></button>
                             </div>
                             <div class="setting-row">
                                 <div>

@@ -92,6 +92,24 @@ function initAudioContext() {
     }
 }
 
+export function applyVolumeNormalization(enabled) {
+    if (!audioCtx) initAudioContext();
+    if (!compressorNode) return;
+    try {
+        if (enabled) {
+            compressorNode.threshold.value = -14.0;
+            compressorNode.knee.value = 8;
+            compressorNode.ratio.value = 6;
+            compressorNode.attack.value = 0.005;
+            compressorNode.release.value = 0.2;
+        } else {
+            compressorNode.threshold.value = -3.0;
+            compressorNode.knee.value = 20;
+            compressorNode.ratio.value = 2;
+        }
+    } catch(e) {}
+}
+
 export function getAudioFrequencyData(dataArray) {
     if (!audioCtx) initAudioContext();
     if (audioCtx && audioCtx.state === 'suspended') {
@@ -171,6 +189,22 @@ function setupAudioEvents(audio) {
     audio.addEventListener('ended', () => {
         if (audio === activeAudio) {
             api('next_track');
+        }
+    });
+    audio.addEventListener('error', (e) => {
+        if (audio === activeAudio) {
+            console.warn('Audio stream playback error, retrying...', e);
+            audio._errorRetries = (audio._errorRetries || 0) + 1;
+            if (audio._errorRetries <= 3 && currentTrack) {
+                setTimeout(() => {
+                    if (window.pywebview?.api?.play_track) {
+                        window.pywebview.api.play_track(currentTrack);
+                    }
+                }, 1000 * audio._errorRetries);
+            } else {
+                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка воспроизведения потока', type: 'error' } }));
+                api('next_track');
+            }
         }
     });
 }
@@ -267,13 +301,32 @@ export function playTrack(track, streamUrl) {
 }
 
 export function seekTo(posMs) {
-    if (!activeAudio || !activeAudio.src) return;
     currentPosMs = posMs;
     targetPosMs = posMs;
-    try {
-        activeAudio.currentTime = posMs / 1000;
-    } catch (e) {
-        console.error("Error seeking audio:", e);
+    lastSeekTime = performance.now();
+    
+    if (currentDuration > 0) {
+        const pct = Math.max(0, Math.min(100, (posMs / currentDuration) * 100));
+        const txVal = `translateX(${pct - 100}%)`;
+        setEl('pb-progress-fill', 'transform', txVal);
+        setEl('pp-progress-fill', 'transform', txVal);
+        setEl('mp-progress-fill', 'transform', txVal);
+        setElText('pb-time-current', formatTime(posMs / 1000));
+        setElText('pp-time-current', formatTime(posMs / 1000));
+        setElText('mp-time-current', formatTime(posMs / 1000));
+    }
+
+    if (activeAudio) {
+        try {
+            activeAudio.currentTime = posMs / 1000;
+        } catch (e) {
+            console.error("Error seeking audio:", e);
+        }
+    }
+    if (window.pywebview?.api?.set_position) {
+        try {
+            window.pywebview.api.set_position(posMs);
+        } catch (e) {}
     }
     api('report_position', posMs, currentDuration);
 }
@@ -708,6 +761,25 @@ function animateProgress(timestamp) {
         if (els.pbTime) els.pbTime.textContent = timeStr;
         if (els.ppTime) els.ppTime.textContent = timeStr;
         if (els.mpTime) els.mpTime.textContent = timeStr;
+
+        // Gapless preloading & Crossfade triggers
+        const remainingSec = (currentDuration - currentPosMs) / 1000;
+        if (remainingSec <= 15 && !window._isPreloadingNextTrack) {
+            window._isPreloadingNextTrack = true;
+            if (window.pywebview?.api?.get_next_track) {
+                window.pywebview.api.get_next_track().then(nextTrack => {
+                    if (nextTrack && nextTrack.stream_url) {
+                        const inactiveAudio = activeAudio === audioA ? audioB : audioA;
+                        if (inactiveAudio.src !== nextTrack.stream_url) {
+                            inactiveAudio.src = nextTrack.stream_url;
+                            inactiveAudio.load();
+                        }
+                    }
+                }).catch(() => {}).finally(() => {
+                    setTimeout(() => { window._isPreloadingNextTrack = false; }, 10000);
+                });
+            }
+        }
     }
 }
 
@@ -787,6 +859,20 @@ export function onTrackChanged(track) {
         headerEl.textContent = headerTitle;
         headerEl.title = headerTitle;
     }
+    // Atomically reset progress bar and position tracking to prevent 100% / ended flicker
+    currentPosMs = 0;
+    targetPosMs = 0;
+    currentDuration = (track?.duration ? track.duration * 1000 : 0);
+    setEl('pb-progress-fill', 'width', '0%');
+    setEl('pp-progress-fill', 'width', '0%');
+    setEl('mp-progress-fill', 'width', '0%');
+    setElText('pb-time-current', '0:00');
+    setElText('pp-time-current', '0:00');
+    setElText('mp-time-current', '0:00');
+    setElText('pb-time-total', formatTime(currentDuration / 1000));
+    setElText('pp-time-total', formatTime(currentDuration / 1000));
+    setElText('mp-time-total', formatTime(currentDuration / 1000));
+
     setElText('pp-title', track?.title || 'Трек не выбран');
     setElText('pp-artist', track?.artist || 'Выберите трек для воспроизведения');
     setElSrc('pp-cover', coverUrl);

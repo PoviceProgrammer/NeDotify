@@ -704,8 +704,10 @@ class DatabaseManager:
         return [dict(row) for row in cursor.fetchall()]
 
     def delete_playlist(self, playlist_id: int) -> bool:
+        pid = int(playlist_id)
         cursor = self.conn.cursor()
-        cursor.execute("DELETE FROM playlists WHERE id = ?", (playlist_id,))
+        cursor.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?", (pid,))
+        cursor.execute("DELETE FROM playlists WHERE id = ?", (pid,))
         self.conn.commit()
         return cursor.rowcount > 0
 
@@ -822,6 +824,15 @@ class DatabaseManager:
         return cursor.fetchone()[0]
 
     def close(self) -> None:
+        if hasattr(self._local, "connection") and self._local.connection:
+            try:
+                self._local.connection.close()
+            except Exception:
+                pass
+            self._local.connection = None
         if hasattr(self._local, "conn") and self._local.conn:
-            self._local.conn.close()
+            try:
+                self._local.conn.close()
+            except Exception:
+                pass
             self._local.conn = None

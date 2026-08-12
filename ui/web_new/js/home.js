@@ -55,13 +55,8 @@ export async function loadHome(isTrackChange = false) {
         // Analytics (Local Last.fm)
         if (data.analytics) {
             setElText('stat-time', formatListeningTime((data.analytics.total_time_seconds || 0) * 1000));
-            
-            if (data.analytics.top_tracks && data.analytics.top_tracks.length > 0) {
-                renderTopTracks(data.analytics.top_tracks);
-            }
-            if (data.analytics.top_artists && data.analytics.top_artists.length > 0) {
-                renderTopArtists(data.analytics.top_artists);
-            }
+            renderTopTracks(data.analytics.top_tracks || []);
+            renderTopArtists(data.analytics.top_artists || []);
         }
 
         // Decide whether to refresh recommendations/mixes/etc.
@@ -434,6 +429,11 @@ export function renderTopTracks(tracks) {
     if (!container) return;
     container.innerHTML = '';
     
+    if (!tracks || tracks.length === 0) {
+        container.innerHTML = '<div class="empty-state text-sm" style="padding:16px;color:var(--text-sec)">Пока нет данных</div>';
+        return;
+    }
+
     tracks.forEach(track => {
         const cover = getCoverUrl(track);
         const card = document.createElement('div');
@@ -446,7 +446,7 @@ export function renderTopTracks(tracks) {
                 </div>
             </div>
             <div class="feed-card-title">${track.title || 'Unknown Title'}</div>
-            <div class="feed-card-sub">${track.artist || 'Unknown'} (${track.plays})</div>
+            <div class="feed-card-sub">${track.artist || 'Unknown'} (${track.plays || 0})</div>
         `;
         card.onclick = () => {
             if (window.pywebview?.api) window.pywebview.api.play_track(track, tracks);
@@ -461,6 +461,11 @@ export function renderTopArtists(artists) {
     if (!container) return;
     container.innerHTML = '';
     
+    if (!artists || artists.length === 0) {
+        container.innerHTML = '<div class="empty-state text-sm" style="padding:16px;color:var(--text-sec)">Пока нет данных</div>';
+        return;
+    }
+
     artists.forEach(artist => {
         const card = document.createElement('div');
         card.className = 'feed-card artist-card';
@@ -469,7 +474,7 @@ export function renderTopArtists(artists) {
                 <i data-lucide="user" style="width:48px;height:48px;color:rgba(255,255,255,0.5)"></i>
             </div>
             <div class="feed-card-title" style="text-align: center;">${artist.artist || 'Unknown'}</div>
-            <div class="feed-card-sub" style="text-align: center;">${artist.plays} раз</div>
+            <div class="feed-card-sub" style="text-align: center;">${artist.plays || 0} раз</div>
         `;
         card.onclick = () => {
             window.appConfig = window.appConfig || {};
