@@ -252,6 +252,25 @@ class PlaylistImportService:
                         "source": "youtube" if "youtube" in path_or_url else "soundcloud" if "soundcloud" in path_or_url else "local",
                         "source_url": path_or_url,
                     })
+                elif " - " in path_or_url:
+                    parts = path_or_url.split(" - ", 1)
+                    tracks.append({
+                        "artist": parts[0].strip(),
+                        "title": parts[1].strip(),
+                        "album": "Unknown Album",
+                        "duration": 0.0,
+                        "source": "youtube",
+                        "source_id": path_or_url.strip(),
+                    })
+                elif len(path_or_url) > 2:
+                    tracks.append({
+                        "artist": "Unknown Artist",
+                        "title": path_or_url.strip(),
+                        "album": "Unknown Album",
+                        "duration": 0.0,
+                        "source": "youtube",
+                        "source_id": path_or_url.strip(),
+                    })
                 current_title = "Unknown Title"
                 current_artist = "Unknown Artist"
                 current_dur = 0.0

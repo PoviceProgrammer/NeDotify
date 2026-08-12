@@ -560,12 +560,12 @@ class AppApi:
                     elif track.get("file_path") and os.path.exists(track["file_path"]):
                         track["stream_url"] = track["file_path"]
                     elif self._core.engine.proxy and getattr(self._core.engine.proxy, "port", None):
-                        import urllib.parse
+                        import urllib.parse as urllib_parse
                         t_id = track.get("id") or 0
                         src = track.get("source") or "youtube"
-                        src_id = urllib.parse.quote(str(track.get("source_id") or ""))
-                        title = urllib.parse.quote(str(track.get("title") or ""))
-                        artist = urllib.parse.quote(str(track.get("artist") or ""))
+                        src_id = urllib_parse.quote(str(track.get("source_id") or ""))
+                        title = urllib_parse.quote(str(track.get("title") or ""))
+                        artist = urllib_parse.quote(str(track.get("artist") or ""))
                         track["stream_url"] = f"http://127.0.0.1:{self._core.engine.proxy.port}/api/stream?track_id={t_id}&source={src}&source_id={src_id}&title={title}&artist={artist}"
                 return track
         except Exception as e:
