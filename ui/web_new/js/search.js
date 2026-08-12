@@ -1,5 +1,5 @@
 // NeDotify вЂ” Search Module Redesign
-import { createTrackElement, renderIcons } from './utils.js?v=19';
+import { createTrackElement, renderIcons, filterVisibleTracks } from './utils.js?v=19';
 import { getCurrentTrack } from './player.js?v=19';
 import { 
     loadArtistProfile, 
@@ -202,8 +202,7 @@ export function onSearchResults(data) {
         return; // Stale result — ignore
     }
     if (data.tracks && data.tracks.length > 0) {
-        // STRICT RULE: Exclude Yandex Music completely!
-        const filteredTracks = data.tracks.filter(t => (t.source || '').toLowerCase() !== 'yandex');
+        const filteredTracks = filterVisibleTracks(data.tracks);
         if (filteredTracks.length > 0) {
             allResults = allResults.concat(filteredTracks);
             renderResults(allResults);

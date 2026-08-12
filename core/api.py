@@ -6,11 +6,13 @@ Exposes Python backend methods to the JavaScript frontend via pywebview.
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import os
 import re
 import shutil
+import socket
 import sys
 import threading
 import time
@@ -27,6 +29,11 @@ SECRET_KEY = b"NEDOTIFY_SECRET_SIGNATURE_KEY"
 # until they are replaced with a remote, server-owned licensing service.
 LICENSE_VALIDATION_ENABLED = False
 
+# Window geometry: main window, compact mini player, and expanded mini player.
+MAIN_WINDOW_SIZE = (1100, 800)
+MINI_WINDOW_SIZE = (200, 68)
+MINI_EXPANDED_SIZE = (240, 140)
+
 
 def _is_ssrf_safe_url(url: str) -> bool:
     """SSRF Protection: Validates external playlist import URLs to prevent internal network scanning."""
@@ -39,20 +46,16 @@ def _is_ssrf_safe_url(url: str) -> bool:
         hostname = (parsed.hostname or "").lower()
         if not hostname:
             return False
-        # Block localhost / loopback
-        if hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+        if hostname in ("localhost", "0.0.0.0", "::1"):
             return False
-        # Block cloud metadata endpoint & private IP blocks
-        if hostname.startswith("169.254.") or hostname.startswith("10.") or hostname.startswith("192.168."):
-            return False
-        if hostname.startswith("172."):
-            try:
-                parts = hostname.split(".")
-                second_octet = int(parts[1])
-                if 16 <= second_octet <= 31:
-                    return False
-            except Exception:
-                pass
+        try:
+            ip_str = socket.gethostbyname(hostname)
+            ip = ipaddress.ip_address(ip_str)
+            if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                return False
+        except Exception:
+            if hostname.startswith("169.254.") or hostname.startswith("10.") or hostname.startswith("192.168.") or hostname.startswith("127."):
+                return False
         return True
     except Exception:
         return False
@@ -69,6 +72,8 @@ class AppApi:
         self._mini_window = None
         self._is_mini_active = False
         self._saved_mini_pos = "bottom-right"
+        self._mini_size = None
+        self._window_op_lock = threading.RLock()
 
         # Dedicated search executor for non-blocking provider and DB searches
         from concurrent.futures import ThreadPoolExecutor
@@ -152,53 +157,127 @@ class AppApi:
             logger.warning(f"Native SetWindowPos failed: {e}")
             return False
 
+    def _deferred_window_op(self, delay: float, fn):
+        """Run a native window operation on a background thread after a short delay.
+
+        Calling pywebview window.resize()/move() synchronously from a JS bridge
+        call deadlocks the WinForms UI thread (app freezes with "wait for
+        response"). Running the op deferred on a daemon thread prevents that.
+        """
+        def _run():
+            time.sleep(delay)
+            try:
+                with self._window_op_lock:
+                    fn()
+            except Exception as e:
+                logger.debug(f"Deferred window op failed: {e}")
+        threading.Thread(target=_run, daemon=True).start()
+
     def toggle_mini_player(self, enable: bool):
         """Switch view between main window and mini player window."""
         logger.info(f"toggle_mini_player called with enable={enable}")
         try:
             self._is_mini_active = enable
-            target_win = self._mini_window or self._window
             if enable:
-                if target_win:
-                    mini_w, mini_h = 240, 85
-                    try:
-                        if hasattr(target_win, 'on_top'):
-                            target_win.on_top = True
-                        target_win.resize(mini_w, mini_h)
-                        self.set_mini_player_position(self._saved_mini_pos)
-                    except Exception as err:
-                        logger.debug(f"Failed setting mini size: {err}")
+                self._deferred_window_op(0.15, self._enter_mini_mode)
             else:
-                if target_win:
-                    logger.info("Resizing window to 1100x800")
-                    target_win.resize(1100, 800)
-                    if hasattr(target_win, 'on_top'):
-                        target_win.on_top = False
-                    # Center main window on screen
-                    try:
-                        import ctypes
-                        user32 = ctypes.windll.user32
-                        screen_w = user32.GetSystemMetrics(0)
-                        screen_h = user32.GetSystemMetrics(1)
-                        if hasattr(target_win, 'move'):
-                            target_win.move((screen_w - 1100) // 2, (screen_h - 800) // 2)
-                    except Exception:
-                        pass
+                self._deferred_window_op(0.15, self._exit_mini_mode)
             return enable
         except Exception as e:
             logger.error(f"Error toggling mini player: {e}")
 
-    def resize_mini_window(self, expanded: bool):
-        """Resize mini player window dynamically."""
-        logger.info(f"resize_mini_window called with expanded={expanded}")
+    def _enter_mini_mode(self):
         target_win = self._mini_window or self._window
-        if target_win:
-            w, h = (260, 135) if expanded else (240, 85)
+        if not target_win:
+            return
+        try:
+            if hasattr(target_win, 'on_top'):
+                target_win.on_top = True
+            w, h = MINI_WINDOW_SIZE
+            self._mini_size = (w, h)
+            target_win.resize(w, h)
+            self._apply_window_pos(target_win, self._saved_mini_pos, w, h)
+        except Exception as err:
+            logger.debug(f"Failed setting mini size: {err}")
+
+    def _exit_mini_mode(self):
+        target_win = self._mini_window or self._window
+        if not target_win:
+            return
+        try:
+            logger.info("Resizing window to 1100x800")
+            if hasattr(target_win, 'on_top'):
+                target_win.on_top = False
+            w, h = MAIN_WINDOW_SIZE
+            self._mini_size = (w, h)
+            target_win.resize(w, h)
+            # Center main window on screen
             try:
-                logger.info(f"Resizing mini window to {w}x{h}")
+                import ctypes
+                user32 = ctypes.windll.user32
+                screen_w = user32.GetSystemMetrics(0)
+                screen_h = user32.GetSystemMetrics(1)
+                if hasattr(target_win, 'move'):
+                    target_win.move((screen_w - w) // 2, (screen_h - h) // 2)
+            except Exception:
+                pass
+        except Exception as err:
+            logger.debug(f"Failed restoring main size: {err}")
+
+    def resize_mini_window(self, expanded: bool):
+        """Resize mini player window dynamically (compact / expanded)."""
+        logger.info(f"resize_mini_window called with expanded={expanded}")
+        self._deferred_window_op(0.1, lambda: self._apply_mini_resize(expanded))
+
+    def _apply_mini_resize(self, expanded: bool):
+        target_win = self._mini_window or self._window
+        if not target_win:
+            return
+        # Never reposition a window the user has dragged away from its corner.
+        try:
+            sx, sy = self._saved_pos_coords(self._saved_mini_pos, *MINI_WINDOW_SIZE)
+            wx = getattr(target_win, 'x', sx) or sx
+            wy = getattr(target_win, 'y', sy) or sy
+            anchored = abs(wx - sx) <= 8 and abs(wy - sy) <= 8
+        except Exception:
+            anchored = False
+        cur = self._mini_size or MINI_WINDOW_SIZE
+        target = MINI_EXPANDED_SIZE if expanded else MINI_WINDOW_SIZE
+        try:
+            steps = 8
+            for i in range(1, steps + 1):
+                w = cur[0] + (target[0] - cur[0]) * i // steps
+                h = cur[1] + (target[1] - cur[1]) * i // steps
                 target_win.resize(w, h)
-            except Exception as e:
-                logger.error(f"Failed to resize mini window: {e}")
+                time.sleep(0.02)
+            self._mini_size = target
+            if anchored and self._is_mini_active:
+                self._apply_window_pos(target_win, self._saved_mini_pos, *target)
+        except Exception as e:
+            logger.error(f"Failed to resize mini window: {e}")
+
+    def _saved_pos_coords(self, pos: str, w: int, h: int):
+        """Compute the screen coordinates for a saved mini-player position."""
+        import ctypes
+        user32 = ctypes.windll.user32
+        screen_w = user32.GetSystemMetrics(0)
+        screen_h = user32.GetSystemMetrics(1)
+        margin = 20
+        if pos == 'top-left':
+            return margin, margin
+        if pos == 'top-center':
+            return (screen_w - w) // 2, margin
+        if pos == 'top-right':
+            return screen_w - w - margin, margin
+        if pos == 'bottom-left':
+            return margin, screen_h - h - margin - 30
+        if pos == 'bottom-center':
+            return (screen_w - w) // 2, screen_h - h - margin - 30
+        if pos == 'bottom-right':
+            return screen_w - w - margin, screen_h - h - margin - 30
+        if pos == 'center':
+            return (screen_w - w) // 2, (screen_h - h) // 2
+        return screen_w - w - margin, margin
 
     def set_mini_player_position(self, pos: str):
         """Move mini player window natively to screen position (top-left, top-right, bottom-left, bottom-right, center)."""
@@ -212,32 +291,12 @@ class AppApi:
         target_win = self._mini_window or self._window
         if not target_win:
             return
+        self._deferred_window_op(0.1, lambda: self._apply_window_pos(target_win, pos, *MINI_WINDOW_SIZE))
+
+    def _apply_window_pos(self, target_win, pos: str, w: int, h: int):
+        """Compute target screen position for size (w x h) and move the window."""
         try:
-            import ctypes
-            user32 = ctypes.windll.user32
-            screen_w = user32.GetSystemMetrics(0)
-            screen_h = user32.GetSystemMetrics(1)
-            
-            w, h = 240, 85
-            margin = 30
-            
-            if pos == 'top-left':
-                x, y = margin, margin
-            elif pos == 'top-center':
-                x, y = (screen_w - w) // 2, margin
-            elif pos == 'top-right':
-                x, y = screen_w - w - margin, margin
-            elif pos == 'bottom-left':
-                x, y = margin, screen_h - h - margin - 40
-            elif pos == 'bottom-center':
-                x, y = (screen_w - w) // 2, screen_h - h - margin - 40
-            elif pos == 'bottom-right':
-                x, y = screen_w - w - margin, screen_h - h - margin - 40
-            elif pos == 'center':
-                x, y = (screen_w - w) // 2, (screen_h - h) // 2
-            else:
-                x, y = screen_w - w - margin, margin
-            
+            x, y = self._saved_pos_coords(pos, w, h)
             if hasattr(target_win, 'move'):
                 target_win.move(x, y)
         except Exception as e:
@@ -341,15 +400,25 @@ class AppApi:
 
     def _on_audio_error(self, err):
         """Callback invoked when audio engine encounters playback error."""
-        self._emit("audio_error", {"message": str(err)})
+        err_msg = str(err)
+        self._emit("audio_error", {"message": err_msg})
+        self._emit("error", err_msg)
 
     def report_state(self, state: str, elapsed_ms: int = 0):
         """Report playback state update (playing, paused, stopped)."""
         self._emit("state_changed", {"state": state, "elapsed_ms": elapsed_ms})
 
-    def report_position(self, pos_ms: int, dur_ms: int = 0):
+    def report_position(self, pos_ms: int, dur_ms: int = 0, duration_ms: int = 0):
         """Report position update."""
-        self._emit("position_changed", {"position_ms": pos_ms, "duration_ms": dur_ms})
+        duration = dur_ms or duration_ms
+        pos_sec = pos_ms / 1000.0 if pos_ms else 0.0
+        dur_sec = duration / 1000.0 if duration else 0.0
+        self._emit("position_changed", {
+            "pos": pos_sec,
+            "duration": dur_sec,
+            "position_ms": pos_ms,
+            "duration_ms": duration
+        })
 
     def play_track(self, track: dict, track_list: list = None, index: int = 0):
         """Play given track data object."""
@@ -442,14 +511,6 @@ class AppApi:
         """Return current volume level."""
         return self._core.settings.get("audio", "volume", 70)
 
-    def report_position(self, pos_ms: int, duration_ms: int):
-        """Called by JS to report playback position."""
-        pass
-
-    def report_state(self, state: str):
-        """Called by JS to report playback state (playing/paused)."""
-        pass
-
     def toggle_mute(self):
         """Toggle audio mute state."""
         return False # Handled by frontend
@@ -461,13 +522,13 @@ class AppApi:
     def toggle_shuffle(self):
         """Toggle queue shuffle mode."""
         enabled = self._core.engine.toggle_shuffle()
-        self._emit("shuffle_changed", enabled)
+        self._emit("shuffle_changed", {"state": enabled})
         return enabled
 
     def toggle_repeat(self):
         """Cycle repeat mode (off -> all -> one -> off)."""
         mode = self._core.engine.toggle_repeat()
-        self._emit("repeat_changed", mode)
+        self._emit("repeat_changed", {"state": mode})
         return mode
 
     def search(self, query: str, source: str = "all", result_type: str = None):
@@ -485,10 +546,13 @@ class AppApi:
             "vk": getattr(self._core, "vk", None),
         }
 
+        DISABLED_UI_PROVIDERS = {"yandex", "vk", "vkontakte", "zeno"}
         if source == "all":
-            requested_providers = ["local", "youtube", "soundcloud", "spotify", "yandex", "vk"]
+            requested_providers = ["local", "youtube", "soundcloud", "spotify"]
         elif source == "local":
             requested_providers = ["local"]
+        elif source in DISABLED_UI_PROVIDERS:
+            requested_providers = []
         else:
             requested_providers = [source]
 
@@ -748,7 +812,11 @@ class AppApi:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
             app_name = "NeDotify"
             if enabled:
-                exe_path = f'"{sys.executable}"'
+                if getattr(sys, 'frozen', False):
+                    exe_path = f'"{sys.executable}"'
+                else:
+                    main_py = os.path.abspath("main.py")
+                    exe_path = f'"{sys.executable}" "{main_py}"'
                 winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, exe_path)
             else:
                 try:
@@ -856,7 +924,14 @@ class AppApi:
         return True
 
     def get_lyrics(self, track_name: str, artist_name: str, duration_ms: int = 0, file_path: str = None):
-        """Get lyrics for track."""
+        """Get lyrics for track asynchronously to prevent blocking UI."""
+        def run():
+            try:
+                data = self._core.lyrics.get_lyrics(track_name, artist_name, duration_ms=duration_ms, file_path=file_path)
+                self._emit("lyrics_ready", data)
+            except Exception as e:
+                self._emit("lyrics_ready", {"synced": False, "lyrics": f"Could not fetch lyrics: {e}"})
+        threading.Thread(target=run, daemon=True).start()
         try:
             return self._core.lyrics.get_lyrics(track_name, artist_name, duration_ms=duration_ms, file_path=file_path)
         except Exception as e:
@@ -900,16 +975,32 @@ class AppApi:
         return []
 
     def get_authentic_home_feed(self, limit: int = 20):
-        """Get personalized home feed recommendations."""
-        history = self._core.db.get_history(limit=limit)
-        return self._core.recommendations.get_feed(history)
+        """Get personalized home feed recommendations asynchronously."""
+        def run():
+            try:
+                history = self._core.db.get_history(limit=limit)
+                feed = self._core.recommendations.get_feed(history)
+                if isinstance(feed, dict):
+                    self._emit("authentic_home_ready", feed)
+                else:
+                    self._emit("authentic_home_ready", {"sections": feed or []})
+            except Exception as e:
+                logger.error(f"Error in get_authentic_home_feed: {e}")
+                self._emit("authentic_home_error", {"error": str(e)})
+        threading.Thread(target=run, daemon=True).start()
+        return {}
 
     def get_yt_playlist_tracks(self, playlist_id: str, limit: int = 50):
-        """Get YouTube playlist tracks."""
-        try:
-            return self._core.youtube.get_playlist_tracks(playlist_id, limit=limit)
-        except Exception as e:
-            return []
+        """Get YouTube playlist tracks asynchronously."""
+        def run():
+            try:
+                tracks = self._core.youtube.get_playlist_tracks(playlist_id, limit=limit)
+                self._emit("yt_playlist_ready", {"playlist_id": playlist_id, "tracks": tracks or []})
+            except Exception as e:
+                logger.error(f"Error fetching YT playlist: {e}")
+                self._emit("yt_playlist_ready", {"playlist_id": playlist_id, "tracks": [], "error": str(e)})
+        threading.Thread(target=run, daemon=True).start()
+        return []
 
     def get_profile_stats(self):
         """Get profile stats."""
@@ -975,9 +1066,18 @@ class AppApi:
         return False
 
     def get_recommendations(self, track_data: dict, max_results: int = 10):
-        """Get recommended tracks for seed track."""
+        """Get recommended tracks for seed track synchronously with timeout."""
         res = []
-        self._core.recommendations.get_recommendations(track_data, callback=lambda tracks: res.extend(tracks))
+        evt = threading.Event()
+        def callback(tracks):
+            if tracks:
+                res.extend(tracks)
+            evt.set()
+        try:
+            self._core.recommendations.get_recommendations(track_data, callback=callback)
+            evt.wait(timeout=3.0)
+        except Exception as e:
+            logger.error(f"Error in get_recommendations: {e}")
         return res[:max_results]
 
     def get_feed(self, max_results: int = 20):

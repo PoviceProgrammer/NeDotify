@@ -198,7 +198,7 @@ export function playTrack(track, streamUrl) {
     if (!track || !streamUrl) return;
     
     if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume();
+        audioCtx.resume().catch(() => {});
     }
     
     updateMediaSession(track);
@@ -257,8 +257,9 @@ export function playTrack(track, streamUrl) {
         if (step >= steps) {
             clearInterval(fadeInterval);
             if (oldAudio) {
-                oldAudio.pause();
-                oldAudio.currentTime = 0;
+                try { oldAudio.pause(); } catch(e) {}
+                try { oldAudio.currentTime = 0; } catch(e) {}
+                try { oldAudio.removeAttribute('src'); oldAudio.load(); } catch(e) {}
             }
             newAudio.volume = targetVol;
         }
@@ -458,7 +459,9 @@ export function initPlayer() {
 
     const mpCard = document.getElementById('mini-player-overlay');
     if (mpCard) {
+        let mpPressPos = null;
         mpCard.addEventListener('mousedown', (e) => {
+            mpPressPos = { x: e.clientX, y: e.clientY };
             if (e.target.closest('button, input, select, a, .btn-ctrl, .icon-btn, .mp-progress-bar-wrap, .progress-track')) {
                 return;
             }
@@ -471,8 +474,17 @@ export function initPlayer() {
             if (e.target.closest('button, input, select, a, .btn-ctrl, .icon-btn, .mp-progress-bar-wrap, .progress-track')) {
                 return;
             }
+            // A real drag fires click too — don't toggle expanded after dragging.
+            if (mpPressPos && (Math.abs(e.clientX - mpPressPos.x) > 5 || Math.abs(e.clientY - mpPressPos.y) > 5)) {
+                mpPressPos = null;
+                return;
+            }
+            mpPressPos = null;
             const targetExpanded = !mpCard.classList.contains('expanded');
             mpCard.classList.toggle('expanded', targetExpanded);
+            mpCard.classList.remove('mp-pop-in', 'mp-pop-out');
+            void mpCard.offsetWidth;
+            mpCard.classList.add(targetExpanded ? 'mp-pop-in' : 'mp-pop-out');
             if (window.pywebview?.api?.resize_mini_window) {
                 try {
                     window.pywebview.api.resize_mini_window(targetExpanded);

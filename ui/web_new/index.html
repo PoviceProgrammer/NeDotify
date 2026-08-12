@@ -383,7 +383,7 @@
 
                 <!-- Left Column: Cover & Controls Glass Panel -->
                 <div class="player-glass-card player-left-col">
-                    <div class="player-header-title" id="pp-header-title">Трек не выбран — ...</div>
+                    <div class="player-header-title" id="pp-header-title"><span id="pp-title">Трек не выбран</span> — <span id="pp-artist">Выберите трек</span></div>
                     
                     <div class="player-cover-section">
                         <div class="player-cover-wrapper" id="pp-cover-wrapper">
@@ -1388,7 +1388,7 @@
                     </div>
 
                     <div id="settings-auth" class="settings-panel">
-                        <div class="settings-section">
+                        <div class="settings-section" style="display:none !important;">
                             <div class="settings-section-title">Яндекс Музыка</div>
                             <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px; border-bottom: none;">
                                 <div>
@@ -1809,7 +1809,7 @@
         </div>
         <div class="glass-modal-body" style="display:flex; flex-direction:column; gap:12px;">
             <div>
-                <label class="glass-modal-label" style="display:block; margin-bottom:6px; font-size:12px; color:var(--text-sec);">Ссылка на плейлист (YouTube, Spotify, Yandex)</label>
+                <label class="glass-modal-label" style="display:block; margin-bottom:6px; font-size:12px; color:var(--text-sec);">Ссылка на плейлист (YouTube, Spotify)</label>
                 <input type="text" id="modal-ip-url" class="glass-modal-input" placeholder="https://..." autocomplete="off">
             </div>
             <div>
@@ -2038,13 +2038,6 @@
         </div>
         <div id="queue-drawer-content"></div>
     </div>
-
-        <div class="context-menu-item" id="cmenu-addplaylist"><i data-lucide="plus"></i> Add to Playlist</div>
-        <div class="context-menu-item" id="cmenu-info"><i data-lucide="info"></i> Info</div>
-        <div class="context-menu-item" id="cmenu-download"><i data-lucide="download"></i> Download</div>
-    </div>
-
-
 
 </body>
 </html>

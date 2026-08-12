@@ -17,9 +17,7 @@ build/
 *.db-shm
 *.db-wal
 scratch/
-ui_backup/
-.agents/
-.scratch*/
+restored_sources/
 backups/
 *.zip
 *.pkg

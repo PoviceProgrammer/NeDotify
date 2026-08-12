@@ -21,12 +21,13 @@ import { initEfficiency } from './efficiency.js?v=19';
 
 
 // Global NeDotify namespace for cross-module communication
+window.loadProfile = loadProfile;
 window.NeDotify = {
     openPlaylistMenu: openPlaylistMenu,
     createPlaylist: createPlaylist,
     loadHome: loadHome,
     loadLibrary: loadLibrary,
-    loadProfile: window.loadProfile,
+    loadProfile: loadProfile,
     loadSettings: loadSettings,
     handleImageError: handleImageError,
     showTrackContextMenu: showTrackContextMenu,
@@ -56,35 +57,32 @@ export async function toggleMiniPlayerMode(targetState) {
     if (targetState === undefined) targetState = !isCurrentlyMini;
 
     if (targetState) {
-        // Entering Mini Mode
+        // Entering Mini Mode: native window is resized asynchronously,
+        // so flip the UI only after the deferred resize lands (~150ms + margin)
         document.body.classList.add('mini-player-entering');
         const mpCard = document.getElementById('mini-player-overlay');
         if (mpCard) mpCard.classList.remove('expanded');
 
-        setTimeout(async () => {
+        if (window.pywebview?.api?.toggle_mini_player) {
+            try { await window.pywebview.api.toggle_mini_player(true); } catch(e) {}
+        }
+        setTimeout(() => {
             document.body.classList.add('mini-player-active');
-            if (window.pywebview?.api?.toggle_mini_player) {
-                try { await window.pywebview.api.toggle_mini_player(true); } catch(e) {}
-            }
-            setTimeout(() => {
-                document.body.classList.remove('mini-player-entering');
-            }, 200);
-        }, 120);
+            document.body.classList.remove('mini-player-entering');
+        }, 320);
     } else {
         // Exiting Mini Mode
         document.body.classList.add('mini-player-exiting');
         const mpCard = document.getElementById('mini-player-overlay');
         if (mpCard) mpCard.classList.remove('expanded');
 
-        setTimeout(async () => {
+        if (window.pywebview?.api?.toggle_mini_player) {
+            try { await window.pywebview.api.toggle_mini_player(false); } catch(e) {}
+        }
+        setTimeout(() => {
             document.body.classList.remove('mini-player-active');
-            if (window.pywebview?.api?.toggle_mini_player) {
-                try { await window.pywebview.api.toggle_mini_player(false); } catch(e) {}
-            }
-            setTimeout(() => {
-                document.body.classList.remove('mini-player-exiting');
-            }, 220);
-        }, 100);
+            document.body.classList.remove('mini-player-exiting');
+        }, 320);
     }
 }
 window.toggleMiniPlayerMode = toggleMiniPlayerMode;
@@ -254,6 +252,9 @@ async function init() {
             document.body.classList.add('mini-player-active');
             const mpCard = document.getElementById('mini-player-overlay');
             if (mpCard) mpCard.classList.remove('expanded');
+            if (window.pywebview?.api?.toggle_mini_player) {
+                try { window.pywebview.api.toggle_mini_player(true); } catch(e) {}
+            }
         }
 
         initContextMenu();

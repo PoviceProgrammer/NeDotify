@@ -1,5 +1,29 @@
 // NeDotify — Utilities Module
 
+export const HIDDEN_SOURCES = new Set(['yandex', 'vk', 'vkontakte', 'zeno']);
+
+export function isHiddenSource(source) {
+    return HIDDEN_SOURCES.has(String(source || '').toLowerCase());
+}
+
+export function filterVisibleTracks(tracks) {
+    return (Array.isArray(tracks) ? tracks : []).filter(track => {
+        if (!track) return false;
+        if (!isHiddenSource(track.source)) return true;
+        return Boolean(track.is_downloaded && track.file_path);
+    });
+}
+
+export function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 export function formatTime(seconds) {
     if (!seconds || seconds <= 0) return "0:00";
     const m = Math.floor(seconds / 60);
@@ -135,15 +159,15 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
     item.innerHTML = `
         <div class="track-cover-wrap fallback-gradient" style="background: ${grad}">
             <svg class="fallback-note-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40%;height:40%;opacity:0.6;position:relative;z-index:1;"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-            ${coverSrc ? `<img src="${coverSrc}" alt="" onerror="window.NeDotify.handleImageError(this, '${track.cover_url || ''}', '${track.source_id || ''}', '${track.source || ''}')" loading="lazy">` : ''}
+            ${coverSrc ? `<img src="${escapeHtml(coverSrc)}" alt="" onerror="this.onerror=null;this.style.display='none';" loading="lazy">` : ''}
             <div class="track-cover-overlay">
                 <i data-lucide="play" style="width:16px;height:16px;color:white"></i>
             </div>
-            ${track.source ? `<div class="source-badge source-${track.source}" title="${track.source}">${getSourceIcon(track.source)}</div>` : ''}
+            ${track.source && !isHiddenSource(track.source) ? `<div class="source-badge source-${escapeHtml(track.source)}" title="${escapeHtml(track.source)}">${getSourceIcon(track.source)}</div>` : ''}
         </div>
         <div class="track-info">
-            <div class="track-title">${track.title || 'Unknown'}</div>
-            <div class="track-artist clickable-artist">${track.artist || 'Unknown'}</div>
+            <div class="track-title">${escapeHtml(track.title || 'Unknown')}</div>
+            <div class="track-artist clickable-artist">${escapeHtml(track.artist || 'Unknown')}</div>
         </div>
         <div class="track-actions">
             <button class="icon-btn download-btn ${track.is_downloaded || track.source === 'local' ? 'downloaded' : ''}" title="${track.is_downloaded || track.source === 'local' ? 'Скачан' : 'Скачать'}">
@@ -301,11 +325,10 @@ export function renderIcons(targetEl) {
 }
 
 function getSourceIcon(source) {
+    if (isHiddenSource(source)) return '';
     switch (source) {
         case 'youtube': return '<i data-lucide="youtube" style="width:12px;height:12px"></i>';
         case 'soundcloud': return '<i data-lucide="cloud" style="width:12px;height:12px"></i>';
-        case 'yandex': return '<strong style="font-size:10px;line-height:1">Я</strong>';
-
         case 'local': return '<i data-lucide="folder" style="width:12px;height:12px"></i>';
         default: return '';
     }

@@ -320,10 +320,13 @@ export function initParticles() {
         ctx.globalAlpha = 1;
     }
 
+    animateFn = animate;
     animate(performance.now());
 }
 
 
+
+let animateFn = null;
 
 window.addEventListener('nedotify:efficiency_state', (e) => {
     const state = e.detail;
@@ -338,7 +341,7 @@ window.addEventListener('nedotify:efficiency_state', (e) => {
         const currSettings = window.settings || {};
         if (currSettings.ui?.particles_enabled !== false) {
             lastFrameTime = performance.now();
-            if (!animFrameId) animFrameId = requestAnimationFrame(animate);
+            if (!animFrameId && animateFn) animFrameId = requestAnimationFrame(animateFn);
         }
     }
     

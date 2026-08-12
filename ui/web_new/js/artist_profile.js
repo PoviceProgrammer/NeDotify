@@ -1,5 +1,5 @@
 // NeDotify РІР‚" Artist Profile Module
-import { createTrackElement, renderIcons, formatTime } from './utils.js?v=19';
+import { createTrackElement, renderIcons, formatTime, filterVisibleTracks } from './utils.js?v=19';
 import { getCurrentTrack } from './player.js?v=19';
 
 // в”Ђв”Ђв”Ђ API Image Parser (Extract high quality artwork fields from response objects) в”Ђв”Ђв”Ђ
@@ -231,8 +231,7 @@ export async function fetchArtistTracks(artistName) {
                 const data = e.detail;
                 if (data) {
                     const raw = Array.isArray(data) ? data : (data.tracks || []);
-                    const filtered = raw.filter(t => 
-                        (t.source || '').toLowerCase() !== 'yandex' && 
+                    const filtered = filterVisibleTracks(raw).filter(t => 
                         (t.title || '').length > 0 && 
                         isTrackByArtist(t, artistName)
                     );

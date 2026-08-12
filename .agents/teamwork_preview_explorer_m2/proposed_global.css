@@ -1,0 +1,254 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Prevent text selection globally in the player */
+  .aure-player {
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+  }
+
+  /* Custom Scrollbar Styles for sidebar and content panels */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--accent-color, #a855f7);
+    border-radius: 3px;
+    opacity: 0.5;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-hover, #c084fc);
+  }
+
+  /* Hide scrollbars class (specified in test 1.4: overflow not scroll) */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+}
+
+/* Theme Engine configurations with CSS Variables */
+:root {
+  /* Default: aura-dark */
+  --bg-color: #0f172a;
+  --text-color: #f8fafc;
+  --accent-color: #a855f7;
+  --accent-hover: #c084fc;
+  --sidebar-bg: #1e293b;
+  --controls-bg: #1e293b;
+}
+
+/* 1. aura-dark */
+.aure-player.aura-dark {
+  --bg-color: #0f172a;
+  --text-color: #f8fafc;
+  --accent-color: #a855f7;
+  --accent-hover: #c084fc;
+  --sidebar-bg: #1e293b;
+  --controls-bg: #1e293b;
+}
+
+/* 2. aura-light */
+.aure-player.aura-light {
+  --bg-color: #f8fafc;
+  --text-color: #0f172a;
+  --accent-color: #3b82f6;
+  --accent-hover: #60a5fa;
+  --sidebar-bg: #f1f5f9;
+  --controls-bg: #f1f5f9;
+}
+
+/* 3. neon-purple */
+.aure-player.neon-purple {
+  --bg-color: #120024;
+  --text-color: #f3e8ff;
+  --accent-color: #d946ef;
+  --accent-hover: #e879f9;
+  --sidebar-bg: #1e003b;
+  --controls-bg: #1e003b;
+}
+
+/* 4. cyberpunk */
+.aure-player.cyberpunk {
+  --bg-color: #0d0e15;
+  --text-color: #00ff66;
+  --accent-color: #fdf500;
+  --accent-hover: #ffea00;
+  --sidebar-bg: #1a1c28;
+  --controls-bg: #1a1c28;
+}
+
+/* 5. glass-morph */
+.aure-player.glass-morph {
+  --bg-color: rgba(15, 23, 42, 0.4);
+  --text-color: #f8fafc;
+  --accent-color: #ec4899;
+  --accent-hover: #f472b6;
+  --sidebar-bg: rgba(30, 41, 59, 0.4);
+  --controls-bg: rgba(30, 41, 59, 0.4);
+}
+
+/* 6. sunset-glow */
+.aure-player.sunset-glow {
+  --bg-color: #1a0f0f;
+  --text-color: #fed7aa;
+  --accent-color: #f97316;
+  --accent-hover: #fb923c;
+  --sidebar-bg: #2d1919;
+  --controls-bg: #2d1919;
+}
+
+/* 7. ocean-breeze */
+.aure-player.ocean-breeze {
+  --bg-color: #081e26;
+  --text-color: #e0f2fe;
+  --accent-color: #0ea5e9;
+  --accent-hover: #38bdf8;
+  --sidebar-bg: #0c2e3a;
+  --controls-bg: #0c2e3a;
+}
+
+/* 8. forest-mist */
+.aure-player.forest-mist {
+  --bg-color: #052e16;
+  --text-color: #dcfce7;
+  --accent-color: #22c55e;
+  --accent-hover: #4ade80;
+  --sidebar-bg: #14532d;
+  --controls-bg: #14532d;
+}
+
+/* 9. royal-gold */
+.aure-player.royal-gold {
+  --bg-color: #1c1917;
+  --text-color: #fef08a;
+  --accent-color: #eab308;
+  --accent-hover: #facc15;
+  --sidebar-bg: #292524;
+  --controls-bg: #292524;
+}
+
+/* 10. crimson-tide */
+.aure-player.crimson-tide {
+  --bg-color: #1f0707;
+  --text-color: #fee2e2;
+  --accent-color: #ef4444;
+  --accent-hover: #f87171;
+  --sidebar-bg: #3b0c0c;
+  --controls-bg: #3b0c0c;
+}
+
+/* 11. monochrome */
+.aure-player.monochrome {
+  --bg-color: #000000;
+  --text-color: #ffffff;
+  --accent-color: #ffffff;
+  --accent-hover: #cccccc;
+  --sidebar-bg: #1c1c1c;
+  --controls-bg: #1c1c1c;
+}
+
+/* 12. matrix-green */
+.aure-player.matrix-green {
+  --bg-color: #000000;
+  --text-color: #00ff00;
+  --accent-color: #00ff00;
+  --accent-hover: #33ff33;
+  --sidebar-bg: #0a0a0a;
+  --controls-bg: #0a0a0a;
+}
+
+/* 13. pastel-pink */
+.aure-player.pastel-pink {
+  --bg-color: #fff1f2;
+  --text-color: #4c0519;
+  --accent-color: #f43f5e;
+  --accent-hover: #fb7185;
+  --sidebar-bg: #ffe4e6;
+  --controls-bg: #ffe4e6;
+}
+
+/* 14. solar-flare */
+.aure-player.solar-flare {
+  --bg-color: #1e1b4b;
+  --text-color: #ffedd5;
+  --accent-color: #f59e0b;
+  --accent-hover: #fbbf24;
+  --sidebar-bg: #312e81;
+  --controls-bg: #312e81;
+}
+
+/* 15. deep-space */
+.aure-player.deep-space {
+  --bg-color: #020617;
+  --text-color: #cbd5e1;
+  --accent-color: #6366f1;
+  --accent-hover: #818cf8;
+  --sidebar-bg: #0b1329;
+  --controls-bg: #0b1329;
+}
+
+/* 16. nordic-frost */
+.aure-player.nordic-frost {
+  --bg-color: #0f172a;
+  --text-color: #e2e8f0;
+  --accent-color: #06b6d4;
+  --accent-hover: #22d3ee;
+  --sidebar-bg: #1e293b;
+  --controls-bg: #1e293b;
+}
+
+/* 17. vintage-sepia */
+.aure-player.vintage-sepia {
+  --bg-color: #2e251b;
+  --text-color: #f5efe6;
+  --accent-color: #d97706;
+  --accent-hover: #f59e0b;
+  --sidebar-bg: #403526;
+  --controls-bg: #403526;
+}
+
+/* Custom inline / testing theme support (Tier 2 test 2.3) */
+.aure-player.custom-inline {
+  --bg-color: #1e293b;
+  --text-color: #ffffff;
+  --accent-color: #ec4899;
+  --sidebar-bg: #0f172a;
+  --controls-bg: #0f172a;
+}
+
+/* Glassmorphism vs Solid modes */
+.aure-player.translucent {
+  background-color: rgba(15, 23, 42, 0.4) !important;
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.aure-player.solid {
+  background-color: var(--bg-color);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+}
+
+/* Custom styling for inputs to use theme variables */
+input[type="range"] {
+  accent-color: var(--accent-color);
+}
+
+/* Platform detection spacing overrides for Tauri integration */
+.aure-player.platform-macos {
+  padding-top: 24px;
+}
