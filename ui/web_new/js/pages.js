@@ -1,4 +1,4 @@
-// NeDotify вЂ” Pages Navigation Module
+// NeDotify - Pages Navigation Module
 import { renderIcons } from './utils.js?v=19';
 
 const pageTitles = {

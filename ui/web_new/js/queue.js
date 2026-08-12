@@ -9,8 +9,8 @@ let currentQueue = [];
 export function initQueue() {
     const btnPP = document.getElementById('pp-btn-queue');
     const btnPB = document.getElementById('pb-btn-queue');
-    const closeBtn = document.getElementById('queue-drawer-close');
-    const overlay = document.getElementById('queue-drawer');
+    const closeBtn = document.getElementById('btn-close-queue') || document.getElementById('queue-drawer-close');
+    const overlay = document.getElementById('queue-overlay') || document.getElementById('queue-drawer');
 
     // Create a transparent backdrop for clicking outside
     let backdrop = document.getElementById('queue-backdrop');

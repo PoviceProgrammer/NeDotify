@@ -153,6 +153,36 @@ export function initLibrary() {
             }
         });
     }
+
+    // Playlist Details view buttons
+    const btnBackLib = document.getElementById('btn-back-library');
+    if (btnBackLib) {
+        btnBackLib.addEventListener('click', () => {
+            if (window.NeDotify?.showPage) {
+                window.NeDotify.showPage('library');
+            } else {
+                const libTab = document.querySelector('[data-page="library"]');
+                if (libTab) libTab.click();
+            }
+        });
+    }
+
+    const plPlayBtn = document.getElementById('pl-btn-play');
+    if (plPlayBtn) {
+        plPlayBtn.addEventListener('click', () => {
+            if (!currentActiveTracks || currentActiveTracks.length === 0) return;
+            const current = getCurrentTrack();
+            const isPlayingFromCurrentList = current && currentActiveTracks.some(t => String(t.id) === String(current.id));
+
+            if (isPlayingFromCurrentList && window.pywebview?.api?.play_pause) {
+                window.pywebview.api.play_pause();
+            } else if (window.pywebview?.api?.play_track) {
+                window.pywebview.api.play_track(currentActiveTracks[0], currentActiveTracks, 0);
+            } else if (window.NeDotify?.playTrack) {
+                window.NeDotify.playTrack(currentActiveTracks[0], currentActiveTracks);
+            }
+        });
+    }
 }
 
 export async function loadLibrary() {

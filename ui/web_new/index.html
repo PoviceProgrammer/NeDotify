@@ -756,7 +756,7 @@
                                     <div class="setting-label">Показывать очередь</div>
                                     <div class="setting-sublabel">Отображать панель очереди</div>
                                 </div>
-                                <div class="toggle-switch on" id="toggle-show-queue"></div>
+                                <button class="toggle-switch on" id="toggle-show-queue"><div class="toggle-dot"></div></button>
                             </div>
 
                             <!-- 5. Положение очереди -->
@@ -785,7 +785,7 @@
                                     <div class="setting-label">Компактная кнопка очереди</div>
                                     <div class="setting-sublabel">Использовать компактный стиль кнопки очереди</div>
                                 </div>
-                                <div class="toggle-switch on" id="toggle-compact-queue-btn"></div>
+                                <button class="toggle-switch on" id="toggle-compact-queue-btn"><div class="toggle-dot"></div></button>
                             </div>
 
                             <!-- 7. Предпросмотр следующего трека -->
@@ -794,7 +794,7 @@
                                     <div class="setting-label">Предпросмотр следующего трека</div>
                                     <div class="setting-sublabel">Показывать информацию о следующем треке</div>
                                 </div>
-                                <div class="toggle-switch on" id="toggle-next-track-preview"></div>
+                                <button class="toggle-switch on" id="toggle-next-track-preview"><div class="toggle-dot"></div></button>
                             </div>
 
                             <!-- 8. Вид очереди -->
@@ -919,13 +919,13 @@
                                 <div class="setting-label">Предпросмотр фона:</div>
                                 <div style="display:flex; align-items:center; gap:16px; width:100%;">
                                     <div id="bg-image-preview" style="width:180px; height:100px; border-radius:12px; background-size:cover; background-position:center; border:1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 16px rgba(0,0,0,0.4);"></div>
-                                    <button class="btn-sm text-xs" id="btn-remove-bg-image" style="background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.4); padding:8px 14px; border-radius:8px; cursor:pointer; font-weight:600;"> </button>
+                                    <button class="btn-sm text-xs" id="btn-remove-bg-image" style="background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.4); padding:8px 14px; border-radius:8px; cursor:pointer; font-weight:600;">🗑 Удалить фоновое изображение</button>
                                 </div>
                             </div>
                             <div class="setting-row">
                                 <div>
-                                    <div class="setting-label">  (Blur): <span id="label-bg-blur">0px</span></div>
-                                    <div class="setting-sublabel">   </div>
+                                    <div class="setting-label">Размытие фона (Blur): <span id="label-bg-blur">0px</span></div>
+                                    <div class="setting-sublabel">Регулировка мягкости размытия фонового изображения</div>
                                 </div>
                                 <input type="range" class="slider-input" id="slider-bg-blur" min="0" max="40" value="0" style="width:140px">
                             </div>
@@ -943,7 +943,7 @@
                     <div id="settings-workshop" class="settings-panel">
                         <div class="settings-section">
                             <div style="margin-bottom:16px;">
-                                <div class="settings-section-title" style="margin-bottom:2px;"></div>
+                                <div class="settings-section-title" style="margin-bottom:2px;">Мастерская фонов</div>
                                 <div class="setting-sublabel">Каталог живых обоев и анимированных фонов сообщества</div>
                             </div>
 
@@ -957,12 +957,12 @@
                                     <button class="tag-btn active" data-tag="all">Все</button>
                                     <button class="tag-btn" data-tag="anime">Аниме</button>
                                     <button class="tag-btn" data-tag="atmosphere">Атмосфера</button>
-                                    <button class="tag-btn" data-tag="retro"></button>
-                                    <button class="tag-btn" data-tag="games">гры</button>
+                                    <button class="tag-btn" data-tag="retro">Ретро</button>
+                                    <button class="tag-btn" data-tag="games">Игры</button>
                                     <button class="tag-btn" data-tag="minimal">Минимализм</button>
                                 </div>
                                 <select id="workshop-sort-select" class="settings-select" style="height:38px; padding:0 14px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); font-size:12px; color:#fff; min-width:160px;">
-                                    <option value="newest">  </option>
+                                    <option value="newest">✨ Сначала новые</option>
                                     <option value="popular">🔥 По популярности</option>
                                     <option value="downloads">📥 По скачиваниям</option>
                                 </select>

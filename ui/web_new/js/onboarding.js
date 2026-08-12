@@ -1,5 +1,5 @@
 export function initOnboarding() {
-    const wizard = document.getElementById('onboarding-wizard');
+    const wizard = document.getElementById('onboarding-modal') || document.getElementById('onboarding-wizard');
     if (!wizard) return;
 
     let isDoneLocal = localStorage.getItem('aura_onboarding_done');
@@ -12,45 +12,30 @@ export function initOnboarding() {
 
     wizard.style.display = 'flex';
     wizard.classList.remove('hidden');
-    let currentStep = 1;
-    const totalSteps = 4;
 
-    const steps = wizard.querySelectorAll('.onboarding-step');
-    const btnNext = document.getElementById('ob-btn-next');
-    const btnBack = document.getElementById('ob-btn-back');
-    const btnSkip = document.getElementById('ob-btn-skip');
-    const btnFinish = document.getElementById('ob-btn-finish');
-
-    function updateView() {
-        steps.forEach(step => {
-            step.classList.toggle('active', parseInt(step.dataset.step) === currentStep);
-            step.classList.toggle('hidden', parseInt(step.dataset.step) !== currentStep);
+    function showStep(stepNum) {
+        const steps = wizard.querySelectorAll('.ob-step, .onboarding-step');
+        steps.forEach(st => {
+            const num = st.id ? parseInt(st.id.replace('ob-step-', '')) : parseInt(st.dataset.step);
+            if (num === stepNum) {
+                st.style.display = 'block';
+                st.classList.add('active');
+            } else {
+                st.style.display = 'none';
+                st.classList.remove('active');
+            }
         });
-
-        btnBack.classList.toggle('hidden', currentStep === 1);
-        
-        if (currentStep === totalSteps) {
-            btnNext.classList.add('hidden');
-            btnFinish.classList.remove('hidden');
-        } else {
-            btnNext.classList.remove('hidden');
-            btnFinish.classList.add('hidden');
-        }
     }
 
-    btnNext.addEventListener('click', () => {
-        if (currentStep < totalSteps) {
-            currentStep++;
-            updateView();
-        }
-    });
+    const btnNext1 = document.getElementById('ob-btn-next-1');
+    const btnNext2 = document.getElementById('ob-btn-next-2');
+    const btnPrev2 = document.getElementById('ob-btn-prev-2');
+    const btnPrev3 = document.getElementById('ob-btn-prev-3');
 
-    btnBack.addEventListener('click', () => {
-        if (currentStep > 1) {
-            currentStep--;
-            updateView();
-        }
-    });
+    if (btnNext1) btnNext1.addEventListener('click', () => showStep(2));
+    if (btnNext2) btnNext2.addEventListener('click', () => showStep(3));
+    if (btnPrev2) btnPrev2.addEventListener('click', () => showStep(1));
+    if (btnPrev3) btnPrev3.addEventListener('click', () => showStep(2));
 
     const presetCards = wizard.querySelectorAll('.preset-card');
     let selectedPreset = 'beauty';
@@ -128,6 +113,8 @@ export function initOnboarding() {
         wizard.style.display = 'none';
     }
 
-    btnFinish.addEventListener('click', () => finishOnboarding(false));
-    btnSkip.addEventListener('click', () => finishOnboarding(true));
+    const btnFinish = document.getElementById('ob-btn-finish');
+    const btnSkip = document.getElementById('ob-btn-skip');
+    if (btnFinish) btnFinish.addEventListener('click', () => finishOnboarding(false));
+    if (btnSkip) btnSkip.addEventListener('click', () => finishOnboarding(true));
 }

@@ -838,7 +838,7 @@ function renderKeybindsList() {
     });
 }
 
-// в"Ђв"Ђв"Ђ Exported so applySettingsFromBackend can restore preset on load в"Ђв"Ђв"Ђ
+// --- Exported so applySettingsFromBackend can restore preset on load ---
 export function applyPerformancePreset(preset, skipSave = false) {
     const root = document.documentElement;
     root.classList.remove('perf-medium', 'perf-low');
@@ -1704,7 +1704,7 @@ function setupPlayerSettingsPanel() {
     setupToggle('toggle-next-track-preview', 'next_track_preview', 'player', applyNextTrackPreview);
 
     // Mini-player position buttons
-    const mpPosGroup = document.getElementById('opt-mp-pos');
+    const mpPosGroup = document.getElementById('mp-pos-btn-group') || document.getElementById('opt-mp-pos');
     if (mpPosGroup) {
         mpPosGroup.querySelectorAll('.opt-card-btn').forEach(btn => {
             btn.addEventListener('click', () => {

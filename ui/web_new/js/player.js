@@ -783,7 +783,7 @@ function animateProgress(timestamp) {
     }
 }
 
-// в"Ђв"Ђв"Ђ Event handlers called from events.js в"Ђв"Ђв"Ђ
+// --- Event handlers called from events.js ---
 
 export function onTrackChanged(track) {
     if (!track) return;
@@ -1061,7 +1061,7 @@ export function applySettings(settings) {
     updateVolumeIcon(currentVolume);
 }
 
-// в"Ђв"Ђв"Ђ Helpers в"Ђв"Ђв"Ђ
+// --- Helpers ---
 
 function updateLikeButtons() {
     const isFav = currentTrack?.is_favorite;
