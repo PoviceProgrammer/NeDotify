@@ -105,8 +105,6 @@ export function initHotkeys() {
             e.preventDefault();
             if (window.pywebview?.api?.maximize) {
                 window.pywebview.api.maximize();
-            } else if (window.pywebview?.api?.toggle_fullscreen) {
-                window.pywebview.api.toggle_fullscreen();
             }
             return;
         }

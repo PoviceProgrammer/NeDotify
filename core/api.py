@@ -333,6 +333,19 @@ class AppApi:
         """Minimize application window."""
         self.minimize()
 
+    def restore(self):
+        """Restore window from maximized state to original unmaximized geometry."""
+        if not self._window:
+            return
+        try:
+            if hasattr(self._window, "restore"):
+                self._window.restore()
+            elif hasattr(self._window, "unmaximize"):
+                self._window.unmaximize()
+            self._is_maximized = False
+        except Exception as e:
+            logger.error(f"Restore window error: {e}")
+
     def maximize(self):
         """Toggle maximize/restore frameless window state while keeping Windows taskbar visible."""
         if not self._window:
@@ -340,26 +353,24 @@ class AppApi:
         try:
             is_max = getattr(self, "_is_maximized", False)
             if is_max:
-                if hasattr(self._window, "restore"):
-                    self._window.restore()
-                self._is_maximized = False
+                self.restore()
             else:
-                # Try Windows work-area set pos to keep taskbar visible
                 hwnd = getattr(self._window, "hwnd", None)
                 if sys.platform == "win32" and hwnd:
                     try:
                         import ctypes
                         from ctypes import wintypes
                         rect = wintypes.RECT()
-                        # SPI_GETWORKAREA = 0x0030
+                        # SPI_GETWORKAREA = 0x0030: Get Windows work area (excludes taskbar)
                         ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0)
                         w = rect.right - rect.left
                         h = rect.bottom - rect.top
+                        # SWP_NOZORDER (0x0004) | SWP_SHOWWINDOW (0x0040)
                         ctypes.windll.user32.SetWindowPos(hwnd, 0, rect.left, rect.top, w, h, 0x0004 | 0x0040)
                         self._is_maximized = True
                         return
-                    except Exception:
-                        pass
+                    except Exception as ex:
+                        logger.warning(f"Win32 SetWindowPos workarea maximize exception: {ex}")
                 if hasattr(self._window, "maximize"):
                     self._window.maximize()
                 self._is_maximized = True
@@ -367,7 +378,7 @@ class AppApi:
             logger.error(f"Maximize window error: {e}")
 
     def toggle_fullscreen(self):
-        """F11 key handler: Frameless window maximize (taskbar visible)."""
+        """Legacy handler redirecting to maximize() to guarantee Windows taskbar visibility."""
         self.maximize()
 
     def start_drag(self):

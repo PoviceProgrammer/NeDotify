@@ -269,7 +269,7 @@ async function init() {
             if (window.pywebview?.api) window.pywebview.api.minimize_window();
         });
         document.getElementById('btn-maximize')?.addEventListener('click', () => {
-            if (window.pywebview?.api) window.pywebview.api.toggle_fullscreen();
+            if (window.pywebview?.api?.maximize) window.pywebview.api.maximize();
         });
         document.getElementById('btn-close')?.addEventListener('click', () => {
             if (window.pywebview?.api) window.pywebview.api.close_window();

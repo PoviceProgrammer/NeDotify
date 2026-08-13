@@ -75,6 +75,7 @@ def main():
         height=800,
         min_size=(100, 40),
         frameless=True,
+        fullscreen=False,
         transparent=is_transparent,
         background_color='#000000' if is_transparent else '#0f0f14',
         easy_drag=False
