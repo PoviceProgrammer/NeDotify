@@ -55,7 +55,7 @@ def update_ytdlp_safely():
                 return
 
         pathlib.Path(stamp_file).touch()
-        subprocess.run([sys.executable, "-m", "pip", "install", "-U", "yt-dlp"], capture_output=True, timeout=30)
+        subprocess.run([sys.executable, "-m", "pip", "install", "-U", "--pre", "yt-dlp"], capture_output=True, timeout=60)
         logger.info("yt-dlp auto-update finished safely.")
     except Exception as e:
         logger.warning(f"Failed to auto-update yt-dlp: {e}")

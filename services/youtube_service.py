@@ -1,4 +1,4 @@
-﻿"""
+"""
 NeDotify - YouTube Service
 Search and stream audio from YouTube/YouTube Music via yt-dlp.
 """
@@ -208,16 +208,19 @@ class YouTubeService(BaseMusicService):
             "noplaylist": True,
             "nocheckcertificate": True,
             "skip_download": True,
-            "extractor_args": {"youtube": ["player_client=android,mweb,ios,web"]},
-            "socket_timeout": 5,
-            "retries": 1,
-            "extractor_retries": 1,
+            # tv_simply + mweb bypass bot detection without cookies in yt-dlp 2026.8+
+            "extractor_args": {"youtube": ["player_client=tv_simply,mweb,ios,web"]},
+            "socket_timeout": 10,
+            "retries": 2,
+            "extractor_retries": 2,
             "source_address": "0.0.0.0",
-            "http_headers": {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+            "http_headers": {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+            },
         }
 
         if fallback:
-            opts["extractor_args"] = {"youtube": ["player_client=mweb,ios,web,tv"]}
+            opts["extractor_args"] = {"youtube": ["player_client=tv_simply,ios,mweb,web,android"]}
             opts["format"] = "bestaudio/best/ba/b/worst"
             opts["ignoreerrors"] = True
 
@@ -230,6 +233,7 @@ class YouTubeService(BaseMusicService):
                 if proxy:
                     opts["proxy"] = proxy
         return opts
+
 
     @property
     def available(self) -> bool:
