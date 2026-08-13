@@ -1,5 +1,5 @@
 // NeDotify - Lyrics Module
-import { getCurrentTrack, seekTo } from './player.js?v=19';
+import { getCurrentTrack, seekTo } from './player.js?v=20260813';
 
 let parsedLyrics = [];
 let currentLineIndex = -1;

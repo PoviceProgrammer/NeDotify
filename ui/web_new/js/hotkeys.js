@@ -1,4 +1,4 @@
-import { togglePlayPause } from './player.js?v=19';
+import { togglePlayPause } from './player.js?v=20260813';
 
 export const DEFAULT_KEYBINDS = [
     { id: 'play_pause', label: 'Воспроизведение / Пауза', defaultKey: 'Space' },

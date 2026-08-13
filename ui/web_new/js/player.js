@@ -1,5 +1,5 @@
 // NeDotify Р Р†Р вЂљ" Player Module
-import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor } from './utils.js?v=19';
+import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor } from './utils.js?v=20260813';
 
 let currentTrack = null;
 let isPlaying = false;

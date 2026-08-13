@@ -1,4 +1,4 @@
-import { formatTime, formatListeningTime, renderIcons, getCoverUrl } from './utils.js?v=19';
+import { formatTime, formatListeningTime, renderIcons, getCoverUrl } from './utils.js?v=20260813';
 
 const feedTimeouts = new Map();
 let trackChangeCount = 0;

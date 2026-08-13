@@ -1,6 +1,6 @@
 // NeDotify вЂ” Library Module (Favorites, Playlists, Local Files)
-import { createTrackElement, renderIcons } from './utils.js?v=19';
-import { getCurrentTrack } from './player.js?v=19';
+import { createTrackElement, renderIcons } from './utils.js?v=20260813';
+import { getCurrentTrack } from './player.js?v=20260813';
 
 let currentContextTrack = null;
 

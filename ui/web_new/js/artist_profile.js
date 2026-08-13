@@ -1,6 +1,6 @@
 // NeDotify РІР‚" Artist Profile Module
-import { createTrackElement, renderIcons, formatTime, filterVisibleTracks } from './utils.js?v=19';
-import { getCurrentTrack } from './player.js?v=19';
+import { createTrackElement, renderIcons, formatTime, filterVisibleTracks } from './utils.js?v=20260813';
+import { getCurrentTrack } from './player.js?v=20260813';
 
 // в”Ђв”Ђв”Ђ API Image Parser (Extract high quality artwork fields from response objects) в”Ђв”Ђв”Ђ
 export function parseApiImageUrl(mediaObject, source = 'youtube') {

@@ -1,6 +1,6 @@
 // NeDotify - Equalizer Module
-import { renderIcons } from './utils.js?v=19';
-import { setEq, setPlaybackRate, setPreservesPitch } from './player.js?v=19';
+import { renderIcons } from './utils.js?v=20260813';
+import { setEq, setPlaybackRate, setPreservesPitch } from './player.js?v=20260813';
 
 let eqPreamp = 0;
 let eqBands = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];

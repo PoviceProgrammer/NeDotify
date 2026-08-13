@@ -1,6 +1,6 @@
 // NeDotify - Queue Module
-import { formatTime, renderIcons, getCoverUrl } from './utils.js?v=19';
-import { getCurrentTrack, playTrack } from './player.js?v=19';
+import { formatTime, renderIcons, getCoverUrl } from './utils.js?v=20260813';
+import { getCurrentTrack, playTrack } from './player.js?v=20260813';
 
 let isQueueVisible = false;
 let draggedItemIndex = null;
