@@ -16,6 +16,24 @@ let isMuted = false;
 let currentReplayGain = 1.0;
 const TARGET_LUFS = -14.0;
 let isInitialLoad = true;
+let currentPlaybackRate = 1.0;
+let currentPreservesPitch = true;
+
+export function setPlaybackRate(rate) {
+    currentPlaybackRate = parseFloat(rate) || 1.0;
+    if (activeAudio) {
+        activeAudio.playbackRate = currentPlaybackRate;
+    }
+}
+
+export function setPreservesPitch(enabled) {
+    currentPreservesPitch = Boolean(enabled);
+    if (activeAudio) {
+        if ('preservesPitch' in activeAudio) activeAudio.preservesPitch = currentPreservesPitch;
+        else if ('webkitPreservesPitch' in activeAudio) activeAudio.webkitPreservesPitch = currentPreservesPitch;
+        else if ('mozPreservesPitch' in activeAudio) activeAudio.mozPreservesPitch = currentPreservesPitch;
+    }
+}
 
 // Dual Audio Engine for Crossfade
 let audioA = new Audio();
@@ -267,6 +285,11 @@ export function playTrack(track, streamUrl) {
     }
     
     newAudio.src = finalSrc;
+    newAudio.playbackRate = currentPlaybackRate;
+    if ('preservesPitch' in newAudio) newAudio.preservesPitch = currentPreservesPitch;
+    else if ('webkitPreservesPitch' in newAudio) newAudio.webkitPreservesPitch = currentPreservesPitch;
+    else if ('mozPreservesPitch' in newAudio) newAudio.mozPreservesPitch = currentPreservesPitch;
+
     newAudio.volume = 0;
     newAudio.play().catch(e => console.error("Audio play error:", e));
     

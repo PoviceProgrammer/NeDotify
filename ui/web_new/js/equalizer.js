@@ -1,6 +1,6 @@
 // NeDotify - Equalizer Module
 import { renderIcons } from './utils.js?v=19';
-import { setEq } from './player.js?v=19';
+import { setEq, setPlaybackRate, setPreservesPitch } from './player.js?v=19';
 
 let eqPreamp = 0;
 let eqBands = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -115,6 +115,62 @@ export async function initEqualizer() {
                     applyEq();
                 }
             });
+        });
+    }
+
+    // Speed & Nightcore / Daycore Controls
+    const speedSlider = document.getElementById('slider-playback-rate');
+    const speedLabel = document.getElementById('label-speed-val');
+    const togglePitch = document.getElementById('toggle-preserve-pitch');
+    const btnNightcore = document.getElementById('btn-mode-nightcore');
+    const btnDaycore = document.getElementById('btn-mode-daycore');
+    const btnNormal = document.getElementById('btn-mode-normal');
+
+    if (speedSlider) {
+        speedSlider.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value) || 1.0;
+            if (speedLabel) speedLabel.textContent = `${val.toFixed(2)}x`;
+            const preserve = togglePitch ? togglePitch.classList.contains('on') : true;
+            setPlaybackRate(val);
+            setPreservesPitch(preserve);
+        });
+    }
+
+    if (togglePitch) {
+        togglePitch.addEventListener('click', () => {
+            const isOn = togglePitch.classList.toggle('on');
+            const val = speedSlider ? parseFloat(speedSlider.value) : 1.0;
+            setPreservesPitch(isOn);
+        });
+    }
+
+    if (btnNightcore) {
+        btnNightcore.addEventListener('click', () => {
+            if (speedSlider) speedSlider.value = 1.25;
+            if (speedLabel) speedLabel.textContent = '1.25x';
+            if (togglePitch) togglePitch.classList.remove('on');
+            setPlaybackRate(1.25);
+            setPreservesPitch(false);
+        });
+    }
+
+    if (btnDaycore) {
+        btnDaycore.addEventListener('click', () => {
+            if (speedSlider) speedSlider.value = 0.85;
+            if (speedLabel) speedLabel.textContent = '0.85x';
+            if (togglePitch) togglePitch.classList.remove('on');
+            setPlaybackRate(0.85);
+            setPreservesPitch(false);
+        });
+    }
+
+    if (btnNormal) {
+        btnNormal.addEventListener('click', () => {
+            if (speedSlider) speedSlider.value = 1.0;
+            if (speedLabel) speedLabel.textContent = '1.0x';
+            if (togglePitch) togglePitch.classList.add('on');
+            setPlaybackRate(1.0);
+            setPreservesPitch(true);
         });
     }
 

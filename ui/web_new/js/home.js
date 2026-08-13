@@ -59,6 +59,9 @@ export async function loadHome(isTrackChange = false) {
             renderTopArtists(data.analytics.top_artists || []);
         }
 
+        // NeDotify Wrapped Analytics
+        loadWrappedStats(currentWrappedPeriod);
+
         // Decide whether to refresh recommendations/mixes/etc.
         let shouldLoadFeeds = !isTrackChange;
         if (isTrackChange) {
@@ -493,6 +496,118 @@ export function renderTopArtists(artists) {
     });
     renderIcons();
 }
+
+let currentWrappedPeriod = 'week';
+
+export async function loadWrappedStats(period = 'week') {
+    currentWrappedPeriod = period;
+    if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.get_wrapped_stats) return;
+
+    try {
+        const stats = await window.pywebview.api.get_wrapped_stats(period);
+        renderWrappedUI(stats);
+    } catch (e) {
+        console.error("Error loading wrapped stats:", e);
+    }
+}
+
+function renderWrappedUI(stats) {
+    if (!stats) return;
+    const badge = document.getElementById('wrapped-total-time-badge');
+    if (badge) badge.textContent = `${stats.total_minutes || 0} мин (${stats.total_plays || 0} треков)`;
+
+    // Render Canvas Activity Chart
+    renderActivityChart(stats.daily_activity || []);
+
+    // Render Top 5
+    const list = document.getElementById('wrapped-top-list');
+    if (!list) return;
+
+    if (!stats.top_tracks || stats.top_tracks.length === 0) {
+        list.innerHTML = '<div class="empty-state text-sm" style="padding:12px; opacity:0.6;">Нет слушательских данных за этот период</div>';
+        return;
+    }
+
+    list.innerHTML = '';
+    stats.top_tracks.forEach((track, i) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.05);';
+        row.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+                <span style="font-weight:700; color:var(--primary); width:14px; text-align:center;">${i+1}</span>
+                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                    <span style="color:#fff; font-weight:600;">${track.title || 'Unknown'}</span>
+                    <span style="color:var(--text-sec); font-size:11px; margin-left:4px;">• ${track.artist || 'Unknown'}</span>
+                </div>
+            </div>
+            <span style="color:var(--primary); font-size:11px; font-weight:600; white-space:nowrap;">${track.plays} прослушиваний</span>
+        `;
+        list.appendChild(row);
+    });
+}
+
+function renderActivityChart(activity) {
+    const canvas = document.getElementById('wrapped-activity-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = canvas.parentElement.clientWidth || 300;
+    const h = canvas.height = 140;
+
+    ctx.clearRect(0, 0, w, h);
+
+    if (!activity || activity.length === 0) return;
+
+    const maxVal = Math.max(...activity.map(a => a.minutes), 10);
+    const barWidth = Math.max(12, Math.floor((w - 40) / activity.length));
+    const spacing = 6;
+
+    activity.forEach((item, i) => {
+        const barH = Math.max(4, Math.floor((item.minutes / maxVal) * (h - 35)));
+        const x = 20 + i * (barWidth + spacing);
+        const y = h - 25 - barH;
+
+        // Gradient bar
+        const grad = ctx.createLinearGradient(0, y, 0, h - 25);
+        grad.addColorStop(0, '#1DB954');
+        grad.addColorStop(1, 'rgba(29, 185, 84, 0.15)');
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(x, y, barWidth, barH, 4);
+        } else {
+            ctx.rect(x, y, barWidth, barH);
+        }
+        ctx.fill();
+
+        // Day Label
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(item.day, x + barWidth / 2, h - 8);
+    });
+}
+
+// Bind period buttons
+document.addEventListener('DOMContentLoaded', () => {
+    const periodContainer = document.getElementById('wrapped-period-btns');
+    if (periodContainer) {
+        periodContainer.querySelectorAll('.wrapped-period-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                periodContainer.querySelectorAll('.wrapped-period-btn').forEach(b => {
+                    b.classList.remove('active');
+                    b.style.background = 'transparent';
+                    b.style.color = 'var(--text-sec)';
+                });
+                btn.classList.add('active');
+                btn.style.background = 'var(--primary)';
+                btn.style.color = '#fff';
+                const period = btn.dataset.period || 'week';
+                loadWrappedStats(period);
+            });
+        });
+    }
+});
 
 
 

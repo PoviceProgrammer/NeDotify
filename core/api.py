@@ -1052,6 +1052,23 @@ class AppApi:
             logger.error(f"Clear storage failed: {e}")
             return False
 
+    def get_wrapped_stats(self, period: str = "week"):
+        """Get NeDotify Wrapped analytics stats (top 5 tracks/artists, total minutes, activity graph)."""
+        try:
+            return self._core.db.get_wrapped_stats(period=period)
+        except Exception as e:
+            logger.error(f"Error fetching wrapped stats: {e}")
+            return {
+                "period": period,
+                "total_plays": 0,
+                "total_seconds": 0,
+                "total_minutes": 0,
+                "total_hours": 0,
+                "top_tracks": [],
+                "top_artists": [],
+                "daily_activity": []
+            }
+
     def get_equalizer(self):
         """Get equalizer preamp and bands."""
         return {
@@ -1324,4 +1341,23 @@ class AppApi:
             status["mode"] = self._core.settings.get("zapret", "mode", "youtube_discord")
             return status
         except Exception as e:
-            return {"running": False, "error": str(e), "message": "Ошибка получения статуса Zapret"}
+            return {"running": False, "mode": "youtube_discord", "error": str(e), "binary_found": False}
+
+    def find_duplicate_tracks(self):
+        """Scan local tracks and return duplicate track groups based on acoustic fingerprint."""
+        try:
+            return self._core.audio_fingerprint.find_duplicates(self._core.db)
+        except Exception as e:
+            logger.error(f"Error finding duplicate tracks: {e}")
+            return []
+
+    def delete_duplicate_track(self, track_id: int, delete_file: bool = False):
+        """Delete duplicate track entry from database and optionally remove local file."""
+        try:
+            res = self._core.audio_fingerprint.delete_duplicate_track(self._core.db, track_id, delete_file=delete_file)
+            if res:
+                self._emit("library_updated", True)
+            return {"success": res}
+        except Exception as e:
+            logger.error(f"Error deleting duplicate track: {e}")
+            return {"success": False, "error": str(e)}

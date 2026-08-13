@@ -130,6 +130,7 @@ class DatabaseManager:
             )
         """
         )
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_played_at ON history(played_at);")
 
         cursor.execute(
             """
@@ -629,6 +630,98 @@ class DatabaseManager:
             (limit,),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+    def get_wrapped_stats(self, period: str = "week") -> Dict[str, Any]:
+        """Calculate wrapped listening analytics for the specified period ('week', 'month', 'all')."""
+        cursor = self.conn.cursor()
+        
+        where_clause = ""
+        if period == "week":
+            where_clause = "WHERE h.played_at >= datetime('now', '-7 days')"
+        elif period == "month":
+            where_clause = "WHERE h.played_at >= datetime('now', '-30 days')"
+        elif period == "year":
+            where_clause = "WHERE h.played_at >= datetime('now', '-365 days')"
+
+        # 1. Total listening time & plays count
+        query_totals = f"""
+            SELECT COUNT(h.id) as total_plays, 
+                   COALESCE(SUM(h.duration_listened), 0) as total_sec
+            FROM history h
+            {where_clause}
+        """
+        cursor.execute(query_totals)
+        row_tot = cursor.fetchone()
+        total_plays = row_tot["total_plays"] if row_tot else 0
+        total_sec = float(row_tot["total_sec"]) if row_tot else 0.0
+
+        # 2. Top 5 tracks for period
+        query_top_tracks = f"""
+            SELECT t.id, t.title, t.artist, t.album, t.cover_path, t.cover_url, t.source, t.source_id,
+                   COUNT(h.id) as plays, COALESCE(SUM(h.duration_listened), 0) as total_listened_sec
+            FROM history h
+            JOIN tracks t ON h.track_id = t.id
+            {where_clause}
+            GROUP BY t.id
+            ORDER BY plays DESC, total_listened_sec DESC
+            LIMIT 5
+        """
+        cursor.execute(query_top_tracks)
+        top_tracks = [dict(r) for r in cursor.fetchall()]
+
+        # 3. Top 5 artists for period
+        query_top_artists = f"""
+            SELECT t.artist, COUNT(h.id) as plays, COALESCE(SUM(h.duration_listened), 0) as total_listened_sec
+            FROM history h
+            JOIN tracks t ON h.track_id = t.id
+            {where_clause}
+            AND t.artist IS NOT NULL AND t.artist != '' AND t.artist != 'Unknown Artist'
+            GROUP BY LOWER(t.artist)
+            ORDER BY plays DESC, total_listened_sec DESC
+            LIMIT 5
+        """
+        cursor.execute(query_top_artists)
+        top_artists = [dict(r) for r in cursor.fetchall()]
+
+        # 4. Activity breakdown by day of week (Mon-Sun)
+        query_activity = f"""
+            SELECT strftime('%w', h.played_at) as day_idx,
+                   COUNT(h.id) as plays,
+                   COALESCE(SUM(h.duration_listened), 0) / 60.0 as minutes
+            FROM history h
+            {where_clause}
+            GROUP BY day_idx
+        """
+        cursor.execute(query_activity)
+        activity_rows = {str(r["day_idx"]): dict(r) for r in cursor.fetchall()}
+
+        days_map = [
+            {"day": "Вс", "idx": "0", "minutes": 0, "plays": 0},
+            {"day": "Пн", "idx": "1", "minutes": 0, "plays": 0},
+            {"day": "Вт", "idx": "2", "minutes": 0, "plays": 0},
+            {"day": "Ср", "idx": "3", "minutes": 0, "plays": 0},
+            {"day": "Чт", "idx": "4", "minutes": 0, "plays": 0},
+            {"day": "Пт", "idx": "5", "minutes": 0, "plays": 0},
+            {"day": "Сб", "idx": "6", "minutes": 0, "plays": 0},
+        ]
+        for d in days_map:
+            if d["idx"] in activity_rows:
+                d["minutes"] = round(float(activity_rows[d["idx"]]["minutes"]), 1)
+                d["plays"] = int(activity_rows[d["idx"]]["plays"])
+
+        # Reorder to Mon-Sun
+        daily_activity = days_map[1:] + [days_map[0]]
+
+        return {
+            "period": period,
+            "total_plays": total_plays,
+            "total_seconds": round(total_sec, 1),
+            "total_minutes": round(total_sec / 60.0, 1),
+            "total_hours": round(total_sec / 3600.0, 2),
+            "top_tracks": top_tracks,
+            "top_artists": top_artists,
+            "daily_activity": daily_activity
+        }
 
     def get_analytics_summary(self) -> Dict[str, Any]:
         cursor = self.conn.cursor()

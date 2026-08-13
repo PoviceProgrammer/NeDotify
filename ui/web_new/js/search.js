@@ -229,19 +229,34 @@ function renderResults(tracks) {
     // Filter by selected sub-type (all, tracks, playlists, albums, artists)
     let displayTracks = tracks;
     if (currentType === 'artists') {
-        const artistSuggest = document.createElement('div');
-        artistSuggest.style.cssText = 'padding: 16px 20px; margin-bottom: 20px; border-radius: 16px; background: rgba(var(--primary-rgb), 0.08); border: 1px solid rgba(var(--primary-rgb), 0.15); display: flex; justify-content: space-between; align-items: center; animation: fadeIn 0.3s ease;';
-        artistSuggest.innerHTML = `
-            <div style="display:flex; align-items:center; gap:12px; font-size:14px; color:var(--text-main)">
-                <i data-lucide="user" style="width:20px;height:20px;color:var(--primary)"></i>
-                <span>Посмотреть подробный профиль исполнителя <strong>"${currentSearchQuery}"</strong></span>
-            </div>
-            <button class="type-filter-btn active" style="margin: 0; padding: 6px 16px; font-size:12px;">Открыть профиль</button>
-        `;
-        artistSuggest.querySelector('button').addEventListener('click', () => {
-            searchArtistProfile(currentSearchQuery);
+        const uniqueArtists = new Set();
+        tracks.forEach(t => { if (t.artist && t.artist !== 'Unknown Artist') uniqueArtists.add(t.artist); });
+        
+        const artistGrid = document.createElement('div');
+        artistGrid.className = 'artist-cards-grid';
+        artistGrid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; animation: fadeIn 0.3s ease;';
+
+        const artistList = uniqueArtists.size > 0 ? Array.from(uniqueArtists) : [currentSearchQuery];
+        artistList.slice(0, 6).forEach(artistName => {
+            const artistTrack = tracks.find(t => t.artist === artistName) || {};
+            const cover = artistTrack.cover_url || artistTrack.cover_path || '';
+
+            const card = document.createElement('div');
+            card.className = 'feed-card artist-card';
+            card.style.cssText = 'padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; cursor: pointer; transition: transform 0.2s, background 0.2s;';
+            card.innerHTML = `
+                <div class="feed-card-cover" style="width: 90px; height: 90px; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, var(--primary), rgba(255,255,255,0.1)); display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px rgba(0,0,0,0.3);">
+                    ${cover ? `<img src="${cover}" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;">` : '<i data-lucide="user" style="width:40px;height:40px;color:rgba(255,255,255,0.6)"></i>'}
+                </div>
+                <div style="font-weight: 700; font-size: 14px; color: #ffffff; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${artistName}</div>
+                <div style="font-size: 11px; color: var(--text-sec);">Исполнитель • Профиль</div>
+                <button class="type-filter-btn active" style="margin-top: 4px; padding: 5px 14px; font-size: 11px; border-radius: 20px;">Открыть профиль</button>
+            `;
+            card.onclick = () => searchArtistProfile(artistName);
+            artistGrid.appendChild(card);
         });
-        container.appendChild(artistSuggest);
+
+        container.appendChild(artistGrid);
     }
 
     // Suggestion banner for artist profile in 'all' view

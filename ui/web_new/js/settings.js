@@ -171,6 +171,21 @@ export function initSettings() {
             }
         });
     }
+
+    // Duplicate Scanner Binding
+    const scanDuplicatesBtn = document.getElementById('btn-scan-duplicates');
+    const duplicatesContainer = document.getElementById('duplicates-results-container');
+    if (scanDuplicatesBtn && duplicatesContainer) {
+        scanDuplicatesBtn.addEventListener('click', async () => {
+            duplicatesContainer.innerHTML = '<div style="font-size:12px; color:var(--text-sec); display:flex; align-items:center; gap:8px;"><div class="spinner" style="width:14px;height:14px;"></div> Сканирование медиатеки на дубликаты...</div>';
+            if (window.pywebview?.api?.find_duplicate_tracks) {
+                const groups = await window.pywebview.api.find_duplicate_tracks();
+                renderDuplicateGroups(groups, duplicatesContainer);
+            } else {
+                duplicatesContainer.innerHTML = '<div style="font-size:12px; color:var(--text-sec);">Сканирование недоступно</div>';
+            }
+        });
+    }
     // Setup font size slider
     setupSlider('slider-font-size', 'font_size', 'theme', (val) => {
         applyFontSize(val);
@@ -2312,6 +2327,50 @@ export function setupWorkshopPanel() {
             });
         });
     }
+}
+
+function renderDuplicateGroups(groups, container) {
+    if (!container) return;
+    if (!groups || groups.length === 0) {
+        container.innerHTML = '<div style="font-size:12px; color:rgba(255,255,255,0.7); background:rgba(255,255,255,0.04); padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.1);">✅ Дубликатов в вашей медиатеке не обнаружено!</div>';
+        return;
+    }
+
+    container.innerHTML = '';
+    groups.forEach((group, idx) => {
+        const groupEl = document.createElement('div');
+        groupEl.style.cssText = 'background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:12px; margin-bottom:10px; font-size:12px;';
+        
+        let tracksHtml = '';
+        group.tracks.forEach(track => {
+            tracksHtml += `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px dashed rgba(255,255,255,0.08);">
+                    <div>
+                        <div style="font-weight:600; color:#fff;">${track.title || 'Unknown'}</div>
+                        <div style="color:var(--text-sec); font-size:11px;">${track.artist || 'Unknown'} • ${(track.file_size_bytes / (1024*1024)).toFixed(2)} MB</div>
+                    </div>
+                    <button class="btn-sm text-xs btn-delete-dup" data-id="${track.id}" style="padding:4px 8px; border-radius:6px; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.3); cursor:pointer;">Удалить</button>
+                </div>
+            `;
+        });
+
+        groupEl.innerHTML = `
+            <div style="font-weight:700; color:var(--primary); margin-bottom:6px;">Группа дубликатов #${idx + 1} (Совпадение ${group.match_confidence}%)</div>
+            ${tracksHtml}
+        `;
+
+        groupEl.querySelectorAll('.btn-delete-dup').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const trackId = parseInt(e.target.dataset.id);
+                if (trackId && window.pywebview?.api?.delete_duplicate_track) {
+                    await window.pywebview.api.delete_duplicate_track(trackId, true);
+                    e.target.closest('div').remove();
+                }
+            });
+        });
+
+        container.appendChild(groupEl);
+    });
 }
 
 
