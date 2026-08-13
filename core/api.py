@@ -607,12 +607,27 @@ class AppApi:
             current_idx = self._core.engine.queue._current_index
             next_idx = (current_idx + 1) % len(self._core.engine.queue.tracks)
             if next_idx < len(self._core.engine.queue.tracks):
-                track = self._core.engine.queue.tracks[next_idx].copy()
-                if not track.get("stream_url"):
-                    if track.get("source") == "local":
-                        track["stream_url"] = track.get("url") or track.get("file_path")
-                    elif track.get("file_path") and os.path.exists(track["file_path"]):
-                        track["stream_url"] = track["file_path"]
+                raw_track = self._core.engine.queue.tracks[next_idx]
+                if not raw_track or not isinstance(raw_track, dict):
+                    return None
+                
+                track = {
+                    "id": raw_track.get("id"),
+                    "title": str(raw_track.get("title") or "Unknown Title"),
+                    "artist": str(raw_track.get("artist") or "Unknown Artist"),
+                    "album": str(raw_track.get("album") or "Unknown Album"),
+                    "duration": float(raw_track.get("duration") or 0),
+                    "cover_url": str(raw_track.get("cover_url") or raw_track.get("cover_path") or ""),
+                    "source": str(raw_track.get("source") or "local"),
+                    "source_id": str(raw_track.get("source_id") or ""),
+                    "stream_url": str(raw_track.get("stream_url") or "")
+                }
+                
+                if not track["stream_url"]:
+                    if track["source"] == "local":
+                        track["stream_url"] = str(raw_track.get("url") or raw_track.get("file_path") or "")
+                    elif raw_track.get("file_path") and os.path.exists(str(raw_track["file_path"])):
+                        track["stream_url"] = str(raw_track["file_path"])
                     elif self._core.engine.proxy and getattr(self._core.engine.proxy, "port", None):
                         import urllib.parse as urllib_parse
                         t_id = track.get("id") or 0

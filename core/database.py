@@ -827,11 +827,18 @@ class DatabaseManager:
         self.conn.commit()
         return cursor.rowcount > 0
 
-    def set_setting(self, key: str, value: str, category: str = "general") -> None:
+    def set_setting(self, key: str, value: Any, category: str = "general") -> None:
+        if isinstance(value, (dict, list)):
+            val_str = json.dumps(value)
+        elif value is None:
+            val_str = ""
+        else:
+            val_str = str(value)
+            
         cursor = self.conn.cursor()
         cursor.execute(
             "INSERT OR REPLACE INTO settings (key, value, category, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
-            (key, value, category),
+            (key, val_str, category),
         )
         self.conn.commit()
 

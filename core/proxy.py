@@ -439,9 +439,12 @@ class LocalProxyManager:
         if self.server:
             try:
                 self.server.shutdown()
+            except Exception:
+                pass
+            try:
                 self.server.server_close()
-            except Exception as e:
-                logger.warning(f'Error stopping proxy server: {e}')
+            except Exception:
+                pass
             self.server = None
         self.thread = None
         self.port = 0

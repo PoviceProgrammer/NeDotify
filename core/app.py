@@ -85,7 +85,7 @@ class AppCore:
         self.yandex = YandexService(self.settings)
         self.spotify = SpotifyService(self.settings)
         self.lyrics = LyricsService(self.settings)
-        self.recommendations = RecommendationService(self.db, self.soundcloud, self.youtube)
+        self.recommendations = RecommendationService(settings=self.settings, db=self.db, soundcloud_service=self.soundcloud, youtube_service=self.youtube)
 
         # Proxy, Downloader & Plugins
         self.proxy = LocalProxyManager(self)
