@@ -768,39 +768,43 @@ function animateProgress(timestamp) {
     if (timestamp - lastProgressFrame < 66) return;
     lastProgressFrame = timestamp;
 
-    if (!isDraggingProgress && activeAudio && currentDuration > 0) {
-        currentPosMs = Math.round(activeAudio.currentTime * 1000);
-        const pct = Math.max(0, Math.min(100, (currentPosMs / currentDuration) * 100));
-        if (!isFinite(pct)) return;
+    if (!isDraggingProgress && activeAudio) {
+        if (activeAudio.duration && !isNaN(activeAudio.duration) && activeAudio.duration > 0) {
+            currentDuration = Math.round(activeAudio.duration * 1000);
+        }
+        if (currentDuration > 0) {
+            currentPosMs = Math.round(activeAudio.currentTime * 1000);
+            const pct = Math.max(0, Math.min(100, (currentPosMs / currentDuration) * 100));
+            if (!isFinite(pct)) return;
 
-        const pctStr   = `${pct.toFixed(2)}%`;
-        const timeStr  = formatTime(currentPosMs / 1000);
-        const els = _getProgEls();
+            const timeStr  = formatTime(currentPosMs / 1000);
+            const els = _getProgEls();
 
-        const txVal = `translateX(${pct - 100}%)`;
-        if (els.pbFill) els.pbFill.style.transform = txVal;
-        if (els.ppFill) els.ppFill.style.transform = txVal;
-        if (els.mpFill) els.mpFill.style.transform = txVal;
-        if (els.pbTime) els.pbTime.textContent = timeStr;
-        if (els.ppTime) els.ppTime.textContent = timeStr;
-        if (els.mpTime) els.mpTime.textContent = timeStr;
+            const txVal = `translateX(${pct - 100}%)`;
+            if (els.pbFill) els.pbFill.style.transform = txVal;
+            if (els.ppFill) els.ppFill.style.transform = txVal;
+            if (els.mpFill) els.mpFill.style.transform = txVal;
+            if (els.pbTime) els.pbTime.textContent = timeStr;
+            if (els.ppTime) els.ppTime.textContent = timeStr;
+            if (els.mpTime) els.mpTime.textContent = timeStr;
 
-        // Gapless preloading & Crossfade triggers
-        const remainingSec = (currentDuration - currentPosMs) / 1000;
-        if (remainingSec <= 15 && !window._isPreloadingNextTrack) {
-            window._isPreloadingNextTrack = true;
-            if (window.pywebview?.api?.get_next_track) {
-                window.pywebview.api.get_next_track().then(nextTrack => {
-                    if (nextTrack && nextTrack.stream_url) {
-                        const inactiveAudio = activeAudio === audioA ? audioB : audioA;
-                        if (inactiveAudio.src !== nextTrack.stream_url) {
-                            inactiveAudio.src = nextTrack.stream_url;
-                            inactiveAudio.load();
+            // Gapless preloading & Crossfade triggers
+            const remainingSec = (currentDuration - currentPosMs) / 1000;
+            if (remainingSec <= 15 && !window._isPreloadingNextTrack) {
+                window._isPreloadingNextTrack = true;
+                if (window.pywebview?.api?.get_next_track) {
+                    window.pywebview.api.get_next_track().then(nextTrack => {
+                        if (nextTrack && nextTrack.stream_url) {
+                            const inactiveAudio = activeAudio === audioA ? audioB : audioA;
+                            if (inactiveAudio.src !== nextTrack.stream_url) {
+                                inactiveAudio.src = nextTrack.stream_url;
+                                inactiveAudio.load();
+                            }
                         }
-                    }
-                }).catch(() => {}).finally(() => {
-                    setTimeout(() => { window._isPreloadingNextTrack = false; }, 10000);
-                });
+                    }).catch(() => {}).finally(() => {
+                        setTimeout(() => { window._isPreloadingNextTrack = false; }, 10000);
+                    });
+                }
             }
         }
     }
@@ -1032,18 +1036,31 @@ export function onPositionChanged(posMs, durationMs) {
     try {
         if (performance.now() - lastSeekTime < 1500) return;
         
-        if (durationMs > 0) {
-            currentDuration = durationMs;
-        }
-        targetPosMs = posMs;
-
         // If audio is actively playing in HTML5 Audio, let animateProgress handle smooth frame updates
         if (isPlaying && activeAudio && !activeAudio.paused) {
             return;
         }
 
+        // Normalize units: ensure durationMs & posMs are strictly in milliseconds
+        let realDurationMs = durationMs;
+        if (activeAudio && activeAudio.duration > 0 && !isNaN(activeAudio.duration)) {
+            realDurationMs = Math.round(activeAudio.duration * 1000);
+        } else if (realDurationMs > 0 && realDurationMs < 10000) {
+            realDurationMs = Math.round(realDurationMs * 1000);
+        }
+
+        if (realDurationMs > 0) {
+            currentDuration = realDurationMs;
+        }
+
+        let realPosMs = posMs;
+        if (realPosMs > 0 && realPosMs < 10000 && currentDuration > 10000) {
+            realPosMs = Math.round(realPosMs * 1000);
+        }
+        targetPosMs = realPosMs;
+
         if (!isDraggingProgress && currentDuration > 0) {
-            const pct = Math.max(0, Math.min(100, (posMs / currentDuration) * 100));
+            const pct = Math.max(0, Math.min(100, (realPosMs / currentDuration) * 100));
             if (isFinite(pct)) {
                 const txVal = `translateX(${pct - 100}%)`;
                 const els = _getProgEls();
@@ -1051,14 +1068,14 @@ export function onPositionChanged(posMs, durationMs) {
                 if (els.ppFill) els.ppFill.style.transform = txVal;
                 if (els.mpFill) els.mpFill.style.transform = txVal;
             }
-            const timeStr = formatTime(posMs / 1000);
+            const timeStr = formatTime(realPosMs / 1000);
             const els = _getProgEls();
             if (els.pbTime) els.pbTime.textContent = timeStr;
             if (els.ppTime) els.ppTime.textContent = timeStr;
             if (els.mpTime) els.mpTime.textContent = timeStr;
         }
     } catch(e) {
-        alert("Player onPositionChanged Error: " + e.message);
+        console.error("Player onPositionChanged Error:", e);
     }
 }
 

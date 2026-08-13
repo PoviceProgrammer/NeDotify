@@ -1,10 +1,10 @@
-// NeDotify вЂ” Python Event Bridge
-import { onTrackChanged, onStateChanged, onPositionChanged, applySettings } from './player.js?v=19';
-import { onSearchResults } from './search.js?v=19';
-import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome } from './home.js?v=19';
-import { loadLibrary, loadFavorites, loadDownloaded, loadPlaylists } from './library.js?v=19';
-import { applySettingsFromBackend, onStorageInfo, setYandexWarning } from './settings.js?v=19';
-import { showToast, renderIcons } from './utils.js?v=19';
+// NeDotify — Python Event Bridge
+import { onTrackChanged, onStateChanged, onPositionChanged, applySettings } from './player.js?v=20260813';
+import { onSearchResults } from './search.js?v=20260813';
+import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome } from './home.js?v=20260813';
+import { loadLibrary, loadFavorites, loadDownloaded, loadPlaylists } from './library.js?v=20260813';
+import { applySettingsFromBackend, onStorageInfo, setYandexWarning } from './settings.js?v=20260813';
+import { showToast, renderIcons } from './utils.js?v=20260813';
 
 let isNextTrackChange = false;
 
@@ -26,11 +26,11 @@ export function initEvents() {
                 break;
 
             case 'position_changed':
-                // Normalize payload: { position_ms: ... } or { pos: ..., duration: ... }
-                let pos = data.pos !== undefined ? data.pos : (data.position_ms ? data.position_ms / 1000 : 0);
-                let duration = data.duration !== undefined ? data.duration : 0;
-                onPositionChanged(pos, duration);
-                document.dispatchEvent(new CustomEvent('nedotify:position_changed', { detail: { pos, duration } }));
+                // Pos and duration should be normalized to milliseconds for onPositionChanged
+                let posMs = data.position_ms !== undefined ? data.position_ms : (data.pos !== undefined ? Math.round(data.pos * 1000) : 0);
+                let durationMs = data.duration_ms !== undefined ? data.duration_ms : (data.duration !== undefined ? Math.round(data.duration * 1000) : 0);
+                onPositionChanged(posMs, durationMs);
+                document.dispatchEvent(new CustomEvent('nedotify:position_changed', { detail: { pos: posMs / 1000, duration: durationMs / 1000, posMs, durationMs } }));
                 break;
 
             case 'search_results':
