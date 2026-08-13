@@ -10,7 +10,7 @@ import os
 import subprocess
 import sys
 
-APP_KEY = "NeDotify_v1.5.1"
+APP_KEY = "NeDotify_v2.0.0"
 
 
 def run_cmd(cmd):

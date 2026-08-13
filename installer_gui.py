@@ -62,11 +62,11 @@ def register_uninstaller(dest_dir, exe_path, uninstaller_path):
     try:
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\NeDotify"
         key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path)
-        winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "NeDotify v1.5.1")
+        winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "NeDotify v2.0.0")
         winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ, f'"{uninstaller_path}"')
         winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, f'"{exe_path}"')
         winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "The NeDotify Team")
-        winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "1.5.1")
+        winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, "2.0.0")
         winreg.CloseKey(key)
     except Exception as e:
         print(f"Failed to register uninstaller in registry: {e}")
@@ -74,7 +74,7 @@ def register_uninstaller(dest_dir, exe_path, uninstaller_path):
 class InstallerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Установка NeDotify v1.5.1")
+        self.root.title("Установка NeDotify v2.0.0")
         self.root.geometry("540x420")
         self.root.resizable(False, False)
 
@@ -89,7 +89,7 @@ class InstallerApp:
         style.configure('TLabel', font=('Segoe UI', 10))
 
         # Title
-        title = tk.Label(root, text="Установка NeDotify v1.5.1", font=("Segoe UI", 16, "bold"))
+        title = tk.Label(root, text="Установка NeDotify v2.0.0", font=("Segoe UI", 16, "bold"))
         title.pack(pady=(15, 10))
 
         # Path variable
@@ -240,7 +240,7 @@ class InstallerApp:
                 register_uninstaller(dest_dir, exe_path, uninstaller_path)
 
             self.status.config(text="Установка успешно завершена!")
-            messagebox.showinfo("Успех", f"NeDotify v1.5.1 успешно установлен в:\n{dest_dir}")
+            messagebox.showinfo("Успех", f"NeDotify v2.0.0 успешно установлен в:\n{dest_dir}")
             self.root.destroy()
             
         except Exception as e:
