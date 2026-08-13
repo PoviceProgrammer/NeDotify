@@ -151,6 +151,7 @@ export async function initEqualizer() {
             if (togglePitch) togglePitch.classList.remove('on');
             setPlaybackRate(1.25);
             setPreservesPitch(false);
+            updateSpeedUI(1.25, 'nightcore');
         });
     }
 
@@ -161,6 +162,7 @@ export async function initEqualizer() {
             if (togglePitch) togglePitch.classList.remove('on');
             setPlaybackRate(0.85);
             setPreservesPitch(false);
+            updateSpeedUI(0.85, 'daycore');
         });
     }
 
@@ -171,8 +173,90 @@ export async function initEqualizer() {
             if (togglePitch) togglePitch.classList.add('on');
             setPlaybackRate(1.0);
             setPreservesPitch(true);
+            updateSpeedUI(1.0, 'normal');
         });
     }
+
+    // Full Player & Player Bar Nightcore Bindings
+    const ppNightcore = document.getElementById('pp-mode-nightcore');
+    const ppDaycore = document.getElementById('pp-mode-daycore');
+    const ppNormal = document.getElementById('pp-mode-normal');
+    const pbNightcore = document.getElementById('pb-btn-nightcore');
+
+    if (ppNightcore) {
+        ppNightcore.addEventListener('click', () => {
+            if (btnNightcore) btnNightcore.click();
+            else {
+                setPlaybackRate(1.25);
+                setPreservesPitch(false);
+                updateSpeedUI(1.25, 'nightcore');
+            }
+        });
+    }
+
+    if (ppDaycore) {
+        ppDaycore.addEventListener('click', () => {
+            if (btnDaycore) btnDaycore.click();
+            else {
+                setPlaybackRate(0.85);
+                setPreservesPitch(false);
+                updateSpeedUI(0.85, 'daycore');
+            }
+        });
+    }
+
+    if (ppNormal) {
+        ppNormal.addEventListener('click', () => {
+            if (btnNormal) btnNormal.click();
+            else {
+                setPlaybackRate(1.0);
+                setPreservesPitch(true);
+                updateSpeedUI(1.0, 'normal');
+            }
+        });
+    }
+
+    if (pbNightcore) {
+        pbNightcore.addEventListener('click', () => {
+            cycleSpeedMode();
+        });
+    }
+
+function updateSpeedUI(rate, modeName) {
+    const pbBtn = document.getElementById('pb-btn-nightcore');
+    if (pbBtn) {
+        if (modeName === 'nightcore') pbBtn.innerHTML = '⚡ 1.25x';
+        else if (modeName === 'daycore') pbBtn.innerHTML = '🌙 0.85x';
+        else pbBtn.innerHTML = `⚡ ${rate.toFixed(1)}x`;
+    }
+
+    const ppNormal = document.getElementById('pp-mode-normal');
+    const ppNightcore = document.getElementById('pp-mode-nightcore');
+    const ppDaycore = document.getElementById('pp-mode-daycore');
+
+    if (ppNormal) ppNormal.style.background = modeName === 'normal' ? 'var(--primary)' : 'rgba(255,255,255,0.08)';
+    if (ppNightcore) ppNightcore.style.background = modeName === 'nightcore' ? 'var(--primary)' : 'rgba(255,255,255,0.08)';
+    if (ppDaycore) ppDaycore.style.background = modeName === 'daycore' ? 'var(--primary)' : 'rgba(255,255,255,0.08)';
+}
+
+let activeModeCycle = 0;
+
+function cycleSpeedMode() {
+    activeModeCycle = (activeModeCycle + 1) % 3;
+    if (activeModeCycle === 1) {
+        setPlaybackRate(1.25);
+        setPreservesPitch(false);
+        updateSpeedUI(1.25, 'nightcore');
+    } else if (activeModeCycle === 2) {
+        setPlaybackRate(0.85);
+        setPreservesPitch(false);
+        updateSpeedUI(0.85, 'daycore');
+    } else {
+        setPlaybackRate(1.0);
+        setPreservesPitch(true);
+        updateSpeedUI(1.0, 'normal');
+    }
+}
 
     // Preamp Slider
     const preampSlider = document.getElementById('eq-preamp');

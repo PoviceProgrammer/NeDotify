@@ -464,6 +464,14 @@
                             <i data-lucide="list-music" style="width:20px;height:20px"></i>
                         </button>
                     </div>
+
+                    <!-- Nightcore & Speed Control Pills in Full Player -->
+                    <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-top:14px; padding:6px 12px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
+                        <span style="font-size:11px; font-weight:700; color:var(--text-sec); letter-spacing:0.5px;">РЕЖИМ:</span>
+                        <button class="pitch-preset-btn" id="pp-mode-nightcore" style="padding:4px 10px; font-size:11px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.08); color:#fff; cursor:pointer; font-weight:600;" title="Nightcore mode (1.25x + Pitch)">⚡ Nightcore</button>
+                        <button class="pitch-preset-btn" id="pp-mode-daycore" style="padding:4px 10px; font-size:11px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.08); color:#fff; cursor:pointer; font-weight:600;" title="Daycore mode (0.85x + Bass Pitch)">🌙 Daycore</button>
+                        <button id="pp-mode-normal" style="padding:4px 10px; font-size:11px; border-radius:8px; border:none; background:var(--primary); color:#fff; cursor:pointer; font-weight:600;">1.0x</button>
+                    </div>
                 </div>
 
                 <!-- Right Column: Lyrics Glass Panel -->
@@ -1772,8 +1780,11 @@
         </div>
     </div>
 
-    <!-- Right: Volume (compact) -->
+    <!-- Right: Speed/Nightcore + Volume (compact) -->
     <div class="pb-right">
+        <button class="btn-ctrl" id="pb-btn-nightcore" title="⚡ Переключить Nightcore (1.25x) / Daycore / 1.0x" style="font-size:11px; font-weight:700; padding:3px 8px; border-radius:6px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:#fff; cursor:pointer;">
+            ⚡ 1.0x
+        </button>
         <button class="btn-ctrl" id="pb-btn-queue" title="Очередь">
             <i data-lucide="list-music" style="width:16px;height:16px"></i>
         </button>
