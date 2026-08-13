@@ -36,6 +36,12 @@ class FileScanner:
                 added.append(track)
         return added
 
+    def scan_single_file(self, filepath: str) -> Optional[dict]:
+        """Scan and import a single audio file into the database."""
+        if not is_audio_file(filepath):
+            return None
+        return self._import_file(filepath)
+
     def scan_folder(self, folder_path: str, recursive: bool = True):
         """Scan a folder for audio files (runs in background thread)."""
         if self._scanning:

@@ -650,12 +650,35 @@ class DatabaseManager:
 
     def create_playlist(self, name: str, description: str = "") -> int:
         cursor = self.conn.cursor()
-        cursor.execute("INSERT INTO playlists (name, description) VALUES (?, ?)", (name, description))
+        clean_name = (name or "").strip()
+        # If playlist with same name already exists (especially system names), reuse it
+        cursor.execute("SELECT id FROM playlists WHERE LOWER(name) = LOWER(?) LIMIT 1", (clean_name,))
+        row = cursor.fetchone()
+        if row:
+            return row["id"]
+
+        cursor.execute("INSERT INTO playlists (name, description) VALUES (?, ?)", (clean_name, description))
         self.conn.commit()
         return cursor.lastrowid
 
     def get_playlists(self) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
+        # Clean up duplicate empty system playlists with exact same name
+        try:
+            cursor.execute("""
+                DELETE FROM playlists 
+                WHERE name IN ('Локальные', 'Локальные треки') 
+                AND id NOT IN (SELECT DISTINCT playlist_id FROM playlist_tracks)
+                AND id NOT IN (
+                    SELECT MIN(id) FROM playlists 
+                    WHERE name IN ('Локальные', 'Локальные треки') 
+                    GROUP BY name
+                )
+            """)
+            self.conn.commit()
+        except Exception:
+            pass
+
         cursor.execute(
             """
             SELECT p.*, COUNT(pt.track_id) as track_count

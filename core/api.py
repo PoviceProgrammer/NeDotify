@@ -344,9 +344,23 @@ class AppApi:
                     self._window.restore()
                 self._is_maximized = False
             else:
+                # Try Windows work-area set pos to keep taskbar visible
+                hwnd = getattr(self._window, "hwnd", None)
+                if sys.platform == "win32" and hwnd:
+                    try:
+                        import ctypes
+                        from ctypes import wintypes
+                        rect = wintypes.RECT()
+                        # SPI_GETWORKAREA = 0x0030
+                        ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0)
+                        w = rect.right - rect.left
+                        h = rect.bottom - rect.top
+                        ctypes.windll.user32.SetWindowPos(hwnd, 0, rect.left, rect.top, w, h, 0x0004 | 0x0040)
+                        self._is_maximized = True
+                        return
+                    except Exception:
+                        pass
                 if hasattr(self._window, "maximize"):
-                    self._window.maximize()
-                elif hasattr(self._window, "toggle_fullscreen"):
                     self._window.maximize()
                 self._is_maximized = True
         except Exception as e:
@@ -443,6 +457,12 @@ class AppApi:
             for t in track_list:
                 if isinstance(t, dict) and t.get("track_id"):
                     t["id"] = t["track_id"]
+
+        if isinstance(track, dict) and track.get("id"):
+            try:
+                self._core.db.add_to_history(track["id"])
+            except Exception:
+                pass
 
         if track_list:
             if index == 0 and track:
@@ -1118,7 +1138,8 @@ class AppApi:
         if not self._window:
             return None
         try:
-            res = self._window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=("Image Files (*.jpg;*.png;*.webp)",))
+            dialog_type = getattr(webview, 'FileDialog', webview).OPEN if hasattr(webview, 'FileDialog') else webview.OPEN_DIALOG
+            res = self._window.create_file_dialog(dialog_type, allow_multiple=False, file_types=("Image Files (*.jpg;*.png;*.webp)",))
             if res and len(res) > 0:
                 src = res[0]
                 avatars_dir = os.path.join(self._core.cache.cache_dir, "avatars")
@@ -1146,7 +1167,8 @@ class AppApi:
             return False
         try:
             file_types = ("Audio Files (*.mp3;*.flac;*.wav;*.ogg;*.m4a)", "All Files (*.*)")
-            res = self._window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=True, file_types=file_types)
+            dialog_type = getattr(webview, 'FileDialog', webview).OPEN if hasattr(webview, 'FileDialog') else webview.OPEN_DIALOG
+            res = self._window.create_file_dialog(dialog_type, allow_multiple=True, file_types=file_types)
             if not res:
                 return False
 

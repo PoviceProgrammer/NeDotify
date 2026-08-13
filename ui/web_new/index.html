@@ -1166,18 +1166,32 @@
                         </div>
                         <div class="settings-section">
                             <div class="settings-section-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                                <span>Эквалайзер</span>
+                                <div style="display:flex; align-items:center; gap:12px;">
+                                    <span>Эквалайзер</span>
+                                    <div id="eq-mode-btn-group" style="display:flex; background:rgba(255,255,255,0.06); padding:2px; border-radius:8px; border:1px solid rgba(255,255,255,0.1);">
+                                        <button class="eq-mode-btn active" data-mode="3" style="padding:3px 8px; font-size:11px; border-radius:6px; border:none; background:var(--primary); color:#fff; cursor:pointer; font-weight:600;">3 полосы</button>
+                                        <button class="eq-mode-btn" data-mode="6" style="padding:3px 8px; font-size:11px; border-radius:6px; border:none; background:transparent; color:var(--text-sec); cursor:pointer; font-weight:600;">6 полос</button>
+                                        <button class="eq-mode-btn" data-mode="10" style="padding:3px 8px; font-size:11px; border-radius:6px; border:none; background:transparent; color:var(--text-sec); cursor:pointer; font-weight:600;">10 полос</button>
+                                    </div>
+                                </div>
                                 <div style="display:flex; gap:8px; align-items:center;">
-                                    <select id="eq-preset-select" class="settings-select" style="padding: 4px 8px; font-size:12px; height:28px;">
-                                        <option value="flat">Пресет: Сброс (Flat)</option>
-                                        <option value="bass_boost">Пресет: Усиление баса</option>
-                                        <option value="treble_boost">Пресет: Усиление высоких</option>
-                                        <option value="vocal">Пресет: Вокал</option>
-                                        <option value="rock">Пресет: Рок</option>
-                                        <option value="pop">Пресет: Поп</option>
-                                        <option value="jazz">Пресет: Джаз</option>
-                                    </select>
-                                    <button id="btn-eq-reset" class="filter-btn" style="padding: 4px 12px; font-size:12px;">Сброс</button>
+                                    <!-- Sleek Custom Glass Dropdown -->
+                                    <div class="custom-glass-dropdown" id="eq-custom-preset-dropdown">
+                                        <button class="custom-glass-dropdown-btn" id="eq-dropdown-btn">
+                                            <span id="eq-preset-current-text">Пресет: Сброс (Flat)</span>
+                                            <i data-lucide="chevron-down" style="width:14px;height:14px"></i>
+                                        </button>
+                                        <div class="custom-glass-dropdown-menu hidden" id="eq-dropdown-menu">
+                                            <div class="custom-glass-dropdown-item active" data-value="flat">Пресет: Сброс (Flat)</div>
+                                            <div class="custom-glass-dropdown-item" data-value="bass_boost">Пресет: Усиление баса</div>
+                                            <div class="custom-glass-dropdown-item" data-value="treble_boost">Пресет: Усиление высоких</div>
+                                            <div class="custom-glass-dropdown-item" data-value="vocal">Пресет: Вокал</div>
+                                            <div class="custom-glass-dropdown-item" data-value="rock">Пресет: Рок</div>
+                                            <div class="custom-glass-dropdown-item" data-value="pop">Пресет: Поп</div>
+                                            <div class="custom-glass-dropdown-item" data-value="jazz">Пресет: Джаз</div>
+                                        </div>
+                                    </div>
+                                    <button id="btn-eq-reset" class="filter-btn" style="padding: 5px 12px; font-size:12px;">Сброс</button>
                                 </div>
                             </div>
                             <div class="setting-row" style="flex-direction:column; align-items:flex-start; padding-bottom: 24px;">

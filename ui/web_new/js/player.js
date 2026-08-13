@@ -1014,27 +1014,25 @@ export function onPositionChanged(posMs, durationMs) {
         }
         targetPosMs = posMs;
 
-        // Sync currentPosMs when it drifts >1.5s from real position
-        if (Math.abs(currentPosMs - targetPosMs) > 1500 || currentPosMs === 0) {
-            currentPosMs = posMs;
+        // If audio is actively playing in HTML5 Audio, let animateProgress handle smooth frame updates
+        if (isPlaying && activeAudio && !activeAudio.paused) {
+            return;
         }
 
         if (!isDraggingProgress && currentDuration > 0) {
             const pct = Math.max(0, Math.min(100, (posMs / currentDuration) * 100));
             if (isFinite(pct)) {
-                // Always update fill width directly from real position
-                setEl('pb-progress-fill', 'width', `${pct}%`);
-                setEl('pp-progress-fill', 'width', `${pct}%`);
-                setEl('mp-progress-fill', 'width', `${pct}%`);
+                const txVal = `translateX(${pct - 100}%)`;
+                const els = _getProgEls();
+                if (els.pbFill) els.pbFill.style.transform = txVal;
+                if (els.ppFill) els.ppFill.style.transform = txVal;
+                if (els.mpFill) els.mpFill.style.transform = txVal;
             }
-            // Update time labels
-            setElText('pb-time-total', formatTime(currentDuration / 1000));
-            setElText('pp-time-total', formatTime(currentDuration / 1000));
-            setElText('mp-time-total', formatTime(currentDuration / 1000));
-
-            setElText('pb-time-current', formatTime(posMs / 1000));
-            setElText('pp-time-current', formatTime(posMs / 1000));
-            setElText('mp-time-current', formatTime(posMs / 1000));
+            const timeStr = formatTime(posMs / 1000);
+            const els = _getProgEls();
+            if (els.pbTime) els.pbTime.textContent = timeStr;
+            if (els.ppTime) els.ppTime.textContent = timeStr;
+            if (els.mpTime) els.mpTime.textContent = timeStr;
         }
     } catch(e) {
         alert("Player onPositionChanged Error: " + e.message);

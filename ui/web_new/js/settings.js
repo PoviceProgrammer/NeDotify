@@ -97,7 +97,16 @@ export function initSettings() {
     });
     setupSlider('slider-glass-blur', 'glass_blur', 'theme', (v) => {
         setElText('label-glass-blur', `${v}px`);
+        setElText('label-bg-blur', `${v}px`);
+        const bgBlurSlider = document.getElementById('slider-bg-blur');
+        if (bgBlurSlider) bgBlurSlider.value = v;
         document.documentElement.style.setProperty('--glass-blur', `${v}px`);
+        document.documentElement.style.setProperty('--blur-sm', `${Math.max(4, Math.round(v * 0.4))}px`);
+        const dataUrl = localStorage.getItem('nedotify_theme_custom_bg_image');
+        const dimVal = document.getElementById('slider-bg-dim')?.value || 30;
+        if (dataUrl) {
+            try { applyCustomBg(JSON.parse(dataUrl), v, dimVal); } catch(e) {}
+        }
     });
 
     // Font Selection Bindings
@@ -1279,6 +1288,11 @@ function setupBackgroundPanel() {
 
     setupSlider('slider-bg-blur', 'bg_blur', 'theme', (v) => {
         setElText('label-bg-blur', `${v}px`);
+        setElText('label-glass-blur', `${v}px`);
+        const glassSlider = document.getElementById('slider-glass-blur');
+        if (glassSlider) glassSlider.value = v;
+        document.documentElement.style.setProperty('--glass-blur', `${v}px`);
+        document.documentElement.style.setProperty('--blur-sm', `${Math.max(4, Math.round(v * 0.4))}px`);
         const dataUrl = localStorage.getItem('nedotify_theme_custom_bg_image');
         const dimVal = document.getElementById('slider-bg-dim')?.value || 30;
         if (dataUrl) {
