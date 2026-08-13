@@ -135,6 +135,22 @@ export function initSettings() {
         applyTransparency(v, document.getElementById('toggle-transparency')?.classList.contains('on'));
     });
 
+    // Discord Rich Presence Binding
+    const toggleDiscordRpc = document.getElementById('toggle-discord-rpc');
+    if (toggleDiscordRpc) {
+        const savedDiscordRpc = localStorage.getItem('nedotify_app_discord_rpc_enabled');
+        const initialEnabled = savedDiscordRpc !== null ? JSON.parse(savedDiscordRpc) : true;
+        toggleDiscordRpc.classList.toggle('on', initialEnabled);
+
+        toggleDiscordRpc.addEventListener('click', () => {
+            const isOn = toggleDiscordRpc.classList.toggle('on');
+            saveSetting('discord_rpc_enabled', isOn, 'app');
+            if (window.pywebview?.api?.toggle_discord_rpc) {
+                window.pywebview.api.toggle_discord_rpc(isOn);
+            }
+        });
+    }
+
     // Particle shapes
     document.querySelectorAll('.particle-shape-btn[data-shape]').forEach(btn => {
         btn.addEventListener('click', () => {

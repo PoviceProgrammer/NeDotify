@@ -30,6 +30,7 @@ from services.watchdog_service import WatchdogService
 from services.yandex_service import YandexService
 from services.youtube_service import YouTubeService
 from services.zapret_service import ZapretService
+from core.services.discord_rpc import DiscordRPCService
 from utils.cache_manager import CacheManager
 from utils.file_scanner import FileScanner
 
@@ -94,6 +95,8 @@ class AppCore:
         self.playlist_importer = PlaylistImportService()
         self.watchdog = WatchdogService(self)
         self.lufs_scanner = LufsScannerService(self.db)
+        self.discord_rpc = DiscordRPCService(self.settings)
+        self.discord_rpc.start()
 
         # Safe background yt-dlp update
         threading.Thread(target=update_ytdlp_safely, daemon=True).start()

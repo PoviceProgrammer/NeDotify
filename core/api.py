@@ -424,6 +424,19 @@ class AppApi:
             if proxy_url:
                 track_copy["file_path"] = proxy_url
 
+        self._current_track = track_copy
+        try:
+            if hasattr(self._core, "discord_rpc") and self._core.discord_rpc:
+                self._core.discord_rpc.update_presence(
+                    track_title=track_copy.get("title", ""),
+                    track_artist=track_copy.get("artist", ""),
+                    is_playing=True,
+                    duration_sec=track_copy.get("duration", 0),
+                    current_pos_sec=0
+                )
+        except Exception as dre:
+            logger.debug(f"Discord RPC update error: {dre}")
+
         self._emit("track_changed", track_copy)
 
     def _on_audio_error(self, err):
@@ -435,6 +448,27 @@ class AppApi:
     def report_state(self, state: str, elapsed_ms: int = 0):
         """Report playback state update (playing, paused, stopped)."""
         self._emit("state_changed", {"state": state, "elapsed_ms": elapsed_ms})
+        try:
+            if hasattr(self._core, "discord_rpc") and self._core.discord_rpc:
+                curr = getattr(self, "_current_track", None) or {}
+                if state == "playing":
+                    self._core.discord_rpc.update_presence(
+                        track_title=curr.get("title", ""),
+                        track_artist=curr.get("artist", ""),
+                        is_playing=True,
+                        duration_sec=curr.get("duration", 0),
+                        current_pos_sec=elapsed_ms / 1000.0 if elapsed_ms else 0
+                    )
+                elif state == "paused":
+                    self._core.discord_rpc.update_presence(
+                        track_title=curr.get("title", ""),
+                        track_artist=curr.get("artist", ""),
+                        is_playing=False
+                    )
+                elif state == "stopped":
+                    self._core.discord_rpc.clear_presence()
+        except Exception:
+            pass
 
     def report_position(self, pos_ms: int, dur_ms: int = 0, duration_ms: int = 0):
         """Report position update."""
@@ -1254,6 +1288,34 @@ class AppApi:
             return {"success": success, "message": msg, "error": None if success else msg}
         except Exception as e:
             return {"success": False, "error": str(e), "message": str(e)}
+
+    def toggle_discord_rpc(self, enabled: bool):
+        """Toggle Discord Rich Presence integration."""
+        try:
+            self._core.settings.set("app", "discord_rpc_enabled", enabled)
+            if hasattr(self._core, "discord_rpc") and self._core.discord_rpc:
+                if enabled:
+                    self._core.discord_rpc.start()
+                    curr = getattr(self, "_current_track", None)
+                    if curr:
+                        self._core.discord_rpc.update_presence(
+                            track_title=curr.get("title", ""),
+                            track_artist=curr.get("artist", ""),
+                            is_playing=True,
+                            duration_sec=curr.get("duration", 0)
+                        )
+                else:
+                    self._core.discord_rpc.clear_presence()
+            return {"success": True, "enabled": enabled}
+        except Exception as e:
+            logger.error(f"Error toggling Discord RPC: {e}")
+            return {"success": False, "error": str(e)}
+
+    def get_discord_rpc_status(self):
+        """Get Discord Rich Presence status."""
+        enabled = self._core.settings.get("app", "discord_rpc_enabled", True)
+        connected = getattr(self._core.discord_rpc, "connected", False) if hasattr(self._core, "discord_rpc") else False
+        return {"enabled": enabled, "connected": connected}
 
     def get_zapret_status(self):
         """Get current Zapret service status."""
