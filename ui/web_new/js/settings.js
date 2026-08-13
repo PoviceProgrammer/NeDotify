@@ -1814,6 +1814,54 @@ function setupPlayerSettingsPanel() {
 // ─── WORKSHOP (МАСТЕРСКАЯ) MODULE ───
 export const WORKSHOP_ITEMS = [
     {
+        id: 'ws_nebula',
+        title: 'Cosmic Abyss Nebula',
+        author: 'Starlight',
+        likes: 1240,
+        downloads: 8540,
+        tag: 'atmosphere',
+        preview: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80',
+        url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&auto=format&fit=crop&q=80',
+        badge: 'SPACE',
+        date: 1785000000
+    },
+    {
+        id: 'ws_aurora',
+        title: 'Nordic Aurora Night',
+        author: 'AuraNordic',
+        likes: 980,
+        downloads: 6420,
+        tag: 'atmosphere',
+        preview: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=600&auto=format&fit=crop&q=80',
+        url: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=1920&auto=format&fit=crop&q=80',
+        badge: 'AURORA',
+        date: 1784999000
+    },
+    {
+        id: 'ws_fluid_dark',
+        title: 'Fluid Dark Glassmorphism',
+        author: 'GlassLab',
+        likes: 1510,
+        downloads: 9830,
+        tag: 'minimal',
+        preview: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
+        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1920&auto=format&fit=crop&q=80',
+        badge: 'GLASS',
+        date: 1784998000
+    },
+    {
+        id: 'ws_dark_forest',
+        title: 'Emerald Dark Forest',
+        author: 'Evergreen',
+        likes: 1120,
+        downloads: 7310,
+        tag: 'atmosphere',
+        preview: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=600&auto=format&fit=crop&q=80',
+        url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=1920&auto=format&fit=crop&q=80',
+        badge: 'DARK',
+        date: 1784997000
+    },
+    {
         id: 'ws_1',
         title: '11',
         author: 'wqwqwq',
