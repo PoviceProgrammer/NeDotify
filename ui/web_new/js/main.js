@@ -378,11 +378,32 @@ async function init() {
     }
 }
 
-// в”Ђв”Ђв”Ђ Profile Page в”Ђв”Ђв”Ђ
+// ─── Profile Page ───
 async function loadProfile() {
-    if (!window.pywebview?.api) return;
     try {
+        const { createTrackElement, renderIcons, formatListeningTimeShort } = await import('./utils.js?v=20260813');
+        const { getCurrentTrack } = await import('./player.js?v=20260813');
+
+        // Refresh nickname and avatar
+        const nicknameInput = document.getElementById('profile-name-input');
+        if (nicknameInput && window.settings?.personalization?.nickname) {
+            nicknameInput.value = window.settings.personalization.nickname;
+        }
+
+        const avatarImg = document.getElementById('profile-avatar-img');
+        const avatarIcon = document.getElementById('profile-avatar-icon');
+        const currentAvatar = window.settings?.personalization?.avatar_path || window.settings?.app?.avatar_path;
+        if (avatarImg && avatarIcon && currentAvatar) {
+            const clean = currentAvatar.replace(/\\/g, '/');
+            avatarImg.src = clean.startsWith('file://') ? encodeURI(clean) : `file:///${encodeURI(clean.replace(/^\//, ''))}`;
+            avatarImg.style.display = 'block';
+            avatarIcon.style.display = 'none';
+        }
+
+        if (!window.pywebview?.api?.get_profile_stats) return;
+
         const data = await window.pywebview.api.get_profile_stats();
+        if (!data) return;
 
         const el = (id, text) => {
             const e = document.getElementById(id);
@@ -390,7 +411,7 @@ async function loadProfile() {
         };
 
         el('profile-stat-tracks', data.total_tracks || 0);
-        el('profile-stat-time', formatListeningTimeShort(data.total_listening_time_ms || 0));
+        el('profile-stat-time', formatListeningTimeShort ? formatListeningTimeShort(data.total_listening_time_ms || 0) : '0 ч');
         el('profile-stat-favorites', data.favorite_count || 0);
 
         // Pinned track
@@ -401,10 +422,8 @@ async function loadProfile() {
             if (pinnedTrack) {
                 pinnedSection.style.display = 'block';
                 pinnedTrackList.innerHTML = '';
-                const { createTrackElement, renderIcons } = await import('./utils.js');
-                const { getCurrentTrack } = await import('./player.js');
                 pinnedTrackList.appendChild(createTrackElement(pinnedTrack, 0, [pinnedTrack], getCurrentTrack()));
-                renderIcons();
+                if (typeof renderIcons === 'function') renderIcons();
             } else {
                 pinnedSection.style.display = 'none';
             }
@@ -415,12 +434,10 @@ async function loadProfile() {
             const container = document.getElementById('profile-top-tracks');
             if (container) {
                 container.innerHTML = '';
-                const { createTrackElement, renderIcons } = await import('./utils.js');
-                const { getCurrentTrack } = await import('./player.js');
                 data.most_played.forEach((track, i) => {
                     container.appendChild(createTrackElement(track, i, data.most_played, getCurrentTrack()));
                 });
-                renderIcons();
+                if (typeof renderIcons === 'function') renderIcons();
             }
         }
 
@@ -429,12 +446,10 @@ async function loadProfile() {
             const container = document.getElementById('profile-recent');
             if (container) {
                 container.innerHTML = '';
-                const { createTrackElement, renderIcons } = await import('./utils.js');
-                const { getCurrentTrack } = await import('./player.js');
                 data.recently_played.slice(0, 10).forEach((track, i) => {
                     container.appendChild(createTrackElement(track, i, data.recently_played, getCurrentTrack()));
                 });
-                renderIcons();
+                if (typeof renderIcons === 'function') renderIcons();
             }
         }
     } catch (e) {

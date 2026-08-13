@@ -524,7 +524,66 @@
             </div>
         </div>
 
-        <!-- в”Ђв”Ђв”Ђв”Ђв”Ђ SETTINGS PAGE в”Ђв”Ђв”Ђв”Ђв”Ђ -->
+        <!-- PROFILE PAGE -->
+        <div id="view-profile" class="view-page">
+            <div class="profile-header">
+                <div class="profile-avatar" id="btn-change-avatar" style="cursor: pointer; position: relative; overflow: hidden;" title="Изменить аватарку">
+                    <img id="profile-avatar-img" src="" style="display:none; width:100%; height:100%; object-fit:cover;" />
+                    <i data-lucide="user" id="profile-avatar-icon" style="width:36px;height:36px"></i>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="text" id="profile-name-input" class="profile-name" value="Пользователь NeDotify" style="background: transparent; border: none; color: white; font-family: inherit; font-size: inherit; font-weight: inherit; outline: none; border-bottom: 1px dashed rgba(255,255,255,0.3); width: 200px;" title="Нажмите, чтобы изменить имя" />
+                        <button id="btn-save-nickname" class="btn-ctrl" style="display:none;" title="Сохранить имя">
+                            <i data-lucide="check" style="width:16px;height:16px;color:var(--primary)"></i>
+                        </button>
+                    </div>
+                    <div class="profile-subtitle" id="profile-date-joined">Музыкальный профиль</div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <button id="btn-create-local-playlist" class="btn-primary" style="display: flex; align-items: center; gap: 8px; padding: 10px 16px;">
+                    <i data-lucide="folder-plus" style="width:16px;height:16px"></i>
+                    Создать плейлист из локальных треков
+                </button>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="profile-stat-tracks">0</div>
+                    <div class="stat-label">Прослушано</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="profile-stat-time">0 ч</div>
+                    <div class="stat-label">Общее время</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="profile-stat-favorites">0</div>
+                    <div class="stat-label">Избранных</div>
+                </div>
+            </div>
+
+            <div class="feed-section" id="profile-pinned-section" style="display:none">
+                <div class="feed-title">📌 Закрепленный трек</div>
+                <div class="track-list" id="profile-pinned-track"></div>
+            </div>
+
+            <div class="feed-section">
+                <div class="feed-title">Топ треков</div>
+                <div class="track-list" id="profile-top-tracks">
+                    <div class="empty-state text-sm">Нет данных</div>
+                </div>
+            </div>
+
+            <div class="feed-section">
+                <div class="feed-title">Недавно прослушано</div>
+                <div class="track-list" id="profile-recent">
+                    <div class="empty-state text-sm">Нет данных</div>
+                </div>
+            </div>
+        </div>
+
         <div id="view-settings" class="view-page settings-overlay">
             <div class="settings-modal-card">
                 <div class="settings-header-bar">
@@ -1667,67 +1726,6 @@
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-        <!-- в”Ђв”Ђв”Ђв”Ђв”Ђ PROFILE PAGE в”Ђв”Ђв”Ђв”Ђв”Ђ -->
-        <div id="view-profile" class="view-page">
-            <div class="profile-header">
-                <div class="profile-avatar" id="btn-change-avatar" style="cursor: pointer; position: relative; overflow: hidden;" title="Изменить аватарку">
-                    <img id="profile-avatar-img" src="" style="display:none; width:100%; height:100%; object-fit:cover;" />
-                    <i data-lucide="user" id="profile-avatar-icon" style="width:36px;height:36px"></i>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="text" id="profile-name-input" class="profile-name" value="Пользователь NeDotify" style="background: transparent; border: none; color: white; font-family: inherit; font-size: inherit; font-weight: inherit; outline: none; border-bottom: 1px dashed rgba(255,255,255,0.3); width: 200px;" title="Нажмите, чтобы изменить имя" />
-                        <button id="btn-save-nickname" class="btn-ctrl" style="display:none;" title="Сохранить имя">
-                            <i data-lucide="check" style="width:16px;height:16px;color:var(--primary)"></i>
-                        </button>
-                    </div>
-                    <div class="profile-subtitle" id="profile-date-joined">Музыкальный профиль</div>
-                </div>
-            </div>
-
-            <div style="margin-bottom: 24px;">
-                <button id="btn-create-local-playlist" class="btn-primary" style="display: flex; align-items: center; gap: 8px; padding: 10px 16px;">
-                    <i data-lucide="folder-plus" style="width:16px;height:16px"></i>
-                    Создать плейлист из локальных треков
-                </button>
-            </div>
-
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value" id="profile-stat-tracks">0</div>
-                    <div class="stat-label">Прослушано</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="profile-stat-time">0 ч</div>
-                    <div class="stat-label">Общее время</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="profile-stat-favorites">0</div>
-                    <div class="stat-label">Избранных</div>
-                </div>
-            </div>
-
-            <div class="feed-section" id="profile-pinned-section" style="display:none">
-                <div class="feed-title">📌 Закрепленный трек</div>
-                <div class="track-list" id="profile-pinned-track"></div>
-            </div>
-
-            <div class="feed-section">
-                <div class="feed-title">Топ треков</div>
-                <div class="track-list" id="profile-top-tracks">
-                    <div class="empty-state text-sm">Нет данных</div>
-                </div>
-            </div>
-
-            <div class="feed-section">
-                <div class="feed-title">Недавно прослушано</div>
-                <div class="track-list" id="profile-recent">
-                    <div class="empty-state text-sm">Нет данных</div>
                 </div>
             </div>
         </div>
