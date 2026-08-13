@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 
 API_KEYS = [
     'b25b959554ed76058ac220b7b2e0a026',
+    '7f005c21966a362eb5a214d0f622d1f4',
+    'a71c8413df426c117d6ee2c85e2586bf',
+    'c14c0003b12368c8b211ab9f1c79e6fb',
     '2c8038f0d5757d5f0426315220c8f133',
     '4cb0edd8ea11e4f641723f031a770edc',
 ]

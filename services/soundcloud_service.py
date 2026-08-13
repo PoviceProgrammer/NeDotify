@@ -20,7 +20,7 @@ except ImportError:
 
 import requests
 import re
-import urllib.parse as urllib
+import urllib.parse as urllib_parse
 import ssl
 import urllib3
 from requests.adapters import HTTPAdapter
@@ -175,7 +175,7 @@ class SoundCloudService(BaseMusicService):
                 cid = self._get_client_id()
                 if cid:
                     try:
-                        encoded = urllib.parse.quote(query)
+                        encoded = urllib_parse.quote(query)
                         url = f"https://api-v2.soundcloud.com/search/tracks?q={encoded}&client_id={cid}&limit={max_results}"
                         r = self._session.get(url, timeout=3.0)
                         if r.status_code == 200:

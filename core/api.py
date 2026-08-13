@@ -610,7 +610,7 @@ class AppApi:
         self._emit("repeat_changed", {"state": mode})
         return mode
 
-    def get_next_track(self) -> Optional[dict]:
+    def get_next_track(self, *args, **kwargs):
         """Return metadata and stream URL for the upcoming track in the queue without advancing index."""
         try:
             if not self._core.engine.queue.tracks:
