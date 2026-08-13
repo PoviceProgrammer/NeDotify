@@ -333,16 +333,53 @@ class AppApi:
         """Minimize application window."""
         self.minimize()
 
+    def _get_hwnd(self):
+        if not self._window:
+            return None
+        if hasattr(self._window, "hwnd") and self._window.hwnd:
+            return self._window.hwnd
+        if hasattr(self._window, "gui_window") and hasattr(self._window.gui_window, "Handle"):
+            try:
+                return int(self._window.gui_window.Handle)
+            except Exception:
+                pass
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                title = getattr(self._window, "title", "NeDotify")
+                hwnd = ctypes.windll.user32.FindWindowW(None, title)
+                if hwnd:
+                    return hwnd
+            except Exception:
+                pass
+        return None
+
     def restore(self):
         """Restore window from maximized state to original unmaximized geometry."""
         if not self._window:
             return
         try:
-            if hasattr(self._window, "restore"):
-                self._window.restore()
-            elif hasattr(self._window, "unmaximize"):
-                self._window.unmaximize()
+            print("[WINDOW] restore called", flush=True)
+            hwnd = self._get_hwnd()
+            if hasattr(self, "_last_geometry") and self._last_geometry:
+                x, y, w, h = self._last_geometry
+                if sys.platform == "win32" and hwnd:
+                    try:
+                        import ctypes
+                        ctypes.windll.user32.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), 0x0004 | 0x0040)
+                    except Exception:
+                        pass
+                if hasattr(self._window, "move") and hasattr(self._window, "resize"):
+                    try:
+                        self._window.move(int(x), int(y))
+                        self._window.resize(int(w), int(h))
+                    except Exception:
+                        pass
+            else:
+                if hasattr(self._window, "resize"):
+                    self._window.resize(1100, 800)
             self._is_maximized = False
+            logger.info("[WINDOW] Restored window to unmaximized geometry")
         except Exception as e:
             logger.error(f"Restore window error: {e}")
 
@@ -352,27 +389,54 @@ class AppApi:
             return
         try:
             is_max = getattr(self, "_is_maximized", False)
+            print(f"[WINDOW] maximize called (is_maximized={is_max})", flush=True)
             if is_max:
                 self.restore()
             else:
-                hwnd = getattr(self._window, "hwnd", None)
+                hwnd = self._get_hwnd()
                 if sys.platform == "win32" and hwnd:
                     try:
                         import ctypes
                         from ctypes import wintypes
+                        
+                        # Store current geometry for restore
+                        if hasattr(self._window, "x") and hasattr(self._window, "y") and hasattr(self._window, "width") and hasattr(self._window, "height"):
+                            self._last_geometry = (self._window.x, self._window.y, self._window.width, self._window.height)
+                        
                         rect = wintypes.RECT()
                         # SPI_GETWORKAREA = 0x0030: Get Windows work area (excludes taskbar)
                         ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0)
                         w = rect.right - rect.left
                         h = rect.bottom - rect.top
+                        
                         # SWP_NOZORDER (0x0004) | SWP_SHOWWINDOW (0x0040)
                         ctypes.windll.user32.SetWindowPos(hwnd, 0, rect.left, rect.top, w, h, 0x0004 | 0x0040)
+                        
+                        if hasattr(self._window, "move") and hasattr(self._window, "resize"):
+                            try:
+                                self._window.move(rect.left, rect.top)
+                                self._window.resize(w, h)
+                            except Exception:
+                                pass
+
                         self._is_maximized = True
+                        logger.info("[WINDOW] Maximized window to Work Area (Taskbar visible)")
                         return
                     except Exception as ex:
                         logger.warning(f"Win32 SetWindowPos workarea maximize exception: {ex}")
-                if hasattr(self._window, "maximize"):
-                    self._window.maximize()
+                
+                # Fallback PyWebView move & resize to Work Area if hwnd fail
+                try:
+                    import ctypes
+                    from ctypes import wintypes
+                    rect = wintypes.RECT()
+                    ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0)
+                    w = rect.right - rect.left
+                    h = rect.bottom - rect.top
+                    self._window.move(rect.left, rect.top)
+                    self._window.resize(w, h)
+                except Exception:
+                    pass
                 self._is_maximized = True
         except Exception as e:
             logger.error(f"Maximize window error: {e}")

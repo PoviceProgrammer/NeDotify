@@ -1,21 +1,21 @@
 // NeDotify - Main Entry Point
-import { initPlayer, applySettings, playTrack } from './player.js?v=19';
-import { initPages, showPage } from './pages.js?v=19';
-import { initSearch } from './search.js?v=19';
-import { loadHome } from './home.js?v=19';
-import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlaylist } from './library.js?v=19';
-import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js?v=19';
-import { initParticles } from './particles.js?v=19';
-import { initVisualizer } from './visualizer.js?v=19';
-import { initEvents } from './events.js?v=19';
-import { renderIcons, handleImageError, showTrackContextMenu } from './utils.js?v=19';
-import { initLyrics } from './lyrics.js?v=19';
-import { initEqualizer } from './equalizer.js?v=19';
-import { initQueue } from './queue.js?v=19';
-import { initOnboarding } from './onboarding.js';
-import { initContextMenu } from './contextmenu.js?v=19';
-import { initHotkeys } from './hotkeys.js?v=19';
-import { initEfficiency } from './efficiency.js?v=19';
+import { initPlayer, applySettings, playTrack } from './player.js?v=20260813';
+import { initPages, showPage } from './pages.js?v=20260813';
+import { initSearch } from './search.js?v=20260813';
+import { loadHome } from './home.js?v=20260813';
+import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlaylist } from './library.js?v=20260813';
+import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js?v=20260813';
+import { initParticles } from './particles.js?v=20260813';
+import { initVisualizer } from './visualizer.js?v=20260813';
+import { initEvents } from './events.js?v=20260813';
+import { renderIcons, handleImageError, showTrackContextMenu } from './utils.js?v=20260813';
+import { initLyrics } from './lyrics.js?v=20260813';
+import { initEqualizer } from './equalizer.js?v=20260813';
+import { initQueue } from './queue.js?v=20260813';
+import { initOnboarding } from './onboarding.js?v=20260813';
+import { initContextMenu } from './contextmenu.js?v=20260813';
+import { initHotkeys } from './hotkeys.js?v=20260813';
+import { initEfficiency } from './efficiency.js?v=20260813';
 
 
 
