@@ -75,6 +75,10 @@ class AppApi:
         self._mini_size = None
         self._window_op_lock = threading.RLock()
 
+        # C-2: lyrics cascade counter (verification: exactly one cascade per request)
+        self._lyrics_cascade_count = 0
+        self._lyrics_lock = threading.Lock()
+
         # Dedicated search executor for non-blocking provider and DB searches
         from concurrent.futures import ThreadPoolExecutor
         self._search_executor = ThreadPoolExecutor(max_workers=6, thread_name_prefix="SearchWorker")
@@ -1271,18 +1275,25 @@ class AppApi:
         return True
 
     def get_lyrics(self, track_name: str, artist_name: str, duration_ms: int = 0, file_path: str = None):
-        """Get lyrics for track asynchronously to prevent blocking UI."""
+        """Get lyrics for track asynchronously to prevent blocking UI (C-2).
+
+        Returns {"status": "loading"} immediately; a single background cascade
+        delivers the result via the lyrics_ready event.
+        """
+        with self._lyrics_lock:
+            self._lyrics_cascade_count += 1
+            cascade_no = self._lyrics_cascade_count
+        logger.info(f"[lyrics] cascade call #{cascade_no} for {artist_name} - {track_name}")
+
         def run():
             try:
                 data = self._core.lyrics.get_lyrics(track_name, artist_name, duration_ms=duration_ms, file_path=file_path)
                 self._emit("lyrics_ready", data)
             except Exception as e:
                 self._emit("lyrics_ready", {"synced": False, "lyrics": f"Could not fetch lyrics: {e}"})
+
         threading.Thread(target=run, daemon=True).start()
-        try:
-            return self._core.lyrics.get_lyrics(track_name, artist_name, duration_ms=duration_ms, file_path=file_path)
-        except Exception as e:
-            return {"synced": False, "lyrics": f"Could not fetch lyrics: {e}"}
+        return {"status": "loading", "cascade": cascade_no}
 
     def get_lyrics_translation(self, lyrics_text: str, target_lang: str = "ru"):
         """Get translation for lyrics text."""
@@ -1438,14 +1449,22 @@ class AppApi:
         return res[:max_results]
 
     def get_track_wave(self, track_data: dict, limit: int = 15, exclude_ids: list = None):
-        """Get smart wave / radio of related tracks for a seed track."""
+        """Get smart wave / radio of related tracks for a seed track (async, O-4).
+
+        Returns [] immediately; results are delivered via the track_wave_ready event.
+        """
         if not track_data or not isinstance(track_data, dict):
             return []
         try:
-            return self._core.recommendations.get_wave_for_track(track_data, limit=limit, exclude_ids=exclude_ids or [])
+            self._core.recommendations.get_wave_for_track(
+                track_data, limit=limit, exclude_ids=exclude_ids or [],
+                callback=lambda tracks: self._emit("track_wave_ready", {"tracks": tracks or []}),
+                error_callback=lambda e: self._emit("track_wave_ready", {"tracks": [], "error": str(e)}),
+            )
         except Exception as e:
             logger.error(f"Error in get_track_wave: {e}")
-            return []
+            self._emit("track_wave_ready", {"tracks": [], "error": str(e)})
+        return []
 
     def get_waveform(self, track_data: dict):
         """Get sound wave peak amplitude points (0.0..1.0) for waveform scrubber."""

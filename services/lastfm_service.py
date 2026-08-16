@@ -114,8 +114,36 @@ class LastFMService(BaseMusicService):
         self.chart = LastFmChartHandler(self)
         self.user = LastFmUserHandler(self)
 
-        self._session = requests.Session()
-        self._session.headers.update({'User-Agent': 'AURA-Music/1.0 (RecommendationEngine)'})
+        self._session_local = threading.local()
+
+        # M-7: token-bucket rate limiter (Condition-based, never time.sleep in the sync path)
+        self._rate_capacity = 5.0
+        self._rate_tokens = self._rate_capacity
+        self._rate_last_refill = time.time()
+        self._rate_lock = threading.Condition()
+
+    def _get_session(self) -> requests.Session:
+        """Per-thread requests.Session (M-7): Sessions are not thread-safe."""
+        session = getattr(self._session_local, 'session', None)
+        if session is None:
+            session = requests.Session()
+            session.headers.update({'User-Agent': 'AURA-Music/1.0 (RecommendationEngine)'})
+            self._session_local.session = session
+        return session
+
+    def _acquire_token(self) -> None:
+        """Token-bucket rate limiter: waits via Condition, never time.sleep (M-7)."""
+        with self._rate_lock:
+            while True:
+                now = time.time()
+                elapsed = now - self._rate_last_refill
+                self._rate_tokens = min(self._rate_capacity, self._rate_tokens + elapsed * 2.0)
+                self._rate_last_refill = now
+                if self._rate_tokens >= 1.0:
+                    self._rate_tokens -= 1.0
+                    return
+                wait_for = (1.0 - self._rate_tokens) / 2.0
+                self._rate_lock.wait(timeout=min(wait_for, 2.0))
 
     def _init_sqlite_cache_path(self) -> str:
         base_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'cache')
@@ -226,8 +254,9 @@ class LastFMService(BaseMusicService):
 
             req_params = {'method': method, 'api_key': api_key, 'format': 'json'}
             req_params.update(params)
+            self._acquire_token()
             try:
-                resp = self._session.get(self.BASE_URL, params=req_params, timeout=5.0)
+                resp = self._get_session().get(self.BASE_URL, params=req_params, timeout=5.0)
                 if resp.status_code == 200:
                     data = resp.json()
                     if 'error' in data:
@@ -246,7 +275,6 @@ class LastFMService(BaseMusicService):
                     continue
                 if resp.status_code in (429, 503):
                     self.logger.warning(f'Last.fm HTTP {resp.status_code}. Rate limit backoff & rotating API key.')
-                    time.sleep(0.2)
                     continue
                 self.logger.warning(f'Last.fm HTTP {resp.status_code}: {resp.text}')
                 continue

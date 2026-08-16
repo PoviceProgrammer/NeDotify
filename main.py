@@ -19,7 +19,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s.%(msecs)03d %(levelname)s: %(message)s',
+    datefmt='%H:%M:%S',
+)
 
 from core.app import AppCore
 from core.api import AppApi
@@ -67,10 +71,13 @@ except Exception as e:
 def main():
     """Application entry point."""
     print("Starting NeDotify...")
-
+    import time as _time
+    _t0 = _time.monotonic()
+    logging.info("[startup] process started")
 
     # Initialize application core
     app_core = AppCore()
+    logging.info(f"[startup] AppCore initialized (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
 
     # Initialize API bridge
     api = AppApi(app_core)
@@ -122,15 +129,18 @@ def main():
 
     # Pass window reference to api
     api.set_window(window)
+    logging.info(f"[startup] window created (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
 
     def on_loaded():
+        logging.info(f"[startup] window loaded (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
         if app_core.engine.queue.current_track:
             app_core.engine._on_track_changed(app_core.engine.queue.current_track)
             
     window.events.loaded += on_loaded
 
-    # Start the application loop (debug=True enables DevTools via F12 or Right Click -> Inspect)
-    webview.start(http_server=True, debug=True)
+    # Start the application loop (debug=False disables DevTools; use F12 for debugging via debug flag)
+    logging.info(f"[startup] webview loop starting (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
+    webview.start(http_server=True, debug=False)
 
     # Save session before exit
     try:

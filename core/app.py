@@ -16,6 +16,7 @@ from core.database import DatabaseManager
 from core.downloader import DownloadManager
 from core.plugins import PluginManager
 from core.proxy import LocalProxyManager
+from core.resolver import StreamResolver
 from core.session import SessionManager
 from core.settings import SettingsManager
 from services.lufs_scanner import LufsScannerService
@@ -73,6 +74,9 @@ class AppCore:
         self.session = SessionManager(self.settings)
         self.cache = CacheManager(self.db)
         self.scanner = FileScanner(self.db)
+
+        # C-3: stream URL cache + single-flight coordinator
+        self.resolver = StreamResolver(self.db)
 
         # Audio Playback
         self.engine = AudioEngine()
@@ -154,10 +158,14 @@ class AppCore:
 
             def _on_resolved(stream_url, metadata=None):
                 if stream_url:
+                    # Refresh resolver caches so subsequent requests reuse the fresh URL
                     try:
-                        self.db.cache_stream(source, source_id, stream_url)
+                        self.resolver.refresh(source, source_id, stream_url)
                     except Exception:
-                        pass
+                        try:
+                            self.db.cache_stream(source, source_id, stream_url)
+                        except Exception:
+                            pass
 
                     if self.settings and self.settings.get("storage", "auto_cache_streams", False):
                         def delayed_download():

@@ -1315,6 +1315,32 @@ function setElSrc(id, src) {
 let currentWaveformData = null;
 let isWaveformScrubberActive = false;
 
+// C-5: waveform render caches (color, element size) + skip-redraw helpers
+let waveColorCache = { color: null, theme: null };
+
+function getWaveColor() {
+    const theme = document.documentElement.getAttribute('data-theme');
+    if (waveColorCache.color === null || waveColorCache.theme !== theme) {
+        waveColorCache.color = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#3b82f6';
+        waveColorCache.theme = theme;
+    }
+    return waveColorCache.color;
+}
+
+// Invalidate the color cache when theme or custom accent changes
+if (typeof MutationObserver !== 'undefined') {
+    new MutationObserver(() => { waveColorCache.color = null; })
+        .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+}
+
+// Invalidate cached element sizes on window resize
+window.addEventListener('resize', () => {
+    document.querySelectorAll('.waveform-canvas').forEach(cv => {
+        cv._wfW = undefined;
+        cv._wfH = undefined;
+    });
+});
+
 export async function fetchAndRenderWaveform(track) {
     currentWaveformData = null;
     const sliderType = localStorage.getItem('nedotify_player_slider_type') || 'default';
@@ -1379,29 +1405,53 @@ export function renderWaveforms(progressPct = 0) {
 function drawWaveformToCanvas(canvas, peaks, progressPct) {
     if (!canvas || !peaks || peaks.length === 0) return;
     const ctx = canvas.getContext('2d');
-    const w = canvas.parentElement.clientWidth || 300;
-    const h = canvas.parentElement.clientHeight || 20;
-    
+
+    // C-5: cached element size (invalidated on window resize / track change)
+    const parent = canvas.parentElement;
+    let w = canvas._wfW;
+    if (w === undefined) {
+        w = canvas._wfW = parent.clientWidth || 300;
+    }
+    let h = canvas._wfH;
+    if (h === undefined) {
+        h = canvas._wfH = parent.clientHeight || 20;
+    }
+
     if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
+        canvas._wfPlayed = -1;
+        canvas._wfStatic = false;
     }
-    
-    ctx.clearRect(0, 0, w, h);
-    
+
     const numBars = Math.min(peaks.length, Math.floor(w / 4));
+    const playedCount = Math.round(progressPct * numBars);
+    const isPerfLow = document.documentElement.classList.contains('perf-low');
+
+    // C-5: skip redraw unless the played bar boundary moved (>=1px granularity)
+    if (!isPerfLow && canvas._wfPlayed === playedCount && canvas._wfPeaks === peaks) return;
+    // C-5: perf-low renders a static wave once; progress is shown by the slider overlay
+    if (isPerfLow && canvas._wfStatic) return;
+
+    canvas._wfPeaks = peaks;
+    canvas._wfPlayed = playedCount;
+    if (isPerfLow) canvas._wfStatic = true;
+
+    ctx.clearRect(0, 0, w, h);
+
     const barWidth = Math.max(2, (w / numBars) - 1.5);
-    const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#3b82f6';
-    
+    const primaryColor = getWaveColor();
+    const dimColor = 'rgba(255, 255, 255, 0.25)';
+
     for (let i = 0; i < numBars; i++) {
         const peakIdx = Math.floor((i / numBars) * peaks.length);
         const amp = Math.max(0.15, peaks[peakIdx] || 0.2);
         const barHeight = Math.max(3, amp * (h - 4));
         const x = i * (barWidth + 1.5);
         const y = (h - barHeight) / 2;
-        
-        const isPlayed = (i / numBars) <= progressPct;
-        ctx.fillStyle = isPlayed ? primaryColor : 'rgba(255, 255, 255, 0.25)';
+
+        const isPlayed = !isPerfLow && (i / numBars) <= progressPct;
+        ctx.fillStyle = isPlayed ? primaryColor : dimColor;
         
         ctx.beginPath();
         if (ctx.roundRect) {

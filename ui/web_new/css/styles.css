@@ -65,7 +65,10 @@
 :root.perf-low .card,
 :root.perf-low .nav-item,
 :root.perf-low .track-item,
-:root.perf-low .feed-card {
+:root.perf-low .feed-card,
+:root.perf-low .glass-panel,
+:root.perf-low .player-glass-card,
+:root.perf-low .settings-modal-card {
     transition: none !important;
 }
 
@@ -95,6 +98,8 @@
 :root.battery-saver-active #player-bar,
 :root.battery-saver-active .glass-panel,
 :root.battery-saver-active .card,
+:root.battery-saver-active .player-glass-card,
+:root.battery-saver-active .settings-modal-card,
 :root.battery-saver-active .modal-content {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
@@ -114,6 +119,57 @@
     will-change: transform;
     transform: translateZ(0);
     backface-visibility: hidden;
+}
+
+/* =============================================
+   Skeleton Splash (removed by main.js on ready)
+   ============================================= */
+#app-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--app-bg, #0f0f14);
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+}
+#app-splash.hidden {
+    opacity: 0;
+}
+.app-splash-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+}
+.app-splash-logo img {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    object-fit: cover;
+}
+.app-splash-shimmer {
+    width: 160px;
+    height: 10px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.16) 50%, rgba(255,255,255,0.06) 75%);
+    background-size: 200% 100%;
+    animation: splashShimmer 1.4s ease-in-out infinite;
+}
+@keyframes splashShimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Blur cards: heavy backdrop-filter disabled while outside the viewport (C-5) */
+.card.blur-out,
+.glass-panel.blur-out,
+.player-glass-card.blur-out,
+.settings-modal-card.blur-out {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 
@@ -4682,11 +4738,17 @@ html.limit-state-focus.unfocused-minimized #home-visualizer-canvas {
 .aura-orb {
     position: absolute;
     border-radius: 50%;
-    filter: blur(120px);
     mix-blend-mode: screen;
     opacity: 0.45;
+    contain: strict;
     will-change: transform;
     animation: auraFloat 24s infinite alternate ease-in-out;
+}
+
+/* C-4: mix-blend only in beauty (default); disabled in perf-low / battery saver */
+:root.perf-low .aura-orb,
+:root.battery-saver-active .aura-orb {
+    mix-blend-mode: normal;
 }
 
 .aura-orb.orb-1 {

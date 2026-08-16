@@ -186,6 +186,10 @@ export function initEvents() {
                 document.dispatchEvent(new CustomEvent('nedotify:lyrics_ready', { detail: data }));
                 break;
 
+            case 'track_wave_ready':
+                window.dispatchEvent(new CustomEvent('nedotify:track_wave_ready', { detail: data }));
+                break;
+
             case 'yandex_device_auth_code':
                 document.dispatchEvent(new CustomEvent('nedotify:yandex_device_auth_code', { detail: data }));
                 break;

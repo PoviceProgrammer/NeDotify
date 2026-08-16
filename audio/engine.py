@@ -115,6 +115,39 @@ class AudioEngine:
             source_id = f"{track.get('artist', '')} {track.get('title')}".strip()
         if source == "local":
             return track.get("url")
+
+        # C-3: cache layer + single-flight in front of the network cascade
+        resolver = getattr(self.app_core, "resolver", None) if self.app_core else None
+        if resolver is not None:
+            cached = resolver.get_cached_url(source, source_id)
+            if cached:
+                return cached
+
+            def _network():
+                try:
+                    return self._resolve_via_network(track), None
+                except Exception as e:
+                    return None, str(e)
+
+            return resolver.resolve(source, source_id, _network)
+
+        return self._resolve_via_network(track)
+
+    def _resolve_via_network(self, track: dict) -> Optional[str]:
+        """Full network resolution cascade: source service -> search fallbacks (C-3)."""
+        if not track:
+            return None
+        source = track.get("source")
+        source_id = track.get("source_id") or track.get("id")
+        if not source:
+            if track.get("url"):
+                source = "local"
+            else:
+                source = "youtube"
+        if not source_id and track.get("title"):
+            source_id = f"{track.get('artist', '')} {track.get('title')}".strip()
+        if source == "local":
+            return track.get("url")
         if source == "youtube":
             import threading
             url = None

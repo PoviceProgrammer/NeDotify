@@ -49,7 +49,7 @@ window.NeDotify = {
             window.pywebview.api.download_track(track);
         }
     },
-    startTrackWave: async (seedTrack) => {
+    startTrackWave: (seedTrack) => {
         if (!seedTrack) return;
         const toastFn = (msg, type) => window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg, type } }));
         toastFn(`📻 Собираем волну по треку «${seedTrack.title || 'выбранному треку'}»...`, 'info');
@@ -59,22 +59,32 @@ window.NeDotify = {
             window.pywebview.api.play_track(seedTrack, [seedTrack], 0);
         }
 
-        try {
-            if (window.pywebview?.api?.get_track_wave) {
-                const seedId = seedTrack.id || seedTrack.source_id;
-                const waveTracks = await window.pywebview.api.get_track_wave(seedTrack, 15, seedId ? [seedId] : []);
-                if (waveTracks && waveTracks.length > 0) {
-                    for (const t of waveTracks) {
-                        if (window.pywebview?.api?.add_to_queue) {
-                            window.pywebview.api.add_to_queue(t);
-                        }
+        if (!window.pywebview?.api?.get_track_wave) return;
+
+        const longWaitTimer = setTimeout(() => toastFn('⏳ Волна собирается дольше обычного...', 'info'), 8000);
+        const handler = (e) => {
+            clearTimeout(longWaitTimer);
+            window.removeEventListener('nedotify:track_wave_ready', handler);
+            const tracks = (e.detail && e.detail.tracks) || [];
+            if (tracks.length > 0) {
+                for (const t of tracks) {
+                    if (window.pywebview?.api?.add_to_queue) {
+                        window.pywebview.api.add_to_queue(t);
                     }
-                    toastFn(`📻 В волну добавлено ${waveTracks.length} треков!`, 'success');
-                } else {
-                    toastFn('Не удалось найти похожие треки для волны', 'warning');
                 }
+                toastFn(`📻 В волну добавлено ${tracks.length} треков!`, 'success');
+            } else {
+                toastFn('Не удалось найти похожие треки для волны', 'warning');
             }
+        };
+        window.addEventListener('nedotify:track_wave_ready', handler);
+
+        const seedId = seedTrack.id || seedTrack.source_id;
+        try {
+            window.pywebview.api.get_track_wave(seedTrack, 15, seedId ? [seedId] : []);
         } catch(e) {
+            clearTimeout(longWaitTimer);
+            window.removeEventListener('nedotify:track_wave_ready', handler);
             console.error('Error starting track wave:', e);
         }
     },
@@ -290,7 +300,18 @@ async function init() {
         };
 
         // Initialize all modules safely
-        await safeInit('Icons', () => renderIcons());
+        await safeInit('Icons', () => new Promise((resolve) => {
+            const runIcons = () => {
+                try { renderIcons(); } catch (err) { console.error('renderIcons failed:', err); }
+                resolve();
+            };
+            // Defer icon rendering past the first paint (requestIdleCallback when available)
+            if (window.requestIdleCallback) {
+                window.requestIdleCallback(runIcons, { timeout: 300 });
+            } else {
+                setTimeout(runIcons, 50);
+            }
+        }));
         await safeInit('Events', () => initEvents());
         await safeInit('Pages', () => initPages());
         await safeInit('Player', () => initPlayer());
@@ -361,6 +382,18 @@ async function init() {
         } catch (err) {
             console.error('Failed to show home page:', err);
         }
+
+        // Remove skeleton splash once the UI is interactive
+        try {
+            const splash = document.getElementById('app-splash');
+            if (splash) {
+                splash.classList.add('hidden');
+                setTimeout(() => splash.remove(), 400);
+            }
+        } catch (err) {
+            console.error('Failed to remove splash:', err);
+        }
+        window.dispatchEvent(new CustomEvent('nedotify:app_ready'));
 
         // Settings already fetched early in init()
 

@@ -36,6 +36,28 @@ document.addEventListener('visibilitychange', () => {
 
 const WHITE_PARTICLE = '#ffffff';
 
+// O-7: pre-rendered emoji sprites (offscreen canvas, once per size/symbol)
+const emojiSpriteCache = new Map();
+function getEmojiSprite(symbol, fontStr) {
+    const key = symbol + '|' + fontStr;
+    let sprite = emojiSpriteCache.get(key);
+    if (!sprite) {
+        const size = Math.ceil(parseFloat(fontStr) * 1.4);
+        const cv = document.createElement('canvas');
+        cv.width = size;
+        cv.height = size;
+        const c = cv.getContext('2d');
+        c.font = fontStr;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillStyle = WHITE_PARTICLE;
+        c.fillText(symbol, size / 2, size / 2);
+        sprite = { canvas: cv, size };
+        emojiSpriteCache.set(key, sprite);
+    }
+    return sprite;
+}
+
 export function stopParticles() {
     isParticlesRunning = false;
     if (animFrameId) {
@@ -107,6 +129,16 @@ export function initParticles() {
     window.removeEventListener('resize', resize);
     window.addEventListener('resize', resize);
     window.addEventListener('nedotify:mini_player_toggled', () => {
+        // O-6: pause when mini player hides the container, resume on restore
+        if (document.body.classList.contains('mini-player-active')) {
+            if (animFrameId) {
+                cancelAnimationFrame(animFrameId);
+                animFrameId = null;
+            }
+        } else if (isParticlesRunning && !animFrameId) {
+            lastFrameTime = 0;
+            animFrameId = requestAnimationFrame(animate);
+        }
         setTimeout(resize, 100);
     });
 
@@ -240,9 +272,9 @@ export function initParticles() {
             ctx.fillText(p.symbol, p.x, p.y);
         } else {
             if (p.symbol) {
-                ctx.font = p.fontStr;
-                ctx.fillStyle = WHITE_PARTICLE;
-                ctx.fillText(p.symbol, p.x, p.y);
+                // O-7: draw pre-rendered sprite instead of fillText per frame
+                const sprite = getEmojiSprite(p.symbol, p.fontStr);
+                ctx.drawImage(sprite.canvas, p.x - sprite.size / 2, p.y - sprite.size / 2);
             } else {
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
@@ -259,7 +291,8 @@ export function initParticles() {
     lastFrameTime = 0;
 
     function animate(timestamp) {
-        if (!isParticlesRunning || document.hidden) {
+        // O-6: stop the loop when paused, hidden, or the container is hidden (mini player)
+        if (!isParticlesRunning || document.hidden || document.body.classList.contains('mini-player-active')) {
             animFrameId = null;
             return;
         }

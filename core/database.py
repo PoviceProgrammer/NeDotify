@@ -904,13 +904,30 @@ class DatabaseManager:
     ) -> None:
         cursor = self.conn.cursor()
         meta_json = json.dumps(metadata) if metadata else None
+        # ON CONFLICT DO UPDATE (not INSERT OR REPLACE) preserves cached_file_path
         cursor.execute(
             """
-            INSERT OR REPLACE INTO stream_cache 
+            INSERT INTO stream_cache 
             (source, source_id, stream_url, title, artist, cover_url, duration, metadata_json, cached_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(source, source_id) DO UPDATE SET
+                stream_url = excluded.stream_url,
+                title = excluded.title,
+                artist = excluded.artist,
+                cover_url = excluded.cover_url,
+                duration = excluded.duration,
+                metadata_json = excluded.metadata_json,
+                cached_at = CURRENT_TIMESTAMP
         """,
             (source, source_id, stream_url, title, artist, cover_url, duration, meta_json),
+        )
+        self.conn.commit()
+
+    def update_cached_stream_url(self, source: str, source_id: str, stream_url: str) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE stream_cache SET stream_url = ?, cached_at = CURRENT_TIMESTAMP WHERE source = ? AND source_id = ?",
+            (stream_url, source, source_id),
         )
         self.conn.commit()
 

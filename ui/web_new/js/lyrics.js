@@ -183,6 +183,8 @@ function loadCurrentTrackLyrics() {
         if (p && p.then) {
             p.then(res => {
                 if (loadGen !== lyricsLoadGeneration) return;
+                // C-2: backend returns {"status": "loading"} instantly; real data comes via lyrics_ready
+                if (res && res.status === 'loading') return;
                 if (res) {
                     renderLyrics({
                         syncedLyrics: res.syncedLyrics || res.synced_lyrics || (typeof res === 'string' ? res : null),
