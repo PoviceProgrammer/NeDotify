@@ -1,5 +1,5 @@
 // NeDotify Р Р†Р вЂљ" Player Module
-import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor } from './utils.js?v=20260813';
+import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml } from './utils.js?v=20260814_9';
 
 let currentTrack = null;
 let isPlaying = false;
@@ -18,6 +18,16 @@ const TARGET_LUFS = -14.0;
 let isInitialLoad = true;
 let currentPlaybackRate = 1.0;
 let currentPreservesPitch = true;
+let currentQueueVersion = 0;
+
+export function getQueueVersion() {
+    return currentQueueVersion;
+}
+
+export function incrementQueueVersion() {
+    currentQueueVersion++;
+    return currentQueueVersion;
+}
 
 export function setPlaybackRate(rate) {
     currentPlaybackRate = parseFloat(rate) || 1.0;
@@ -41,6 +51,31 @@ audioA.crossOrigin = "anonymous";
 let audioB = new Audio();
 audioB.crossOrigin = "anonymous";
 let activeAudio = audioA;
+let hlsInstance = null;
+
+function loadAudioSource(audioEl, src) {
+    if (hlsInstance) {
+        try { hlsInstance.destroy(); } catch(e) {}
+        hlsInstance = null;
+    }
+
+    const isHls = typeof src === 'string' && (src.includes('.m3u8') || src.includes('/playlist') || src.includes('format=m3u8'));
+    if (isHls && window.Hls && window.Hls.isSupported()) {
+        try {
+            hlsInstance = new window.Hls({
+                enableWorker: true,
+                lowLatencyMode: false
+            });
+            hlsInstance.loadSource(src);
+            hlsInstance.attachMedia(audioEl);
+            return;
+        } catch(he) {
+            console.warn('HLS.js initialization error, falling back to direct src:', he);
+        }
+    }
+    audioEl.src = src;
+    try { audioEl.load(); } catch(e) {}
+}
 
 // Web Audio API for Equalizer
 let audioCtx = null;
@@ -246,6 +281,8 @@ export function updateMediaSession(track) {
     }
 }
 
+let currentFadeInterval = null;
+
 export function playTrack(track, streamUrl) {
     if (!track || !streamUrl) return;
     
@@ -255,9 +292,21 @@ export function playTrack(track, streamUrl) {
     
     updateMediaSession(track);
     
+    if (currentFadeInterval) {
+        clearInterval(currentFadeInterval);
+        currentFadeInterval = null;
+    }
+
     const newAudio = activeAudio === audioA ? audioB : audioA;
     const oldAudio = activeAudio;
     
+    // Instantly stop and clean up old audio
+    if (oldAudio) {
+        try { oldAudio.pause(); } catch(e) {}
+        try { oldAudio.currentTime = 0; } catch(e) {}
+        try { oldAudio.removeAttribute('src'); oldAudio.load(); } catch(e) {}
+    }
+
     // Parse duration from streamUrl if track.duration is missing
     let parsedDuration = 0;
     try {
@@ -284,43 +333,26 @@ export function playTrack(track, streamUrl) {
         finalSrc = 'file:///' + finalSrc.replace(/\\/g, '/');
     }
     
-    newAudio.src = finalSrc;
+    loadAudioSource(newAudio, finalSrc);
     newAudio.playbackRate = currentPlaybackRate;
     if ('preservesPitch' in newAudio) newAudio.preservesPitch = currentPreservesPitch;
     else if ('webkitPreservesPitch' in newAudio) newAudio.webkitPreservesPitch = currentPreservesPitch;
     else if ('mozPreservesPitch' in newAudio) newAudio.mozPreservesPitch = currentPreservesPitch;
 
-    newAudio.volume = 0;
-    newAudio.play().catch(e => console.error("Audio play error:", e));
+    const targetVol = isMuted ? 0 : (currentVolume / 100) * currentReplayGain;
+    newAudio.volume = targetVol;
+    
+    const playPromise = newAudio.play();
+    if (playPromise !== undefined) {
+        playPromise.catch(e => {
+            console.warn("Audio play promise error:", e);
+        });
+    }
     
     activeAudio = newAudio;
+    currentTrack = track;
     isPlaying = true;
     onStateChanged('playing');
-    
-    // Smooth Crossfade
-    const fadeMs = 2000;
-    const steps = 20;
-    const stepTime = fadeMs / steps;
-    const targetVol = isMuted ? 0 : (currentVolume / 100) * currentReplayGain;
-    
-    let step = 0;
-    const fadeInterval = setInterval(() => {
-        step++;
-        newAudio.volume = Math.min(targetVol, (step / steps) * targetVol);
-        if (oldAudio && oldAudio.src) {
-            oldAudio.volume = Math.max(0, targetVol - (step / steps) * targetVol);
-        }
-        
-        if (step >= steps) {
-            clearInterval(fadeInterval);
-            if (oldAudio) {
-                try { oldAudio.pause(); } catch(e) {}
-                try { oldAudio.currentTime = 0; } catch(e) {}
-                try { oldAudio.removeAttribute('src'); oldAudio.load(); } catch(e) {}
-            }
-            newAudio.volume = targetVol;
-        }
-    }, stepTime);
 }
 
 export function seekTo(posMs) {
@@ -488,16 +520,31 @@ export function initPlayer() {
         api('stop_track');
     }
 
-    if (mpPlay) mpPlay.addEventListener('click', togglePlayPause);
-    if (mpStop) mpStop.addEventListener('click', stopPlayback);
-    if (mpNext) mpNext.addEventListener('click', () => api('next_track'));
-    if (mpPrev) mpPrev.addEventListener('click', () => api('prev_track'));
+    if (mpPlay) mpPlay.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePlayPause();
+    });
+    if (mpStop) mpStop.addEventListener('click', (e) => {
+        e.stopPropagation();
+        stopPlayback();
+    });
+    if (mpNext) mpNext.addEventListener('click', (e) => {
+        e.stopPropagation();
+        api('next_track');
+    });
+    if (mpPrev) mpPrev.addEventListener('click', (e) => {
+        e.stopPropagation();
+        api('prev_track');
+    });
 
-    if (mpLike) mpLike.addEventListener('click', async () => {
-        if (!currentTrack) return;
-        const res = await api('toggle_favorite', currentTrack);
+    if (mpLike) mpLike.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const trk = currentTrack || (queue && queue[queueIndex]);
+        if (!trk) return;
+        const res = await api('toggle_favorite', trk);
         if (res && res.success) {
-            currentTrack.is_favorite = res.is_favorite;
+            trk.is_favorite = res.is_favorite;
+            if (currentTrack) currentTrack.is_favorite = res.is_favorite;
             updateLikeButtons();
         }
     });
@@ -505,66 +552,41 @@ export function initPlayer() {
     const mpMinimize = document.getElementById('mp-btn-minimize');
     const mpClose = document.getElementById('mp-btn-close');
 
-    if (mpMinimize) mpMinimize.addEventListener('click', () => {
-        if (window.pywebview?.api?.minimize) {
+    if (mpMinimize) mpMinimize.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.pywebview?.api?.minimize_window) {
+            window.pywebview.api.minimize_window();
+        } else if (window.pywebview?.api?.minimize) {
             window.pywebview.api.minimize();
-        }
-    });
-
-    if (mpClose) mpClose.addEventListener('click', async () => {
-        if (window.pywebview?.api?.close) {
-            window.pywebview.api.close();
-        } else {
-            document.body.classList.remove('mini-player-active');
-            if (window.pywebview?.api?.toggle_mini_player) {
-                setTimeout(() => {
-                    try { window.pywebview.api.toggle_mini_player(false); } catch(e) {}
-                }, 50);
-            }
         }
     });
 
     if (mpExpand) mpExpand.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (window.NeDotify?.toggleMiniPlayerMode) {
-            window.NeDotify.toggleMiniPlayerMode(false);
-        } else if (window.toggleMiniPlayerMode) {
+        if (window.toggleMiniPlayerMode) {
             window.toggleMiniPlayerMode(false);
+        } else if (window.NeDotify?.toggleMiniPlayerMode) {
+            window.NeDotify.toggleMiniPlayerMode(false);
+        }
+    });
+
+    if (mpClose) mpClose.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.pywebview?.api?.close_window) {
+            window.pywebview.api.close_window();
+        } else if (window.pywebview?.api?.close) {
+            window.pywebview.api.close();
         }
     });
 
     const mpCard = document.getElementById('mini-player-overlay');
     if (mpCard) {
-        let mpPressPos = null;
         mpCard.addEventListener('mousedown', (e) => {
-            mpPressPos = { x: e.clientX, y: e.clientY };
             if (e.target.closest('button, input, select, a, .btn-ctrl, .icon-btn, .mp-progress-bar-wrap, .progress-track')) {
                 return;
             }
             if (window.pywebview?.api?.start_drag) {
                 window.pywebview.api.start_drag();
-            }
-        });
-
-        mpCard.addEventListener('click', (e) => {
-            if (e.target.closest('button, input, select, a, .btn-ctrl, .icon-btn, .mp-progress-bar-wrap, .progress-track')) {
-                return;
-            }
-            // A real drag fires click too — don't toggle expanded after dragging.
-            if (mpPressPos && (Math.abs(e.clientX - mpPressPos.x) > 5 || Math.abs(e.clientY - mpPressPos.y) > 5)) {
-                mpPressPos = null;
-                return;
-            }
-            mpPressPos = null;
-            const targetExpanded = !mpCard.classList.contains('expanded');
-            mpCard.classList.toggle('expanded', targetExpanded);
-            mpCard.classList.remove('mp-pop-in', 'mp-pop-out');
-            void mpCard.offsetWidth;
-            mpCard.classList.add(targetExpanded ? 'mp-pop-in' : 'mp-pop-out');
-            if (window.pywebview?.api?.resize_mini_window) {
-                try {
-                    window.pywebview.api.resize_mini_window(targetExpanded);
-                } catch(err) {}
             }
         });
     }
@@ -684,7 +706,7 @@ export function initPlayer() {
                             const btn = document.createElement('button');
                             btn.className = 'context-menu-item';
                             const plId = pl.id !== undefined ? pl.id : pl.ID;
-                            btn.innerHTML = `<i data-lucide="list-music" style="width:14px;height:14px"></i> ${pl.name}`;
+                            btn.innerHTML = `<i data-lucide="list-music" style="width:14px;height:14px"></i> ${escapeHtml(pl.name)}`;
                             btn.addEventListener('click', async () => {
                                 await api('add_to_playlist', plId, currentTrack);
                                 optMenu.classList.remove('visible');
@@ -788,21 +810,63 @@ function animateProgress(timestamp) {
             if (els.ppTime) els.ppTime.textContent = timeStr;
             if (els.mpTime) els.mpTime.textContent = timeStr;
 
-            // Gapless preloading & Crossfade triggers
+            // Waveform scrubber update
+            renderWaveforms(pct / 100);
+
             const remainingSec = (currentDuration - currentPosMs) / 1000;
-            if (remainingSec <= 15 && !window._isPreloadingNextTrack) {
+
+            // 1. Queue Autopilot Trigger (at 12s remaining, before prefetch)
+            if (remainingSec <= 12 && !window._isAutopilotFetching) {
+                const autopilotEnabled = localStorage.getItem('nedotify_player_queue_autopilot') !== 'false';
+                if (autopilotEnabled && window.pywebview?.api?.get_queue) {
+                    window.pywebview.api.get_queue().then(q => {
+                        if (q && q.tracks && (q.current_index >= q.tracks.length - 1)) {
+                            window._isAutopilotFetching = true;
+                            if (window.pywebview?.api?.get_track_wave && currentTrack) {
+                                const excludeIds = (q.tracks || []).map(t => t.id || t.source_id).filter(Boolean);
+                                window.pywebview.api.get_track_wave(currentTrack, 6, excludeIds).then(newTracks => {
+                                    if (newTracks && newTracks.length > 0) {
+                                        incrementQueueVersion();
+                                        newTracks.forEach(nt => {
+                                            if (window.pywebview?.api?.add_to_queue) {
+                                                window.pywebview.api.add_to_queue(nt);
+                                            }
+                                        });
+                                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: '📻 Автопилот добавил похожие треки в очередь', type: 'info' } }));
+                                    }
+                                }).catch(err => console.error('Autopilot error:', err))
+                                .finally(() => {
+                                    setTimeout(() => { window._isAutopilotFetching = false; }, 12000);
+                                });
+                            }
+                        }
+                    }).catch(() => {});
+                }
+            }
+
+            // 2. Next Track Prefetching (at 7s remaining, after autopilot appended tracks)
+            if (remainingSec <= 7 && !window._isPreloadingNextTrack) {
                 window._isPreloadingNextTrack = true;
-                if (window.pywebview?.api?.get_next_track) {
+                const prefetchEnabled = localStorage.getItem('nedotify_player_player_prefetch') !== 'false';
+                const capturedQueueVer = currentQueueVersion;
+
+                if (prefetchEnabled && window.pywebview?.api?.get_next_track) {
                     window.pywebview.api.get_next_track().then(nextTrack => {
-                        if (nextTrack && nextTrack.stream_url) {
-                            const inactiveAudio = activeAudio === audioA ? audioB : audioA;
-                            if (inactiveAudio.src !== nextTrack.stream_url) {
-                                inactiveAudio.src = nextTrack.stream_url;
-                                inactiveAudio.load();
+                        // Check if queue mutated during async resolution
+                        if (nextTrack && capturedQueueVer === currentQueueVersion) {
+                            if (window.pywebview?.api?.prefetch_track) {
+                                window.pywebview.api.prefetch_track(nextTrack);
+                            }
+                            if (nextTrack.stream_url) {
+                                const inactiveAudio = activeAudio === audioA ? audioB : audioA;
+                                if (inactiveAudio.src !== nextTrack.stream_url) {
+                                    inactiveAudio.src = nextTrack.stream_url;
+                                    inactiveAudio.load();
+                                }
                             }
                         }
                     }).catch(() => {}).finally(() => {
-                        setTimeout(() => { window._isPreloadingNextTrack = false; }, 10000);
+                        setTimeout(() => { window._isPreloadingNextTrack = false; }, 8000);
                     });
                 }
             }
@@ -873,10 +937,14 @@ export function onTrackChanged(track) {
             const color = extractDominantColor(pbCover);
             if (color) {
                 document.documentElement.style.setProperty('--ambient-glow', `rgb(${color.r}, ${color.g}, ${color.b})`);
+                document.documentElement.style.setProperty('--aura-orb-1', `rgb(${color.r}, ${color.g}, ${color.b})`);
+                document.documentElement.style.setProperty('--aura-orb-2', `rgb(${Math.min(255, color.r + 40)}, ${Math.max(0, color.g - 25)}, ${Math.min(255, color.b + 50)})`);
             }
         };
         setElSrc('pb-cover', coverUrl);
     }
+
+    fetchAndRenderWaveform(track);
 
     // Update player page
     const hasArtist = track?.artist && track.artist !== 'Локальный файл' && track.artist !== '...' && track.artist !== 'Unknown Artist';
@@ -909,10 +977,15 @@ export function onTrackChanged(track) {
         const el = document.getElementById(elId);
         if (!el) return;
         el.title = text || '';
-        el.innerHTML = `<span class="mp-marquee-span">${text || ''}</span>`;
+        let span = el.querySelector('.mp-marquee-span');
+        if (!span) {
+            span = document.createElement('span');
+            span.className = 'mp-marquee-span';
+            el.replaceChildren(span);
+        }
+        span.textContent = text || '';
         
         const updateMarquee = () => {
-            const span = el.querySelector('.mp-marquee-span');
             if (span && span.scrollWidth > el.clientWidth && el.clientWidth > 0) {
                 const dist = span.scrollWidth - el.clientWidth + 16;
                 span.style.setProperty('--scroll-dist', `-${dist}px`);
@@ -1237,6 +1310,113 @@ function setElSrc(id, src) {
         }
     }
 }
+
+// --- Waveform Scrubber Engine ---
+let currentWaveformData = null;
+let isWaveformScrubberActive = false;
+
+export async function fetchAndRenderWaveform(track) {
+    currentWaveformData = null;
+    const sliderType = localStorage.getItem('nedotify_player_slider_type') || 'default';
+    const isWaveMode = sliderType === 'wave';
+    
+    const pbCanvas = document.getElementById('pb-waveform-canvas');
+    const ppCanvas = document.getElementById('pp-waveform-canvas');
+    
+    if (!isWaveMode) {
+        if (pbCanvas) pbCanvas.classList.add('hidden');
+        if (ppCanvas) ppCanvas.classList.add('hidden');
+        isWaveformScrubberActive = false;
+        return;
+    }
+
+    if (pbCanvas) pbCanvas.classList.remove('hidden');
+    if (ppCanvas) ppCanvas.classList.remove('hidden');
+    isWaveformScrubberActive = true;
+
+    if (!track) return;
+    
+    try {
+        if (window.pywebview?.api?.get_waveform) {
+            const peaks = await window.pywebview.api.get_waveform(track);
+            if (peaks && peaks.length > 0) {
+                currentWaveformData = peaks;
+            } else {
+                currentWaveformData = generatePseudoWaveform(track);
+            }
+            renderWaveforms(currentPosMs / (currentDuration || 1));
+        }
+    } catch(e) {
+        currentWaveformData = generatePseudoWaveform(track);
+        renderWaveforms(currentPosMs / (currentDuration || 1));
+    }
+}
+
+function generatePseudoWaveform(track) {
+    const seed = (track?.title || 'a').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+    const peaks = [];
+    for (let i = 0; i < 100; i++) {
+        const val = 0.2 + 0.65 * Math.abs(Math.sin((i + seed) * 0.18) * Math.cos((i * 0.3) + seed));
+        peaks.push(parseFloat(val.toFixed(3)));
+    }
+    return peaks;
+}
+
+export function renderWaveforms(progressPct = 0) {
+    if (!isWaveformScrubberActive || !currentWaveformData) return;
+    
+    const pbCanvas = document.getElementById('pb-waveform-canvas');
+    const ppCanvas = document.getElementById('pp-waveform-canvas');
+    
+    if (pbCanvas && !pbCanvas.classList.contains('hidden')) {
+        drawWaveformToCanvas(pbCanvas, currentWaveformData, progressPct);
+    }
+    if (ppCanvas && !ppCanvas.classList.contains('hidden')) {
+        drawWaveformToCanvas(ppCanvas, currentWaveformData, progressPct);
+    }
+}
+
+function drawWaveformToCanvas(canvas, peaks, progressPct) {
+    if (!canvas || !peaks || peaks.length === 0) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.parentElement.clientWidth || 300;
+    const h = canvas.parentElement.clientHeight || 20;
+    
+    if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+    }
+    
+    ctx.clearRect(0, 0, w, h);
+    
+    const numBars = Math.min(peaks.length, Math.floor(w / 4));
+    const barWidth = Math.max(2, (w / numBars) - 1.5);
+    const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#3b82f6';
+    
+    for (let i = 0; i < numBars; i++) {
+        const peakIdx = Math.floor((i / numBars) * peaks.length);
+        const amp = Math.max(0.15, peaks[peakIdx] || 0.2);
+        const barHeight = Math.max(3, amp * (h - 4));
+        const x = i * (barWidth + 1.5);
+        const y = (h - barHeight) / 2;
+        
+        const isPlayed = (i / numBars) <= progressPct;
+        ctx.fillStyle = isPlayed ? primaryColor : 'rgba(255, 255, 255, 0.25)';
+        
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(x, y, barWidth, barHeight, 2);
+        } else {
+            ctx.rect(x, y, barWidth, barHeight);
+        }
+        ctx.fill();
+    }
+}
+
+document.addEventListener('nedotify:slider_type_changed', () => {
+    fetchAndRenderWaveform(currentTrack);
+});
+
 
 
 

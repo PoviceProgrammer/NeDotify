@@ -1,6 +1,6 @@
 // NeDotify РІР‚" Artist Profile Module
-import { createTrackElement, renderIcons, formatTime, filterVisibleTracks } from './utils.js?v=20260813';
-import { getCurrentTrack } from './player.js?v=20260813';
+import { createTrackElement, renderIcons, formatTime, filterVisibleTracks, escapeHtml } from './utils.js?v=20260814_9';
+import { getCurrentTrack } from './player.js?v=20260814_9';
 
 // в”Ђв”Ђв”Ђ API Image Parser (Extract high quality artwork fields from response objects) в”Ђв”Ђв”Ђ
 export function parseApiImageUrl(mediaObject, source = 'youtube') {
@@ -331,10 +331,10 @@ export class ArtistPhotoComponent {
         
         overlay.innerHTML = `
             <div style="display:flex;align-items:center;">
-                <span class="artist-genres-badge">${this.artistData.genres}</span>
+                <span class="artist-genres-badge">${escapeHtml(this.artistData.genres)}</span>
                 ${mockBadge}
             </div>
-            <h2 class="artist-name-title">${this.artistData.name}</h2>
+            <h2 class="artist-name-title">${escapeHtml(this.artistData.name)}</h2>
         `;
         container.appendChild(overlay);
         
@@ -370,7 +370,7 @@ export class ArtistBioComponent {
                 Биография
             </h3>
             <div class="artist-bio-content">
-                <p>${this.artistData.bio}</p>
+                <p>${escapeHtml(this.artistData.bio)}</p>
             </div>
         `;
         
@@ -420,14 +420,14 @@ export class ArtistAlbumsComponent {
                     <div class="album-item-card" data-album-index="${index}">
                         <div class="album-cover-wrap fallback-gradient" style="background: ${grad}">
                             ${SVG_NOTE_FALLBACK}
-                            <img src="${album.cover}" alt="${album.title}" onerror="this.style.display='none'" loading="lazy">
+                            <img src="${escapeHtml(album.cover)}" alt="${escapeHtml(album.title)}" onerror="this.style.display='none'" loading="lazy">
                             <div class="album-play-overlay">
                                 <button class="album-play-btn" title="Воспроизвести альбом">
                                     <i data-lucide="play" style="width:18px;height:18px;fill:currentColor"></i>
                                 </button>
                             </div>
                         </div>
-                        <div class="album-title" title="${album.title}">${album.title}</div>
+                        <div class="album-title" title="${escapeHtml(album.title)}">${escapeHtml(album.title)}</div>
                         <div class="album-year">${album.year} г.</div>
                     </div>
                 `}).join('')}
@@ -714,7 +714,7 @@ export async function loadArtistProfile(artistName, targetContainer) {
         renderIcons();
     } catch (e) {
         console.error('Failed to load artist profile:', e);
-        targetContainer.innerHTML = `<div class="empty-state">Ошибка загрузки профиля: ${e.message}</div>`;
+        targetContainer.innerHTML = `<div class="empty-state">Ошибка загрузки профиля: ${escapeHtml(e.message)}</div>`;
     }
 }
 

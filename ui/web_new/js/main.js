@@ -1,21 +1,21 @@
 // NeDotify - Main Entry Point
-import { initPlayer, applySettings, playTrack } from './player.js?v=20260813';
-import { initPages, showPage } from './pages.js?v=20260813';
-import { initSearch } from './search.js?v=20260813';
-import { loadHome } from './home.js?v=20260813';
-import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlaylist } from './library.js?v=20260813';
-import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js?v=20260813';
-import { initParticles } from './particles.js?v=20260813';
-import { initVisualizer } from './visualizer.js?v=20260813';
-import { initEvents } from './events.js?v=20260813';
-import { renderIcons, handleImageError, showTrackContextMenu } from './utils.js?v=20260813';
-import { initLyrics } from './lyrics.js?v=20260813';
-import { initEqualizer } from './equalizer.js?v=20260813';
-import { initQueue } from './queue.js?v=20260813';
-import { initOnboarding } from './onboarding.js?v=20260813';
-import { initContextMenu } from './contextmenu.js?v=20260813';
-import { initHotkeys } from './hotkeys.js?v=20260813';
-import { initEfficiency } from './efficiency.js?v=20260813';
+import { initPlayer, applySettings, playTrack } from './player.js?v=20260814_9';
+import { initPages, showPage } from './pages.js?v=20260814_9';
+import { initSearch } from './search.js?v=20260814_9';
+import { loadHome } from './home.js?v=20260814_9';
+import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlaylist } from './library.js?v=20260814_9';
+import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js?v=20260814_9';
+import { initParticles } from './particles.js?v=20260814_9';
+import { initVisualizer } from './visualizer.js?v=20260814_9';
+import { initEvents } from './events.js?v=20260814_9';
+import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml } from './utils.js?v=20260814_9';
+import { initLyrics } from './lyrics.js?v=20260814_9';
+import { initEqualizer } from './equalizer.js?v=20260814_9';
+import { initQueue } from './queue.js?v=20260814_9';
+import { initOnboarding } from './onboarding.js?v=20260814_9';
+import { initContextMenu } from './contextmenu.js?v=20260814_9';
+import { initHotkeys } from './hotkeys.js?v=20260814_9';
+import { initEfficiency } from './efficiency.js?v=20260814_9';
 
 
 
@@ -49,6 +49,35 @@ window.NeDotify = {
             window.pywebview.api.download_track(track);
         }
     },
+    startTrackWave: async (seedTrack) => {
+        if (!seedTrack) return;
+        const toastFn = (msg, type) => window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg, type } }));
+        toastFn(`📻 Собираем волну по треку «${seedTrack.title || 'выбранному треку'}»...`, 'info');
+        
+        // Play the seed track first
+        if (window.pywebview?.api?.play_track) {
+            window.pywebview.api.play_track(seedTrack, [seedTrack], 0);
+        }
+
+        try {
+            if (window.pywebview?.api?.get_track_wave) {
+                const seedId = seedTrack.id || seedTrack.source_id;
+                const waveTracks = await window.pywebview.api.get_track_wave(seedTrack, 15, seedId ? [seedId] : []);
+                if (waveTracks && waveTracks.length > 0) {
+                    for (const t of waveTracks) {
+                        if (window.pywebview?.api?.add_to_queue) {
+                            window.pywebview.api.add_to_queue(t);
+                        }
+                    }
+                    toastFn(`📻 В волну добавлено ${waveTracks.length} треков!`, 'success');
+                } else {
+                    toastFn('Не удалось найти похожие треки для волны', 'warning');
+                }
+            }
+        } catch(e) {
+            console.error('Error starting track wave:', e);
+        }
+    },
     toggleMiniPlayerMode: toggleMiniPlayerMode
 };
 
@@ -57,32 +86,15 @@ export async function toggleMiniPlayerMode(targetState) {
     if (targetState === undefined) targetState = !isCurrentlyMini;
 
     if (targetState) {
-        // Entering Mini Mode: native window is resized asynchronously,
-        // so flip the UI only after the deferred resize lands (~150ms + margin)
-        document.body.classList.add('mini-player-entering');
-        const mpCard = document.getElementById('mini-player-overlay');
-        if (mpCard) mpCard.classList.remove('expanded');
-
+        document.body.classList.add('mini-player-active');
         if (window.pywebview?.api?.toggle_mini_player) {
             try { await window.pywebview.api.toggle_mini_player(true); } catch(e) {}
         }
-        setTimeout(() => {
-            document.body.classList.add('mini-player-active');
-            document.body.classList.remove('mini-player-entering');
-        }, 320);
     } else {
-        // Exiting Mini Mode
-        document.body.classList.add('mini-player-exiting');
-        const mpCard = document.getElementById('mini-player-overlay');
-        if (mpCard) mpCard.classList.remove('expanded');
-
+        document.body.classList.remove('mini-player-active');
         if (window.pywebview?.api?.toggle_mini_player) {
             try { await window.pywebview.api.toggle_mini_player(false); } catch(e) {}
         }
-        setTimeout(() => {
-            document.body.classList.remove('mini-player-active');
-            document.body.classList.remove('mini-player-exiting');
-        }, 320);
     }
 }
 window.toggleMiniPlayerMode = toggleMiniPlayerMode;
@@ -248,14 +260,7 @@ async function init() {
             initOnboarding();
         }
 
-        if (window.location.hash === '#mini') {
-            document.body.classList.add('mini-player-active');
-            const mpCard = document.getElementById('mini-player-overlay');
-            if (mpCard) mpCard.classList.remove('expanded');
-            if (window.pywebview?.api?.toggle_mini_player) {
-                try { window.pywebview.api.toggle_mini_player(true); } catch(e) {}
-            }
-        }
+
 
         initContextMenu();
         initHotkeys();
@@ -374,7 +379,7 @@ async function init() {
     } catch (e) {
         console.error("Init Error:", e);
         const tc = document.getElementById('toast-container');
-        if (tc) tc.innerHTML = `<div style="background:red;padding:10px;color:white;z-index:9999;">Critical Init Error: ${e.message}</div>`;
+        if (tc) tc.innerHTML = `<div style="background:red;padding:10px;color:white;z-index:9999;">Critical Init Error: ${escapeHtml(e.message)}</div>`;
     }
 }
 

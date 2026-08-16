@@ -100,6 +100,23 @@ export function handleImageError(img, coverUrl, sourceId, source) {
     }
 }
 
+// Builds a safe <img> tag: escaped src + data-attributes instead of inline onerror.
+// The delegated error listener below handles image fallback (coverUrl/sourceId/source).
+export function coverImgHtml({ src, coverUrl, sourceId, source, alt = '', extraAttrs = '' }) {
+    let dataAttrs = '';
+    if (coverUrl) dataAttrs += ` data-cover-url="${escapeHtml(coverUrl)}"`;
+    if (sourceId) dataAttrs += ` data-source-id="${escapeHtml(sourceId)}"`;
+    if (source) dataAttrs += ` data-source="${escapeHtml(source)}"`;
+    return `<img src="${escapeHtml(src || '')}" alt="${escapeHtml(alt)}"${dataAttrs} loading="lazy"${extraAttrs ? ' ' + extraAttrs : ''}>`;
+}
+
+// 'error' does not bubble, but is caught on document in the capture phase.
+document.addEventListener('error', (e) => {
+    const target = e.target;
+    if (!target || target.tagName !== 'IMG' || !target.dataset.coverUrl) return;
+    handleImageError(target, target.dataset.coverUrl, target.dataset.sourceId || '', target.dataset.source || '');
+}, true);
+
 export function getCoverUrl(track) {
     if (!track) return '';
     if (track.cover_path) {
@@ -373,14 +390,14 @@ export function showTrackContextMenu(track, e, tracksArray) {
 
     menu.innerHTML = `
         <div class="rich-menu-header">
-            ${coverUrl ? `<div class="rich-menu-header-bg" style="background-image: url('${coverUrl}')"></div>` : ''}
-            <img class="rich-menu-cover" src="${coverUrl || './assets/default_cover.png'}" onerror="this.style.opacity='0.4'">
+            ${coverUrl ? `<div class="rich-menu-header-bg" style="background-image: url('${escapeHtml(coverUrl)}')"></div>` : ''}
+            <img class="rich-menu-cover" src="${escapeHtml(coverUrl || './assets/default_cover.png')}" onerror="this.style.opacity='0.4'">
             <div class="rich-menu-title-col">
                 <div class="rich-menu-title-row">
-                    <span class="rich-menu-title">${track.title || 'Неизвестный трек'}</span>
+                    <span class="rich-menu-title">${escapeHtml(track.title || 'Неизвестный трек')}</span>
                     <i data-lucide="info" class="rich-menu-info-icon" style="width:15px;height:15px"></i>
                 </div>
-                <div class="rich-menu-artist">${track.artist || 'Неизвестный исполнитель'}</div>
+                <div class="rich-menu-artist">${escapeHtml(track.artist || 'Неизвестный исполнитель')}</div>
             </div>
         </div>
 
@@ -493,9 +510,10 @@ export function showTrackContextMenu(track, e, tracksArray) {
                 showToast(`'${track.title || 'Трек'}' добавлен в очередь`, 'success');
                 break;
             case 'wave':
-                showToast(`Запуск Волны по треку '${track.title || ''}'...`, 'info');
-                if (window.searchArtistProfile) {
-                    window.searchArtistProfile(track.artist || track.title);
+                if (window.NeDotify?.startTrackWave) {
+                    window.NeDotify.startTrackWave(track);
+                } else {
+                    showToast(`📻 Запуск радио по треку '${track.title || ''}'...`, 'info');
                 }
                 break;
             case 'favorite':

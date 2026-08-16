@@ -1,6 +1,6 @@
 // NeDotify вЂ” Library Module (Favorites, Playlists, Local Files)
-import { createTrackElement, renderIcons } from './utils.js?v=20260813';
-import { getCurrentTrack } from './player.js?v=20260813';
+import { createTrackElement, renderIcons, escapeHtml } from './utils.js?v=20260814_9';
+import { getCurrentTrack } from './player.js?v=20260814_9';
 
 let currentContextTrack = null;
 
@@ -17,6 +17,81 @@ export function initLibrary() {
     if (offlineCard) {
         offlineCard.addEventListener('click', () => selectSection('offline'));
     }
+
+    // Download all favorites button & Batch Progress
+    const btnDownloadAll = document.getElementById('lib-btn-download-all');
+    const batchProgressBox = document.getElementById('lib-batch-progress-box');
+    const batchProgressBar = document.getElementById('lib-batch-progress-bar');
+    const batchProgressCount = document.getElementById('lib-batch-progress-count');
+    const btnBatchCancel = document.getElementById('lib-btn-batch-cancel');
+
+    if (btnDownloadAll) {
+        btnDownloadAll.addEventListener('click', async () => {
+            if (window.pywebview?.api?.download_all_favorites) {
+                btnDownloadAll.disabled = true;
+                btnDownloadAll.style.opacity = '0.6';
+                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: '⏳ Проверка свободного места и запуск скачивания...', type: 'info' } }));
+                try {
+                    const res = await window.pywebview.api.download_all_favorites();
+                    if (res && res.success) {
+                        if (res.count > 0 && batchProgressBox) {
+                            batchProgressBox.style.display = 'inline-flex';
+                            if (batchProgressBar) batchProgressBar.style.width = '0%';
+                            if (batchProgressCount) batchProgressCount.textContent = `0 / ${res.count}`;
+                        }
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: res.message || 'Скачивание начато', type: 'success' } }));
+                    } else {
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: res?.message || 'Ошибка запуска скачивания', type: 'warning' } }));
+                    }
+                } catch(e) {
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка вызова скачивания', type: 'error' } }));
+                } finally {
+                    btnDownloadAll.disabled = false;
+                    btnDownloadAll.style.opacity = '1';
+                }
+            }
+        });
+    }
+
+    if (btnBatchCancel) {
+        btnBatchCancel.addEventListener('click', async () => {
+            if (window.pywebview?.api?.cancel_batch_download) {
+                await window.pywebview.api.cancel_batch_download();
+                if (batchProgressBox) batchProgressBox.style.display = 'none';
+                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Пакетное скачивание отменено', type: 'warning' } }));
+            }
+        });
+    }
+
+    // Document event listeners for batch downloading dispatched via events.js
+    document.addEventListener('nedotify:batch_download_started', (e) => {
+        const data = e.detail || {};
+        if (batchProgressBox) batchProgressBox.style.display = 'inline-flex';
+        if (batchProgressBar) batchProgressBar.style.width = '0%';
+        if (batchProgressCount) batchProgressCount.textContent = `0 / ${data.total || 0}`;
+    });
+
+    document.addEventListener('nedotify:batch_download_progress', (e) => {
+        const data = e.detail || {};
+        if (batchProgressBox) batchProgressBox.style.display = 'inline-flex';
+        if (batchProgressBar) batchProgressBar.style.width = `${data.percent || 0}%`;
+        if (batchProgressCount) batchProgressCount.textContent = `${data.current || 0} / ${data.total || 0}`;
+    });
+
+    document.addEventListener('nedotify:batch_download_finished', (e) => {
+        const data = e.detail || {};
+        if (batchProgressCount) batchProgressCount.textContent = `${data.completed || 0} / ${data.total || 0}`;
+        if (batchProgressBar) batchProgressBar.style.width = '100%';
+        setTimeout(() => {
+            if (batchProgressBox) batchProgressBox.style.display = 'none';
+            window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `✅ Загрузка завершена (${data.completed || 0} треков)`, type: 'success' } }));
+            loadLibrary();
+        }, 1200);
+    });
+
+    document.addEventListener('nedotify:batch_download_cancelled', () => {
+        if (batchProgressBox) batchProgressBox.style.display = 'none';
+    });
 
     // Sidebar Action Buttons
     const btnImport = document.getElementById('lib-btn-import');
@@ -261,6 +336,11 @@ export async function selectSection(type, data = null) {
     activeView.style.display = 'block';
     tracksContainer.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
 
+    const btnDownloadAll = document.getElementById('lib-btn-download-all');
+    if (btnDownloadAll) {
+        btnDownloadAll.style.display = type === 'favorites' ? 'inline-flex' : 'none';
+    }
+
     // Reset active highlights
     document.querySelectorAll('.lib-top-card').forEach(c => c.classList.remove('active'));
     document.querySelectorAll('.lib-playlist-item').forEach(i => i.classList.remove('active'));
@@ -430,7 +510,7 @@ export async function loadPlaylists() {
             item.innerHTML = `
                 ${!isLocked ? `<span class="pl-drag-handle" title="Зажми для перемещения"><i data-lucide="grip-vertical" style="width:13px;height:13px;color:var(--primary);flex-shrink:0;cursor:grab;"></i></span>` : '<span style="width:13px;flex-shrink:0;"></span>'}
                 <i data-lucide="${iconName}" style="width:14px;height:14px;color:${iconColor};flex-shrink:0;"></i>
-                <span class="truncate" style="${isLocked ? 'font-weight:600;' : ''}">${pl.name}</span>
+                <span class="truncate" style="${isLocked ? 'font-weight:600;' : ''}">${escapeHtml(pl.name)}</span>
                 ${!isLocked ? `<button class="btn-del-pl" title="Удалить плейлист" style="margin-left:auto; background:none; border:none; color:var(--text-dim); cursor:pointer; padding:2px; opacity:0; transition:opacity 0.18s;"><i data-lucide="trash-2" style="width:12px;height:12px;"></i></button>` : ''}
             `;
 
@@ -726,7 +806,7 @@ async function loadPlaylistMenuItems(items, menu) {
             playlists.forEach(pl => {
                 const btn = document.createElement('button');
                 btn.className = 'context-menu-item';
-                btn.innerHTML = `<i data-lucide="list-music" style="width:14px;height:14px;color:var(--text-sec)"></i> ${pl.name}`;
+                btn.innerHTML = `<i data-lucide="list-music" style="width:14px;height:14px;color:var(--text-sec)"></i> ${escapeHtml(pl.name)}`;
                 btn.addEventListener('click', async () => {
                     const plId = pl.id !== undefined ? pl.id : pl.ID;
                     await window.pywebview.api.add_to_playlist(plId, currentContextTrack);

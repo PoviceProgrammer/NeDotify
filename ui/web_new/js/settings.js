@@ -1,9 +1,9 @@
 // NeDotify Р Р†Р вЂљ" Settings Module
-import { renderIcons } from './utils.js?v=20260813';
-import { initParticles, stopParticles, setParticlesFps } from './particles.js?v=20260813';
-import { setVisualizerFps } from './visualizer.js?v=20260813';
-import { initOnboarding } from './onboarding.js?v=20260813';
-import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js?v=20260813';
+import { renderIcons, escapeHtml } from './utils.js?v=20260814_9';
+import { initParticles, stopParticles, setParticlesFps } from './particles.js?v=20260814_9';
+import { setVisualizerFps } from './visualizer.js?v=20260814_9';
+import { initOnboarding } from './onboarding.js?v=20260814_9';
+import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js?v=20260814_9';
 
 // Helper: read a localStorage setting that was saved by saveSetting()
 function getLocalSetting(key, defaultVal) {
@@ -42,15 +42,32 @@ export function initSettings() {
 
     // Settings panel navigation
     document.querySelectorAll('.settings-nav-btn[data-panel]').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const panelName = btn.dataset.panel;
+            if (!panelName) return;
+
             document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
-            const target = document.getElementById('settings-' + btn.dataset.panel);
-            if (target) target.classList.add('active');
-            if (btn.dataset.panel === 'icons') setupIconsPanel();
 
-            if (btn.dataset.panel === 'workshop') setupWorkshopPanel();
+            document.querySelectorAll('.settings-panel').forEach(p => {
+                p.classList.remove('active');
+                p.style.display = 'none';
+            });
+
+            const target = document.getElementById('settings-' + panelName);
+            if (target) {
+                target.classList.add('active');
+                target.style.display = 'block';
+            }
+
+            if (panelName === 'icons') setupIconsPanel();
+            if (panelName === 'workshop') setupWorkshopPanel();
+            if (panelName === 'optimization') setupOptimizationPanel();
+
+            try {
+                if (window.lucide) window.lucide.createIcons();
+            } catch(err) {}
         });
     });
 
@@ -900,6 +917,7 @@ export function applyPerformancePreset(preset, skipSave = false) {
     if (!skipSave) {
         saveSetting('performance_preset', preset, 'optimization');
     }
+    applyAuraOrbs(getLocalSetting('nedotify_player_aura_orbs_enabled', true));
 }
 
 function _setSlidersForPreset(vizFps, particlesFps) {
@@ -1191,19 +1209,64 @@ function applyThemeMode(mode) {
     } else {
         document.documentElement.setAttribute('data-theme', mode);
     }
+    applyAuraOrbs(getLocalSetting('nedotify_player_aura_orbs_enabled', true));
 }
 
 function setupZapretPanel() {
     const toggleZapret = document.getElementById('toggle-zapret-enabled');
     const selectZapretMode = document.getElementById('select-zapret-mode');
+    const toggleAutoUpdate = document.getElementById('toggle-zapret-autoupdate');
+    const btnUpdateZapret = document.getElementById('btn-update-zapret');
+    const versionBadge = document.getElementById('zapret-version-badge');
+    const updateStatus = document.getElementById('zapret-update-status');
 
-    let selectedMode = 'auto';
+    let selectedMode = 'youtube_discord';
 
     if (selectZapretMode) {
         selectZapretMode.addEventListener('change', (e) => {
             selectedMode = e.target.value;
             if (toggleZapret && toggleZapret.classList.contains('on')) {
                 applyZapret(true);
+            }
+        });
+    }
+
+    if (toggleAutoUpdate) {
+        toggleAutoUpdate.addEventListener('click', () => {
+            const isOn = toggleAutoUpdate.classList.toggle('on');
+            if (window.pywebview?.api?.set_setting) {
+                window.pywebview.api.set_setting('zapret', 'autoupdate', isOn);
+            }
+        });
+    }
+
+    if (btnUpdateZapret) {
+        btnUpdateZapret.addEventListener('click', async () => {
+            btnUpdateZapret.disabled = true;
+            btnUpdateZapret.style.opacity = '0.6';
+            if (updateStatus) updateStatus.textContent = 'Проверка и загрузка актуальной версии...';
+
+            try {
+                if (window.pywebview?.api?.update_zapret) {
+                    const res = await window.pywebview.api.update_zapret(true);
+                    if (res?.success) {
+                        if (versionBadge && res.status?.version) versionBadge.textContent = res.status.version;
+                        if (updateStatus) updateStatus.textContent = 'Установлена последняя версия';
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                            detail: { msg: res.message || 'Zapret успешно обновлен!', type: 'success' }
+                        }));
+                    } else {
+                        if (updateStatus) updateStatus.textContent = 'Ошибка проверки обновления';
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                            detail: { msg: res.message || 'Не удалось обновить Zapret', type: 'error' }
+                        }));
+                    }
+                }
+            } catch (err) {
+                if (updateStatus) updateStatus.textContent = 'Ошибка сети при обновлении';
+            } finally {
+                btnUpdateZapret.disabled = false;
+                btnUpdateZapret.style.opacity = '1';
             }
         });
     }
@@ -1215,13 +1278,18 @@ function setupZapretPanel() {
         if (window.pywebview?.api?.toggle_zapret) {
             const res = await window.pywebview.api.toggle_zapret(enable, selectedMode, customArgs, binPath);
             if (res) {
-                if (enable && !res.running) {
+                if (enable && !res.success) {
+                    if (toggleZapret) toggleZapret.classList.remove('on');
                     window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                        detail: { msg: 'Не удалось запустить winws.exe. Проверьте логи или пути.', type: 'warning' }
+                        detail: { msg: res.message || res.error || 'Не удалось запустить winws.exe. Проверьте права администратора.', type: 'warning' }
                     }));
                 } else if (enable) {
                     window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                        detail: { msg: 'Zapret (Обход DPI) успешно включен!', type: 'success' }
+                        detail: { msg: res.message || 'Zapret (Обход DPI) успешно включен!', type: 'success' }
+                    }));
+                } else {
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                        detail: { msg: res.message || 'Zapret остановлен', type: 'info' }
                     }));
                 }
             }
@@ -1239,10 +1307,17 @@ function setupZapretPanel() {
     if (window.pywebview?.api?.get_zapret_status) {
         window.pywebview.api.get_zapret_status().then(status => {
             if (status) {
-                if (toggleZapret) toggleZapret.classList.toggle('on', !!status.enabled);
+                const isRunning = !!(status.running || status.enabled);
+                if (toggleZapret) toggleZapret.classList.toggle('on', isRunning);
                 if (status.mode && selectZapretMode) {
                     selectedMode = status.mode;
                     selectZapretMode.value = status.mode;
+                }
+                if (versionBadge && status.version) {
+                    versionBadge.textContent = status.version;
+                }
+                if (toggleAutoUpdate && status.autoupdate !== undefined) {
+                    toggleAutoUpdate.classList.toggle('on', status.autoupdate !== false);
                 }
             }
         }).catch(() => {});
@@ -1652,10 +1727,23 @@ export function applyPlayerStyle(style) {
     root.classList.add(`player-style-${style}`);
 }
 
+export function applyAuraOrbs(enabled) {
+    const el = document.getElementById('aura-orbs-container');
+    if (!el) return;
+    const isLightMode = document.documentElement.getAttribute('data-theme') === 'light';
+    const isPerfLow = document.documentElement.classList.contains('perf-low');
+    const isBatterySaver = document.documentElement.classList.contains('battery-saver-active');
+    
+    // Automatically disable in light mode or low-performance / battery saver modes
+    const shouldDisable = !enabled || isLightMode || isPerfLow || isBatterySaver;
+    el.classList.toggle('disabled', shouldDisable);
+}
+
 export function applySliderType(type) {
     const root = document.documentElement;
     root.classList.remove('slider-type-default', 'slider-type-thin', 'slider-type-ios', 'slider-type-wave');
     root.classList.add(`slider-type-${type}`);
+    window.dispatchEvent(new CustomEvent('nedotify:slider_type_changed', { detail: { type } }));
 }
 
 export function applyShowQueue(enabled) {
@@ -1747,6 +1835,9 @@ function setupPlayerSettingsPanel() {
     setupToggle('toggle-show-queue', 'show_queue', 'player', applyShowQueue);
     setupToggle('toggle-compact-queue-btn', 'compact_queue_btn', 'player', applyCompactQueueBtn);
     setupToggle('toggle-next-track-preview', 'next_track_preview', 'player', applyNextTrackPreview);
+    setupToggle('toggle-queue-autopilot', 'queue_autopilot', 'player');
+    setupToggle('toggle-player-prefetch', 'player_prefetch', 'player');
+    setupToggle('toggle-aura-orbs', 'aura_orbs_enabled', 'player', applyAuraOrbs);
 
     // Mini-player position buttons
     const mpPosGroup = document.getElementById('mp-pos-btn-group') || document.getElementById('opt-mp-pos');
@@ -1780,6 +1871,9 @@ function setupPlayerSettingsPanel() {
         queuePos: getLocalSetting('nedotify_player_queue_pos', 'bottom'),
         compactQueue: getLocalSetting('nedotify_player_compact_queue_btn', true),
         nextPreview: getLocalSetting('nedotify_player_next_track_preview', true),
+        autopilot: getLocalSetting('nedotify_player_queue_autopilot', true),
+        prefetch: getLocalSetting('nedotify_player_player_prefetch', true),
+        auraOrbs: getLocalSetting('nedotify_player_aura_orbs_enabled', true),
         queueView: getLocalSetting('nedotify_player_queue_view', 'normal'),
         mpProg: getLocalSetting('nedotify_player_mp_progress', 'line'),
         mpCover: getLocalSetting('nedotify_player_mp_cover_shape', 'default'),
@@ -1812,10 +1906,13 @@ function setupPlayerSettingsPanel() {
     syncActiveCard('opt-mp-cover-shape', saved.mpCover);
     syncActiveCard('opt-mp-shape', saved.mpShape);
 
-    // Sync toggle visuals (HTML defaults them all to 'on', must correct from storage)
+    // Sync toggle visuals
     syncToggleVisual('toggle-show-queue', saved.showQueue);
     syncToggleVisual('toggle-compact-queue-btn', saved.compactQueue);
     syncToggleVisual('toggle-next-track-preview', saved.nextPreview);
+    syncToggleVisual('toggle-queue-autopilot', saved.autopilot);
+    syncToggleVisual('toggle-player-prefetch', saved.prefetch);
+    syncToggleVisual('toggle-aura-orbs', saved.auraOrbs);
 
     if (mpPosGroup) {
         mpPosGroup.querySelectorAll('.opt-card-btn').forEach(b => {
@@ -1834,10 +1931,12 @@ function setupPlayerSettingsPanel() {
     applyQueuePosition(saved.queuePos);
     applyCompactQueueBtn(saved.compactQueue);
     applyNextTrackPreview(saved.nextPreview);
+    applyAuraOrbs(saved.auraOrbs);
     applyQueueViewMode(saved.queueView);
     applyMpProgress(saved.mpProg);
     applyMpCoverShape(saved.mpCover);
     applyMpShape(saved.mpShape);
+
     applyMpPos(saved.mpPos);
 }
 
@@ -2346,8 +2445,8 @@ function renderDuplicateGroups(groups, container) {
             tracksHtml += `
                 <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px dashed rgba(255,255,255,0.08);">
                     <div>
-                        <div style="font-weight:600; color:#fff;">${track.title || 'Unknown'}</div>
-                        <div style="color:var(--text-sec); font-size:11px;">${track.artist || 'Unknown'} • ${(track.file_size_bytes / (1024*1024)).toFixed(2)} MB</div>
+                        <div style="font-weight:600; color:#fff;">${escapeHtml(track.title || 'Unknown')}</div>
+                        <div style="color:var(--text-sec); font-size:11px;">${escapeHtml(track.artist || 'Unknown')} • ${(track.file_size_bytes / (1024*1024)).toFixed(2)} MB</div>
                     </div>
                     <button class="btn-sm text-xs btn-delete-dup" data-id="${track.id}" style="padding:4px 8px; border-radius:6px; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.3); cursor:pointer;">Удалить</button>
                 </div>

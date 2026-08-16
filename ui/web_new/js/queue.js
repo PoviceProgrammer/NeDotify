@@ -1,6 +1,5 @@
-// NeDotify - Queue Module
-import { formatTime, renderIcons, getCoverUrl } from './utils.js?v=20260813';
-import { getCurrentTrack, playTrack } from './player.js?v=20260813';
+import { formatTime, renderIcons, getCoverUrl, escapeHtml } from './utils.js?v=20260814_9';
+import { getCurrentTrack, playTrack, incrementQueueVersion } from './player.js?v=20260814_9';
 
 let isQueueVisible = false;
 let draggedItemIndex = null;
@@ -54,6 +53,7 @@ export function initQueue() {
     // Listen to queue updates from python
     window.addEventListener('pywebviewready', () => {
         window.pywebview.api.on_queue_updated = (q) => {
+            incrementQueueVersion();
             if (isQueueVisible) {
                 currentQueue = q.tracks;
                 renderQueue(q.tracks, q.current_index);
@@ -94,10 +94,10 @@ function renderQueue(tracks, currentIndex) {
             <div style="display:flex; align-items:center; color:var(--text-dim); cursor:grab; padding:0 8px;" class="drag-handle" title="Зажмите чтобы перетащить">
                 <i data-lucide="grip-vertical" style="width:16px;height:16px"></i>
             </div>
-            <img class="track-item-cover" src="${getCoverUrl(track)}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM1NTUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNOSAxOHYtN20wIDd2LW0wIDdhNSA1IDAgMCAxLTUgNW01LTV2LTRtMC00VjRtMCAwdjNtMCAwaDlNMCAwdjNtMCAwdi0zbTkgM2g5bTAgMHYzbTAgMHYtM20tOSAzdi0zbTkgM2gybTAgMHYtbTAgMGgyIi8+PC9zdmc+'">
+            <img class="track-item-cover" src="${escapeHtml(getCoverUrl(track))}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM1NTUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNOSAxOHYtN20wIDd2LW0wIDdhNSA1IDAgMCAxLTUgNW01LTV2LTRtMC00VjRtMCAwdjNtMCAwaDlNMCAwdjNtMCAwdi0zbTkgM2g5bTAgMHYzbTAgMHYtM20tOSAzdi0zbTkgM2gybTAgMHYtbTAgMGgyIi8+PC9zdmc+'">
             <div class="track-item-info">
-                <div class="track-item-title" style="${index === currentIndex ? 'color:var(--primary)' : ''}">${track.title || 'Unknown'}</div>
-                <div class="track-item-artist">${track.artist || 'Unknown Artist'}</div>
+                <div class="track-item-title" style="${index === currentIndex ? 'color:var(--primary)' : ''}">${escapeHtml(track.title || 'Unknown')}</div>
+                <div class="track-item-artist">${escapeHtml(track.artist || 'Unknown Artist')}</div>
             </div>
             <div class="track-item-duration">${formatTime(track.duration || 0)}</div>
         `;

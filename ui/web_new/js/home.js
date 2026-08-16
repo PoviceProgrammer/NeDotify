@@ -1,4 +1,4 @@
-import { formatTime, formatListeningTime, renderIcons, getCoverUrl } from './utils.js?v=20260813';
+import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, coverImgHtml } from './utils.js?v=20260814_9';
 
 const feedTimeouts = new Map();
 let trackChangeCount = 0;
@@ -111,8 +111,8 @@ function renderHistory(tracks) {
     const container = document.getElementById('home-history');
     if (!container) return;
     container.innerHTML = '';
-    tracks.slice(0, 6).forEach(track => {
-        container.appendChild(createFeedCard(track));
+    tracks.slice(0, 10).forEach((track, idx) => {
+        container.appendChild(createFeedCard(track, tracks, idx));
     });
     renderIcons();
 }
@@ -177,13 +177,13 @@ export function renderAuthenticHome(sections) {
                 card.className = 'feed-card';
                 card.innerHTML = `
                     <div class="feed-card-cover">
-                        <img src="${item.cover_url || ''}" alt="" onerror="window.NeDotify.handleImageError(this, '${item.cover_url || ''}', '${item.source_id || ''}', 'youtube')" loading="lazy">
+                        ${coverImgHtml({ src: item.cover_url || '', coverUrl: item.cover_url || '', sourceId: item.source_id || '', source: 'youtube' })}
                         <div class="feed-card-overlay">
                             <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px;fill:currentColor"></i></button>
                         </div>
                     </div>
-                    <div class="feed-card-title">${item.title || 'Unknown'}</div>
-                    <div class="feed-card-sub">${item.artist || ''}</div>
+                    <div class="feed-card-title">${escapeHtml(item.title || 'Unknown')}</div>
+                    <div class="feed-card-sub">${escapeHtml(item.artist || '')}</div>
                 `;
                 
                 card.onclick = () => {
@@ -207,13 +207,13 @@ export function renderAuthenticHome(sections) {
                 const card = document.createElement('div');
                 card.className = 'feed-card';
                 card.innerHTML = `
-                    <div class="feed-card-cover" style="background-image: url('${item.cover_url}')">
+                    <div class="feed-card-cover" style="background-image: url('${escapeHtml(item.cover_url)}')">
                         <div class="feed-card-overlay">
                             <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px"></i></button>
                         </div>
                     </div>
-                    <div class="feed-card-title">${item.title}</div>
-                    <div class="feed-card-sub">${item.artist || (item.type === 'album' ? 'Альбом' : 'Микс')}</div>
+                    <div class="feed-card-title">${escapeHtml(item.title)}</div>
+                    <div class="feed-card-sub">${escapeHtml(item.artist || (item.type === 'album' ? 'Альбом' : 'Микс'))}</div>
                 `;
                 card.onclick = () => {
                     // Show loading indicator somewhere or toast
@@ -227,13 +227,13 @@ export function renderAuthenticHome(sections) {
                 const card = document.createElement('div');
                 card.className = 'feed-card';
                 card.innerHTML = `
-                    <div class="feed-card-cover" style="background-image: url('${item.cover_url}')">
+                    <div class="feed-card-cover" style="background-image: url('${escapeHtml(item.cover_url)}')">
                         <div class="feed-card-overlay">
                             <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px"></i></button>
                         </div>
                     </div>
-                    <div class="feed-card-title">${item.title}</div>
-                    <div class="feed-card-sub">${item.artist || 'Специально для вас'}</div>
+                    <div class="feed-card-title">${escapeHtml(item.title)}</div>
+                    <div class="feed-card-sub">${escapeHtml(item.artist || 'Специально для вас')}</div>
                 `;
                 card.onclick = () => {
                     if (window.pywebview && window.pywebview.api && window.pywebview.api.play_track) {
@@ -269,7 +269,7 @@ export function renderHomePlaylists(playlists) {
                     <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px"></i></button>
                 </div>
             </div>
-            <div class="feed-card-title">${pl.name}</div>
+            <div class="feed-card-title">${escapeHtml(pl.name)}</div>
             <div class="feed-card-sub">${pl.track_count || 0} треков</div>
         `;
         card.addEventListener('click', async () => {
@@ -308,9 +308,9 @@ export function renderArtists(artists) {
         const cover = getCoverUrl(artist);
         card.innerHTML = `
             <div class="feed-card-cover">
-                <img src="${cover}" alt="" onerror="window.NeDotify.handleImageError(this, '${artist.cover_url || ''}', '', '')" loading="lazy">
+                ${coverImgHtml({ src: cover, coverUrl: artist.cover_url || '' })}
             </div>
-            <div class="feed-card-title" style="text-align:center">${artist.artist}</div>
+            <div class="feed-card-title" style="text-align:center">${escapeHtml(artist.artist)}</div>
         `;
         card.addEventListener('click', () => {
             const input = document.getElementById('search-input');
@@ -328,25 +328,20 @@ export function renderArtists(artists) {
 function renderFeedSection(containerId, tracks) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    const sec = container.closest('.feed-section');
-    if (sec) {
-        sec.classList.remove('hidden');
-        sec.style.display = '';
-    }
     container.innerHTML = '';
 
     if (!tracks || tracks.length === 0) {
-        container.innerHTML = '<div class="empty-state text-sm">Нет данных</div>';
+        container.innerHTML = '<div class="empty-state text-sm" style="padding:20px">Нет данных</div>';
         return;
     }
 
-    tracks.forEach(track => {
-        container.appendChild(createFeedCard(track));
+    tracks.forEach((track, idx) => {
+        container.appendChild(createFeedCard(track, tracks, idx));
     });
     renderIcons();
 }
 
-function createFeedCard(track) {
+function createFeedCard(track, trackList = null, trackIndex = 0) {
     const card = document.createElement('div');
     card.className = 'feed-card';
 
@@ -364,7 +359,7 @@ function createFeedCard(track) {
                 <div style="position: absolute; bottom: -20%; right: -20%; width: 140%; height: 100%; background: linear-gradient(to top right, rgba(0,0,0,0.4), transparent); border-top-left-radius: 50%; transform: rotate(-15deg);"></div>
                 
                 <!-- If there's a cover_url, show it subtly or as a small badge. Otherwise just colors. -->
-                ${track.cover_url && !track.cover_url.includes('hqdefault') ? `<div style="position:absolute; bottom: -10px; right: -10px; width: 60%; height: 60%; border-radius: 12px; background-image: url('${track.cover_url}'); background-size: cover; box-shadow: 0 8px 16px rgba(0,0,0,0.4); transform: rotate(-10deg); opacity: 0.8;"></div>` : ''}
+                ${track.cover_url && !track.cover_url.includes('hqdefault') ? `<div style="position:absolute; bottom: -10px; right: -10px; width: 60%; height: 60%; border-radius: 12px; background-image: url('${escapeHtml(track.cover_url)}'); background-size: cover; box-shadow: 0 8px 16px rgba(0,0,0,0.4); transform: rotate(-10deg); opacity: 0.8;"></div>` : ''}
                 
                 <!-- YT Music style persistent play icon ring -->
                 <div style="position: absolute; top: 12px; left: 12px; width: 32px; height: 32px; border-radius: 50%; background: #000; border: 2px solid hsl(${hue1}, 80%, 70%); display:flex; align-items:center; justify-content:center; box-shadow: 0 4px 8px rgba(0,0,0,0.3);">
@@ -375,13 +370,13 @@ function createFeedCard(track) {
                     <button class="feed-card-play" style="background: rgba(0,0,0,0.6);"><i data-lucide="play" style="width:16px;height:16px;fill:#fff;color:#fff"></i></button>
                 </div>
             </div>
-            <div class="feed-card-title">${track.title}</div>
-            <div class="feed-card-sub">${track.artist || 'Микс'}</div>
+            <div class="feed-card-title">${escapeHtml(track.title)}</div>
+            <div class="feed-card-sub">${escapeHtml(track.artist || 'Микс')}</div>
         `;
         card.addEventListener('click', () => {
             if (window.pywebview?.api?.play_track && track.tracks && track.tracks.length > 0) {
                 window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Включаю: ${track.title}...`, type: 'info' } }));
-                window.pywebview.api.play_track(track.tracks[0], track.tracks);
+                window.pywebview.api.play_track(track.tracks[0], track.tracks, 0);
             }
         });
         return card;
@@ -390,19 +385,23 @@ function createFeedCard(track) {
     const cover = getCoverUrl(track);
     card.innerHTML = `
         <div class="feed-card-cover">
-            <img src="${cover}" alt="" onerror="window.NeDotify.handleImageError(this, '${track.cover_url || ''}', '${track.source_id || ''}', '${track.source || ''}')" loading="lazy">
+            ${coverImgHtml({ src: cover, coverUrl: track.cover_url || '', sourceId: track.source_id || '', source: track.source || '' })}
             <div class="feed-card-overlay">
                 <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px;fill:currentColor"></i></button>
             </div>
         </div>
-        <div class="feed-card-title">${track.title || 'Unknown'}</div>
-        <div class="feed-card-sub">${track.artist || ''}</div>
+        <div class="feed-card-title">${escapeHtml(track.title || 'Unknown')}</div>
+        <div class="feed-card-sub">${escapeHtml(track.artist || '')}</div>
     `;
     card.addEventListener('click', () => {
         if (window.pywebview?.api) {
             const trackObj = { ...track };
             if (trackObj.track_id) trackObj.id = trackObj.track_id;
-            window.pywebview.api.play_track(trackObj);
+            if (trackList && trackList.length > 0) {
+                window.pywebview.api.play_track(trackObj, trackList, trackIndex);
+            } else {
+                window.pywebview.api.play_track(trackObj);
+            }
         }
     });
     return card;
@@ -443,13 +442,13 @@ export function renderTopTracks(tracks) {
         card.className = 'feed-card';
         card.innerHTML = `
             <div class="feed-card-cover">
-                <img src="${cover}" alt="" onerror="window.NeDotify.handleImageError(this, '${track.cover_url || ''}', '${track.source_id || ''}', '${track.source || ''}')" loading="lazy">
+                ${coverImgHtml({ src: cover, coverUrl: track.cover_url || '', sourceId: track.source_id || '', source: track.source || '' })}
                 <div class="feed-card-overlay">
                     <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px;fill:currentColor"></i></button>
                 </div>
             </div>
-            <div class="feed-card-title">${track.title || 'Unknown Title'}</div>
-            <div class="feed-card-sub">${track.artist || 'Unknown'} (${track.plays || 0})</div>
+            <div class="feed-card-title">${escapeHtml(track.title || 'Unknown Title')}</div>
+            <div class="feed-card-sub">${escapeHtml(track.artist || 'Unknown')} (${track.plays || 0})</div>
         `;
         card.onclick = () => {
             if (window.pywebview?.api) window.pywebview.api.play_track(track, tracks);
@@ -476,7 +475,7 @@ export function renderTopArtists(artists) {
             <div class="feed-card-cover" style="border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, var(--accent), var(--bg-surface)); display: flex; align-items: center; justify-content: center;">
                 <i data-lucide="user" style="width:48px;height:48px;color:rgba(255,255,255,0.5)"></i>
             </div>
-            <div class="feed-card-title" style="text-align: center;">${artist.artist || 'Unknown'}</div>
+            <div class="feed-card-title" style="text-align: center;">${escapeHtml(artist.artist || 'Unknown')}</div>
             <div class="feed-card-sub" style="text-align: center;">${artist.plays || 0} раз</div>
         `;
         card.onclick = () => {
@@ -536,8 +535,8 @@ function renderWrappedUI(stats) {
             <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
                 <span style="font-weight:700; color:var(--primary); width:14px; text-align:center;">${i+1}</span>
                 <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                    <span style="color:#fff; font-weight:600;">${track.title || 'Unknown'}</span>
-                    <span style="color:var(--text-sec); font-size:11px; margin-left:4px;">• ${track.artist || 'Unknown'}</span>
+                    <span style="color:#fff; font-weight:600;">${escapeHtml(track.title || 'Unknown')}</span>
+                    <span style="color:var(--text-sec); font-size:11px; margin-left:4px;">• ${escapeHtml(track.artist || 'Unknown')}</span>
                 </div>
             </div>
             <span style="color:var(--primary); font-size:11px; font-weight:600; white-space:nowrap;">${track.plays} прослушиваний</span>

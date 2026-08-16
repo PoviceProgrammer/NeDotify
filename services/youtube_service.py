@@ -41,37 +41,7 @@ class YouTubeService(BaseMusicService):
         self._ytmusic = None
         if HAS_YTMUSIC:
             import requests
-            import ssl
-            import urllib3
             from requests.adapters import HTTPAdapter
-
-
-
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-
-
-            class CustomSSLAdapter(HTTPAdapter):
-                def init_poolmanager(self, *args, **kwargs):
-                    ctx = ssl.create_default_context()
-                    ctx.check_hostname = False
-                    ctx.verify_mode = ssl.CERT_NONE
-
-                    try:
-                        ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
-                    except Exception:
-
-
-
-
-
-                        pass
-                    kwargs["ssl_context"] = ctx
-
-
-                    return super().init_poolmanager(*args, **kwargs)
-
-
 
             class TimeoutSession(requests.Session):
                 def request(self, *args, **kwargs):
@@ -79,10 +49,9 @@ class YouTubeService(BaseMusicService):
                     return super().request(*args, **kwargs)
 
             session = TimeoutSession()
-            adapter = CustomSSLAdapter(pool_connections=30, pool_maxsize=30, max_retries=2)
+            adapter = HTTPAdapter(pool_connections=30, pool_maxsize=30, max_retries=2)
             session.mount("https://", adapter)
             session.mount("http://", adapter)
-            session.verify = False
             proxy = self.settings.get("auth", "proxy_url", "") if self.settings else ""
             if proxy:
                 session.proxies = {"http": proxy, "https": proxy}
@@ -208,11 +177,15 @@ class YouTubeService(BaseMusicService):
             "noplaylist": True,
             "nocheckcertificate": True,
             "skip_download": True,
-            # tv_simply + mweb bypass bot detection without cookies in yt-dlp 2026.8+
-            "extractor_args": {"youtube": ["player_client=tv_simply,mweb,ios,web"]},
-            "socket_timeout": 10,
-            "retries": 2,
-            "extractor_retries": 2,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android", "ios", "mweb", "web_embedded"],
+                    "player_skip": ["configs", "webpage"]
+                }
+            },
+            "socket_timeout": 5,
+            "retries": 0,
+            "extractor_retries": 0,
             "source_address": "0.0.0.0",
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
@@ -220,7 +193,12 @@ class YouTubeService(BaseMusicService):
         }
 
         if fallback:
-            opts["extractor_args"] = {"youtube": ["player_client=tv_simply,ios,mweb,web,android"]}
+            opts["extractor_args"] = {
+                "youtube": {
+                    "player_client": ["android", "ios", "mweb"],
+                    "player_skip": ["configs"]
+                }
+            }
             opts["format"] = "bestaudio/best/ba/b/worst"
             opts["ignoreerrors"] = True
 
@@ -229,6 +207,9 @@ class YouTubeService(BaseMusicService):
                 cookies_file_path = self.settings.get("auth", "cookies_file_path", "")
                 if cookies_file_path and os.path.exists(cookies_file_path):
                     opts["cookiefile"] = cookies_file_path
+                configured_browser = self.settings.get("auth", "browser_cookies", "none")
+                if configured_browser and configured_browser != "none":
+                    opts["cookiesfrombrowser"] = (configured_browser,)
                 proxy = self.settings.get("auth", "proxy_url", "")
                 if proxy:
                     opts["proxy"] = proxy
@@ -279,46 +260,38 @@ class YouTubeService(BaseMusicService):
                     if not artist:
                         artist = "Unknown Artist"
 
-                    duration = item.get("duration_seconds", 0)
-                    if duration == 0 and item.get("duration"):
-                        try:
-                            parts = item["duration"].split(":")
-                            if len(parts) == 2:
-                                duration = int(parts[0]) * 60 + int(parts[1])
-                            elif len(parts) == 3:
-                                duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-                        except:
-                            duration = 0
+                    duration_str = item.get("duration", "0:00")
+                    duration = 0
+                    if duration_str:
+                        parts = duration_str.split(":")
+                        if len(parts) == 2:
+                            duration = int(parts[0]) * 60 + int(parts[1])
+                        elif len(parts) == 3:
+                            duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
 
-                    cover_url = ""
-                    if item.get("thumbnails") and len(item["thumbnails"]) > 0:
-                        cover_url = item["thumbnails"][-1]["url"]
-                    else:
-                        cover_url = f"https://img.youtube.com/vi/{source_id}/hqdefault.jpg"
+                    thumbnails = item.get("thumbnails", [])
+                    cover_url = thumbnails[-1]["url"] if thumbnails else ""
 
-                    track = {
-                        "title": title,
-                        "artist": artist,
-                        "cover_url": cover_url,
-                        "duration": duration,
+                    tracks.append({
                         "source": "youtube",
                         "source_id": source_id,
-                        "source_url": f"https://www.youtube.com/watch?v={source_id}",
-                    }
-                    tracks.append(track)
+                        "title": title,
+                        "artist": artist,
+                        "duration": duration,
+                        "cover_url": cover_url,
+                        "album": item.get("album", {}).get("name", "") if isinstance(item.get("album"), dict) else "",
+                    })
 
                 self.set_search_cache(cache_key, tracks)
-
-                if tracks:
-                    self._executor.submit(self._prefetch_top_tracks, tracks)
                 if callback:
                     callback(tracks)
-                return None
+
+                self._executor.submit(self._prefetch_top_tracks, tracks)
+
             except Exception as e:
-                self.logger.exception("Ошибка при поиске YouTube")
+                logger.error(f"YouTube search error: {e}")
                 if error_callback:
-                    error_callback(f"Произошла ошибка: {type(e).__name__} - {str(e)}")
-                return None
+                    error_callback(str(e))
 
         self._executor.submit(_search)
         return None
@@ -354,19 +327,15 @@ class YouTubeService(BaseMusicService):
                 if self.settings:
                     configured_browser = self.settings.get("auth", "browser_cookies", "none")
 
-                browsers = ["chrome", "edge", "firefox", "opera"]
-                for browser in browsers:
-                    if browser == configured_browser:
-                        continue
-                    logger.info(f"Age gate bypass: trying cookies from browser: {browser}")
+                if configured_browser and configured_browser != "none":
+                    logger.info(f"Age gate bypass: trying cookies from configured browser: {configured_browser}")
                     cookie_opts = opts.copy()
-                    cookie_opts["cookiesfrombrowser"] = (browser,)
-
+                    cookie_opts["cookiesfrombrowser"] = (configured_browser,)
                     try:
                         with yt_dlp.YoutubeDL(cookie_opts) as ydl_cookie:
                             return ydl_cookie.extract_info(video_url, download=False)
                     except Exception as cookie_err:
-                        logger.warning(f"Bypassing age gate with browser '{browser}' failed: {cookie_err}")
+                        logger.warning(f"Browser cookies extraction failed: {cookie_err}")
             raise e
 
     def get_stream_url(self, video_url: str, callback: Callable = None, error_callback: Callable = None, quality: str = "high"):
@@ -383,7 +352,7 @@ class YouTubeService(BaseMusicService):
             return None
 
         def _extract():
-            max_attempts = 2
+            max_attempts = 1
             for attempt in range(max_attempts):
                 try:
                     info = None
@@ -398,6 +367,11 @@ class YouTubeService(BaseMusicService):
                                 error_callback("Не удалось прочитать куки браузера. Закройте браузер или используйте cookies.txt")
                             return None
 
+                        if any(k in err_lower for k in ("bot", "sign in", "confirm you", "drm")):
+                            logger.info("YouTube bot/auth challenge detected, triggering fast fallback.")
+                            if error_callback:
+                                error_callback(err_msg)
+                            return None
 
                         logger.debug(f"First extraction failed: {err_msg}. Trying fallback...")
                         try:

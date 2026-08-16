@@ -1,13 +1,13 @@
 // NeDotify вЂ” Search Module Redesign
-import { createTrackElement, renderIcons, filterVisibleTracks } from './utils.js?v=20260813';
-import { getCurrentTrack } from './player.js?v=20260813';
+import { createTrackElement, renderIcons, filterVisibleTracks, escapeHtml } from './utils.js?v=20260814_9';
+import { getCurrentTrack } from './player.js?v=20260814_9';
 import { 
     loadArtistProfile, 
     ArtistPhotoComponent, 
     ArtistBioComponent, 
     ArtistAlbumsComponent, 
     ArtistTracksComponent 
-} from './artist_profile.js?v=20260813';
+} from './artist_profile.js?v=20260814_9';
 
 let searchDebounce = null;
 let currentSource = 'youtube'; // Default source is YouTube Music as shown in screenshot 1
@@ -246,9 +246,9 @@ function renderResults(tracks) {
             card.style.cssText = 'padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; cursor: pointer; transition: transform 0.2s, background 0.2s;';
             card.innerHTML = `
                 <div class="feed-card-cover" style="width: 90px; height: 90px; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, var(--primary), rgba(255,255,255,0.1)); display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px rgba(0,0,0,0.3);">
-                    ${cover ? `<img src="${cover}" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;">` : '<i data-lucide="user" style="width:40px;height:40px;color:rgba(255,255,255,0.6)"></i>'}
+                    ${cover ? `<img src="${escapeHtml(cover)}" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;">` : '<i data-lucide="user" style="width:40px;height:40px;color:rgba(255,255,255,0.6)"></i>'}
                 </div>
-                <div style="font-weight: 700; font-size: 14px; color: #ffffff; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${artistName}</div>
+                <div style="font-weight: 700; font-size: 14px; color: #ffffff; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(artistName)}</div>
                 <div style="font-size: 11px; color: var(--text-sec);">Исполнитель • Профиль</div>
                 <button class="type-filter-btn active" style="margin-top: 4px; padding: 5px 14px; font-size: 11px; border-radius: 20px;">Открыть профиль</button>
             `;
@@ -266,7 +266,7 @@ function renderResults(tracks) {
         artistSuggest.innerHTML = `
             <div style="display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text-main)">
                 <i data-lucide="user" style="width:16px;height:16px;color:var(--primary)"></i>
-                <span>Посмотреть профиль исполнителя <strong>"${currentSearchQuery}"</strong></span>
+                <span>Посмотреть профиль исполнителя <strong>"${escapeHtml(currentSearchQuery)}"</strong></span>
             </div>
             <button class="type-filter-btn active" style="margin: 0; padding: 4px 12px; font-size:11px;">Открыть</button>
         `;

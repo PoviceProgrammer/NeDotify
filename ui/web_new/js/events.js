@@ -1,10 +1,10 @@
 // NeDotify — Python Event Bridge
-import { onTrackChanged, onStateChanged, onPositionChanged, applySettings } from './player.js?v=20260813';
-import { onSearchResults } from './search.js?v=20260813';
-import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome } from './home.js?v=20260813';
-import { loadLibrary, loadFavorites, loadDownloaded, loadPlaylists } from './library.js?v=20260813';
-import { applySettingsFromBackend, onStorageInfo, setYandexWarning } from './settings.js?v=20260813';
-import { showToast, renderIcons } from './utils.js?v=20260813';
+import { onTrackChanged, onStateChanged, onPositionChanged, applySettings } from './player.js?v=20260814_9';
+import { onSearchResults } from './search.js?v=20260814_9';
+import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome } from './home.js?v=20260814_9';
+import { loadLibrary, loadFavorites, loadDownloaded, loadPlaylists } from './library.js?v=20260814_9';
+import { applySettingsFromBackend, onStorageInfo, setYandexWarning } from './settings.js?v=20260814_9';
+import { showToast, renderIcons, escapeHtml } from './utils.js?v=20260814_9';
 
 let isNextTrackChange = false;
 
@@ -58,7 +58,7 @@ export function initEvents() {
             case 'authentic_home_error':
                 const authContainer = document.getElementById('home-authentic-feed');
                 if (authContainer) {
-                    authContainer.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-sec);">Ошибка: ${data.error}</div>`;
+                    authContainer.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-sec);">Ошибка: ${escapeHtml(data.error)}</div>`;
                 }
                 break;
 
@@ -119,10 +119,31 @@ export function initEvents() {
                 break;
 
             case 'mini_player_toggled':
-                document.body.classList.toggle('mini-player-active', !!data?.is_mini);
+                if (data?.is_mini) {
+                    document.body.classList.add('mini-player-active');
+                } else {
+                    document.body.classList.remove('mini-player-active');
+                }
                 window.dispatchEvent(new CustomEvent('nedotify:mini_player_toggled', { detail: data }));
                 break;
 
+            case 'batch_download_started':
+                document.dispatchEvent(new CustomEvent('nedotify:batch_download_started', { detail: data }));
+                break;
+
+            case 'batch_download_progress':
+                document.dispatchEvent(new CustomEvent('nedotify:batch_download_progress', { detail: data }));
+                break;
+
+            case 'batch_download_finished':
+                document.dispatchEvent(new CustomEvent('nedotify:batch_download_finished', { detail: data }));
+                break;
+
+            case 'batch_download_cancelled':
+                document.dispatchEvent(new CustomEvent('nedotify:batch_download_cancelled', { detail: data }));
+                break;
+
+            case 'download_complete':
             case 'track_downloaded':
                 loadDownloaded();
                 loadPlaylists();
@@ -166,6 +187,7 @@ export function initEvents() {
                 break;
 
             // ================= FUTURE EVENTS / DEPRECATED =================
+            case 'proxy_status':
             case 'smart_home_ready':
             case 'yandex_auth_error':
             case 'yandex_device_auth_code':

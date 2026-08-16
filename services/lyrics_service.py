@@ -15,9 +15,9 @@ import concurrent.futures
 
 logger = logging.getLogger(__name__)
 
+# Verified TLS context (default). Certificate checks are restored for all
+# metadata/lyrics requests; stream extraction is handled by yt-dlp separately.
 ssl_ctx = ssl.create_default_context()
-ssl_ctx.check_hostname = False
-ssl_ctx.verify_mode = ssl.CERT_NONE
 
 class LyricsService:
     def __init__(self, settings=None):

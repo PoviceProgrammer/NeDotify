@@ -21,23 +21,7 @@ except ImportError:
 import requests
 import re
 import urllib.parse as urllib_parse
-import ssl
-import urllib3
 from requests.adapters import HTTPAdapter
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-class CustomSSLAdapter(HTTPAdapter):
-    def init_poolmanager(self, *args, **kwargs):
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        try:
-            ctx.set_ciphers('DEFAULT:@SECLEVEL=1')
-        except Exception:
-            pass
-        kwargs['ssl_context'] = ctx
-        return super().init_poolmanager(*args, **kwargs)
 
 class SoundCloudService(BaseMusicService):
     """Client-side SoundCloud audio extraction using high-speed v2 REST API & yt-dlp fallback."""
@@ -51,12 +35,13 @@ class SoundCloudService(BaseMusicService):
         self._ydl_search = None
         self._client_id = None
         self._client_id_lock = threading.Lock()
+        self._related_cache = {}
+        self._waveform_cache = {}
         
         self._session = requests.Session()
-        adapter = CustomSSLAdapter(pool_connections=20, pool_maxsize=20, max_retries=2)
+        adapter = HTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=2)
         self._session.mount('https://', adapter)
         self._session.mount('http://', adapter)
-        self._session.verify = False
         self._session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
@@ -76,28 +61,35 @@ class SoundCloudService(BaseMusicService):
                 return self._client_id
             
             
-            fallbacks = ['IPx78YJ43STMUuy4PfGaiGEwNaWfQ4zq', 'iZ8g4fkSUAYLLflw8bkKmDGEDFGDVFm1', 'a3e059563d7fd3372b49b37f00a00bcf', 'YUKOSUSEbL28wJ3vN3sVNeX34R1h11a0']
+            fallbacks = [
+                'UMY1dzQ68n2QbCuypNe8JOivmV2FO2Ep',
+                'IPx78YJ43STMUuy4PfGaiGEwNaWfQ4zq',
+                'iZ8g4fkSUAYLLflw8bkKmDGEDFGDVFm1',
+                'a3e059563d7fd3372b49b37f00a00bcf',
+                'YUKOSUSEbL28wJ3vN3sVNeX34R1h11a0'
+            ]
             for cid in fallbacks:
                 try:
-                    r = self._session.get(f'https://api-v2.soundcloud.com/search/tracks?q=test&client_id={cid}&limit=1', timeout=5.0)
+                    r = self._session.get(f'https://api-v2.soundcloud.com/search/tracks?q=test&client_id={cid}&limit=1', timeout=4.0)
                     if r.status_code == 200:
                         self._client_id = cid
                         return cid
                 except Exception:
                     pass
-            
-            
+
             try:
                 r = self._session.get('https://soundcloud.com', timeout=8.0)
                 if r.status_code == 200:
-                    script_urls = re.findall(r'src="(https://a-v2\.sndcdn\.com/assets/[^"]+\.js)"', r.text)
-                    for url in reversed(script_urls[-5:]):
+                    script_urls = re.findall(r'src="(https://[a-zA-Z0-9\.-]+\.sndcdn\.com/assets/[^"]+\.js)"', r.text)
+                    for url in reversed(script_urls[-8:]):
                         try:
                             js = self._session.get(url, timeout=5.0).text
-                            match = re.search(r'client_id[:=]"([a-zA-Z0-9]{32})"', js)
-                            if match:
-                                self._client_id = match.group(1)
-                                return self._client_id
+                            matches = re.findall(r'client_id[:=]["\']([a-zA-Z0-9]{32})["\']', js) + re.findall(r'client_id=([a-zA-Z0-9]{32})', js)
+                            for m in matches:
+                                test_r = self._session.get(f'https://api-v2.soundcloud.com/search/tracks?q=test&client_id={m}&limit=1', timeout=3.0)
+                                if test_r.status_code == 200:
+                                    self._client_id = m
+                                    return self._client_id
                         except Exception:
                             pass
             except Exception as e:
@@ -191,6 +183,7 @@ class SoundCloudService(BaseMusicService):
                                 user_info = item.get('user', {})
                                 artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
                                 duration = int(item.get('duration', 0) / 1000)
+                                waveform_url = item.get('waveform_url') or ''
                                 
                                 track = {
                                     'title': item.get('title', 'Unknown Title'),
@@ -199,7 +192,8 @@ class SoundCloudService(BaseMusicService):
                                     'source': 'soundcloud',
                                     'source_id': str(item.get('id')),
                                     'source_url': item.get('permalink_url') or f"https://soundcloud.com/{item.get('permalink', item.get('id'))}",
-                                    'cover_url': artwork
+                                    'cover_url': artwork,
+                                    'waveform_url': waveform_url,
                                 }
                                 tracks.append(track)
                                 
@@ -240,8 +234,8 @@ class SoundCloudService(BaseMusicService):
             except Exception as e:
                 self.logger.warning(f'SoundCloud search failed: {e}. Performing Youtube fallback...')
                 try:
-                    from services.youtube_service import YoutubeService
-                    yt = YoutubeService(self.settings)
+                    from services.youtube_service import YouTubeService
+                    yt = YouTubeService(self.settings)
                     
                     def yt_cb(tracks):
                         for t in tracks:
@@ -269,39 +263,42 @@ class SoundCloudService(BaseMusicService):
             try:
                 cid = self._get_client_id()
                 track_id = None
-                if track_url.isdigit():
-                    track_id = track_url
-                elif 'tracks/' in track_url:
-                    parts = track_url.split('tracks/')
+                t_url = None
+
+                if str(track_url).isdigit():
+                    track_id = str(track_url)
+                    t_url = f"https://api-v2.soundcloud.com/tracks/{track_id}?client_id={cid}"
+                elif 'tracks/' in str(track_url):
+                    parts = str(track_url).split('tracks/')
                     if len(parts) > 1:
                         possible = parts[1].split('/')[0].split('?')[0]
                         if possible.isdigit():
                             track_id = possible
+                            t_url = f"https://api-v2.soundcloud.com/tracks/{track_id}?client_id={cid}"
+                elif str(track_url).startswith('http'):
+                    import urllib.parse
+                    t_url = f"https://api-v2.soundcloud.com/resolve?url={urllib.parse.quote(str(track_url))}&client_id={cid}"
 
-                if cid and track_id:
+                if cid and t_url:
                     try:
-                        t_url = f"https://api-v2.soundcloud.com/tracks/{track_id}?client_id={cid}"
-                        r = self._session.get(t_url, timeout=2.5)
+                        r = self._session.get(t_url, timeout=3.5)
                         if r.status_code == 200:
                             t_data = r.json()
                             media = t_data.get('media', {})
                             transcodings = media.get('transcodings', [])
                             stream_url = None
-                            
-                            
-                            
+
                             sorted_tc = sorted(transcodings, key=lambda x: 0 if x.get('format', {}).get('protocol') == 'progressive' else 1)
-                            
+
                             for tc in sorted_tc:
                                 tc_url = f"{tc['url']}?client_id={cid}"
-                                tc_resp = self._session.get(tc_url, timeout=2.0)
+                                tc_resp = self._session.get(tc_url, timeout=2.5)
                                 if tc_resp.status_code == 200:
                                     s_candidate = tc_resp.json().get('url')
-                                    
-                                    if s_candidate and '.m3u8' not in s_candidate and 'playlist' not in s_candidate and 'preview' not in s_candidate:
+                                    if s_candidate and 'preview' not in s_candidate:
                                         stream_url = s_candidate
                                         break
-                                    
+
                             if stream_url:
                                 artwork = t_data.get('artwork_url') or ''
                                 if artwork and 'large.jpg' in artwork:
@@ -319,7 +316,7 @@ class SoundCloudService(BaseMusicService):
                                     callback(stream_url, metadata)
                                 return
                     except Exception as api_ex:
-                        self.logger.warning(f"Fast SoundCloud stream extraction failed, trying yt-dlp: {api_ex}")
+                        self.logger.warning(f"Fast SoundCloud stream extraction failed: {api_ex}")
                 if HAS_YTDLP:
                     url_to_extract = track_url
                     if not url_to_extract.startswith('http'):
@@ -471,3 +468,100 @@ class SoundCloudService(BaseMusicService):
             with yt_dlp.YoutubeDL(dl_opts) as sc_ydl:
                 sc_ydl.download([sc_url])
             return output_path
+
+    def get_related_tracks_sync(self, track_id_or_urn: str, limit: int = 15) -> list:
+        """Fetch related tracks from SoundCloud API v2 with caching and graceful failover."""
+        import time
+        if not track_id_or_urn:
+            return []
+
+        raw_id = str(track_id_or_urn).strip()
+        if "soundcloud:tracks:" in raw_id:
+            raw_id = raw_id.split("soundcloud:tracks:")[-1]
+        elif "/" in raw_id:
+            raw_id = raw_id.rstrip("/").split("/")[-1]
+
+        cache_key = f"sc_rel:{raw_id}:{limit}"
+        now = time.time()
+        if cache_key in self._related_cache:
+            entry_time, data = self._related_cache[cache_key]
+            if now - entry_time < 86400:
+                return data
+
+        cid = self._get_client_id()
+        if not cid:
+            return []
+
+        try:
+            url = f"https://api-v2.soundcloud.com/tracks/{raw_id}/related?client_id={cid}&limit={limit}"
+            r = self._session.get(url, timeout=5.0)
+            if r.status_code == 200:
+                data = r.json()
+                tracks = []
+                for item in data.get('collection', []):
+                    if not item or not item.get('id'):
+                        continue
+                    artwork = item.get('artwork_url') or ''
+                    if artwork and 'large.jpg' in artwork:
+                        artwork = artwork.replace('large.jpg', 't500x500.jpg')
+                    user_info = item.get('user', {})
+                    artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
+                    duration = int(item.get('duration', 0) / 1000)
+                    waveform_url = item.get('waveform_url') or ''
+                    track = {
+                        'title': item.get('title', 'Unknown Title'),
+                        'artist': artist,
+                        'duration': duration,
+                        'source': 'soundcloud',
+                        'source_id': str(item.get('id')),
+                        'source_url': item.get('permalink_url') or f"https://soundcloud.com/{item.get('permalink', item.get('id'))}",
+                        'cover_url': artwork,
+                        'waveform_url': waveform_url,
+                    }
+                    tracks.append(track)
+
+                if tracks:
+                    self._related_cache[cache_key] = (now, tracks)
+                    return tracks
+        except Exception as e:
+            self.logger.warning(f"SoundCloud related tracks fetch error for {raw_id}: {e}")
+
+        return []
+
+    def get_waveform_data_sync(self, waveform_url: str) -> list:
+        """Fetch and normalize audio waveform peaks (samples) to an array of 0.0..1.0 values."""
+        if not waveform_url:
+            return []
+
+        json_url = waveform_url
+        if json_url.endswith('.png'):
+            json_url = json_url[:-4] + '.json'
+
+        if json_url in self._waveform_cache:
+            return self._waveform_cache[json_url]
+
+        try:
+            r = self._session.get(json_url, timeout=4.0)
+            if r.status_code == 200:
+                data = r.json()
+                samples = data.get('samples', [])
+                height = float(data.get('height') or max(samples or [1]) or 1)
+
+                if samples:
+                    normalized = [round(min(1.0, max(0.05, s / height)), 3) for s in samples]
+                    target_len = 100
+                    if len(normalized) > target_len:
+                        step = len(normalized) / float(target_len)
+                        resampled = []
+                        for i in range(target_len):
+                            idx = int(i * step)
+                            chunk = normalized[idx : idx + max(1, int(step))]
+                            resampled.append(round(max(chunk) if chunk else 0.1, 3))
+                        normalized = resampled
+
+                    self._waveform_cache[json_url] = normalized
+                    return normalized
+        except Exception as e:
+            self.logger.warning(f"Failed to fetch waveform JSON from {json_url}: {e}")
+
+        return []
