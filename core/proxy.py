@@ -323,11 +323,18 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         else:
             headers_list = resp.info().items()
 
+        cors_sent = False
         for header, val in headers_list:
-            if header.lower() not in HOP_BY_HOP:
+            h_low = header.lower()
+            if h_low not in HOP_BY_HOP:
+                if h_low == 'access-control-allow-origin':
+                    cors_sent = True
                 self.send_header(header, val)
 
-        self.send_header('Access-Control-Allow-Origin', '*')
+        if not cors_sent:
+            self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization')
         self.end_headers()
 
         import os

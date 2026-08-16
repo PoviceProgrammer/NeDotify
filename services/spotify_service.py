@@ -1,4 +1,4 @@
-﻿"""
+"""
 NeDotify - Fast Spotify Service
 Blazingly fast Spotify search & high-resolution artwork resolution with instant LRU caching.
 """
@@ -16,22 +16,12 @@ from requests.adapters import HTTPAdapter
 logger = logging.getLogger(__name__)
 
 _session = requests.Session()
-_adapter = HTTPAdapter(pool_connections=30, pool_maxsize=30, max_retries=2)
+_adapter = HTTPAdapter(pool_connections=30, pool_maxsize=30, max_retries=0)
 _session.mount("https://", _adapter)
 _session.mount("http://", _adapter)
 _session.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 })
-
-
-def _prewarm_session():
-    try:
-        _session.get("https://itunes.apple.com/search?term=test&limit=1", timeout=2.0)
-    except Exception:
-        pass
-
-
-threading.Thread(target=_prewarm_session, daemon=True).start()
 
 
 @lru_cache(maxsize=256)

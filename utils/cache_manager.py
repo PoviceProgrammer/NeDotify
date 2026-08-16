@@ -18,9 +18,7 @@ class CacheManager:
     def __init__(self, db: DatabaseManager):
         self.db = db
         self._base_dir = os.path.join(os.path.expanduser("~"), ".nedotify")
-        # Store covers inside ui/web_new/covers so WebView can resolve them via relative paths
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self._covers_dir = os.path.abspath(os.path.join(project_root, "ui", "web_new", "covers"))
+        self._covers_dir = os.path.join(self._base_dir, "covers")
         self._streams_dir = os.path.join(self._base_dir, "streams")
         self._temp_dir = os.path.join(self._base_dir, "temp")
 

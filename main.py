@@ -21,9 +21,48 @@ import logging
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-# Migrate secrets to AppData on launch
 from core.app import AppCore
 from core.api import AppApi
+
+# Automatic DNS-over-HTTPS fallback for Russian ISP DNS blocking
+def _enable_doh_fallback():
+    import socket, urllib.request, json, ssl
+    _orig_getaddrinfo = socket.getaddrinfo
+    _dns_cache = {}
+
+    def _doh_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        try:
+            return _orig_getaddrinfo(host, port, family, type, proto, flags)
+        except socket.gaierror:
+            if host in _dns_cache:
+                try:
+                    return _orig_getaddrinfo(_dns_cache[host], port, family, type, proto, flags)
+                except Exception:
+                    pass
+            for doh_url in [
+                f"https://1.1.1.1/dns-query?name={host}&type=A",
+                f"https://dns.google/resolve?name={host}&type=A",
+                f"https://77.88.8.8/dns-query?name={host}&type=A"
+            ]:
+                try:
+                    ctx = ssl._create_unverified_context()
+                    req = urllib.request.Request(doh_url, headers={"accept": "application/dns-json", "User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req, timeout=2.0, context=ctx) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        ips = [ans["data"] for ans in data.get("Answer", []) if ans.get("type") == 1]
+                        if ips:
+                            _dns_cache[host] = ips[0]
+                            return _orig_getaddrinfo(ips[0], port, family, type, proto, flags)
+                except Exception:
+                    continue
+            raise
+
+    socket.getaddrinfo = _doh_getaddrinfo
+
+try:
+    _enable_doh_fallback()
+except Exception as e:
+    logging.debug(f"DoH init error: {e}")
 
 def main():
     """Application entry point."""
@@ -90,8 +129,8 @@ def main():
             
     window.events.loaded += on_loaded
 
-    # Start the application loop (debug=False to disable DevTools)
-    webview.start(http_server=True, debug=False)
+    # Start the application loop (debug=True enables DevTools via F12 or Right Click -> Inspect)
+    webview.start(http_server=True, debug=True)
 
     # Save session before exit
     try:

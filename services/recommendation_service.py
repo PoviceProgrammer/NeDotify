@@ -723,3 +723,127 @@ class RecommendationService(BaseMusicService):
                     error_callback(str(e))
 
         self._executor.submit(_task)
+
+    def get_wave_for_track(self, seed_track: dict, limit: int = 15, exclude_ids: list = None, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None):
+        """
+        Generate a smart wave / radio of similar tracks based on a seed track.
+        Prioritizes:
+        1. SoundCloud Related API (fast & high relevance)
+        2. Last.fm Similar Tracks API + Track Resolver
+        3. Last.fm Similar Artists + Top Tracks
+        4. User Taste Profile / Local DB
+        """
+        if exclude_ids is None:
+            exclude_ids = []
+        exclude_set = {str(eid).strip().lower() for eid in exclude_ids if eid}
+
+        def _task():
+            try:
+                results = []
+                seen_keys = set()
+
+                seed_id = str(seed_track.get('source_id') or seed_track.get('id') or '')
+                seed_artist = str(seed_track.get('artist') or '').strip()
+                seed_title = str(seed_track.get('title') or '').strip()
+                seed_source = seed_track.get('source') or ''
+
+                if seed_id:
+                    exclude_set.add(seed_id.lower())
+                if seed_artist and seed_title:
+                    seen_keys.add(f"{seed_artist.lower()}:{seed_title.lower()}")
+
+                # 1. Primary: SoundCloud Related API
+                if self.sc_service and (seed_source == 'soundcloud' or seed_id.isdigit()):
+                    try:
+                        sc_related = self.sc_service.get_related_tracks_sync(seed_id, limit=limit + 5)
+                        for trk in sc_related:
+                            tid = str(trk.get('source_id') or '').lower()
+                            t_key = f"{(trk.get('artist') or '').lower()}:{(trk.get('title') or '').lower()}"
+                            if tid in exclude_set or t_key in seen_keys:
+                                continue
+                            seen_keys.add(t_key)
+                            results.append(self._format_ui_track(trk))
+                            if len(results) >= limit:
+                                break
+                    except Exception as e:
+                        self.logger.warning(f"SoundCloud related tracks retrieval failed: {e}")
+
+                # 2. Secondary: Last.fm similar tracks + TrackResolver
+                if len(results) < limit and seed_artist and seed_title and seed_artist != 'Unknown Artist':
+                    try:
+                        sim_tracks = self.lastfm.track.getSimilar(seed_artist, seed_title, limit=limit)
+                        for st in sim_tracks:
+                            c_title = st.get('name') or ''
+                            c_artist = st.get('artist') or seed_artist
+                            t_key = f"{c_artist.lower()}:{c_title.lower()}"
+                            if t_key in seen_keys:
+                                continue
+                            seen_keys.add(t_key)
+
+                            resolved = self.resolver.resolve_track(c_title, c_artist)
+                            if resolved and (resolved.get('source_id') or resolved.get('source_url')):
+                                tid = str(resolved.get('source_id') or '').lower()
+                                if tid not in exclude_set:
+                                    results.append(self._format_ui_track(resolved))
+                                    if len(results) >= limit:
+                                        break
+                    except Exception as e:
+                        self.logger.warning(f"Last.fm similar tracks retrieval failed: {e}")
+
+                # 3. Tertiary: Last.fm similar artists top tracks
+                if len(results) < limit and seed_artist and seed_artist != 'Unknown Artist':
+                    try:
+                        sim_artists = self.lastfm.artist.getSimilar(seed_artist, limit=5)
+                        for sa in sim_artists:
+                            sa_name = sa.get('name')
+                            if not sa_name:
+                                continue
+                            top_trks = self.lastfm.artist.getTopTracks(sa_name, limit=3)
+                            for tt in top_trks:
+                                c_title = tt.get('name') or ''
+                                c_artist = tt.get('artist') or sa_name
+                                t_key = f"{c_artist.lower()}:{c_title.lower()}"
+                                if t_key in seen_keys:
+                                    continue
+                                seen_keys.add(t_key)
+
+                                resolved = self.resolver.resolve_track(c_title, c_artist)
+                                if resolved and (resolved.get('source_id') or resolved.get('source_url')):
+                                    tid = str(resolved.get('source_id') or '').lower()
+                                    if tid not in exclude_set:
+                                        results.append(self._format_ui_track(resolved))
+                                        if len(results) >= limit:
+                                            break
+                            if len(results) >= limit:
+                                break
+                    except Exception as e:
+                        self.logger.warning(f"Last.fm similar artists retrieval failed: {e}")
+
+                # 4. Fallback: Local database / taste profile
+                if len(results) < limit and self.db:
+                    try:
+                        taste = UserTasteProfile().build_from_db(self.db)
+                        for hist in taste.recent_history:
+                            t_key = f"{(hist.get('artist') or '').lower()}:{(hist.get('title') or '').lower()}"
+                            tid = str(hist.get('source_id') or hist.get('id') or '').lower()
+                            if t_key not in seen_keys and tid not in exclude_set:
+                                seen_keys.add(t_key)
+                                results.append(self._format_ui_track(hist))
+                                if len(results) >= limit:
+                                    break
+                    except Exception:
+                        pass
+
+                if callback:
+                    callback(results[:limit])
+                return results[:limit]
+            except Exception as e:
+                self.logger.error(f"Error in get_wave_for_track: {e}")
+                if error_callback:
+                    error_callback(str(e))
+                return []
+
+        if callback:
+            self._executor.submit(_task)
+            return None
+        return _task()

@@ -31,8 +31,8 @@ LICENSE_VALIDATION_ENABLED = False
 
 # Window geometry: main window, compact mini player, and expanded mini player.
 MAIN_WINDOW_SIZE = (1100, 800)
-MINI_WINDOW_SIZE = (200, 68)
-MINI_EXPANDED_SIZE = (240, 140)
+MINI_WINDOW_SIZE = (380, 110)
+MINI_EXPANDED_SIZE = (400, 180)
 
 
 def _is_ssrf_safe_url(url: str) -> bool:
@@ -179,9 +179,10 @@ class AppApi:
         try:
             self._is_mini_active = enable
             if enable:
-                self._deferred_window_op(0.15, self._enter_mini_mode)
+                self._enter_mini_mode()
             else:
-                self._deferred_window_op(0.15, self._exit_mini_mode)
+                self._exit_mini_mode()
+            self._emit("mini_player_toggled", {"is_mini": enable})
             return enable
         except Exception as e:
             logger.error(f"Error toggling mini player: {e}")
@@ -191,6 +192,13 @@ class AppApi:
         if not target_win:
             return
         try:
+            # Save main window geometry to restore exactly upon exit
+            self._saved_main_geometry = (
+                getattr(target_win, 'width', MAIN_WINDOW_SIZE[0]) or MAIN_WINDOW_SIZE[0],
+                getattr(target_win, 'height', MAIN_WINDOW_SIZE[1]) or MAIN_WINDOW_SIZE[1],
+                getattr(target_win, 'x', None),
+                getattr(target_win, 'y', None)
+            )
             if hasattr(target_win, 'on_top'):
                 target_win.on_top = True
             w, h = MINI_WINDOW_SIZE
@@ -205,22 +213,26 @@ class AppApi:
         if not target_win:
             return
         try:
-            logger.info("Resizing window to 1100x800")
+            logger.info("Restoring main window geometry")
             if hasattr(target_win, 'on_top'):
                 target_win.on_top = False
-            w, h = MAIN_WINDOW_SIZE
+            gw, gh, gx, gy = getattr(self, '_saved_main_geometry', (*MAIN_WINDOW_SIZE, None, None))
+            w = max(gw or MAIN_WINDOW_SIZE[0], 800)
+            h = max(gh or MAIN_WINDOW_SIZE[1], 600)
             self._mini_size = (w, h)
             target_win.resize(w, h)
-            # Center main window on screen
-            try:
-                import ctypes
-                user32 = ctypes.windll.user32
-                screen_w = user32.GetSystemMetrics(0)
-                screen_h = user32.GetSystemMetrics(1)
-                if hasattr(target_win, 'move'):
-                    target_win.move((screen_w - w) // 2, (screen_h - h) // 2)
-            except Exception:
-                pass
+            if gx is not None and gy is not None and hasattr(target_win, 'move'):
+                target_win.move(gx, gy)
+            else:
+                try:
+                    import ctypes
+                    user32 = ctypes.windll.user32
+                    screen_w = user32.GetSystemMetrics(0)
+                    screen_h = user32.GetSystemMetrics(1)
+                    if hasattr(target_win, 'move'):
+                        target_win.move((screen_w - w) // 2, (screen_h - h) // 2)
+                except Exception:
+                    pass
         except Exception as err:
             logger.debug(f"Failed restoring main size: {err}")
 
@@ -611,7 +623,7 @@ class AppApi:
             else:
                 self._on_audio_error(f"Could not resolve stream for {source}/{source_id}")
 
-        self._core.re_resolve_stream_url_async(source, source_id, callback=on_resolved)
+        self._core.re_resolve_stream_url_async(source, source_id, callback=on_resolved, track=track)
 
     def stop_track(self):
         """Stop audio playback."""
@@ -1074,7 +1086,7 @@ class AppApi:
         """Get cache, covers & downloaded storage size info."""
         try:
             cache_dir = getattr(self._core.cache, "cache_dir", os.path.expanduser("~/.nedotify/cache"))
-            covers_dir = getattr(self._core.scanner, "_covers_dir", os.path.join(os.getcwd(), "ui", "web_new", "covers"))
+            covers_dir = getattr(self._core.scanner, "_covers_dir", os.path.expanduser("~/.nedotify/covers"))
 
             cache_bytes = 0
             if os.path.exists(cache_dir):
@@ -1342,6 +1354,139 @@ class AppApi:
             logger.error(f"Error in get_recommendations: {e}")
         return res[:max_results]
 
+    def get_track_wave(self, track_data: dict, limit: int = 15, exclude_ids: list = None):
+        """Get smart wave / radio of related tracks for a seed track."""
+        if not track_data or not isinstance(track_data, dict):
+            return []
+        try:
+            return self._core.recommendations.get_wave_for_track(track_data, limit=limit, exclude_ids=exclude_ids or [])
+        except Exception as e:
+            logger.error(f"Error in get_track_wave: {e}")
+            return []
+
+    def get_waveform(self, track_data: dict):
+        """Get sound wave peak amplitude points (0.0..1.0) for waveform scrubber."""
+        if not track_data or not isinstance(track_data, dict):
+            return []
+        waveform_url = track_data.get("waveform_url") or ""
+        if waveform_url and hasattr(self._core, "soundcloud"):
+            try:
+                return self._core.soundcloud.get_waveform_data_sync(waveform_url)
+            except Exception as e:
+                logger.warning(f"Error fetching waveform: {e}")
+        return []
+
+    def _clean_stream_cache(self, max_size_mb: int = 350, max_age_hours: int = 48):
+        """Clean cached audio streams using LRU and TTL to prevent disk bloat."""
+        try:
+            streams_dir = os.path.join(os.path.expanduser("~"), ".nedotify", "streams")
+            if not os.path.exists(streams_dir):
+                return
+            now = time.time()
+            max_age_sec = max_age_hours * 3600
+            files = []
+            total_size = 0
+            for entry in os.scandir(streams_dir):
+                if entry.is_file():
+                    stat = entry.stat()
+                    total_size += stat.st_size
+                    files.append((entry.path, stat.st_mtime, stat.st_size))
+            
+            kept_files = []
+            for path, mtime, size in files:
+                if (now - mtime) > max_age_sec:
+                    try:
+                        os.remove(path)
+                        total_size -= size
+                    except Exception:
+                        kept_files.append((path, mtime, size))
+                else:
+                    kept_files.append((path, mtime, size))
+
+            max_bytes = max_size_mb * 1024 * 1024
+            if total_size > max_bytes:
+                kept_files.sort(key=lambda x: x[1])
+                for path, mtime, size in kept_files:
+                    if total_size <= max_bytes * 0.7:
+                        break
+                    try:
+                        os.remove(path)
+                        total_size -= size
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.debug(f"Stream cache cleanup ignored: {e}")
+
+    def prefetch_track(self, track_data: dict):
+        """Background pre-caching / stream resolution for seamless instant next track switching."""
+        if not track_data or not isinstance(track_data, dict):
+            return False
+        def _prefetch_task():
+            try:
+                self._clean_stream_cache()
+                source = track_data.get("source")
+                source_id = track_data.get("source_id")
+                source_url = track_data.get("source_url") or source_id
+                if source == "soundcloud" and hasattr(self._core, "soundcloud"):
+                    self._core.soundcloud.get_stream_url(source_url or source_id, quality="high")
+                elif source == "youtube" and hasattr(self._core, "youtube"):
+                    yt_url = source_url if source_url and "youtube.com" in source_url else f"https://www.youtube.com/watch?v={source_id}"
+                    self._core.youtube.get_stream_url(yt_url, quality="high")
+            except Exception as e:
+                logger.debug(f"Prefetch task ignored error: {e}")
+        self._search_executor.submit(_prefetch_task)
+        return True
+
+    def download_all_favorites(self):
+        """Download all favorite tracks for offline playback with disk space validation and batch progress."""
+        try:
+            favs = self._core.db.get_favorite_tracks() or []
+            if not favs:
+                return {"success": False, "message": "В избранном нет треков для загрузки"}
+
+            to_download = [t for t in favs if not t.get("is_downloaded")]
+            if not to_download:
+                return {"success": True, "count": 0, "total": len(favs), "message": "Все любимые треки уже скачаны!"}
+
+            app_dir = os.path.expanduser("~/.nedotify")
+            total, used, free = shutil.disk_usage(app_dir if os.path.exists(app_dir) else os.path.expanduser("~"))
+            needed_bytes = len(to_download) * 5 * 1024 * 1024
+            if free < needed_bytes:
+                free_mb = free / (1024 * 1024)
+                needed_mb = needed_bytes / (1024 * 1024)
+                return {
+                    "success": False,
+                    "message": f"Недостаточно места на диске. Нужно ~{int(needed_mb)} МБ, доступно {int(free_mb)} МБ"
+                }
+
+            if hasattr(self._core, "downloader"):
+                self._core.downloader.start_batch(len(to_download))
+
+            for track in to_download:
+                self.download_track(track)
+
+            self._emit("batch_download_started", {"total": len(to_download), "current": 0})
+
+            return {
+                "success": True,
+                "count": len(to_download),
+                "total": len(favs),
+                "message": f"Добавлено в очередь на скачивание: {len(to_download)} треков"
+            }
+        except Exception as e:
+            logger.error(f"Error in download_all_favorites: {e}")
+            return {"success": False, "message": f"Ошибка скачивания: {e}"}
+
+    def cancel_batch_download(self):
+        """Cancel ongoing batch download and clear remaining queue."""
+        try:
+            if hasattr(self._core, "downloader"):
+                return self._core.downloader.cancel_batch()
+            return True
+        except Exception as e:
+            logger.error(f"Error cancelling batch download: {e}")
+            return False
+
     def get_feed(self, max_results: int = 20):
         """Request recommendations without blocking the UI bridge."""
         history = self._core.db.get_history(limit=10)
@@ -1390,11 +1535,18 @@ class AppApi:
                 success, msg = self._core.zapret.start(mode=mode, custom_args=custom_args, binary_path=binary_path)
             else:
                 success, msg = self._core.zapret.stop()
-            self._core.settings.set("zapret", "enabled", enabled)
+            self._core.settings.set("zapret", "enabled", enabled and success)
             self._core.settings.set("zapret", "mode", mode)
-            return {"success": success, "message": msg, "error": None if success else msg}
+            is_running = self._core.zapret.is_running()
+            return {
+                "success": success,
+                "running": is_running,
+                "enabled": enabled and success,
+                "message": msg,
+                "error": None if success else msg
+            }
         except Exception as e:
-            return {"success": False, "error": str(e), "message": str(e)}
+            return {"success": False, "running": False, "enabled": False, "error": str(e), "message": str(e)}
 
     def toggle_discord_rpc(self, enabled: bool):
         """Toggle Discord Rich Presence integration."""
@@ -1429,9 +1581,27 @@ class AppApi:
         try:
             status = self._core.zapret.get_status()
             status["mode"] = self._core.settings.get("zapret", "mode", "youtube_discord")
+            status["enabled"] = self._core.settings.get("zapret", "enabled", False)
+            status["autoupdate"] = self._core.settings.get("zapret", "autoupdate", True)
             return status
         except Exception as e:
-            return {"running": False, "mode": "youtube_discord", "error": str(e), "binary_found": False}
+            return {"running": False, "enabled": False, "mode": "youtube_discord", "error": str(e), "binary_found": False}
+
+    def check_zapret_update(self):
+        """Check for updates to the Zapret binary bundle."""
+        try:
+            return self._core.zapret.check_for_updates()
+        except Exception as e:
+            return {"update_available": False, "error": str(e)}
+
+    def update_zapret(self, force: bool = False):
+        """Update Zapret binary bundle to latest version."""
+        try:
+            success, msg = self._core.zapret.update_zapret(force=force)
+            status = self._core.zapret.get_status()
+            return {"success": success, "message": msg, "status": status}
+        except Exception as e:
+            return {"success": False, "message": f"Ошибка обновления: {e}", "error": str(e)}
 
     def find_duplicate_tracks(self):
         """Scan local tracks and return duplicate track groups based on acoustic fingerprint."""

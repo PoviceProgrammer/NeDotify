@@ -91,11 +91,11 @@ class AppCore:
         self.proxy = LocalProxyManager(self)
         self.downloader = DownloadManager(self)
         self.plugins = PluginManager(self)
-        self.p2p = P2PService(self.db, self.settings)
+        self.p2p = P2PService()
         self.zapret = ZapretService(self.settings)
         self.playlist_importer = PlaylistImportService()
         self.watchdog = WatchdogService(self)
-        self.lufs_scanner = LufsScannerService(self.db)
+        self.lufs_scanner = LufsScannerService(self)
         self.audio_fingerprint = AudioFingerprintService()
         self.discord_rpc = DiscordRPCService(self.settings)
         self.discord_rpc.start()
@@ -109,15 +109,23 @@ class AppCore:
                 mode = self.settings.get("zapret", "mode", "youtube_discord")
                 custom_args = self.settings.get("zapret", "custom_args", "")
                 bin_path = self.settings.get("zapret", "binary_path", "")
-                self.zapret.start(mode=mode, custom_args=custom_args, binary_path=bin_path)
+                threading.Thread(
+                    target=self.zapret.start,
+                    kwargs={"mode": mode, "custom_args": custom_args, "binary_path": bin_path},
+                    daemon=True
+                ).start()
         except Exception as ze:
             logger.error(f"Failed to auto-start Zapret: {ze}")
+
+        # Periodic background check for Zapret updates
+        if hasattr(self, "zapret") and self.zapret:
+            self.zapret.auto_update_in_background()
 
         # Start Local Stream Proxy & Load Plugins
         self.proxy.start()
         self.plugins.load_plugins()
 
-    def re_resolve_stream_url_async(self, source, source_id, callback=None, on_error=None, quality="high"):
+    def re_resolve_stream_url_async(self, source, source_id, callback=None, on_error=None, quality="high", track=None):
         """Construct lookup URL, call get_stream_url asynchronously and trigger callbacks."""
         def worker():
             url = None
@@ -160,14 +168,99 @@ class AppCore:
                     callback(stream_url, metadata or {"source": source, "source_id": source_id})
 
             def _on_err(err):
+                if source == "youtube" and hasattr(self, "soundcloud") and self.soundcloud:
+                    # Fallback to SoundCloud with track title/artist
+                    try:
+                        import re
+                        t_art = track.get('artist', '') if track and isinstance(track, dict) else ""
+                        t_title = track.get('title', '') if track and isinstance(track, dict) else ""
+                        if not t_title:
+                            try:
+                                db_track = self.db.get_track_by_source_id(source, source_id)
+                                if db_track:
+                                    t_art = db_track.get('artist', '')
+                                    t_title = db_track.get('title', '')
+                            except Exception:
+                                pass
+
+                        if not t_title or t_title == source_id or (len(t_title) == 11 and " " not in t_title):
+                            try:
+                                import urllib.request, json
+                                oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={source_id}&format=json"
+                                req = urllib.request.Request(oembed_url, headers={'User-Agent': 'Mozilla/5.0'})
+                                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                                    o_data = json.loads(resp.read().decode('utf-8'))
+                                    if o_data.get('title'):
+                                        t_title = o_data['title']
+                                    if o_data.get('author_name') and not t_art:
+                                        t_art = o_data['author_name']
+                            except Exception:
+                                pass
+
+                        def clean_noise(text):
+                            if not text: return ""
+                            t = re.sub(r'[\(\[\{][^\)\]\}]*(?:official|video|audio|клип|релиз|remix|edit|lyric|prod|ft\.|feat\.|4k|hd|hq|live|topic)[^\)\]\}]*[\)\]\}]', '', text, flags=re.IGNORECASE)
+                            t = re.sub(r'\b(official\s+video|official\s+audio|music\s+video|lyric\s+video|премьера\s+клипа|клип|релиз)\b', '', t, flags=re.IGNORECASE)
+                            t = re.sub(r'[\(\[\{]\s*[\)\]\}]', '', t)
+                            return ' '.join(t.split()).strip()
+
+                        clean_t = clean_noise(t_title)
+                        clean_a = clean_noise(t_art)
+                        c_queries = []
+                        if ' - ' in clean_t:
+                            parts = clean_t.split(' - ', 1)
+                            if len(parts) == 2:
+                                c_queries.append(f"{parts[0].strip()} {parts[1].strip()}")
+                                c_queries.append(clean_t.replace(' - ', ' '))
+                                c_queries.append(parts[1].strip())
+                        if clean_a and clean_t:
+                            clean_a_short = re.sub(r'\s*-\s*Topic\b', '', clean_a, flags=re.IGNORECASE).strip()
+                            if clean_a_short.lower() not in clean_t.lower():
+                                c_queries.append(f"{clean_a_short} {clean_t}")
+                            else:
+                                c_queries.append(clean_t)
+                        if clean_t:
+                            c_queries.append(clean_t)
+                        raw = f"{t_art} {t_title}".strip()
+                        if raw:
+                            c_queries.append(raw)
+                        c_queries.append(str(source_id).replace("https://www.youtube.com/watch?v=", ""))
+
+                        candidates = []
+                        for q in c_queries:
+                            qn = ' '.join(q.split()).strip()
+                            if qn and len(qn) > 1 and qn not in candidates:
+                                candidates.append(qn)
+
+                        def try_search_candidates(idx=0):
+                            if idx >= len(candidates):
+                                if on_error:
+                                    on_error(err)
+                                return
+
+                            sq = candidates[idx]
+                            logger.info(f"YouTube resolution failed; trying SoundCloud fallback ({idx+1}/{len(candidates)}) for: {sq}")
+
+                            def on_sc_search_res(res):
+                                if res and len(res) > 0:
+                                    target_sc = res[0].get("source_url") or res[0].get("source_id")
+                                    self.soundcloud.get_stream_url(target_sc, callback=_on_resolved, error_callback=lambda e: try_search_candidates(idx + 1))
+                                else:
+                                    try_search_candidates(idx + 1)
+
+                            self.soundcloud.search(sq, max_results=3, callback=on_sc_search_res, error_callback=lambda e: try_search_candidates(idx + 1))
+
+                        try_search_candidates(0)
+                        return
+                    except Exception as fallback_ex:
+                        logger.debug(f"SoundCloud fallback search error: {fallback_ex}")
                 if on_error:
                     on_error(err)
 
             try:
                 service.get_stream_url(url, callback=_on_resolved, error_callback=_on_err, quality=quality)
             except Exception as e:
-                if on_error:
-                    on_error(str(e))
+                _on_err(str(e))
 
         threading.Thread(target=worker, daemon=True).start()
 

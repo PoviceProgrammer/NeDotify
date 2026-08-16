@@ -1,5 +1,5 @@
 // NeDotify - Pages Navigation Module
-import { renderIcons } from './utils.js?v=20260813';
+import { renderIcons } from './utils.js?v=20260814_9';
 
 const pageTitles = {
     home: 'Главная',
@@ -47,6 +47,14 @@ export function showPage(pageId) {
                 return;
             }
             settingsView.classList.add('active');
+
+            const activeNavBtn = document.querySelector('.settings-nav-btn.active') || document.querySelector('.settings-nav-btn[data-panel="appearance"]');
+            const activePanelId = activeNavBtn ? 'settings-' + activeNavBtn.dataset.panel : 'settings-appearance';
+            document.querySelectorAll('.settings-panel').forEach(p => {
+                const isActive = p.id === activePanelId;
+                p.classList.toggle('active', isActive);
+                p.style.display = isActive ? 'block' : 'none';
+            });
         }
 
         document.querySelectorAll('.nav-item[data-page]').forEach(item => {

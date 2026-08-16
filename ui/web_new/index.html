@@ -9,14 +9,22 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Montserrat:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="js/lucide.min.js?v=3"></script>
+    <script src="js/hls.min.js"></script>
     <link rel="icon" type="image/png" href="logo.png">
-    <link rel="stylesheet" href="css/themes.css?v=2">
-    <link rel="stylesheet" href="css/styles.css?v=7">
+    <link rel="stylesheet" href="css/themes.css?v=20260814_9">
+    <link rel="stylesheet" href="css/styles.css?v=20260814_9">
 </head>
 <body>
 
 <!-- Particles Background -->
 <div id="particles-bg"></div>
+
+<!-- Vision Pro Glass Aura Orbs -->
+<div id="aura-orbs-container" class="aura-orbs-container">
+    <div class="aura-orb orb-1"></div>
+    <div class="aura-orb orb-2"></div>
+    <div class="aura-orb orb-3"></div>
+</div>
 
 <!-- Title Bar (Frameless window) -->
 <div id="title-bar">
@@ -40,6 +48,57 @@
 <div id="network-banner" class="network-banner hidden">
     <i data-lucide="wifi-off" id="network-banner-icon" style="width:16px;height:16px;margin-right:8px;"></i>
     <span id="network-banner-text">Нет подключения к сети</span>
+</div>
+
+<!-- ───── COMPACT MINI PLAYER OVERLAY (Direct child of body) ───── -->
+<div id="mini-player-overlay" class="mini-player-card">
+    <div class="mp-compact-row">
+        <!-- Cover Art -->
+        <div class="mp-cover-wrap">
+            <svg id="mp-cover-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;opacity:0.6;position:absolute;top:calc(50% - 10px);left:calc(50% - 10px);"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+            <img id="mp-cover" src="" alt="Cover" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:8px;" onload="this.style.display='block'" onerror="this.style.display='none'">
+        </div>
+
+        <!-- Track Info (Drag handle region) -->
+        <div class="mp-info pywebview-drag-region">
+            <div id="mp-title" class="mp-title" title="Трек не выбран">Трек не выбран</div>
+            <div id="mp-artist" class="mp-artist">Выберите трек</div>
+        </div>
+
+        <!-- Controls: Prev, Play/Pause, Next, Like, Minimize, Expand, Close -->
+        <div class="mp-controls-row">
+            <button id="mp-btn-prev" class="btn-ctrl" title="Предыдущий">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+            </button>
+            <button id="mp-btn-play" class="btn-ctrl btn-play-mini" title="Воспроизведение / Пауза">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            </button>
+            <button id="mp-btn-next" class="btn-ctrl" title="Следующий" aria-label="Next">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+            </button>
+            <button id="mp-btn-like" class="icon-btn" title="В избранное">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>
+            </button>
+            <button id="mp-btn-minimize" class="icon-btn" title="Свернуть в панель задач">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+            <button id="mp-btn-expand" class="icon-btn" title="Развернуть окно плеера">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+            </button>
+            <button id="mp-btn-close" class="icon-btn btn-close" title="Закрыть приложение">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Duration Progress Bar -->
+    <div class="mp-progress-row">
+        <span id="mp-time-current" class="mp-time">0:00</span>
+        <div class="progress-track" id="mp-progress-track">
+            <div class="progress-fill" id="mp-progress-fill" style="transform: translateX(-100%)"></div>
+        </div>
+        <span id="mp-time-total" class="mp-time">0:00</span>
+    </div>
 </div>
 
 <!-- App Container -->
@@ -380,9 +439,27 @@
                                 <h2 class="lib-active-title" id="lib-active-title">Название</h2>
                                 <span class="lib-active-sub" id="lib-active-sub">0 треков</span>
                             </div>
-                            <button class="btn-play-large" id="lib-btn-play-all" title="Воспроизвести все" style="width:44px;height:44px">
-                                <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
-                            </button>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <div id="lib-batch-progress-box" class="lib-batch-progress-box" style="display:none; align-items:center; gap:10px; padding:6px 12px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); min-width:220px;">
+                                    <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                                        <div style="display:flex; justify-content:space-between; font-size:11px; font-weight:600; color:#fff;">
+                                            <span>Скачивание...</span>
+                                            <span id="lib-batch-progress-count">0 / 0</span>
+                                        </div>
+                                        <div style="width:100%; height:4px; border-radius:2px; background:rgba(255,255,255,0.15); overflow:hidden;">
+                                            <div id="lib-batch-progress-bar" style="width:0%; height:100%; background:var(--primary); transition:width 0.2s ease;"></div>
+                                        </div>
+                                    </div>
+                                    <button id="lib-btn-batch-cancel" title="Отменить загрузку" class="icon-btn" style="width:24px;height:24px;color:#ef4444;background:transparent;border:none;cursor:pointer;"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+                                </div>
+                                <button class="btn-ctrl" id="lib-btn-download-all" title="Скачать всё любимое для оффлайн прослушивания" style="display:none; padding:8px 14px; border-radius:10px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); font-size:12px; font-weight:600; color:#fff; gap:6px; align-items:center; cursor:pointer;">
+                                    <i data-lucide="download-cloud" style="width:16px;height:16px"></i>
+                                    <span>Скачать всё</span>
+                                </button>
+                                <button class="btn-play-large" id="lib-btn-play-all" title="Воспроизвести все" style="width:44px;height:44px">
+                                    <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
+                                </button>
+                            </div>
                         </div>
                         <div id="lib-active-tracks" class="track-list" style="flex:1; overflow-y:auto;"></div>
                     </div>
@@ -431,7 +508,8 @@
                     <!-- Progress Slider -->
                     <div class="pb-progress player-card-progress">
                         <span class="pb-time" id="pp-time-current">0:00</span>
-                        <div class="progress-track" id="pp-progress-track">
+                        <div class="progress-track" id="pp-progress-track" style="position: relative;">
+                            <canvas id="pp-waveform-canvas" class="waveform-canvas hidden"></canvas>
                             <div class="progress-fill" id="pp-progress-fill" style="transform: translateX(-100%)"></div>
                         </div>
                         <span class="pb-time" id="pp-time-total">0:00</span>
@@ -465,13 +543,6 @@
                         </button>
                     </div>
 
-                    <!-- Nightcore & Speed Control Pills in Full Player -->
-                    <div style="display:flex; justify-content:center; align-items:center; gap:8px; margin-top:14px; padding:6px 12px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);">
-                        <span style="font-size:11px; font-weight:700; color:var(--text-sec); letter-spacing:0.5px;">РЕЖИМ:</span>
-                        <button class="pitch-preset-btn" id="pp-mode-nightcore" style="padding:4px 10px; font-size:11px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.08); color:#fff; cursor:pointer; font-weight:600;" title="Nightcore mode (1.25x + Pitch)">⚡ Nightcore</button>
-                        <button class="pitch-preset-btn" id="pp-mode-daycore" style="padding:4px 10px; font-size:11px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.08); color:#fff; cursor:pointer; font-weight:600;" title="Daycore mode (0.85x + Bass Pitch)">🌙 Daycore</button>
-                        <button id="pp-mode-normal" style="padding:4px 10px; font-size:11px; border-radius:8px; border:none; background:var(--primary); color:#fff; cursor:pointer; font-weight:600;">1.0x</button>
-                    </div>
                 </div>
 
                 <!-- Right Column: Lyrics Glass Panel -->
@@ -772,6 +843,7 @@
                                 <input type="range" class="slider-input" id="slider-transparency-level" min="10" max="100" value="80" style="width:140px">
                             </div>
                         </div>
+
                         <div class="settings-section">
                             <div class="settings-section-title">Эффект стекла (Glassmorphism)</div>
                             <div class="setting-row">
@@ -781,6 +853,8 @@
                                 </div>
                                 <input type="range" class="slider-input" id="slider-glass-blur" min="0" max="40" value="20" style="width:140px">
                             </div>
+                        </div>
+
                         <div class="settings-section">
                             <div class="settings-section-title">ИНТЕГРАЦИИ И СТАТУС</div>
                             <div class="setting-row">
@@ -898,6 +972,33 @@
                                     <div class="setting-sublabel">Использовать компактный стиль кнопки очереди</div>
                                 </div>
                                 <button class="toggle-switch on" id="toggle-compact-queue-btn"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <!-- Автопилот очереди -->
+                            <div class="setting-row" style="margin-top: 20px;">
+                                <div>
+                                    <div class="setting-label">Бесконечный автопилот очереди</div>
+                                    <div class="setting-sublabel">Автоматически подбирать похожие треки и продолжать воспроизведение, когда очередь заканчивается</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-queue-autopilot"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <!-- Предзагрузка следующего трека -->
+                            <div class="setting-row" style="margin-top: 20px;">
+                                <div>
+                                    <div class="setting-label">Предзагрузка следующего трека (Prefetch)</div>
+                                    <div class="setting-sublabel">Разрешать аудиопоток следующего трека заранее для мгновенного переключения без пауз</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-player-prefetch"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <!-- Атмосферный свет обложки -->
+                            <div class="setting-row" style="margin-top: 20px;">
+                                <div>
+                                    <div class="setting-label">Атмосферный свет обложки (Aura Orbs)</div>
+                                    <div class="setting-sublabel">Мягкие дрейфующие световые сферы Vision Pro, окрашивающиеся под играющий трек</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-aura-orbs"><div class="toggle-dot"></div></button>
                             </div>
 
                             <!-- 7. Предпросмотр следующего трека -->
@@ -1318,25 +1419,6 @@
                             </div>
                         </div>
 
-                        <!-- Speed & Nightcore / Daycore Panel -->
-                        <div class="settings-section" style="margin-top: 24px;">
-                            <div class="settings-section-title">СКОРОСТЬ И ТОНАЛЬНОСТЬ (NIGHTCORE / DAYCORE)</div>
-                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:12px;">
-                                <div style="display:flex; justify-content:space-between; width:100%; align-items:center; flex-wrap:wrap; gap:8px;">
-                                    <span class="setting-label">Скорость: <strong id="label-speed-val">1.0x</strong></span>
-                                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                                        <button class="btn-sm pitch-preset-btn" id="btn-mode-nightcore" style="padding:4px 10px; font-size:11px; border-radius:6px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:#fff; cursor:pointer;" title="Ускорение + выравнивание тональности">⚡ Nightcore (1.25x)</button>
-                                        <button class="btn-sm pitch-preset-btn" id="btn-mode-daycore" style="padding:4px 10px; font-size:11px; border-radius:6px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:#fff; cursor:pointer;" title="Замедление + глубокий бас">🌙 Daycore (0.85x)</button>
-                                        <button class="btn-sm" id="btn-mode-normal" style="padding:4px 10px; font-size:11px; border-radius:6px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:var(--text-sec); cursor:pointer;">Обычный (1.0x)</button>
-                                    </div>
-                                </div>
-                                <input type="range" id="slider-playback-rate" class="slider-input" min="0.5" max="2.0" step="0.05" value="1.0" style="width:100%">
-                                <div style="display:flex; gap:8px; align-items:center; width:100%;">
-                                    <button class="toggle-switch on" id="toggle-preserve-pitch"><div class="toggle-dot"></div></button>
-                                    <span style="font-size:12px; color:var(--text-sec);">Сохранять оригинальную тональность при смене скорости</span>
-                                </div>
-                            </div>
-                        </div>
                     </div>
 
                     <!-- Particles -->
@@ -1713,24 +1795,40 @@
                                 </div>
                                 <button class="toggle-switch" id="toggle-zapret-enabled"><div class="toggle-dot"></div></button>
                             </div>
-                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px; border-bottom: none;">
+                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
                                 <div>
                                     <div class="setting-label">Режим обхода</div>
                                     <div class="setting-sublabel">Выберите стратегию обхода замедления (fake-packet / split / disord)</div>
                                 </div>
                                 <select class="settings-select" id="select-zapret-mode">
-                                    <option value="auto">Автоматическая стратегия (Рекомендуется)</option>
-                                    <option value="fake_hex">Fake Packets Hex</option>
-                                    <option value="split2">Split-seq 2-stage</option>
+                                    <option value="youtube_discord">YouTube & Discord (Рекомендуется)</option>
+                                    <option value="standard">Стандартный (Fake TLS + Split2)</option>
+                                    <option value="aggressive">Disorder2 (для строгого DPI)</option>
+                                    <option value="multisplit">Multisplit (Альтернативный)</option>
                                 </select>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Автообновление Zapret</div>
+                                    <div class="setting-sublabel">Автоматически проверять и скачивать актуальные версии winws с GitHub</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-zapret-autoupdate"><div class="toggle-dot"></div></button>
+                            </div>
+                            <div class="setting-row" style="border-bottom: none;">
+                                <div>
+                                    <div class="setting-label">Версия: <span id="zapret-version-badge" style="color:var(--primary); font-weight:700;">v72.13</span></div>
+                                    <div class="setting-sublabel" id="zapret-update-status">Проверка обновлений доступна в один клик</div>
+                                </div>
+                                <button class="btn-primary text-xs" id="btn-update-zapret" style="padding: 6px 14px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="refresh-cw" style="width:14px;height:14px"></i>
+                                    <span>Обновить</span>
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-</div>
     </div>
 </div>
 
@@ -1773,18 +1871,16 @@
         </div>
         <div class="pb-progress">
             <span class="pb-time" id="pb-time-current">0:00</span>
-            <div class="progress-track" id="pb-progress-track">
+            <div class="progress-track" id="pb-progress-track" style="position: relative;">
+                <canvas id="pb-waveform-canvas" class="waveform-canvas hidden"></canvas>
                 <div class="progress-fill" id="pb-progress-fill" style="transform: translateX(-100%)"></div>
             </div>
             <span class="pb-time" id="pb-time-total">0:00</span>
         </div>
     </div>
 
-    <!-- Right: Speed/Nightcore + Volume (compact) -->
+    <!-- Right: Queue + Volume (compact) -->
     <div class="pb-right">
-        <button class="btn-ctrl" id="pb-btn-nightcore" title="⚡ Переключить Nightcore (1.25x) / Daycore / 1.0x" style="font-size:11px; font-weight:700; padding:3px 8px; border-radius:6px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:#fff; cursor:pointer;">
-            ⚡ 1.0x
-        </button>
         <button class="btn-ctrl" id="pb-btn-queue" title="Очередь">
             <i data-lucide="list-music" style="width:16px;height:16px"></i>
         </button>
@@ -1796,7 +1892,7 @@
                 <div class="volume-fill" id="pb-volume-fill" style="width:70%"></div>
             </div>
         </div>
-    </div>
+</div>
 </div>
 
 <!-- Playlist Context Menu -->
@@ -1943,66 +2039,7 @@
     </div>
 </div>
 
-<!-- ───── COMPACT MINI PLAYER OVERLAY ───── -->
-<div id="mini-player-overlay" class="mini-player-card pywebview-drag-region">
-    <!-- Top Header Bar (Appears on Hover): Title, Artist & Window Actions -->
-    <div class="mp-top-bar">
-        <div class="mp-info">
-            <div id="mp-title" class="mp-title" title="Трек не выбран">Трек не выбран</div>
-            <div id="mp-artist" class="mp-artist">Выберите трек</div>
-        </div>
-        <div class="mp-header-actions">
-            <button id="mp-btn-expand" class="icon-btn" title="Развернуть окно">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
-            </button>
-            <button id="mp-btn-minimize" class="icon-btn" title="Свернуть">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            </button>
-            <button id="mp-btn-close" class="icon-btn btn-close" title="Закрыть">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-        </div>
-    </div>
 
-    <!-- Main Compact Row (Always visible): Cover, Prev, Play, Next, Like -->
-    <div class="mp-compact-row">
-        <!-- Cover Art / Music Note -->
-        <div class="mp-cover-wrap">
-            <svg id="mp-cover-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:50%;height:50%;opacity:0.6;position:absolute;top:25%;left:25%;"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-            <img id="mp-cover" src="" alt="Cover" style="display:none" onload="this.style.display='block'" onerror="this.style.display='none'">
-        </div>
-
-        <!-- Controls: Prev, Play/Pause, Next -->
-        <div class="mp-controls-row">
-            <button id="mp-btn-prev" class="btn-ctrl" title="Предыдущий">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
-            </button>
-            <button id="mp-btn-play" class="btn-ctrl btn-play-mini" title="Воспроизведение">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-            </button>
-            <button id="mp-btn-next" class="btn-ctrl" title="Следующий" aria-label="Next">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
-            </button>
-            <button id="mp-btn-stop" class="btn-ctrl" title="Остановить" aria-label="Stop">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" stroke="none"><rect x="4" y="4" width="16" height="16"></rect></svg>
-            </button>
-        </div>
-
-        <!-- Like Button -->
-        <button id="mp-btn-like" class="icon-btn" title="Нравится">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>
-        </button>
-    </div>
-
-    <!-- Duration Progress Bar (Appears on Hover) -->
-    <div class="mp-progress-row">
-        <span id="mp-time-current" class="mp-time">0:00</span>
-        <div class="progress-track" id="mp-progress-track">
-            <div class="progress-fill" id="mp-progress-fill" style="transform: translateX(-100%)"></div>
-        </div>
-        <span id="mp-time-total" class="mp-time">0:00</span>
-    </div>
-</div>
 
 <!-- ============================================== -->
 <!-- ONBOARDING WIZARD -->
@@ -2138,7 +2175,7 @@
     </div>
 </div>
 
-<script type="module" src="js/main.js?v=20260813"></script><script>
+<script type="module" src="js/main.js?v=20260814_9"></script><script>
     // Initialize Lucide icons after DOM is ready
     document.addEventListener('DOMContentLoaded', () => {
         if (window.lucide) lucide.createIcons();
@@ -2153,7 +2190,7 @@
         </div>
         <div id="queue-drawer-content"></div>
     </div>
-
+</div>
 </body>
 </html>
 

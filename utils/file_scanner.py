@@ -21,9 +21,9 @@ class FileScanner:
         self._on_progress: Optional[Callable] = None
         self._on_complete: Optional[Callable] = None
         self._on_file_found: Optional[Callable] = None
-        # Store covers inside ui/web_new/covers so WebView can resolve them via relative paths
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self._covers_dir = os.path.abspath(os.path.join(project_root, "ui", "web_new", "covers"))
+        # Store covers inside ~/.nedotify/covers to prevent write-permission errors in packaged builds
+        self._covers_dir = os.path.join(os.path.expanduser("~"), ".nedotify", "covers")
+        os.makedirs(self._covers_dir, exist_ok=True)
 
     def scan_files(self, file_paths: list) -> list:
         """Import specific files. Returns list of added track dicts."""

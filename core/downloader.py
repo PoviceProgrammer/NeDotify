@@ -23,9 +23,35 @@ class DownloadManager:
         self._processor_thread = threading.Thread(target=self._process_queue, daemon=True)
         self._processor_thread.start()
 
+        self._batch_total = 0
+        self._batch_completed = 0
+        self._batch_active = False
 
         self._init_db_table()
         self._resume_pending_downloads()
+
+    def start_batch(self, total: int):
+        """Initialize batch download tracking."""
+        with self._queue_lock:
+            self._batch_total = total
+            self._batch_completed = 0
+            self._batch_active = total > 0
+
+    def cancel_batch(self):
+        """Cancel ongoing batch download and clear queue."""
+        with self._queue_lock:
+            self._queue.clear()
+            self._batch_active = False
+            self._batch_total = 0
+            self._batch_completed = 0
+        try:
+            self._core.db.conn.execute("UPDATE download_queue SET status = 'cancelled' WHERE status = 'pending'")
+            self._core.db.conn.commit()
+        except Exception:
+            pass
+        if hasattr(self._core, 'api') and getattr(self._core.api, '_emit', None):
+            self._core.api._emit('batch_download_cancelled', True)
+        return True
 
     def _init_db_table(self):
         """Create download queue table if missing."""
@@ -139,6 +165,23 @@ class DownloadManager:
                 self._core.db.conn.execute("UPDATE download_queue SET status = 'failed' WHERE track_id = ?", (track_id,))
                 self._core.db.conn.commit()
             except: pass
+        finally:
+            if self._batch_active:
+                self._batch_completed += 1
+                percent = round((self._batch_completed / max(1, self._batch_total)) * 100)
+                if hasattr(self._core, 'api') and getattr(self._core.api, '_emit', None):
+                    self._core.api._emit('batch_download_progress', {
+                        'current': self._batch_completed,
+                        'total': self._batch_total,
+                        'percent': percent,
+                        'track_id': track_id
+                    })
+                    if self._batch_completed >= self._batch_total:
+                        self._batch_active = False
+                        self._core.api._emit('batch_download_finished', {
+                            'total': self._batch_total,
+                            'completed': self._batch_completed
+                        })
 
     def stop(self):
         self._running = False

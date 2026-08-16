@@ -43,19 +43,16 @@ class AudioEngine:
     def play_track(self, track: dict) -> None:
         if not track:
             return None
-        self.queue.add_track(track, play_next=True)
-        self.queue.next_track()
+        self.queue.set_tracks([track], start_index=0)
         self._notify_track_changed()
 
     def play_queue(self, track_list: Optional[list] = None, index: int = 0) -> None:
         if track_list is not None:
-            self.queue.clear()
-            for t in track_list:
-                self.queue.add_track(t)
+            safe_index = max(0, min(index, len(track_list) - 1)) if track_list else 0
+            self.queue.set_tracks(track_list, start_index=safe_index)
         if not self.queue.tracks:
             return None
-        self.queue._current_index = index - 1
-        self.next_track()
+        self._notify_track_changed()
 
     def add_to_queue(self, track: dict, play_next: bool = False) -> None:
         self.queue.add_track(track, play_next=play_next)
@@ -141,65 +138,158 @@ class AudioEngine:
                         event.set()
 
                 def err_cb(e):
-                    try:
-                        logger.error(f"YouTube stream resolution error: {e}")
-                    finally:
-                        event.set()
+                    event.set()
 
                 try:
                     self.app_core.youtube.get_stream_url(source_id, cb, err_cb)
                 except Exception:
                     event.set()
-                event.wait(timeout=15)
-            if url or not track.get("title"):
+                event.wait(timeout=8)
+
+            if url:
                 return url
-            search_query = f"{track.get('artist', '')} {track['title']} audio".strip()
-            logger.info(f"Fallback search for failed track: {search_query}")
-            search_event = threading.Event()
-            search_results = []
 
-            def s_cb(res):
-                nonlocal search_results
+            # Tier 1 Fallback: SoundCloud Search (fast, no bot challenges, high reliability)
+            track_title = track.get("title", "")
+            track_artist = track.get("artist", "")
+
+            # If title is missing, equal to source_id, or looks like a 11-char hash
+            if not track_title or track_title == source_id or (len(track_title) == 11 and " " not in track_title):
                 try:
-                    search_results = res
-                finally:
-                    search_event.set()
+                    import urllib.request, json
+                    oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={source_id}&format=json"
+                    req = urllib.request.Request(oembed_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=3.0) as resp:
+                        o_data = json.loads(resp.read().decode('utf-8'))
+                        if o_data.get('title'):
+                            track_title = o_data['title']
+                            track['title'] = track_title
+                        if o_data.get('author_name') and not track_artist:
+                            track_artist = o_data['author_name']
+                            track['artist'] = track_artist
+                except Exception:
+                    pass
+            
+            import re
+            def _build_queries(artist_str, title_str):
+                c_queries = []
+                def clean_noise(text):
+                    if not text: return ""
+                    t = re.sub(r'[\(\[\{][^\)\]\}]*(?:official|video|audio|клип|релиз|remix|edit|lyric|prod|ft\.|feat\.|4k|hd|hq|live|topic)[^\)\]\}]*[\)\]\}]', '', text, flags=re.IGNORECASE)
+                    t = re.sub(r'\b(official\s+video|official\s+audio|music\s+video|lyric\s+video|премьера\s+клипа|клип|релиз)\b', '', t, flags=re.IGNORECASE)
+                    t = re.sub(r'[\(\[\{]\s*[\)\]\}]', '', t)
+                    return ' '.join(t.split()).strip()
 
-            def s_err(e):
-                search_event.set()
+                clean_t = clean_noise(title_str)
+                clean_a = clean_noise(artist_str)
 
-            try:
-                self.app_core.youtube.search(search_query, max_results=1, callback=s_cb, error_callback=s_err)
-            except Exception:
-                search_event.set()
-            search_event.wait(timeout=10)
-            if search_results and len(search_results) > 0:
-                new_id = search_results[0].get("source_id")
-                if new_id:
-                    logger.info(f"Fallback found new ID: {new_id}")
-                    if track.get("id"):
-                        try:
-                            self.app_core.db.update_track(track["id"], source_id=new_id)
-                        except Exception:
-                            pass
-                    track["source_id"] = new_id
-                    event2 = threading.Event()
+                if ' - ' in clean_t:
+                    parts = clean_t.split(' - ', 1)
+                    if len(parts) == 2:
+                        c_queries.append(f"{parts[0].strip()} {parts[1].strip()}")
+                        c_queries.append(clean_t.replace(' - ', ' '))
+                        c_queries.append(parts[1].strip())
 
-                    def cb2(*args):
+                if clean_a and clean_t:
+                    clean_a_short = re.sub(r'\s*-\s*Topic\b', '', clean_a, flags=re.IGNORECASE).strip()
+                    if clean_a_short.lower() not in clean_t.lower():
+                        c_queries.append(f"{clean_a_short} {clean_t}")
+                    else:
+                        c_queries.append(clean_t)
+                        
+                if clean_t:
+                    c_queries.append(clean_t)
+
+                raw = f"{artist_str} {title_str}".strip()
+                if raw:
+                    c_queries.append(raw)
+
+                out = []
+                for q in c_queries:
+                    qn = ' '.join(q.split()).strip()
+                    if qn and len(qn) > 1 and qn not in out:
+                        out.append(qn)
+                return out
+
+            candidates = _build_queries(track_artist, track_title)
+            for sc_query in candidates:
+                logger.info(f"YouTube resolution failed; trying SoundCloud fallback search for: {sc_query}")
+                sc_event = threading.Event()
+                sc_results = []
+
+                def sc_cb(res):
+                    if res:
+                        sc_results.extend(res)
+                    sc_event.set()
+
+                try:
+                    if hasattr(self.app_core, "soundcloud") and self.app_core.soundcloud:
+                        self.app_core.soundcloud.search(sc_query, max_results=3, callback=sc_cb, error_callback=lambda e: sc_event.set())
+                except Exception as ex:
+                    logger.debug(f"SoundCloud fallback search error: {ex}")
+                    sc_event.set()
+
+                sc_event.wait(timeout=3.0)
+
+                if sc_results:
+                    target_sc = sc_results[0].get("source_url") or sc_results[0].get("source_id")
+                    sc_stream_event = threading.Event()
+
+                    def _sc_done(s_url, s_meta=None):
                         nonlocal url
-                        try:
-                            url = args[0] if args else None
-                        finally:
-                            event2.set()
-
-                    def err_cb2(e):
-                        event2.set()
+                        url = s_url
+                        sc_stream_event.set()
 
                     try:
-                        self.app_core.youtube.get_stream_url(new_id, cb2, err_cb2)
+                        self.app_core.soundcloud.get_stream_url(target_sc, _sc_done, lambda e: sc_stream_event.set())
                     except Exception:
-                        event2.set()
-                    event2.wait(timeout=15)
+                        sc_stream_event.set()
+
+                    sc_stream_event.wait(timeout=3.5)
+                    if url:
+                        logger.info(f"SoundCloud fallback stream resolved successfully: {url[:50]}...")
+                        if track.get("id"):
+                            try:
+                                self.app_core.db.cache_stream(source, source_id, url)
+                            except Exception:
+                                pass
+                        return url
+
+            # Tier 2 Fallback: YouTube Search Alternative
+            search_query = f"{track_artist} {track_title} audio".strip()
+            if search_query:
+                search_event = threading.Event()
+                search_results = []
+
+                def s_cb(res):
+                    if res:
+                        search_results.extend(res)
+                    search_event.set()
+
+                try:
+                    self.app_core.youtube.search(search_query, max_results=1, callback=s_cb, error_callback=lambda e: search_event.set())
+                except Exception:
+                    search_event.set()
+
+                search_event.wait(timeout=6)
+                if search_results and len(search_results) > 0:
+                    new_id = search_results[0].get("source_id")
+                    if new_id and new_id != source_id:
+                        event2 = threading.Event()
+
+                        def cb2(*args):
+                            nonlocal url
+                            try:
+                                url = args[0] if args else None
+                            finally:
+                                event2.set()
+
+                        try:
+                            self.app_core.youtube.get_stream_url(new_id, cb2, lambda e: event2.set())
+                        except Exception:
+                            event2.set()
+                        event2.wait(timeout=8)
+
             return url
         if source == "spotify":
             import threading
