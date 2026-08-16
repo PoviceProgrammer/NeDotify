@@ -658,6 +658,89 @@ class AppApi:
         self._core.engine.queue.move_track(old_index, new_index)
         self._emit("queue_updated", self.get_queue())
 
+    def play_next(self, track: dict):
+        """Insert track at the next position in the queue (O-1)."""
+        try:
+            self._core.engine.add_to_queue(track, play_next=True)
+            self._emit("queue_updated", self.get_queue())
+            return {"success": True}
+        except Exception as e:
+            logger.error(f"play_next error: {e}")
+            return {"success": False, "error": str(e)}
+
+    def add_to_queue(self, track: dict):
+        """Append track to the end of the queue (O-1)."""
+        try:
+            self._core.engine.add_to_queue(track, play_next=False)
+            self._emit("queue_updated", self.get_queue())
+            return {"success": True}
+        except Exception as e:
+            logger.error(f"add_to_queue error: {e}")
+            return {"success": False, "error": str(e)}
+
+    def set_setting(self, section: str, key: str, value):
+        """Persist a setting value (section, key, value) (O-1)."""
+        try:
+            self._core.settings.set(section, key, value)
+            return {"success": True}
+        except Exception as e:
+            logger.error(f"set_setting error: {e}")
+            return {"success": False, "error": str(e)}
+
+    def yandex_device_auth(self):
+        """Start Yandex Music device-code authorization (O-1)."""
+        try:
+            svc = getattr(self._core, "yandex", None)
+            if not svc:
+                return {"success": False, "message": "Yandex Music сервис недоступен"}
+
+            def _on_code(code):
+                user_code = getattr(code, "user_code", "") or ""
+                ver_url = getattr(code, "verification_url", "") or "https://passport.yandex.ru/device"
+                self._emit("yandex_device_auth_code", {
+                    "user_code": user_code,
+                    "verification_url": ver_url
+                })
+
+            def _worker():
+                try:
+                    from yandex_music import Client
+                    if not hasattr(Client, "device_auth"):
+                        self._emit("yandex_device_auth_result", {
+                            "success": False,
+                            "message": "Установленная библиотека yandex-music не поддерживает device-авторизацию. Введите токен вручную в поле ниже."
+                        })
+                        return
+                    client = svc._get_client()
+                    if client is None:
+                        client = Client()
+                    token = client.device_auth(on_code=_on_code, timeout=300)
+                    if token and getattr(token, "access_token", ""):
+                        self._core.settings.set("auth", "yandex_token", token.access_token)
+                        self._core.settings.set("auth", "yandex_token_valid", True)
+                        svc.reset_client()
+                        self._emit("yandex_device_auth_result", {
+                            "success": True,
+                            "message": "Авторизация Яндекс Музыки выполнена успешно"
+                        })
+                    else:
+                        self._emit("yandex_device_auth_result", {
+                            "success": False,
+                            "message": "Не удалось получить токен Яндекс Музыки"
+                        })
+                except Exception as e:
+                    logger.error("Yandex device auth failed: %s", e)
+                    self._emit("yandex_device_auth_result", {
+                        "success": False,
+                        "message": f"Ошибка авторизации Яндекс Музыки: {type(e).__name__}"
+                    })
+
+            threading.Thread(target=_worker, daemon=True).start()
+            return {"success": True, "message": "Запрос авторизации запущен"}
+        except Exception as e:
+            logger.error("yandex_device_auth error: %s", e)
+            return {"success": False, "message": str(e)}
+
     def set_volume(self, volume: int):
         """Set playback volume (0-100)."""
         self._core.settings.set("audio", "volume", volume)
@@ -1537,6 +1620,8 @@ class AppApi:
                 success, msg = self._core.zapret.stop()
             self._core.settings.set("zapret", "enabled", enabled and success)
             self._core.settings.set("zapret", "mode", mode)
+            self._core.settings.set("zapret", "custom_args", custom_args or "")
+            self._core.settings.set("zapret", "binary_path", binary_path or "")
             is_running = self._core.zapret.is_running()
             return {
                 "success": success,
@@ -1582,7 +1667,9 @@ class AppApi:
             status = self._core.zapret.get_status()
             status["mode"] = self._core.settings.get("zapret", "mode", "youtube_discord")
             status["enabled"] = self._core.settings.get("zapret", "enabled", False)
-            status["autoupdate"] = self._core.settings.get("zapret", "autoupdate", True)
+            status["autoupdate"] = self._core.settings.get("zapret", "autoupdate", False)
+            status["custom_args"] = self._core.settings.get("zapret", "custom_args", "")
+            status["binary_path"] = self._core.settings.get("zapret", "binary_path", "")
             return status
         except Exception as e:
             return {"running": False, "enabled": False, "mode": "youtube_discord", "error": str(e), "binary_found": False}

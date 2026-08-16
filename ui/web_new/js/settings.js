@@ -319,16 +319,50 @@ export function initSettings() {
                 statusEl.innerHTML = '⏳ Запрос кода авторизации...';
                 statusEl.style.color = 'var(--text-sec)';
             }
+            btnYandexAuth.disabled = true;
             if (window.pywebview && window.pywebview.api && window.pywebview.api.yandex_device_auth) {
-                window.pywebview.api.yandex_device_auth();
+                window.pywebview.api.yandex_device_auth().then(res => {
+                    if (res && !res.success) {
+                        if (statusEl) {
+                            statusEl.style.display = 'none';
+                        }
+                        btnYandexAuth.disabled = false;
+                        showToast(res.message || 'Ошибка авторизации Яндекс Музыки', 'error');
+                    }
+                }).catch(() => {
+                    if (statusEl) {
+                        statusEl.style.display = 'none';
+                    }
+                    btnYandexAuth.disabled = false;
+                });
             } else {
                 showToast('Функция пока недоступна (Yandex Auth)', 'info');
                 if (statusEl) {
                     statusEl.style.display = 'none';
                 }
                 btnYandexAuth.disabled = false;
-                btnYandexAuth.textContent = '🔑 Получить токен';
             }
+        });
+
+        document.addEventListener('nedotify:yandex_device_auth_code', (e) => {
+            const statusEl = document.getElementById('yandex-device-status');
+            const data = e.detail || {};
+            if (statusEl) {
+                statusEl.style.display = 'block';
+                statusEl.innerHTML = `🔑 Код авторизации: <b style="color:var(--primary);font-weight:800;letter-spacing:2px;">${escapeHtml(data.user_code || '')}</b><br><span style="font-size:11px;">Откройте ${escapeHtml(data.verification_url || 'passport.yandex.ru/device')} и введите код</span>`;
+                statusEl.style.color = 'var(--text-sec)';
+            }
+        });
+
+        document.addEventListener('nedotify:yandex_device_auth_result', (e) => {
+            const statusEl = document.getElementById('yandex-device-status');
+            const data = e.detail || {};
+            if (statusEl) {
+                statusEl.style.display = 'block';
+                statusEl.innerHTML = escapeHtml(data.message || '');
+                statusEl.style.color = data.success ? 'var(--primary)' : 'var(--danger, #f87171)';
+            }
+            btnYandexAuth.disabled = false;
         });
     }
 
@@ -1221,6 +1255,8 @@ function setupZapretPanel() {
     const updateStatus = document.getElementById('zapret-update-status');
 
     let selectedMode = 'youtube_discord';
+    let savedCustomArgs = '';
+    let savedBinaryPath = '';
 
     if (selectZapretMode) {
         selectZapretMode.addEventListener('change', (e) => {
@@ -1272,8 +1308,8 @@ function setupZapretPanel() {
     }
 
     async function applyZapret(enable) {
-        const customArgs = '';
-        const binPath = '';
+        const customArgs = savedCustomArgs || '';
+        const binPath = savedBinaryPath || '';
 
         if (window.pywebview?.api?.toggle_zapret) {
             const res = await window.pywebview.api.toggle_zapret(enable, selectedMode, customArgs, binPath);
@@ -1316,8 +1352,10 @@ function setupZapretPanel() {
                 if (versionBadge && status.version) {
                     versionBadge.textContent = status.version;
                 }
+                savedCustomArgs = status.custom_args || '';
+                savedBinaryPath = status.binary_path || '';
                 if (toggleAutoUpdate && status.autoupdate !== undefined) {
-                    toggleAutoUpdate.classList.toggle('on', status.autoupdate !== false);
+                    toggleAutoUpdate.classList.toggle('on', status.autoupdate === true);
                 }
             }
         }).catch(() => {});

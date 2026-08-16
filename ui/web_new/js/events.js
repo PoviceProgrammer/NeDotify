@@ -186,6 +186,14 @@ export function initEvents() {
                 document.dispatchEvent(new CustomEvent('nedotify:lyrics_ready', { detail: data }));
                 break;
 
+            case 'yandex_device_auth_code':
+                document.dispatchEvent(new CustomEvent('nedotify:yandex_device_auth_code', { detail: data }));
+                break;
+
+            case 'yandex_device_auth_result':
+                document.dispatchEvent(new CustomEvent('nedotify:yandex_device_auth_result', { detail: data }));
+                break;
+
             // ================= FUTURE EVENTS / DEPRECATED =================
             case 'proxy_status':
             case 'smart_home_ready':

@@ -101,11 +101,19 @@ export function initOnboarding() {
         } catch(e) {}
 
         if (window.pywebview && window.pywebview.api) {
-            await window.pywebview.api.complete_onboarding(settingsData);
+            try {
+                await window.pywebview.api.complete_onboarding(settingsData);
+            } catch(e) {
+                console.error('complete_onboarding failed:', e);
+            }
             
             const urlInput = document.getElementById('ob-playlist-url');
             if (urlInput && urlInput.value && !isSkip) {
-                window.pywebview.api.import_external_playlist(urlInput.value);
+                try {
+                    window.pywebview.api.import_external_playlist(urlInput.value);
+                } catch(e) {
+                    console.error('import_external_playlist failed:', e);
+                }
             }
         }
 

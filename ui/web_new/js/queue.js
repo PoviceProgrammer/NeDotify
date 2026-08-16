@@ -50,15 +50,14 @@ export function initQueue() {
         if (e.key === 'Escape' && isQueueVisible) closeQueue();
     });
 
-    // Listen to queue updates from python
-    window.addEventListener('pywebviewready', () => {
-        window.pywebview.api.on_queue_updated = (q) => {
-            incrementQueueVersion();
-            if (isQueueVisible) {
-                currentQueue = q.tracks;
-                renderQueue(q.tracks, q.current_index);
-            }
-        };
+    // Listen to queue updates from python (dispatched via events.js as nedotify:queue_updated)
+    document.addEventListener('nedotify:queue_updated', (e) => {
+        incrementQueueVersion();
+        const q = e.detail || {};
+        currentQueue = q.tracks || [];
+        if (isQueueVisible) {
+            renderQueue(q.tracks, q.current_index);
+        }
     });
 
     document.addEventListener('nedotify:track_changed', () => {

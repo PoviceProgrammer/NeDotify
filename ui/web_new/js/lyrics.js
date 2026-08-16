@@ -9,6 +9,9 @@ let isTranslationEnabled = false;
 let currentTranslationMap = {};
 let currentRawLyricsText = "";
 
+// O-12: freshness guard — stale get_lyrics responses must not overwrite a newer track
+let lyricsLoadGeneration = 0;
+
 function toggleTranslation() {
     isTranslationEnabled = !isTranslationEnabled;
     const btns = [
@@ -160,6 +163,9 @@ function loadCurrentTrackLyrics() {
     currentRawLyricsText = "";
     currentOffsetMs = 0;
 
+    // O-12: bump generation — only the freshest request may render
+    const loadGen = ++lyricsLoadGeneration;
+
     const trackKey = String(track.source_id || track.id || track.title || '');
     if (trackKey) {
         try {
@@ -176,6 +182,7 @@ function loadCurrentTrackLyrics() {
         
         if (p && p.then) {
             p.then(res => {
+                if (loadGen !== lyricsLoadGeneration) return;
                 if (res) {
                     renderLyrics({
                         syncedLyrics: res.syncedLyrics || res.synced_lyrics || (typeof res === 'string' ? res : null),
@@ -186,6 +193,7 @@ function loadCurrentTrackLyrics() {
                     renderLyrics(null);
                 }
             }).catch(err => {
+                if (loadGen !== lyricsLoadGeneration) return;
                 console.error("get_lyrics error:", err);
                 renderLyrics(null);
             });

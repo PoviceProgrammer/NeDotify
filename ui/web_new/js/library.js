@@ -308,6 +308,9 @@ export async function loadLibrarySummary() {
 let currentActiveSection = 'favorites';
 let currentSelectedPlaylistData = null;
 
+// O-11: generation counter — stale async renders must not overwrite newer views
+let libraryGeneration = 0;
+
 export function refreshActiveLibraryView() {
     loadLibrarySummary();
     if (currentActiveSection === 'favorites') {
@@ -323,6 +326,9 @@ window.refreshActiveLibraryView = refreshActiveLibraryView;
 export async function selectSection(type, data = null) {
     currentActiveSection = type;
     if (data) currentSelectedPlaylistData = data;
+
+    // O-11: bump generation — any in-flight render from an older selection is discarded
+    const viewGen = ++libraryGeneration;
 
     const emptyEl = document.getElementById('lib-empty-selection');
     const activeView = document.getElementById('lib-active-view');
@@ -357,9 +363,18 @@ export async function selectSection(type, data = null) {
         } catch (e) {}
 
         let backendFavs = [];
-        if (window.pywebview?.api?.get_favorites) {
-            backendFavs = await window.pywebview.api.get_favorites() || [];
+        try {
+            if (window.pywebview?.api?.get_favorites) {
+                backendFavs = await window.pywebview.api.get_favorites() || [];
+            }
+        } catch (e) {
+            console.error('get_favorites failed:', e);
+            backendFavs = [];
         }
+
+        // M-10: never leave the spinner hanging — show a message on failure
+        if (backendFavs === null || backendFavs === undefined) backendFavs = [];
+        if (viewGen !== libraryGeneration) return;
 
         const combined = [...localFavs];
         backendFavs.forEach(bt => {
@@ -389,9 +404,15 @@ export async function selectSection(type, data = null) {
         if (titleEl) titleEl.textContent = 'Оффлайн треки';
 
         let downloaded = [];
-        if (window.pywebview?.api?.get_downloaded_tracks) {
-            downloaded = await window.pywebview.api.get_downloaded_tracks() || [];
+        try {
+            if (window.pywebview?.api?.get_downloaded_tracks) {
+                downloaded = await window.pywebview.api.get_downloaded_tracks() || [];
+            }
+        } catch (e) {
+            console.error('get_downloaded_tracks failed:', e);
+            downloaded = [];
         }
+        if (viewGen !== libraryGeneration) return;
 
         // Deduplicate tracks by id / source_id
         const seen = new Set();
@@ -423,9 +444,15 @@ export async function selectSection(type, data = null) {
         if (titleEl) titleEl.textContent = data.name || 'Плейлист';
 
         let tracks = [];
-        if (window.pywebview?.api?.get_playlist_tracks) {
-            tracks = await window.pywebview.api.get_playlist_tracks(data.id) || [];
+        try {
+            if (window.pywebview?.api?.get_playlist_tracks) {
+                tracks = await window.pywebview.api.get_playlist_tracks(data.id) || [];
+            }
+        } catch (e) {
+            console.error('get_playlist_tracks failed:', e);
+            tracks = [];
         }
+        if (viewGen !== libraryGeneration) return;
 
         // Deduplicate tracks by id / source_id
         const seen = new Set();

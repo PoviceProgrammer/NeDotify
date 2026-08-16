@@ -125,6 +125,12 @@ class AppCore:
         self.proxy.start()
         self.plugins.load_plugins()
 
+        # Watchdog: monitor playback health (O-13)
+        try:
+            self.watchdog.start()
+        except Exception as we:
+            logger.error(f"Failed to start watchdog: {we}")
+
     def re_resolve_stream_url_async(self, source, source_id, callback=None, on_error=None, quality="high", track=None):
         """Construct lookup URL, call get_stream_url asynchronously and trigger callbacks."""
         def worker():
