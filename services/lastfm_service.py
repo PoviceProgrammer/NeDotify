@@ -131,6 +131,11 @@ class LastFMService(BaseMusicService):
             self._session_local.session = session
         return session
 
+    @property
+    def _session(self) -> requests.Session:
+        """Backward-compatible alias: the calling thread's session (M-7)."""
+        return self._get_session()
+
     def _acquire_token(self) -> None:
         """Token-bucket rate limiter: waits via Condition, never time.sleep (M-7)."""
         with self._rate_lock:

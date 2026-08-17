@@ -15,7 +15,7 @@ import { initQueue } from './queue.js?v=20260814_9';
 import { initOnboarding } from './onboarding.js?v=20260814_9';
 import { initContextMenu } from './contextmenu.js?v=20260814_9';
 import { initHotkeys } from './hotkeys.js?v=20260814_9';
-import { initEfficiency } from './efficiency.js?v=20260814_9';
+import { initEfficiency, initBlurObserver } from './efficiency.js?v=20260814_9';
 
 
 
@@ -275,6 +275,7 @@ async function init() {
         initContextMenu();
         initHotkeys();
         initEfficiency();
+        initBlurObserver();
 
         // Window controls (frameless) - Initialize first to ensure app can always be closed
         document.getElementById('btn-mini-player')?.addEventListener('click', () => {

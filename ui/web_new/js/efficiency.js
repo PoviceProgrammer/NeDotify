@@ -1,3 +1,39 @@
+export function initBlurObserver() {
+    // C-5: heavy backdrop-filter disabled on offscreen glass cards (IntersectionObserver)
+    if (!('IntersectionObserver' in window)) return;
+    if (document.documentElement.classList.contains('perf-low')) return;
+
+    const selector = '.card, .glass-panel, .player-glass-card, .settings-modal-card';
+    let scanScheduled = false;
+
+    const scan = () => {
+        scanScheduled = false;
+        document.querySelectorAll(selector).forEach(el => {
+            if (!el._blurObserved) {
+                el._blurObserved = true;
+                io.observe(el);
+            }
+        });
+    };
+
+    const io = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+            entry.target.classList.toggle('blur-out', !entry.isIntersecting);
+        }
+    }, { rootMargin: '150px 0px', threshold: 0 });
+
+    // Debounced re-scan for dynamically rendered content (feeds, views, modals)
+    const observer = new MutationObserver(() => {
+        if (scanScheduled) return;
+        scanScheduled = true;
+        requestAnimationFrame(scan);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    scan();
+    window.addEventListener('nedotify:app_ready', scan);
+}
+
 export let isEfficiencyModeActive = false;
 
 export function initEfficiency() {
