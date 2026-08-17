@@ -47,6 +47,7 @@ def update_ytdlp_safely():
     try:
         stamp_file = os.path.expanduser("~/.nedotify/.last_ytdlp_update")
         os.makedirs(os.path.dirname(stamp_file), exist_ok=True)
+        pending_file = os.path.expanduser("~/.nedotify/.ytdlp_update_pending")
 
         if os.path.exists(stamp_file):
             last_mtime = os.path.getmtime(stamp_file)
@@ -55,9 +56,29 @@ def update_ytdlp_safely():
                 logger.info(f"yt-dlp update skipped (last update {age_hours:.1f}h ago)")
                 return
 
-        pathlib.Path(stamp_file).touch()
-        subprocess.run([sys.executable, "-m", "pip", "install", "-U", "--pre", "yt-dlp"], capture_output=True, timeout=60)
-        logger.info("yt-dlp auto-update finished safely.")
+        # M-5: never pip-install while the app is running (can break the imported
+        # yt_dlp mid-session) — schedule the update for the next launch instead.
+        if not os.path.exists(pending_file):
+            pathlib.Path(pending_file).touch()
+            logger.info("yt-dlp update deferred to next launch (never mid-run).")
+            return
+
+        try:
+            os.remove(pending_file)
+        except OSError:
+            pass
+        # M-5: stable releases only (no --pre)
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"],
+            capture_output=True,
+            timeout=120,
+        )
+        if result.returncode == 0:
+            # M-5: stamp ONLY after a successful update
+            pathlib.Path(stamp_file).touch()
+            logger.info("yt-dlp auto-update finished safely.")
+        else:
+            logger.warning(f"yt-dlp update failed (rc={result.returncode}): {(result.stderr or b'')[:200]}")
     except Exception as e:
         logger.warning(f"Failed to auto-update yt-dlp: {e}")
 
@@ -134,6 +155,12 @@ class AppCore:
             self.watchdog.start()
         except Exception as we:
             logger.error(f"Failed to start watchdog: {we}")
+
+        # M-9: LUFS/ReplayGain scanner was never started (ProcessPool was idle)
+        try:
+            self.lufs_scanner.start()
+        except Exception as le:
+            logger.warning(f"Failed to start LUFS scanner: {le}")
 
         # O-3: periodic DB cache cleanup by expires_at (every 10 minutes)
         self._cache_cleanup_stop = threading.Event()

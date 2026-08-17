@@ -20,6 +20,17 @@ let currentPlaybackRate = 1.0;
 let currentPreservesPitch = true;
 let currentQueueVersion = 0;
 
+// M-1: throttle volume RPC to 100ms (last value wins); flush immediately on release
+let volumeRpcTimer = null;
+
+function scheduleVolumeRpc(volume, immediate) {
+    if (volumeRpcTimer !== null) clearTimeout(volumeRpcTimer);
+    volumeRpcTimer = setTimeout(() => {
+        volumeRpcTimer = null;
+        api('set_volume', volume);
+    }, immediate ? 0 : 100);
+}
+
 export function getQueueVersion() {
     return currentQueueVersion;
 }
@@ -378,11 +389,7 @@ export function seekTo(posMs) {
             console.error("Error seeking audio:", e);
         }
     }
-    if (window.pywebview?.api?.set_position) {
-        try {
-            window.pywebview.api.set_position(posMs);
-        } catch (e) {}
-    }
+    // M-1: single RPC with the final value (set_position is a no-op on the backend)
     api('report_position', posMs, currentDuration);
 }
 
@@ -647,13 +654,15 @@ export function initPlayer() {
             setEl('pb-volume-fill', 'width', `${pct * 100}%`);
             updateVolumeIcon(currentVolume);
             activeAudio.volume = isMuted ? 0 : (currentVolume / 100) * currentReplayGain;
-            api('set_volume', currentVolume);
+            // M-1: throttle RPC while dragging — last value wins
+            scheduleVolumeRpc(currentVolume, false);
         },
         onRelease: (pct) => {
             isDraggingVolume = false;
             currentVolume = Math.round(pct * 100);
             activeAudio.volume = isMuted ? 0 : (currentVolume / 100) * currentReplayGain;
-            api('set_volume', currentVolume);
+            // M-1: flush the final value immediately
+            scheduleVolumeRpc(currentVolume, true);
         }
     });
 
@@ -663,7 +672,8 @@ export function initPlayer() {
         setEl('pb-volume-fill', 'width', `${currentVolume}%`);
         updateVolumeIcon(currentVolume);
         if (activeAudio) activeAudio.volume = isMuted ? 0 : (currentVolume / 100) * currentReplayGain;
-        api('set_volume', currentVolume);
+        // M-1: discrete event — send immediately
+        scheduleVolumeRpc(currentVolume, true);
     };
 
     // Volume icon mute toggle

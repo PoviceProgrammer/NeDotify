@@ -268,28 +268,31 @@ export async function loadLibrary() {
 export async function loadLibrarySummary() {
     // Update Favorite count
     try {
-        let localFavs = [];
+        let localIds = new Set();
         try {
             const raw = localStorage.getItem('nedotify_favorites');
-            if (raw) localFavs = JSON.parse(raw);
+            if (raw) {
+                const entries = JSON.parse(raw);
+                entries.forEach(e => {
+                    const id = typeof e === 'string' ? e : String((e && e.id) || (e && e.source_id) || '');
+                    if (id) localIds.add(id);
+                });
+            }
         } catch (e) {}
 
         let backendFavs = [];
         if (window.pywebview?.api?.get_favorites) {
             backendFavs = await window.pywebview.api.get_favorites() || [];
         }
+        if (backendFavs === null || backendFavs === undefined) backendFavs = [];
 
-        const favCombined = [...localFavs];
-        backendFavs.forEach(bt => {
-            const bId = bt.id || bt.source_id;
-            if (!favCombined.some(lt => (lt.id || lt.source_id) === bId)) {
-                favCombined.push(bt);
-            }
-        });
+        const backendIds = new Set(backendFavs.map(bt => String(bt.id || bt.source_id || '')));
+        // M-2/M-3: count = unique backend + local-only IDs (legacy sync may lag)
+        const favCount = backendFavs.length + [...localIds].filter(id => id && !backendIds.has(id)).length;
 
         const favSub = document.getElementById('lib-fav-count');
         if (favSub) {
-            favSub.textContent = favCombined.length > 0 ? `${favCombined.length} треков` : 'Нет треков';
+            favSub.textContent = favCount > 0 ? `${favCount} треков` : 'Нет треков';
         }
     } catch (e) {}
 
@@ -411,10 +414,16 @@ export async function selectSection(type, data = null) {
         if (favCard) favCard.classList.add('active');
         if (titleEl) titleEl.textContent = 'Любимые треки';
 
-        let localFavs = [];
+        // M-2: localStorage holds IDs only (full objects live in the backend DB)
+        const localIds = new Set();
         try {
             const raw = localStorage.getItem('nedotify_favorites');
-            if (raw) localFavs = JSON.parse(raw);
+            if (raw) {
+                JSON.parse(raw).forEach(e => {
+                    const id = typeof e === 'string' ? e : String((e && e.id) || (e && e.source_id) || '');
+                    if (id) localIds.add(id);
+                });
+            }
         } catch (e) {}
 
         let backendFavs = [];
@@ -431,16 +440,19 @@ export async function selectSection(type, data = null) {
         if (backendFavs === null || backendFavs === undefined) backendFavs = [];
         if (viewGen !== libraryGeneration) return;
 
-        const combined = [...localFavs];
-        backendFavs.forEach(bt => {
-            const bId = String(bt.id || bt.source_id);
-            if (!combined.some(lt => String(lt.id || lt.source_id) === bId)) {
-                combined.push(bt);
-            }
+        // M-3: O(n) dedup via Set
+        const seen = new Set();
+        const combined = backendFavs.filter(bt => {
+            const bId = String(bt.id || bt.source_id || '');
+            if (!bId || seen.has(bId)) return false;
+            seen.add(bId);
+            return true;
         });
+        // local-only IDs (not yet synced) still count
+        const totalFavs = combined.length + [...localIds].filter(id => id && !seen.has(id)).length;
 
         currentActiveTracks = combined;
-        if (subEl) subEl.textContent = `${combined.length} треков`;
+        if (subEl) subEl.textContent = `${totalFavs} треков`;
 
         if (combined.length === 0) {
             tracksContainer.innerHTML = '<div class="empty-state">Нет любимых треков</div>';
@@ -523,10 +535,6 @@ export async function selectSection(type, data = null) {
 
         renderLibraryList(tracksContainer, tracks);
     }
-}
-
-export async function loadFavorites() {
-    refreshActiveLibraryView();
 }
 
 export async function loadDownloaded() {
@@ -754,14 +762,11 @@ function setupPlaylistDrag(item, list) {
     handle.addEventListener('pointerdown', onPointerDown);
 }
 
-let _dragItem = null;
 let _dragGhost = null;
 let _placeholder = null;
 let _dragOffsetY = 0;
 
 function startDrag(item, list, clientY) {
-    _dragItem = item;
-
     const rect = item.getBoundingClientRect();
     _dragOffsetY = clientY - rect.top;
 
@@ -834,7 +839,6 @@ function endDrag(item, list) {
         document.body.style.userSelect = '';
         _dragGhost = null;
         _placeholder = null;
-        _dragItem = null;
 
         // Persist new order (only draggable items, skip locked)
         const allItems = [...list.querySelectorAll('.lib-playlist-item')];

@@ -2,36 +2,6 @@
 import { createTrackElement, renderIcons, formatTime, filterVisibleTracks, escapeHtml } from './utils.js?v=20260814_9';
 import { getCurrentTrack } from './player.js?v=20260814_9';
 
-// в”Ђв”Ђв”Ђ API Image Parser (Extract high quality artwork fields from response objects) в”Ђв”Ђв”Ђ
-export function parseApiImageUrl(mediaObject, source = 'youtube') {
-    if (!mediaObject) return '';
-    if (typeof mediaObject === 'string') return mediaObject;
-    if (mediaObject.cover_url) return mediaObject.cover_url;
-    if (mediaObject.artwork_url) return mediaObject.artwork_url;
-    
-    if (source === 'youtube' || mediaObject.source === 'youtube') {
-        if (mediaObject.thumbnails && mediaObject.thumbnails.length > 0) {
-            return mediaObject.thumbnails[0].url || mediaObject.thumbnails[0];
-        }
-        if (mediaObject.thumbnail && typeof mediaObject.thumbnail === 'string') {
-            return mediaObject.thumbnail;
-        }
-        if (mediaObject.source_id) {
-            return `https://i.ytimg.com/vi/${mediaObject.source_id}/hqdefault.jpg`;
-        }
-    }
-    
-    if (source === 'soundcloud' || mediaObject.source === 'soundcloud') {
-        if (mediaObject.artwork_url) {
-            return mediaObject.artwork_url.replace('-large', '-t500x500');
-        }
-        if (mediaObject.user && mediaObject.user.avatar_url) {
-            return mediaObject.user.avatar_url;
-        }
-    }
-    return '';
-}
-
 // Gradient seed backgrounds for fallback covers (visible ONLY if image loading fails)
 const colors = [
     'linear-gradient(135deg, #f53d3d 0%, #ff803b 100%)', // Red/Orange

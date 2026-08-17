@@ -56,14 +56,13 @@ function adjustLyricsOffset(deltaMs) {
     }));
     const track = getCurrentTrack();
     if (track) {
+        try {
+            // M-2: single key for the active track — no unbounded per-track localStorage growth
+            localStorage.setItem('nedotify_lyrics_offset_current', currentOffsetMs);
+        } catch(e) {}
         const trackKey = String(track.source_id || track.id || track.title || '');
-        if (trackKey) {
-            try {
-                localStorage.setItem(`nedotify_lyrics_offset_${trackKey}`, currentOffsetMs);
-            } catch(e) {}
-            if (window.pywebview?.api?.save_setting) {
-                window.pywebview.api.save_setting(`lyrics_offset_${trackKey}`, currentOffsetMs, 'lyrics');
-            }
+        if (trackKey && window.pywebview?.api?.save_setting) {
+            window.pywebview.api.save_setting(`lyrics_offset_${trackKey}`, currentOffsetMs, 'lyrics');
         }
     }
     currentLineIndex = -1;
@@ -166,14 +165,12 @@ function loadCurrentTrackLyrics() {
     // O-12: bump generation — only the freshest request may render
     const loadGen = ++lyricsLoadGeneration;
 
-    const trackKey = String(track.source_id || track.id || track.title || '');
-    if (trackKey) {
-        try {
-            const saved = localStorage.getItem(`nedotify_lyrics_offset_${trackKey}`);
-            if (saved) currentOffsetMs = parseInt(saved) || 0;
-        } catch(e) {
-            currentOffsetMs = 0;
-        }
+    // M-2: localStorage keeps only the active track's offset (no unbounded per-track keys)
+    try {
+        const saved = localStorage.getItem('nedotify_lyrics_offset_current');
+        if (saved) currentOffsetMs = parseInt(saved) || 0;
+    } catch(e) {
+        currentOffsetMs = 0;
     }
     
     if (window.pywebview?.api) {

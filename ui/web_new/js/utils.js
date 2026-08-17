@@ -31,6 +31,15 @@ export function formatTime(seconds) {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
+// M-9: single implementation (was duplicated in main.js where the import failed silently)
+export function formatListeningTimeShort(ms) {
+    if (!ms || ms <= 0) return '0 ч';
+    const hours = Math.floor(ms / (1000 * 3600));
+    if (hours > 0) return `${hours} ч`;
+    const minutes = Math.floor(ms / (1000 * 60));
+    return `${minutes} мин`;
+}
+
 export function formatListeningTime(ms) {
     if (!ms || ms <= 0) return "0 мин";
     const totalSeconds = Math.floor(ms / 1000);
@@ -58,10 +67,11 @@ export function extractDominantColor(imgEl) {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
-    
-    canvas.width = imgEl.naturalWidth || imgEl.width || 100;
-    canvas.height = imgEl.naturalHeight || imgEl.height || 100;
-    
+
+    // M-11: sample a small downscaled copy instead of full-size getImageData
+    canvas.width = 50;
+    canvas.height = 50;
+
     try {
         ctx.drawImage(imgEl, 0, 0, canvas.width, canvas.height);
         const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -269,16 +279,20 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
                 icon.style.fill = track.is_favorite ? 'currentColor' : 'none';
             }
 
-            // Sync with localStorage
+            // Sync with localStorage (M-2: store IDs only, not full track objects)
             try {
                 let favs = JSON.parse(localStorage.getItem('nedotify_favorites') || '[]');
-                const tId = track.id || track.source_id;
+                const tId = String(track.id || track.source_id || '');
+                const matches = (f) => {
+                    if (typeof f === 'string') return f === tId;
+                    return String((f && f.id) || (f && f.source_id) || '') === tId;
+                };
                 if (track.is_favorite) {
-                    if (!favs.some(f => (f.id || f.source_id) === tId)) {
-                        favs.push(track);
+                    if (tId && !favs.some(matches)) {
+                        favs.push(tId);
                     }
                 } else {
-                    favs = favs.filter(f => (f.id || f.source_id) !== tId);
+                    favs = favs.filter(f => !matches(f));
                 }
                 localStorage.setItem('nedotify_favorites', JSON.stringify(favs));
             } catch (err) {}
@@ -321,6 +335,57 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
     });
 
     return item;
+}
+
+// M-2: warn when localStorage usage exceeds ~4MB (silent quota errors are the symptom)
+export function checkLocalStorageQuota(warnThresholdBytes = 4 * 1024 * 1024) {
+    try {
+        let total = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k === null) continue;
+            const v = localStorage.getItem(k);
+            total += k.length + (v ? v.length : 0);
+        }
+        if (total > warnThresholdBytes) {
+            console.warn(`[storage] localStorage usage ${(total / 1024 / 1024).toFixed(1)}MB exceeds ${(warnThresholdBytes / 1024 / 1024)}MB — clean up custom backgrounds or large cached data`);
+        }
+        return total;
+    } catch (e) {
+        return 0;
+    }
+}
+
+// M-2: downscale a base64 image to max 256px JPEG before persisting (backgrounds)
+export function compressBackgroundImage(dataUrl, callback) {
+    if (!dataUrl || !dataUrl.startsWith('data:image')) {
+        callback(dataUrl);
+        return;
+    }
+    try {
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const MAX = 256;
+                const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+                const w = Math.max(1, Math.round(img.width * scale));
+                const h = Math.max(1, Math.round(img.height * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) { callback(dataUrl); return; }
+                ctx.drawImage(img, 0, 0, w, h);
+                callback(canvas.toDataURL('image/jpeg', 0.8));
+            } catch (err) {
+                callback(dataUrl);
+            }
+        };
+        img.onerror = () => callback(dataUrl);
+        img.src = dataUrl;
+    } catch (err) {
+        callback(dataUrl);
+    }
 }
 
 export function renderIcons(targetEl) {

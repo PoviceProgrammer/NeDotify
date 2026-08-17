@@ -6,10 +6,41 @@ Search and stream audio from SoundCloud via yt-dlp.
 from typing import Callable, Optional
 import threading
 import logging
+import time
+import collections
 from concurrent.futures import ThreadPoolExecutor
 from services.base_service import BaseMusicService
 
 logger = logging.getLogger(__name__)
+
+
+class _TTLCache:
+    """M-8: bounded cache with TTL and LRU eviction."""
+
+    def __init__(self, max_entries=100, ttl_seconds=600):
+        self._data = collections.OrderedDict()
+        self._max = max_entries
+        self._ttl = ttl_seconds
+
+    def get(self, key):
+        entry = self._data.pop(key, None)
+        if entry is None:
+            return None
+        timestamp, value = entry
+        if time.time() - timestamp > self._ttl:
+            return None
+        self._data[key] = entry  # refresh recency
+        return value
+
+    def set(self, key, value):
+        self._data.pop(key, None)
+        self._data[key] = (time.time(), value)
+        while len(self._data) > self._max:
+            self._data.popitem(last=False)
+
+    def __len__(self):
+        return len(self._data)
+
 
 try:
     import yt_dlp
@@ -35,8 +66,8 @@ class SoundCloudService(BaseMusicService):
         self._ydl_search = None
         self._client_id = None
         self._client_id_lock = threading.Lock()
-        self._related_cache = {}
-        self._waveform_cache = {}
+        self._related_cache = _TTLCache(max_entries=100, ttl_seconds=600)
+        self._waveform_cache = _TTLCache(max_entries=100, ttl_seconds=600)
         
         self._session = requests.Session()
         adapter = HTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=2)
@@ -482,11 +513,9 @@ class SoundCloudService(BaseMusicService):
             raw_id = raw_id.rstrip("/").split("/")[-1]
 
         cache_key = f"sc_rel:{raw_id}:{limit}"
-        now = time.time()
-        if cache_key in self._related_cache:
-            entry_time, data = self._related_cache[cache_key]
-            if now - entry_time < 86400:
-                return data
+        cached = self._related_cache.get(cache_key)
+        if cached is not None:
+            return cached
 
         cid = self._get_client_id()
         if not cid:
@@ -521,7 +550,7 @@ class SoundCloudService(BaseMusicService):
                     tracks.append(track)
 
                 if tracks:
-                    self._related_cache[cache_key] = (now, tracks)
+                    self._related_cache.set(cache_key, tracks)
                     return tracks
         except Exception as e:
             self.logger.warning(f"SoundCloud related tracks fetch error for {raw_id}: {e}")
@@ -537,8 +566,9 @@ class SoundCloudService(BaseMusicService):
         if json_url.endswith('.png'):
             json_url = json_url[:-4] + '.json'
 
-        if json_url in self._waveform_cache:
-            return self._waveform_cache[json_url]
+        cached = self._waveform_cache.get(json_url)
+        if cached is not None:
+            return cached
 
         try:
             r = self._session.get(json_url, timeout=4.0)
@@ -559,7 +589,7 @@ class SoundCloudService(BaseMusicService):
                             resampled.append(round(max(chunk) if chunk else 0.1, 3))
                         normalized = resampled
 
-                    self._waveform_cache[json_url] = normalized
+                    self._waveform_cache.set(json_url, normalized)
                     return normalized
         except Exception as e:
             self.logger.warning(f"Failed to fetch waveform JSON from {json_url}: {e}")

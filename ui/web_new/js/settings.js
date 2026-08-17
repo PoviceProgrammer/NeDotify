@@ -1,5 +1,5 @@
 // NeDotify Р Р†Р вЂљ" Settings Module
-import { renderIcons, escapeHtml } from './utils.js?v=20260814_9';
+import { renderIcons, escapeHtml, compressBackgroundImage } from './utils.js?v=20260814_9';
 import { initParticles, stopParticles, setParticlesFps } from './particles.js?v=20260814_9';
 import { setVisualizerFps } from './visualizer.js?v=20260814_9';
 import { initOnboarding } from './onboarding.js?v=20260814_9';
@@ -1413,10 +1413,13 @@ function setupBackgroundPanel() {
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     const dataUrl = event.target.result;
-                    saveSetting('custom_bg_image', dataUrl, 'theme');
-                    const blurVal = document.getElementById('slider-bg-blur')?.value || 0;
-                    const dimVal = document.getElementById('slider-bg-dim')?.value || 30;
-                    applyCustomBg(dataUrl, blurVal, dimVal);
+                    // M-2: downscale to 256px JPEG so the 5MB localStorage quota isn't eaten by backgrounds
+                    compressBackgroundImage(dataUrl, (compressed) => {
+                        saveSetting('custom_bg_image', compressed, 'theme');
+                        const blurVal = document.getElementById('slider-bg-blur')?.value || 0;
+                        const dimVal = document.getElementById('slider-bg-dim')?.value || 30;
+                        applyCustomBg(compressed, blurVal, dimVal);
+                    });
                 };
                 reader.readAsDataURL(file);
             }

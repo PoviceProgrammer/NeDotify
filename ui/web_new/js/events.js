@@ -2,7 +2,7 @@
 import { onTrackChanged, onStateChanged, onPositionChanged, applySettings } from './player.js?v=20260814_9';
 import { onSearchResults } from './search.js?v=20260814_9';
 import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome } from './home.js?v=20260814_9';
-import { loadLibrary, loadFavorites, loadDownloaded, loadPlaylists } from './library.js?v=20260814_9';
+import { loadLibrary, loadDownloaded, loadPlaylists } from './library.js?v=20260814_9';
 import { applySettingsFromBackend, onStorageInfo, setYandexWarning } from './settings.js?v=20260814_9';
 import { showToast, renderIcons, escapeHtml } from './utils.js?v=20260814_9';
 

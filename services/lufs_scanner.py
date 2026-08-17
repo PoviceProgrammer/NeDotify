@@ -74,7 +74,8 @@ class LufsScannerService:
                     track_id = row['id']
                     filepath = row['file_path']
                     if os.path.exists(filepath):
-                        futures[track_id] = self._pool.submit(analyze_lufs, filepath)
+                        # M-9 fix: key by the future, not the track id
+                        futures[self._pool.submit(analyze_lufs, filepath)] = track_id
                     else:
                         self._update_db(track_id, 0.0, 0.0)
                 from concurrent.futures import as_completed

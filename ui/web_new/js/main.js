@@ -8,7 +8,7 @@ import { initSettings, applySettingsFromBackend, loadSettings } from './settings
 import { initParticles } from './particles.js?v=20260814_9';
 import { initVisualizer } from './visualizer.js?v=20260814_9';
 import { initEvents } from './events.js?v=20260814_9';
-import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml } from './utils.js?v=20260814_9';
+import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota } from './utils.js?v=20260814_9';
 import { initLyrics } from './lyrics.js?v=20260814_9';
 import { initEqualizer } from './equalizer.js?v=20260814_9';
 import { initQueue } from './queue.js?v=20260814_9';
@@ -277,6 +277,15 @@ async function init() {
         initEfficiency();
         initBlurObserver();
 
+        // M-9: debug.js was orphaned — load it on demand via ?debug=1 (never in normal UI)
+        try {
+            if (new URLSearchParams(location.search).has('debug')) {
+                const dbgScript = document.createElement('script');
+                dbgScript.src = 'js/debug.js';
+                document.head.appendChild(dbgScript);
+            }
+        } catch (e) {}
+
         // Window controls (frameless) - Initialize first to ensure app can always be closed
         document.getElementById('btn-mini-player')?.addEventListener('click', () => {
             toggleMiniPlayerMode();
@@ -315,6 +324,8 @@ async function init() {
         }));
         await safeInit('Events', () => initEvents());
         await safeInit('Pages', () => initPages());
+        // M-2: warn early if localStorage is near the ~5MB quota
+        try { checkLocalStorageQuota(); } catch (e) {}
         await safeInit('Player', () => initPlayer());
         await safeInit('Search', () => initSearch());
         await safeInit('Library', () => initLibrary());
@@ -418,10 +429,13 @@ async function init() {
 }
 
 // ─── Profile Page ───
+// M-4: single cache-busting version — must match the ?v= used by static imports
+const CACHE_VERSION = '20260814_9';
+
 async function loadProfile() {
     try {
-        const { createTrackElement, renderIcons, formatListeningTimeShort } = await import('./utils.js?v=20260813');
-        const { getCurrentTrack } = await import('./player.js?v=20260813');
+        const { createTrackElement, renderIcons, formatListeningTimeShort } = await import(`./utils.js?v=${CACHE_VERSION}`);
+        const { getCurrentTrack } = await import(`./player.js?v=${CACHE_VERSION}`);
 
         // Refresh nickname and avatar
         const nicknameInput = document.getElementById('profile-name-input');
@@ -627,14 +641,6 @@ function setupProfileAndGreeting() {
             }
         });
     }
-}
-
-function formatListeningTimeShort(ms) {
-    if (!ms || ms <= 0) return '0 ч';
-    const hours = Math.floor(ms / (1000 * 3600));
-    if (hours > 0) return `${hours} ч`;
-    const minutes = Math.floor(ms / (1000 * 60));
-    return `${minutes} мин`;
 }
 
 
