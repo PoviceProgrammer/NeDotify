@@ -901,12 +901,13 @@ class DatabaseManager:
         # O-3: downloaded files are long-lived — never auto-purged by expires_at
         cursor = self.conn.cursor()
         cursor.execute(
-            "UPDATE stream_cache SET cached_file_path = ?, expires_at = NULL WHERE source = ? AND source_id = ?",
+            "UPDATE stream_cache SET cached_file_path = ?, expires_at = NULL, cached_at = CURRENT_TIMESTAMP "
+            "WHERE source = ? AND source_id = ?",
             (file_path, source, source_id),
         )
         self.conn.commit()
 
-    def get_cached_stream(self, source: str, source_id: str, max_age_seconds: int = 86400) -> Optional[Dict[str, Any]]:
+    def get_cached_stream(self, source: str, source_id: str, max_age_seconds: int = 14400) -> Optional[Dict[str, Any]]:
         cursor = self.conn.cursor()
         cursor.execute(
             """

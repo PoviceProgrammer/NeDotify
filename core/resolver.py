@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 _MEM_TTL = 3600.0        # in-memory URL lifetime (seconds)
 _RESOLVE_TIMEOUT = 12.0  # max wait for a single-flight resolution
-_DB_MAX_AGE = 86400      # DB stream_cache max age (seconds)
+_DB_MAX_AGE = 14400      # DB stream_cache max age (seconds) — googlevideo URLs expire in ~6h
 
 
 class _Flight:

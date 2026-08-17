@@ -203,7 +203,40 @@ export function setEq(preamp, bands) {
 }
 
 // Sync time updates to UI
+const STALL_FALLBACK_MS = 8000;
+
+function armStallFallback(audio) {
+    disarmStallFallback(audio);
+    audio._stallTimer = setTimeout(() => {
+        audio._stallTimer = null;
+        if (audio === activeAudio && currentTrack && !audio.paused) {
+            console.warn('Audio stream stalled (no data), falling back to re-resolution...');
+            audio._errorRetries = (audio._errorRetries || 0) + 1;
+            if (audio._errorRetries <= 3) {
+                if (window.pywebview?.api?.play_track) {
+                    window.pywebview.api.play_track(currentTrack);
+                }
+            } else {
+                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка воспроизведения потока', type: 'error' } }));
+                api('next_track');
+            }
+        }
+    }, STALL_FALLBACK_MS);
+}
+
+function disarmStallFallback(audio) {
+    if (audio._stallTimer) {
+        clearTimeout(audio._stallTimer);
+        audio._stallTimer = null;
+    }
+}
+
 function setupAudioEvents(audio) {
+    audio.addEventListener('stalled', () => armStallFallback(audio));
+    audio.addEventListener('waiting', () => armStallFallback(audio));
+    audio.addEventListener('playing', () => disarmStallFallback(audio));
+    audio.addEventListener('canplay', () => disarmStallFallback(audio));
+    audio.addEventListener('progress', () => disarmStallFallback(audio));
     audio.addEventListener('timeupdate', () => {
         if (audio === activeAudio && !isDraggingProgress) {
             // Prefer HTML5 duration if backend didn't provide one
@@ -257,6 +290,7 @@ function setupAudioEvents(audio) {
     });
     audio.addEventListener('error', (e) => {
         if (audio === activeAudio) {
+            disarmStallFallback(audio);
             console.warn('Audio stream playback error, retrying...', e);
             audio._errorRetries = (audio._errorRetries || 0) + 1;
             if (audio._errorRetries <= 3 && currentTrack) {
@@ -345,6 +379,8 @@ export function playTrack(track, streamUrl) {
     }
     
     loadAudioSource(newAudio, finalSrc);
+    newAudio._errorRetries = 0;
+    disarmStallFallback(newAudio);
     newAudio.playbackRate = currentPlaybackRate;
     if ('preservesPitch' in newAudio) newAudio.preservesPitch = currentPreservesPitch;
     else if ('webkitPreservesPitch' in newAudio) newAudio.webkitPreservesPitch = currentPreservesPitch;
