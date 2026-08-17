@@ -509,9 +509,11 @@ class AppApi:
             return
 
         track_copy = dict(track)
-        # Proxy cloud stream URL if needed
+        # Proxy cloud stream URL if the track already has a resolvable stream/file.
+        # Tracks whose stream is still being resolved keep an empty stream_url so the
+        # frontend can show a loading state instead of hanging on the proxy.
         if track_copy.get("source") in ("youtube", "soundcloud", "yandex", "vk"):
-            if not track_copy.get("stream_url"):
+            if not track_copy.get("stream_url") and track_copy.get("file_path"):
                 proxy_url = self._core.proxy.get_proxy_url(
                     track_copy.get("source"),
                     track_copy.get("source_id"),
@@ -630,17 +632,38 @@ class AppApi:
             source = target_track.get("source", "local") if isinstance(target_track, dict) else "local"
             source_id = target_track.get("source_id") if isinstance(target_track, dict) else None
 
-            # If local or already has stream_url / file_path:
-            if source == "local" or not source_id or target_track.get("file_path") or target_track.get("stream_url"):
+            def _fp_usable(fp):
+                if not fp:
+                    return False
+                if fp.startswith("http://") or fp.startswith("https://"):
+                    return True
+                try:
+                    return os.path.exists(fp) and os.path.getsize(fp) > 1024
+                except OSError:
+                    return False
+
+            fp = target_track.get("file_path") if isinstance(target_track, dict) else None
+            if source == "local" or _fp_usable(fp):
+                logger.info(f"api.py -> play_track fast path: source={source}, file_path={str(fp)[:80] if fp else None}")
                 self._core.engine.play_queue(track_list, safe_index)
                 return
 
-            # Check DB stream cache
-            cached = self._core.db.get_cached_stream(source, source_id)
-            if cached and (cached.get("cached_file_path") or cached.get("stream_url")):
-                target_track["file_path"] = cached.get("cached_file_path") or cached.get("stream_url")
-                self._core.engine.play_queue(track_list, safe_index)
-                return
+            # Check DB stream cache (local file or fresh url)
+            if source_id:
+                cached = self._core.db.get_cached_stream(source, source_id)
+                if cached:
+                    cfp = cached.get("cached_file_path")
+                    if cfp and os.path.exists(cfp) and os.path.getsize(cfp) > 1024:
+                        target_track["file_path"] = cfp
+                        logger.info(f"api.py -> play_track cache hit (local file): {cfp}")
+                        self._core.engine.play_queue(track_list, safe_index)
+                        return
+                    c_url = cached.get("stream_url")
+                    if c_url and (c_url.startswith("http://") or c_url.startswith("https://")):
+                        target_track["file_path"] = c_url
+                        logger.info(f"api.py -> play_track cache hit (url): {c_url[:80]}")
+                        self._core.engine.play_queue(track_list, safe_index)
+                        return
 
             # Check on-disk streams directory
             import re
@@ -657,38 +680,90 @@ class AppApi:
                         found_local = True
                         break
                 if found_local:
+                    logger.info(f"api.py -> play_track streams dir hit: {target_track['file_path']}")
                     self._core.engine.play_queue(track_list, safe_index)
                     return
 
-            # Resolve target track asynchronously before starting queue playback
+            # Start queue playback immediately (frontend shows loading state),
+            # resolve the target stream in background and notify again when ready.
+            self._core.engine.play_queue(track_list, safe_index)
+
             def on_queue_resolved(stream_url, metadata=None):
-                logger.info(f"api.py -> queue track resolved! stream_url={stream_url[:60] if stream_url else None}")
-                if stream_url:
+                if not stream_url:
+                    logger.warning(f"api.py -> queue resolve FAILED: {source}/{source_id}")
+                    if self._core.engine.queue.current_track is target_track:
+                        self._on_audio_error(f"Не удалось найти поток для {target_track.get('title') or source_id}")
+                    return
+                logger.info(f"api.py -> queue track resolved! stream_url={stream_url[:80]}")
+                if self._core.engine.queue.current_track is target_track:
                     target_track["file_path"] = stream_url
                     if metadata and isinstance(metadata, dict):
                         if metadata.get("duration") and not target_track.get("duration"):
                             target_track["duration"] = metadata["duration"]
-                self._core.engine.play_queue(track_list, safe_index)
+                    self._core.engine.play_queue(track_list, safe_index)
 
-            self._core.re_resolve_stream_url_async(source, source_id, callback=on_queue_resolved, track=target_track)
+            def on_queue_error(err):
+                logger.warning(f"api.py -> queue resolve error: {err}")
+                if self._core.engine.queue.current_track is target_track:
+                    self._on_audio_error(f"Не удалось найти поток для {target_track.get('title') or source_id}")
+
+            self._core.re_resolve_stream_url_async(source, source_id, callback=on_queue_resolved, on_error=on_queue_error, track=target_track)
         else:
             self._resolve_track(track, lambda t: self._core.engine.play_track(t))
 
     def _resolve_track(self, track: dict, play_callback):
-        """Resolve stream URL for online track before sending to player."""
+        """Ensure stream for an online track. Keeps the queue intact when the track is already current."""
         source = track.get("source", "local")
         source_id = track.get("source_id")
 
-        if source == "local" or not source_id or track.get("file_path") or track.get("stream_url"):
-            play_callback(track)
+        def _fp_usable(fp):
+            if not fp:
+                return False
+            if fp.startswith("http://") or fp.startswith("https://"):
+                return True
+            try:
+                return os.path.exists(fp) and os.path.getsize(fp) > 1024
+            except OSError:
+                return False
+
+        def _is_current():
+            cur = self._core.engine.queue.current_track
+            if cur is track:
+                return True
+            if not cur or not source_id:
+                return False
+            return cur.get("source") == source and cur.get("source_id") == source_id
+
+        def _deliver():
+            if _is_current() and len(self._core.engine.queue.tracks) > 1:
+                cur = self._core.engine.queue.current_track
+                cur["file_path"] = track.get("file_path")
+                self._core.engine._notify_track_changed()
+            else:
+                play_callback(track)
+
+        fp = track.get("file_path")
+        if source == "local" or _fp_usable(fp):
+            logger.info(f"api.py -> _resolve_track fast path: source={source}, file_path={str(fp)[:80] if fp else None}")
+            _deliver()
             return
 
         # Check DB cached stream first
-        cached = self._core.db.get_cached_stream(source, source_id)
-        if cached and (cached.get("cached_file_path") or cached.get("stream_url")):
-            track["file_path"] = cached.get("cached_file_path") or cached.get("stream_url")
-            play_callback(track)
-            return
+        if source_id:
+            cached = self._core.db.get_cached_stream(source, source_id)
+            if cached:
+                cfp = cached.get("cached_file_path")
+                if cfp and os.path.exists(cfp) and os.path.getsize(cfp) > 1024:
+                    track["file_path"] = cfp
+                    logger.info(f"api.py -> _resolve_track cache hit (local file): {cfp}")
+                    _deliver()
+                    return
+                c_url = cached.get("stream_url")
+                if c_url and (c_url.startswith("http://") or c_url.startswith("https://")):
+                    track["file_path"] = c_url
+                    logger.info(f"api.py -> _resolve_track cache hit (url): {c_url[:80]}")
+                    _deliver()
+                    return
 
         # Check on-disk streams directory
         import re
@@ -701,22 +776,42 @@ class AppApi:
                 cand = os.path.join(streams_dir, f"{cache_id}.{ext}")
                 if os.path.exists(cand) and os.path.getsize(cand) > 1024:
                     track["file_path"] = cand
-                    play_callback(track)
+                    logger.info(f"api.py -> _resolve_track streams dir hit: {cand}")
+                    _deliver()
                     return
 
         # Re-resolve stream url asynchronously
-        def on_resolved(stream_url, metadata=None):
-            logger.info(f"api.py -> on_resolved! stream_url={stream_url[:60] if stream_url else None}")
-            if stream_url:
-                track["file_path"] = stream_url
-                if metadata and isinstance(metadata, dict):
-                    if metadata.get("duration") and not track.get("duration"):
-                        track["duration"] = metadata["duration"]
-                play_callback(track)
-            else:
-                self._on_audio_error(f"Could not resolve stream for {source}/{source_id}")
+        cur_start = self._core.engine.queue.current_track
 
-        self._core.re_resolve_stream_url_async(source, source_id, callback=on_resolved, track=track)
+        def on_resolved(stream_url, metadata=None):
+            if not stream_url:
+                logger.warning(f"api.py -> on_resolved FAILED: {source}/{source_id}")
+                if _is_current():
+                    self._on_audio_error(f"Не удалось найти поток для {track.get('title') or source_id}")
+                return
+            logger.info(f"api.py -> on_resolved! stream_url={stream_url[:80]}")
+            track["file_path"] = stream_url
+            if metadata and isinstance(metadata, dict):
+                if metadata.get("duration") and not track.get("duration"):
+                    track["duration"] = metadata["duration"]
+            if _is_current():
+                cur = self._core.engine.queue.current_track
+                cur["file_path"] = stream_url
+                if metadata and isinstance(metadata, dict):
+                    if metadata.get("duration") and not cur.get("duration"):
+                        cur["duration"] = metadata["duration"]
+                self._core.engine._notify_track_changed()
+            elif self._core.engine.queue.current_track is cur_start:
+                # Selection unchanged since resolution started: safe to deliver
+                play_callback(track)
+            # else: user moved on - drop stale resolution
+
+        def on_resolve_error(err):
+            logger.warning(f"api.py -> on_resolve error: {err}")
+            if _is_current():
+                self._on_audio_error(f"Не удалось найти поток для {track.get('title') or source_id}")
+
+        self._core.re_resolve_stream_url_async(source, source_id, callback=on_resolved, on_error=on_resolve_error, track=track)
 
     def stop_track(self):
         """Stop audio playback."""

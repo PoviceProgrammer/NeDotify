@@ -86,24 +86,34 @@ class AudioEngine:
         if self._on_track_changed and self.queue.current_track:
             track = self.queue.current_track.copy()
             if not track.get("stream_url"):
-                if track.get("source") == "local":
-                    track["stream_url"] = track.get("url") or track.get("file_path")
-                elif track.get("file_path") and os.path.exists(track["file_path"]):
-                    track["stream_url"] = track["file_path"]
-                elif self.proxy and getattr(self.proxy, "port", None):
-                    import urllib.parse as urllib_parse
-                    t_id = track.get("id") or 0
-                    src = track.get("source") or "youtube"
-                    src_id = urllib_parse.quote(str(track.get("source_id") or ""))
-                    title = urllib_parse.quote(str(track.get("title") or ""))
-                    artist = urllib_parse.quote(str(track.get("artist") or ""))
-                    fp = track.get("file_path")
-                    if fp and (fp.startswith("http://") or fp.startswith("https://")) and not any(d in fp for d in ("youtube.com", "youtu.be", "soundcloud.com", "music.yandex.ru")):
-                        quoted_url = urllib_parse.quote(fp)
-                        proxy_url = f"http://127.0.0.1:{self.proxy.port}/?url={quoted_url}&source={src}&source_id={src_id}&title={title}&artist={artist}"
-                    else:
-                        proxy_url = f"http://127.0.0.1:{self.proxy.port}/api/stream?track_id={t_id}&source={src}&source_id={src_id}&title={title}&artist={artist}"
-                    track["stream_url"] = proxy_url
+                import urllib.parse as urllib_parse
+                fp = track.get("file_path")
+                if not fp and track.get("source") == "local":
+                    fp = track.get("url")
+                if fp and (fp.startswith("http://") or fp.startswith("https://")):
+                    # Remote stream URL: serve through proxy (SSRF-guarded), never expose raw URL
+                    if self.proxy and getattr(self.proxy, "port", None):
+                        src = track.get("source") or "youtube"
+                        src_id = urllib_parse.quote(str(track.get("source_id") or ""))
+                        title = urllib_parse.quote(str(track.get("title") or ""))
+                        artist = urllib_parse.quote(str(track.get("artist") or ""))
+                        if not any(d in fp for d in ("youtube.com", "youtu.be", "soundcloud.com", "music.yandex.ru")):
+                            quoted_url = urllib_parse.quote(fp)
+                            proxy_url = f"http://127.0.0.1:{self.proxy.port}/?url={quoted_url}&source={src}&source_id={src_id}&title={title}&artist={artist}"
+                        else:
+                            t_id = track.get("id") or 0
+                            proxy_url = f"http://127.0.0.1:{self.proxy.port}/api/stream?track_id={t_id}&source={src}&source_id={src_id}&title={title}&artist={artist}"
+                        track["stream_url"] = proxy_url
+                elif fp and os.path.exists(fp):
+                    # Local cached file: always serve through proxy - browsers cannot play raw fs paths
+                    if self.proxy and getattr(self.proxy, "port", None):
+                        t_id = track.get("id") or 0
+                        src = track.get("source") or "youtube"
+                        src_id = urllib_parse.quote(str(track.get("source_id") or ""))
+                        title = urllib_parse.quote(str(track.get("title") or ""))
+                        artist = urllib_parse.quote(str(track.get("artist") or ""))
+                        track["stream_url"] = f"http://127.0.0.1:{self.proxy.port}/api/stream?track_id={t_id}&source={src}&source_id={src_id}&title={title}&artist={artist}"
+                # else: stream not resolved yet - leave stream_url empty; frontend shows loading state
             self._on_track_changed(track)
 
     def resolve_stream_url(self, track: dict) -> Optional[str]:

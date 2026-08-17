@@ -113,6 +113,7 @@ class AppCore:
 
         # Proxy, Downloader & Plugins
         self.proxy = LocalProxyManager(self)
+        self.engine.proxy = self.proxy
         self.downloader = DownloadManager(self)
         self.plugins = PluginManager(self)
         self.zapret = ZapretService(self.settings)

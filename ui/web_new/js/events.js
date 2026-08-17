@@ -222,6 +222,7 @@ export function initEvents() {
             case 'audio_error':
                 const cleanAudioErr = (data?.message || '').toString().replace(/\x1b\[[0-9;]*m/g, '');
                 showToast('Ошибка воспроизведения: ' + cleanAudioErr, 'error');
+                window._pendingResolveKey = null;
                 onStateChanged('stopped');
                 break;
 

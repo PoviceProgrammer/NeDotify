@@ -224,16 +224,25 @@ function handleStreamError(audio, reason) {
         setTimeout(() => {
             if (audio === activeAudio && currentTrack && String(currentTrack.id || currentTrack.source_id || currentTrack.title || '') === trackIdKey) {
                 if (window.pywebview?.api?.play_track) {
-                    window.pywebview.api.play_track(currentTrack);
+                    // Force full re-resolution: drop cached stream/file urls so backend re-resolves
+                    const cleanTrack = { ...currentTrack, file_path: undefined, stream_url: undefined };
+                    window.pywebview.api.play_track(cleanTrack);
                 }
             }
         }, 1500 * currentTrackRetries);
     } else {
-        console.error(`Audio stream failed after ${currentTrackRetries} attempts. Skipping to next track.`);
-        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Не удалось воспроизвести: ${currentTrack.title || 'трек'}`, type: 'error' } }));
+        console.error(`Audio stream failed after ${currentTrackRetries} attempts. Stopping playback.`);
         currentTrackRetries = 0;
         lastRetriedTrackId = null;
-        api('next_track');
+        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Не удалось воспроизвести: ${currentTrack.title || 'трек'}`, type: 'error' } }));
+        if (activeAudio) {
+            try { activeAudio.pause(); } catch(e) {}
+            try { activeAudio.currentTime = 0; } catch(e) {}
+            activeAudio.src = '';
+            try { activeAudio.load(); } catch(e) {}
+        }
+        isPlaying = false;
+        onStateChanged('stopped');
     }
 }
 
@@ -974,6 +983,12 @@ export function onTrackChanged(track) {
     setElText('pp-time-total', formatTime(currentDuration / 1000));
     setElText('mp-time-total', formatTime(currentDuration / 1000));
     
+    // Fresh stream means a fresh attempt: reset retry accounting
+    if (track.stream_url) {
+        currentTrackRetries = 0;
+        lastRetriedTrackId = null;
+    }
+    
     // Auto-play new track via HTML5 Audio (or pause on initial app launch)
     if (isInitialLoad) {
         isInitialLoad = false;
@@ -988,9 +1003,27 @@ export function onTrackChanged(track) {
             navigator.mediaSession.playbackState = 'paused';
         }
     } else if (track.stream_url) {
-        playTrack(track, track.stream_url);
+        window._pendingResolveKey = null;
+        // Avoid restarting playback when backend re-emits the same stream (e.g. double resolution notify)
+        if (!activeAudio.src || activeAudio.src !== track.stream_url) {
+            playTrack(track, track.stream_url);
+        }
     } else if (track.file_path) {
         playTrack(track, track.file_path);
+    } else if (track.source && track.source !== 'local' && track.source_id && window.pywebview?.api?.play_track) {
+        // Stream not resolved yet: show loading and request background resolution.
+        // Backend keeps the queue intact for the current track.
+        isPlaying = false;
+        onStateChanged('loading');
+        const resolveKey = String(track.source) + '|' + String(track.source_id);
+        if (window._pendingResolveKey !== resolveKey) {
+            window._pendingResolveKey = resolveKey;
+            const pendingTrack = { ...track, file_path: undefined, stream_url: undefined };
+            window.pywebview.api.play_track(pendingTrack);
+        }
+    } else {
+        isPlaying = false;
+        onStateChanged('paused');
     }
     
     const coverUrl = getCoverUrl(track);
