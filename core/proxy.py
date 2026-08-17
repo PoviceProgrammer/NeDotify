@@ -239,7 +239,13 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             except urllib.error.HTTPError as e:
                 if e.code in (401, 403, 404, 410):
                     if e.code in (403, 410) and source and source_id and attempt == 0:
-                        logger.info(f'Received HTTP {e.code} for {source}:{source_id}. Attempting self-healing re-resolution...')
+                        logger.info(f'Received HTTP {e.code} for {source}:{source_id}. Invalidating cache and self-healing re-resolution...')
+                        try:
+                            resolver = getattr(self.server.app_core, 'resolver', None)
+                            if resolver is not None:
+                                resolver.invalidate(source, source_id)
+                        except Exception:
+                            pass
                         try:
                             import threading
                             resolve_event = threading.Event()
@@ -251,7 +257,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                                 resolve_event.set()
 
                             self.server.app_core.re_resolve_stream_url_async(source, source_id, _on_resolved)
-                            resolve_event.wait(timeout=15)
+                            resolve_event.wait(timeout=7)
 
                             if new_url:
                                 req = urllib.request.Request(new_url)

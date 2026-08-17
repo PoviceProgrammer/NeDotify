@@ -232,6 +232,7 @@ function disarmStallFallback(audio) {
 }
 
 function setupAudioEvents(audio) {
+    audio.addEventListener('loadstart', () => armStallFallback(audio));
     audio.addEventListener('stalled', () => armStallFallback(audio));
     audio.addEventListener('waiting', () => armStallFallback(audio));
     audio.addEventListener('playing', () => disarmStallFallback(audio));

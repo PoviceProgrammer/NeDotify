@@ -962,6 +962,15 @@ class DatabaseManager:
         )
         self.conn.commit()
 
+    def invalidate_cached_stream(self, source: str, source_id: str) -> None:
+        """Clear a dead stream URL but keep the row (downloaded-file rows survive)."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE stream_cache SET stream_url = NULL WHERE source = ? AND source_id = ?",
+            (source, source_id),
+        )
+        self.conn.commit()
+
     def cleanup_expired_cache(self) -> int:
         """O-3: purge stream_cache rows past expires_at (skips downloaded-file rows)."""
         cursor = self.conn.cursor()

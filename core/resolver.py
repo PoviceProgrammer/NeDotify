@@ -9,6 +9,7 @@ background resolution instead of each triggering the full network cascade.
 """
 
 import logging
+import re
 import threading
 import time
 from typing import Callable, Optional, Tuple
@@ -52,6 +53,19 @@ class StreamResolver:
     def _key(source: str, source_id) -> Tuple[str, str]:
         return (source, str(source_id))
 
+    @staticmethod
+    def _url_expired(url: Optional[str]) -> bool:
+        """A stream URL carrying an 'expire=' param (googlevideo) is dead past it."""
+        if not url:
+            return False
+        try:
+            m = re.search(r'[?&]expire=(\d{6,})', url)
+            if m and int(m.group(1)) < time.time() + 60:
+                return True
+        except Exception:
+            pass
+        return False
+
     def get_cached_url(self, source: str, source_id) -> Optional[str]:
         """Return a cached stream URL (in-memory first, then DB), or None."""
         key = self._key(source, source_id)
@@ -59,14 +73,18 @@ class StreamResolver:
         with self._lock:
             entry = self._mem.get(key)
             if entry and now - entry[1] <= self._mem_ttl:
-                self._stats["mem_hits"] += 1
-                return entry[0]
-            self._mem.pop(key, None)
+                if not self._url_expired(entry[0]):
+                    self._stats["mem_hits"] += 1
+                    return entry[0]
+                self._mem.pop(key, None)
 
         if self._db is not None:
             try:
                 cached = self._db.get_cached_stream(source, str(source_id), max_age_seconds=self._db_max_age)
                 if cached and cached.get("stream_url"):
+                    if self._url_expired(cached["stream_url"]):
+                        self.invalidate(source, str(source_id))
+                        return None
                     with self._lock:
                         self._mem[key] = (cached["stream_url"], now)
                     self._stats["db_hits"] += 1
@@ -134,6 +152,17 @@ class StreamResolver:
                 self._db.cache_stream(source, str(source_id), stream_url)
             except Exception as e:
                 logger.debug(f"Failed to cache refreshed stream URL: {e}")
+
+    def invalidate(self, source: str, source_id) -> None:
+        """Drop a dead URL from memory and clear it in the DB (keeps downloaded-file rows)."""
+        key = self._key(source, source_id)
+        with self._lock:
+            self._mem.pop(key, None)
+        if self._db is not None:
+            try:
+                self._db.invalidate_cached_stream(source, str(source_id))
+            except Exception as e:
+                logger.debug(f"Failed to invalidate cached stream URL: {e}")
 
     def _persist(self, source: str, source_id, url: str) -> None:
         key = self._key(source, source_id)
