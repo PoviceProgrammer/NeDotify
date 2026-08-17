@@ -128,7 +128,7 @@ export function initParticles() {
     resize();
     window.removeEventListener('resize', resize);
     window.addEventListener('resize', resize);
-    window.addEventListener('nedotify:mini_player_toggled', () => {
+    const onMiniPlayerToggled = () => {
         // O-6: pause when mini player hides the container, resume on restore
         if (document.body.classList.contains('mini-player-active')) {
             if (animFrameId) {
@@ -140,7 +140,9 @@ export function initParticles() {
             animFrameId = requestAnimationFrame(animate);
         }
         setTimeout(resize, 100);
-    });
+    };
+    window.removeEventListener('nedotify:mini_player_toggled', onMiniPlayerToggled);
+    window.addEventListener('nedotify:mini_player_toggled', onMiniPlayerToggled);
 
     let mouseThrottleId = null;
     const onMouseMove = (e) => {

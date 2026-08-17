@@ -2,6 +2,11 @@
 NeDotify - Local HTTP Stream Proxy
 Proxies cloud stream requests to inject authentication headers/cookies and support self-healing stream URL re-resolution.
 """
+import os
+import re
+import time
+import json
+import mimetypes
 import http.server
 import socketserver
 import urllib.request
@@ -9,6 +14,8 @@ import urllib.parse
 import urllib.error
 import threading
 import logging
+
+from core.api import _is_ssrf_safe_url  # mirrors core/api.py:_is_ssrf_safe_url; imported (not copied) — core.api does not import core.proxy, so no import cycle
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +51,6 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         logger.debug(format % args)
     def serve_local_file(self, file_path):
-        import os
-        import mimetypes
         file_size = os.path.getsize(file_path)
         content_type, _ = mimetypes.guess_type(file_path)
         if not content_type:
@@ -108,31 +113,36 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         query_params = urllib.parse.parse_qs(parsed_path.query)
         if parsed_path.path == '/api/stream':
             track_id = query_params.get('track_id', [None])[0]
-            if not track_id:
-                self.send_error(400, 'Missing track_id')
-                return None
-            import os
-            try:
-                track_id = int(track_id)
-            except ValueError:
-                pass
+            source = query_params.get('source', [None])[0]
+            source_id = query_params.get('source_id', [None])[0]
+            title = query_params.get('title', [''])[0]
+            artist = query_params.get('artist', [''])[0]
 
-            track = self.server.app_core.db.get_track(track_id)
+            int_track_id = None
+            if track_id:
+                try:
+                    parsed_id = int(track_id)
+                    if parsed_id > 0:
+                        int_track_id = parsed_id
+                except (ValueError, TypeError):
+                    pass
+
+            track = self.server.app_core.db.get_track(int_track_id) if int_track_id else None
             if not track:
-                source = query_params.get('source', ['youtube'])[0]
-                source_id = query_params.get('source_id', [None])[0]
-                title = query_params.get('title', [''])[0]
-                artist = query_params.get('artist', [''])[0]
+                if not source_id and not int_track_id:
+                    self.send_error(400, 'Missing track_id or source_id')
+                    return None
+                source = source if source else 'youtube'
                 track = {
-                    'id': track_id,
-                    'source': source if source else 'youtube',
+                    'id': int_track_id or 0,
+                    'source': source,
                     'source_id': source_id if source_id else f"{artist} {title}".strip(),
                     'title': title,
                     'artist': artist,
                 }
 
-            source = track.get('source')
-            source_id = track.get('source_id')
+            source = track.get('source') or source or 'youtube'
+            source_id = track.get('source_id') or source_id
 
             if source == 'local':
                 file_path = track.get('file_path') or track.get('url')
@@ -142,10 +152,24 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 self.send_error(404, 'Local file not found')
                 return None
 
+            # 1. Check DB stream cache
             cached_stream = self.server.app_core.db.get_cached_stream(source, source_id)
             if cached_stream and cached_stream.get('cached_file_path') and os.path.exists(cached_stream['cached_file_path']):
                 self.serve_local_file(cached_stream['cached_file_path'])
                 return None
+
+            # 2. Check on-disk cache directly
+            streams_dir = self.server.app_core.cache._streams_dir
+            safe_source = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source or 'unknown'))
+            safe_source_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id or ''))
+            cache_name = f"{safe_source}_{safe_source_id}" if safe_source_id else (f"track_{int_track_id}" if int_track_id else f"temp_{int(time.time()*1000)}")
+
+            for ext in ("m4a", "webm", "mp3", "ogg"):
+                candidate_path = os.path.join(streams_dir, f"{cache_name}.{ext}")
+                if os.path.exists(candidate_path) and os.path.getsize(candidate_path) > 1024:
+                    self.server.app_core.db.set_cached_file(source, source_id, candidate_path)
+                    self.serve_local_file(candidate_path)
+                    return None
 
             target_url = self.server.app_core.engine.resolve_stream_url(track)
             if not target_url:
@@ -155,9 +179,9 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     pass
                 return None
 
-            streams_dir = self.server.app_core.cache._streams_dir
-            temp_path = os.path.join(self.server.app_core.cache._temp_dir, f"{track_id}.tmp")
-            final_path = os.path.join(streams_dir, f"{track_id}.m4a")
+            final_path = os.path.join(streams_dir, f"{cache_name}.m4a")
+            unique_tag = f"{os.getpid()}_{threading.get_ident()}_{int(time.time() * 1000)}"
+            temp_path = os.path.join(self.server.app_core.cache._temp_dir, f"{cache_name}_{unique_tag}.tmp")
 
             range_header = self.headers.get('Range', '')
             is_cachable_request = (not range_header) or (range_header == 'bytes=0-')
@@ -186,6 +210,16 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
 
             if not target_url:
                 self.send_error(400, "Missing 'url' query parameter and could not resolve stream")
+                return None
+
+            # SSRF guard: reject URLs resolving to internal/private hosts (same logic as core/api.py).
+            if not _is_ssrf_safe_url(target_url):
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': 'URL blocked: SSRF validation failed'}).encode('utf-8'))
+                logger.warning(f'SSRF guard blocked proxied URL: {target_url[:120]}')
                 return None
             req = urllib.request.Request(target_url)
             if 'Range' in self.headers:
@@ -329,21 +363,16 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         else:
             headers_list = resp.info().items()
 
-        cors_sent = False
         for header, val in headers_list:
             h_low = header.lower()
-            if h_low not in HOP_BY_HOP:
-                if h_low == 'access-control-allow-origin':
-                    cors_sent = True
+            if h_low not in HOP_BY_HOP and not h_low.startswith('access-control-'):
                 self.send_header(header, val)
 
-        if not cors_sent:
-            self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization')
+        self.send_header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges')
         self.end_headers()
-
-        import os
 
         try:
             if is_cachable_request and status_code in (200, 206):
@@ -465,15 +494,28 @@ class LocalProxyManager:
 
     def get_proxy_url(self, source, source_id, original_url=None, track_id=None):
         if not self.port:
-            return original_url
+            return original_url or ''
+        if original_url and not any(d in original_url for d in ('youtube.com', 'youtu.be', 'soundcloud.com')):
+            params = {
+                'url': original_url,
+                'source': source if source else '',
+                'source_id': source_id if source_id else '',
+            }
+            query = urllib.parse.urlencode(params)
+            return f'http://127.0.0.1:{self.port}/?{query}'
+        
+        params = {}
         if track_id:
-            return f'http://127.0.0.1:{self.port}/api/stream?track_id={track_id}'
-        if not original_url:
+            try:
+                if int(track_id) > 0:
+                    params['track_id'] = track_id
+            except (ValueError, TypeError):
+                pass
+        if source:
+            params['source'] = source
+        if source_id:
+            params['source_id'] = source_id
+        if not params:
             return ''
-        params = {
-            'url': original_url,
-            'source': source if source else '',
-            'source_id': source_id if source_id else '',
-        }
         query = urllib.parse.urlencode(params)
-        return f'http://127.0.0.1:{self.port}/?{query}'
+        return f'http://127.0.0.1:{self.port}/api/stream?{query}'

@@ -84,7 +84,7 @@ class LastFmUserHandler:
 class LastFMService(BaseMusicService):
     """Last.fm API Client with key rotation, SQLite caching, and rate limiting resilience."""
 
-    BASE_URL = 'http://ws.audioscrobbler.com/2.0/'
+    BASE_URL = 'https://ws.audioscrobbler.com/2.0/'
 
     def __init__(self, settings=None):
         super().__init__()

@@ -1,10 +1,10 @@
 // NeDotify — Python Event Bridge
-import { onTrackChanged, onStateChanged, onPositionChanged, applySettings } from './player.js?v=20260814_9';
-import { onSearchResults } from './search.js?v=20260814_9';
-import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome } from './home.js?v=20260814_9';
-import { loadLibrary, loadDownloaded, loadPlaylists } from './library.js?v=20260814_9';
-import { applySettingsFromBackend, onStorageInfo, setYandexWarning } from './settings.js?v=20260814_9';
-import { showToast, renderIcons, escapeHtml } from './utils.js?v=20260814_9';
+import { onTrackChanged, onStateChanged, onPositionChanged, applySettings } from './player.js?v=20260817_2';
+import { onSearchResults } from './search.js?v=20260817_2';
+import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome } from './home.js?v=20260817_2';
+import { loadLibrary, loadDownloaded, loadPlaylists } from './library.js?v=20260817_2';
+import { applySettingsFromBackend, onStorageInfo, setYandexWarning } from './settings.js?v=20260817_2';
+import { showToast, renderIcons, escapeHtml } from './utils.js?v=20260817_2';
 
 let isNextTrackChange = false;
 
@@ -217,6 +217,16 @@ export function initEvents() {
 
             case 'yandex_device_auth_result':
                 document.dispatchEvent(new CustomEvent('nedotify:yandex_device_auth_result', { detail: data }));
+                break;
+
+            case 'audio_error':
+                const cleanAudioErr = (data?.message || '').toString().replace(/\x1b\[[0-9;]*m/g, '');
+                showToast('Ошибка воспроизведения: ' + cleanAudioErr, 'error');
+                onStateChanged('stopped');
+                break;
+
+            case 'theme_changed':
+                window.dispatchEvent(new CustomEvent('nedotify:theme_changed', { detail: data }));
                 break;
 
             // ================= FUTURE EVENTS / DEPRECATED =================

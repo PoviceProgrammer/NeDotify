@@ -1,6 +1,6 @@
 // NeDotify РІР‚" Artist Profile Module
-import { createTrackElement, renderIcons, formatTime, filterVisibleTracks, escapeHtml } from './utils.js?v=20260814_9';
-import { getCurrentTrack } from './player.js?v=20260814_9';
+import { createTrackElement, renderIcons, formatTime, filterVisibleTracks, escapeHtml } from './utils.js?v=20260817_2';
+import { getCurrentTrack } from './player.js?v=20260817_2';
 
 // Gradient seed backgrounds for fallback covers (visible ONLY if image loading fails)
 const colors = [
@@ -669,7 +669,7 @@ export async function loadArtistProfile(artistName, targetContainer) {
             const albumTracks = (artistData.tracks || []).filter(t => t.album === album.title);
             const playList = albumTracks.length > 0 ? albumTracks : artistData.tracks;
             if (window.pywebview && window.pywebview.api && playList.length > 0) {
-                window.pywebview.api.play_track(playList[0], playList);
+                window.pywebview.api.play_track(playList[0], playList, 0);
             }
         };
         

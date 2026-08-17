@@ -1,4 +1,4 @@
-import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, coverImgHtml } from './utils.js?v=20260814_9';
+import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, coverImgHtml } from './utils.js?v=20260817_2';
 
 const feedTimeouts = new Map();
 let trackChangeCount = 0;
@@ -436,7 +436,7 @@ export function renderTopTracks(tracks) {
         return;
     }
 
-    tracks.forEach(track => {
+    tracks.forEach((track, i) => {
         const cover = getCoverUrl(track);
         const card = document.createElement('div');
         card.className = 'feed-card';
@@ -451,7 +451,7 @@ export function renderTopTracks(tracks) {
             <div class="feed-card-sub">${escapeHtml(track.artist || 'Unknown')} (${track.plays || 0})</div>
         `;
         card.onclick = () => {
-            if (window.pywebview?.api) window.pywebview.api.play_track(track, tracks);
+            if (window.pywebview?.api) window.pywebview.api.play_track(track, tracks, i);
         };
         container.appendChild(card);
     });

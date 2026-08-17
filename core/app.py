@@ -22,7 +22,6 @@ from core.settings import SettingsManager
 from services.lufs_scanner import LufsScannerService
 from services.lyrics_service import LyricsService
 from services.playlist_import_service import PlaylistImportService
-from services.p2p_service import P2PService
 from services.recommendation_service import RecommendationService
 from services.soundcloud_service import SoundCloudService
 from services.spotify_service import SpotifyService
@@ -116,7 +115,6 @@ class AppCore:
         self.proxy = LocalProxyManager(self)
         self.downloader = DownloadManager(self)
         self.plugins = PluginManager(self)
-        self.p2p = P2PService()
         self.zapret = ZapretService(self.settings)
         self.playlist_importer = PlaylistImportService()
         self.watchdog = WatchdogService(self)
@@ -335,11 +333,6 @@ class AppCore:
         try:
             if hasattr(self, "downloader") and self.downloader:
                 self.downloader.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "p2p") and self.p2p:
-                self.p2p.stop()
         except Exception:
             pass
         try:

@@ -1,5 +1,5 @@
 // NeDotify - Lyrics Module
-import { getCurrentTrack, seekTo } from './player.js?v=20260814_9';
+import { getCurrentTrack, seekTo } from './player.js?v=20260817_2';
 
 let parsedLyrics = [];
 let currentLineIndex = -1;
@@ -107,12 +107,6 @@ export function initLyrics() {
     if (btnMinusPage) btnMinusPage.addEventListener('click', () => adjustLyricsOffset(-500));
     if (btnPlusPage) btnPlusPage.addEventListener('click', () => adjustLyricsOffset(500));
     if (btnTransPage) btnTransPage.addEventListener('click', () => toggleTranslation());
-
-    window.addEventListener('pywebviewready', () => {
-        window.pywebview.api.on_lyrics_ready = (data) => {
-            renderLyrics(data);
-        };
-    });
 
     // Listen to track/position events dispatched by events.js via custom events
     document.addEventListener('nedotify:track_changed', (e) => {

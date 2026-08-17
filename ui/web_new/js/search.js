@@ -1,13 +1,13 @@
 // NeDotify вЂ” Search Module Redesign
-import { createTrackElement, renderIcons, filterVisibleTracks, escapeHtml } from './utils.js?v=20260814_9';
-import { getCurrentTrack } from './player.js?v=20260814_9';
+import { createTrackElement, renderIcons, filterVisibleTracks, escapeHtml } from './utils.js?v=20260817_2';
+import { getCurrentTrack } from './player.js?v=20260817_2';
 import { 
     loadArtistProfile, 
     ArtistPhotoComponent, 
     ArtistBioComponent, 
     ArtistAlbumsComponent, 
     ArtistTracksComponent 
-} from './artist_profile.js?v=20260814_9';
+} from './artist_profile.js?v=20260817_2';
 
 let searchDebounce = null;
 let currentSource = 'youtube'; // Default source is YouTube Music as shown in screenshot 1

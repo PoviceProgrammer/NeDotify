@@ -1,5 +1,5 @@
 // NeDotify Р Р†Р вЂљ" Player Module
-import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml } from './utils.js?v=20260814_9';
+import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml } from './utils.js?v=20260817_2';
 
 let currentTrack = null;
 let isPlaying = false;
@@ -202,24 +202,47 @@ export function setEq(preamp, bands) {
     });
 }
 
-// Sync time updates to UI
-const STALL_FALLBACK_MS = 8000;
+// Global track retry management (prevents audioA/audioB ping-pong infinite loops)
+let currentTrackRetries = 0;
+let lastRetriedTrackId = null;
+const STALL_FALLBACK_MS = 10000;
+
+function handleStreamError(audio, reason) {
+    if (audio !== activeAudio || !currentTrack) return;
+    disarmStallFallback(audio);
+    
+    const trackIdKey = String(currentTrack.id || currentTrack.source_id || currentTrack.title || '');
+    if (lastRetriedTrackId !== trackIdKey) {
+        lastRetriedTrackId = trackIdKey;
+        currentTrackRetries = 0;
+    }
+    
+    currentTrackRetries++;
+    console.warn(`Audio stream error (${reason}), retry attempt ${currentTrackRetries} for:`, currentTrack.title);
+    
+    if (currentTrackRetries <= 2) {
+        setTimeout(() => {
+            if (audio === activeAudio && currentTrack && String(currentTrack.id || currentTrack.source_id || currentTrack.title || '') === trackIdKey) {
+                if (window.pywebview?.api?.play_track) {
+                    window.pywebview.api.play_track(currentTrack);
+                }
+            }
+        }, 1500 * currentTrackRetries);
+    } else {
+        console.error(`Audio stream failed after ${currentTrackRetries} attempts. Skipping to next track.`);
+        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Не удалось воспроизвести: ${currentTrack.title || 'трек'}`, type: 'error' } }));
+        currentTrackRetries = 0;
+        lastRetriedTrackId = null;
+        api('next_track');
+    }
+}
 
 function armStallFallback(audio) {
     disarmStallFallback(audio);
     audio._stallTimer = setTimeout(() => {
         audio._stallTimer = null;
-        if (audio === activeAudio && currentTrack && !audio.paused) {
-            console.warn('Audio stream stalled (no data), falling back to re-resolution...');
-            audio._errorRetries = (audio._errorRetries || 0) + 1;
-            if (audio._errorRetries <= 3) {
-                if (window.pywebview?.api?.play_track) {
-                    window.pywebview.api.play_track(currentTrack);
-                }
-            } else {
-                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка воспроизведения потока', type: 'error' } }));
-                api('next_track');
-            }
+        if (audio === activeAudio && currentTrack && !audio.paused && audio.src && audio.src !== '' && audio.src !== 'about:blank') {
+            handleStreamError(audio, 'stall_timeout');
         }
     }, STALL_FALLBACK_MS);
 }
@@ -235,7 +258,10 @@ function setupAudioEvents(audio) {
     audio.addEventListener('loadstart', () => armStallFallback(audio));
     audio.addEventListener('stalled', () => armStallFallback(audio));
     audio.addEventListener('waiting', () => armStallFallback(audio));
-    audio.addEventListener('playing', () => disarmStallFallback(audio));
+    audio.addEventListener('playing', () => {
+        disarmStallFallback(audio);
+        currentTrackRetries = 0;
+    });
     audio.addEventListener('canplay', () => disarmStallFallback(audio));
     audio.addEventListener('progress', () => disarmStallFallback(audio));
     audio.addEventListener('timeupdate', () => {
@@ -290,21 +316,11 @@ function setupAudioEvents(audio) {
         }
     });
     audio.addEventListener('error', (e) => {
-        if (audio === activeAudio) {
-            disarmStallFallback(audio);
-            console.warn('Audio stream playback error, retrying...', e);
-            audio._errorRetries = (audio._errorRetries || 0) + 1;
-            if (audio._errorRetries <= 3 && currentTrack) {
-                setTimeout(() => {
-                    if (window.pywebview?.api?.play_track) {
-                        window.pywebview.api.play_track(currentTrack);
-                    }
-                }, 1000 * audio._errorRetries);
-            } else {
-                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка воспроизведения потока', type: 'error' } }));
-                api('next_track');
-            }
+        // Ignore synthetic or background cleanup errors
+        if (audio !== activeAudio || !audio.src || audio.src === '' || audio.src === 'about:blank' || audio.src === window.location.href) {
+            return;
         }
+        handleStreamError(audio, 'error_event');
     });
 }
 setupAudioEvents(audioA);
@@ -343,14 +359,27 @@ export function playTrack(track, streamUrl) {
         currentFadeInterval = null;
     }
 
+    const trackIdKey = String(track.id || track.source_id || track.title || '');
+    if (lastRetriedTrackId !== trackIdKey) {
+        lastRetriedTrackId = trackIdKey;
+        currentTrackRetries = 0;
+    }
+
     const newAudio = activeAudio === audioA ? audioB : audioA;
     const oldAudio = activeAudio;
     
+    // Switch activeAudio immediately FIRST to prevent old audio error handlers from firing
+    activeAudio = newAudio;
+    currentTrack = track;
+    isPlaying = true;
+    disarmStallFallback(newAudio);
+    
     // Instantly stop and clean up old audio
     if (oldAudio) {
+        disarmStallFallback(oldAudio);
         try { oldAudio.pause(); } catch(e) {}
         try { oldAudio.currentTime = 0; } catch(e) {}
-        try { oldAudio.removeAttribute('src'); oldAudio.load(); } catch(e) {}
+        oldAudio.src = '';
     }
 
     // Parse duration from streamUrl if track.duration is missing
@@ -380,8 +409,6 @@ export function playTrack(track, streamUrl) {
     }
     
     loadAudioSource(newAudio, finalSrc);
-    newAudio._errorRetries = 0;
-    disarmStallFallback(newAudio);
     newAudio.playbackRate = currentPlaybackRate;
     if ('preservesPitch' in newAudio) newAudio.preservesPitch = currentPreservesPitch;
     else if ('webkitPreservesPitch' in newAudio) newAudio.webkitPreservesPitch = currentPreservesPitch;
@@ -397,9 +424,6 @@ export function playTrack(track, streamUrl) {
         });
     }
     
-    activeAudio = newAudio;
-    currentTrack = track;
-    isPlaying = true;
     onStateChanged('playing');
 }
 
@@ -757,7 +781,7 @@ export function initPlayer() {
                             btn.addEventListener('click', async () => {
                                 await api('add_to_playlist', plId, currentTrack);
                                 optMenu.classList.remove('visible');
-                                const { showToast } = await import('./utils.js');
+                                const { showToast } = await import('./utils.js?v=20260817_2');
                                 showToast(`Добавлено в «${pl.name}»`, 'success');
                             });
                             itemsEl.appendChild(btn);

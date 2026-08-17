@@ -18,6 +18,7 @@ class DownloadManager:
         self._running = True
         self._queue = []
         self._queue_lock = threading.Lock()
+        self._lock = threading.Lock()  # guards batch counters (_batch_active/_batch_completed/_batch_total)
 
 
         self._processor_thread = threading.Thread(target=self._process_queue, daemon=True)
@@ -166,22 +167,23 @@ class DownloadManager:
                 self._core.db.conn.commit()
             except: pass
         finally:
-            if self._batch_active:
-                self._batch_completed += 1
-                percent = round((self._batch_completed / max(1, self._batch_total)) * 100)
-                if hasattr(self._core, 'api') and getattr(self._core.api, '_emit', None):
-                    self._core.api._emit('batch_download_progress', {
-                        'current': self._batch_completed,
-                        'total': self._batch_total,
-                        'percent': percent,
-                        'track_id': track_id
-                    })
-                    if self._batch_completed >= self._batch_total:
-                        self._batch_active = False
-                        self._core.api._emit('batch_download_finished', {
+            with self._lock:
+                if self._batch_active:
+                    self._batch_completed += 1
+                    percent = round((self._batch_completed / max(1, self._batch_total)) * 100)
+                    if hasattr(self._core, 'api') and getattr(self._core.api, '_emit', None):
+                        self._core.api._emit('batch_download_progress', {
+                            'current': self._batch_completed,
                             'total': self._batch_total,
-                            'completed': self._batch_completed
+                            'percent': percent,
+                            'track_id': track_id
                         })
+                        if self._batch_completed >= self._batch_total:
+                            self._batch_active = False
+                            self._core.api._emit('batch_download_finished', {
+                                'total': self._batch_total,
+                                'completed': self._batch_completed
+                            })
 
     def stop(self):
         self._running = False

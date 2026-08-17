@@ -221,7 +221,7 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
             return;
         }
         if (window.pywebview && window.pywebview.api) {
-            window.pywebview.api.play_track(track, tracksArray);
+            window.pywebview.api.play_track(track, tracksArray, index);
         }
     });
 

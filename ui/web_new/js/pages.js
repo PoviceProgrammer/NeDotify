@@ -1,5 +1,5 @@
 // NeDotify - Pages Navigation Module
-import { renderIcons } from './utils.js?v=20260814_9';
+import { renderIcons } from './utils.js?v=20260817_2';
 
 const pageTitles = {
     home: 'Главная',

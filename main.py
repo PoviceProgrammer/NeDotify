@@ -18,11 +18,26 @@ except AttributeError:
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import logging
+from logging.handlers import RotatingFileHandler
+
+# File logging: rotating ~/.nedotify/logs/app.log (2MB x 3 backups); console handler is kept too.
+_LOG_FORMAT = '%(asctime)s.%(msecs)03d %(levelname)s: %(message)s'
+_log_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'logs')
+os.makedirs(_log_dir, exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s.%(msecs)03d %(levelname)s: %(message)s',
+    format=_LOG_FORMAT,
     datefmt='%H:%M:%S',
+    handlers=[
+        logging.StreamHandler(),
+        RotatingFileHandler(
+            os.path.join(_log_dir, 'app.log'),
+            maxBytes=2_000_000,
+            backupCount=3,
+            encoding='utf-8',
+        ),
+    ],
 )
 
 from core.app import AppCore
@@ -49,7 +64,7 @@ def _enable_doh_fallback():
                 f"https://77.88.8.8/dns-query?name={host}&type=A"
             ]:
                 try:
-                    ctx = ssl._create_unverified_context()
+                    ctx = ssl.create_default_context()
                     req = urllib.request.Request(doh_url, headers={"accept": "application/dns-json", "User-Agent": "Mozilla/5.0"})
                     with urllib.request.urlopen(req, timeout=2.0, context=ctx) as resp:
                         data = json.loads(resp.read().decode("utf-8"))

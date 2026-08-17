@@ -97,7 +97,12 @@ class AudioEngine:
                     src_id = urllib_parse.quote(str(track.get("source_id") or ""))
                     title = urllib_parse.quote(str(track.get("title") or ""))
                     artist = urllib_parse.quote(str(track.get("artist") or ""))
-                    proxy_url = f"http://127.0.0.1:{self.proxy.port}/api/stream?track_id={t_id}&source={src}&source_id={src_id}&title={title}&artist={artist}"
+                    fp = track.get("file_path")
+                    if fp and (fp.startswith("http://") or fp.startswith("https://")) and not any(d in fp for d in ("youtube.com", "youtu.be", "soundcloud.com", "music.yandex.ru")):
+                        quoted_url = urllib_parse.quote(fp)
+                        proxy_url = f"http://127.0.0.1:{self.proxy.port}/?url={quoted_url}&source={src}&source_id={src_id}&title={title}&artist={artist}"
+                    else:
+                        proxy_url = f"http://127.0.0.1:{self.proxy.port}/api/stream?track_id={t_id}&source={src}&source_id={src_id}&title={title}&artist={artist}"
                     track["stream_url"] = proxy_url
             self._on_track_changed(track)
 
@@ -174,10 +179,11 @@ class AudioEngine:
                     event.set()
 
                 try:
-                    self.app_core.youtube.get_stream_url(source_id, cb, err_cb)
+                    video_url = f"https://www.youtube.com/watch?v={source_id}" if not str(source_id).startswith("http") else str(source_id)
+                    self.app_core.youtube.get_stream_url(video_url, cb, err_cb)
                 except Exception:
                     event.set()
-                event.wait(timeout=8)
+                event.wait(timeout=10)
 
             if url:
                 return url

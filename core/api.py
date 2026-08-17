@@ -5,7 +5,6 @@ Exposes Python backend methods to the JavaScript frontend via pywebview.
 
 
 import hashlib
-import hmac
 import ipaddress
 import json
 import logging
@@ -22,8 +21,6 @@ import webbrowser
 import webview
 
 logger = logging.getLogger(__name__)
-
-SECRET_KEY = b"NEDOTIFY_SECRET_SIGNATURE_KEY"
 
 # Temporary feature flag: license validation and VK-based activation are disabled
 # until they are replaced with a remote, server-owned licensing service.
@@ -514,14 +511,15 @@ class AppApi:
         track_copy = dict(track)
         # Proxy cloud stream URL if needed
         if track_copy.get("source") in ("youtube", "soundcloud", "yandex", "vk"):
-            proxy_url = self._core.proxy.get_proxy_url(
-                track_copy.get("source"),
-                track_copy.get("source_id"),
-                track_copy.get("file_path") or track_copy.get("source_url"),
-                track_id=track_copy.get("id")
-            )
-            if proxy_url:
-                track_copy["file_path"] = proxy_url
+            if not track_copy.get("stream_url"):
+                proxy_url = self._core.proxy.get_proxy_url(
+                    track_copy.get("source"),
+                    track_copy.get("source_id"),
+                    track_copy.get("file_path") or track_copy.get("source_url"),
+                    track_id=track_copy.get("id")
+                )
+                if proxy_url:
+                    track_copy["stream_url"] = proxy_url
 
         self._current_track = track_copy
         try:
@@ -583,7 +581,7 @@ class AppApi:
 
     def play_track(self, track: dict, track_list: list = None, index: int = 0):
         """Play given track data object."""
-        logger.info(f"api.py -> play_track called! track={track.get('title')}, has_track_list={bool(track_list)}")
+        logger.info(f"api.py -> play_track called! track={track.get('title') if isinstance(track, dict) else track}, has_track_list={bool(track_list)}, index={index}")
         if isinstance(track, dict) and track.get("track_id"):
             track["id"] = track["track_id"]
         if track_list and isinstance(track_list, list):
@@ -598,15 +596,81 @@ class AppApi:
                 pass
 
         if track_list:
-            if index == 0 and track:
-                # Try to find the actual index of the clicked track
-                t_id = track.get("id") or track.get("source_id") or track.get("file_path") or track.get("title")
-                for i, t in enumerate(track_list):
-                    c_id = t.get("id") or t.get("source_id") or t.get("file_path") or t.get("title")
-                    if t_id and c_id and str(t_id) == str(c_id):
-                        index = i
+            if index is None or index == 0:
+                if track and isinstance(track, dict):
+                    t_src_id = track.get("source_id")
+                    t_id = track.get("id")
+                    found = False
+                    if t_src_id:
+                        for i, t in enumerate(track_list):
+                            if isinstance(t, dict) and t.get("source_id") and str(t.get("source_id")) == str(t_src_id):
+                                index = i
+                                found = True
+                                break
+                    if not found and t_id:
+                        for i, t in enumerate(track_list):
+                            if isinstance(t, dict) and t.get("id") and str(t.get("id")) == str(t_id):
+                                index = i
+                                found = True
+                                break
+                    if not found and track.get("title"):
+                        t_title = str(track.get("title", "")).strip().lower()
+                        t_artist = str(track.get("artist", "")).strip().lower()
+                        for i, t in enumerate(track_list):
+                            if isinstance(t, dict):
+                                c_title = str(t.get("title", "")).strip().lower()
+                                c_artist = str(t.get("artist", "")).strip().lower()
+                                if c_title == t_title and (not t_artist or c_artist == t_artist):
+                                    index = i
+                                    break
+
+            safe_index = max(0, min(index, len(track_list) - 1)) if track_list else 0
+            target_track = track_list[safe_index] if (isinstance(track_list, list) and safe_index < len(track_list)) else track
+
+            source = target_track.get("source", "local") if isinstance(target_track, dict) else "local"
+            source_id = target_track.get("source_id") if isinstance(target_track, dict) else None
+
+            # If local or already has stream_url / file_path:
+            if source == "local" or not source_id or target_track.get("file_path") or target_track.get("stream_url"):
+                self._core.engine.play_queue(track_list, safe_index)
+                return
+
+            # Check DB stream cache
+            cached = self._core.db.get_cached_stream(source, source_id)
+            if cached and (cached.get("cached_file_path") or cached.get("stream_url")):
+                target_track["file_path"] = cached.get("cached_file_path") or cached.get("stream_url")
+                self._core.engine.play_queue(track_list, safe_index)
+                return
+
+            # Check on-disk streams directory
+            import re
+            streams_dir = getattr(self._core.cache, "_streams_dir", None)
+            if streams_dir and os.path.exists(streams_dir):
+                safe_source = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source or 'unknown'))
+                safe_source_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id or ''))
+                cache_id = f"{safe_source}_{safe_source_id}"
+                found_local = False
+                for ext in ("m4a", "webm", "mp3", "ogg"):
+                    cand = os.path.join(streams_dir, f"{cache_id}.{ext}")
+                    if os.path.exists(cand) and os.path.getsize(cand) > 1024:
+                        target_track["file_path"] = cand
+                        found_local = True
                         break
-            self._core.engine.play_queue(track_list, index)
+                if found_local:
+                    self._core.engine.play_queue(track_list, safe_index)
+                    return
+
+            # Resolve target track asynchronously before starting queue playback
+            def on_queue_resolved(stream_url, metadata=None):
+                logger.info(f"api.py -> queue track resolved! stream_url={stream_url[:60] if stream_url else None}")
+                if stream_url:
+                    target_track["file_path"] = stream_url
+                    if metadata and isinstance(metadata, dict):
+                        if metadata.get("duration") and not target_track.get("duration"):
+                            target_track["duration"] = metadata["duration"]
+                self._core.engine.play_queue(track_list, safe_index)
+
+            self._core.re_resolve_stream_url_async(source, source_id, callback=on_queue_resolved, track=target_track)
         else:
             self._resolve_track(track, lambda t: self._core.engine.play_track(t))
 
@@ -615,22 +679,39 @@ class AppApi:
         source = track.get("source", "local")
         source_id = track.get("source_id")
 
-        if source == "local" or not source_id:
+        if source == "local" or not source_id or track.get("file_path") or track.get("stream_url"):
             play_callback(track)
             return
 
         # Check DB cached stream first
         cached = self._core.db.get_cached_stream(source, source_id)
-        if cached and cached.get("stream_url"):
-            track["file_path"] = cached["stream_url"]
+        if cached and (cached.get("cached_file_path") or cached.get("stream_url")):
+            track["file_path"] = cached.get("cached_file_path") or cached.get("stream_url")
             play_callback(track)
             return
 
+        # Check on-disk streams directory
+        import re
+        streams_dir = getattr(self._core.cache, "_streams_dir", None)
+        if streams_dir and os.path.exists(streams_dir):
+            safe_source = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source or 'unknown'))
+            safe_source_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id or ''))
+            cache_id = f"{safe_source}_{safe_source_id}"
+            for ext in ("m4a", "webm", "mp3", "ogg"):
+                cand = os.path.join(streams_dir, f"{cache_id}.{ext}")
+                if os.path.exists(cand) and os.path.getsize(cand) > 1024:
+                    track["file_path"] = cand
+                    play_callback(track)
+                    return
+
         # Re-resolve stream url asynchronously
         def on_resolved(stream_url, metadata=None):
-            logger.info(f"api.py -> on_resolved! stream_url={stream_url}")
+            logger.info(f"api.py -> on_resolved! stream_url={stream_url[:60] if stream_url else None}")
             if stream_url:
                 track["file_path"] = stream_url
+                if metadata and isinstance(metadata, dict):
+                    if metadata.get("duration") and not track.get("duration"):
+                        track["duration"] = metadata["duration"]
                 play_callback(track)
             else:
                 self._on_audio_error(f"Could not resolve stream for {source}/{source_id}")
@@ -1142,7 +1223,9 @@ class AppApi:
             import copy
             return copy.deepcopy(self._core.settings._settings)
             
-        categories = ['app', 'appearance', 'player', 'lyrics', 'system', 'general', 'audio', 'overlay', 'efficiency', 'optimization', 'hotkeys', 'storage', 'player_appearance', 'personalization', 'interface', 'ui', 'theme', 'equalizer', 'auth', 'services', 'session', 'subscription']
+        # 'auth' is kept on purpose: the settings UI reads/writes yandex_token,
+        # oauth_client_id, oauth_client_secret, cookies_file_path and proxy_url there.
+        categories = ['app', 'appearance', 'player', 'lyrics', 'system', 'general', 'audio', 'overlay', 'efficiency', 'optimization', 'hotkeys', 'storage', 'player_appearance', 'personalization', 'interface', 'ui', 'theme', 'equalizer', 'auth', 'services', 'session']
         res = {}
         for c in categories:
             try:
@@ -1377,12 +1460,11 @@ class AppApi:
         return []
 
     def get_profile_stats(self):
-        """Get profile stats."""
-        history = self._core.db.get_history(limit=10000)
+        """Get profile stats (counts via COUNT(*), not full-row fetches)."""
         return {
-            "total_tracks": len(history) if history else self._core.db.get_tracks_count(),
+            "total_tracks": self._core.db.get_tracks_count(),
             "favorite_count": self._core.db.get_tracks_count_by_favorite(),
-            "playlist_count": len(self.get_playlists()),
+            "playlist_count": self._core.db.get_playlists_count(),
             "total_listening_time_ms": self._core.db.get_total_listening_time(),
             "most_played": self._core.db.get_most_played(limit=5),
             "recently_played": self._core.db.get_history(limit=5)

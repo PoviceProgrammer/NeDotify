@@ -1,9 +1,9 @@
 // NeDotify Р Р†Р вЂљ" Settings Module
-import { renderIcons, escapeHtml, compressBackgroundImage } from './utils.js?v=20260814_9';
-import { initParticles, stopParticles, setParticlesFps } from './particles.js?v=20260814_9';
-import { setVisualizerFps } from './visualizer.js?v=20260814_9';
-import { initOnboarding } from './onboarding.js?v=20260814_9';
-import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js?v=20260814_9';
+import { renderIcons, escapeHtml, compressBackgroundImage } from './utils.js?v=20260817_2';
+import { initParticles, stopParticles, setParticlesFps } from './particles.js?v=20260817_2';
+import { setVisualizerFps } from './visualizer.js?v=20260817_2';
+import { initOnboarding } from './onboarding.js?v=20260817_2';
+import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js?v=20260817_2';
 
 // Helper: read a localStorage setting that was saved by saveSetting()
 function getLocalSetting(key, defaultVal) {
@@ -30,6 +30,11 @@ const THEMES = [
 ];
 
 export function initSettings() {
+
+    // Backend may push theme changes (theme string) at runtime — re-apply the active theme
+    window.addEventListener('nedotify:theme_changed', (e) => {
+        applyThemeMode?.(String(e.detail ?? getLocalSetting('theme_mode', 'system')));
+    });
 
     setupToggle('toggle-unfocus-enabled', 'unfocus_enabled', 'efficiency');
     setupToggle('toggle-unfocus-blur', 'unfocus_blur_reduction', 'efficiency');
@@ -2367,7 +2372,7 @@ export function setupWorkshopPanel() {
         }
 
         if (items.length === 0) {
-            grid.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-sec)">РќРёС‡РµРіРѕ не найденРѕ</div>';
+            grid.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-sec)">Ничего не найдено</div>';
             return;
         }
 

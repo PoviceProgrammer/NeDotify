@@ -1,5 +1,5 @@
-import { formatTime, renderIcons, getCoverUrl, escapeHtml } from './utils.js?v=20260814_9';
-import { getCurrentTrack, playTrack, incrementQueueVersion } from './player.js?v=20260814_9';
+import { formatTime, renderIcons, getCoverUrl, escapeHtml } from './utils.js?v=20260817_2';
+import { getCurrentTrack, playTrack, incrementQueueVersion } from './player.js?v=20260817_2';
 
 let isQueueVisible = false;
 let draggedItemIndex = null;
@@ -115,7 +115,7 @@ function renderQueue(tracks, currentIndex) {
             }
 
             if (window.pywebview?.api?.play_track) {
-                window.pywebview.api.play_track(track, currentQueue);
+                window.pywebview.api.play_track(track, currentQueue, index);
             }
         });
 

@@ -810,6 +810,11 @@ class DatabaseManager:
         )
         return [dict(row) for row in cursor.fetchall()]
 
+    def get_playlists_count(self) -> int:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM playlists")
+        return cursor.fetchone()[0]
+
     def add_to_playlist(self, playlist_id: int, track_id: int) -> bool:
         cursor = self.conn.cursor()
         cursor.execute(

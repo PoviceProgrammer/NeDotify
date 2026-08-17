@@ -20,6 +20,7 @@ class BaseMusicService:
     _MAX_CACHE_SIZE = 2000
     _search_cache: Dict[str, Dict[str, Any]] = {}
     _SEARCH_CACHE_TTL = 300
+    _SEARCH_CACHE_MAX_SIZE = 500
 
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -53,8 +54,11 @@ class BaseMusicService:
 
     @classmethod
     def set_search_cache(cls, key: str, data: Any) -> None:
-        """Save an item to the search cache together with a timestamp."""
+        """Save an item to the search cache together with a timestamp (oldest entry evicted past the cap)."""
         with cls._cache_lock:
+            if len(cls._search_cache) >= cls._SEARCH_CACHE_MAX_SIZE and key not in cls._search_cache:
+                oldest_key = next(iter(cls._search_cache))
+                cls._search_cache.pop(oldest_key, None)
             cls._search_cache[key] = {'data': data, 'ts': time.time()}
 
     @staticmethod
