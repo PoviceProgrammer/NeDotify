@@ -323,6 +323,61 @@ export function refreshActiveLibraryView() {
 }
 window.refreshActiveLibraryView = refreshActiveLibraryView;
 
+// O-9: render library lists in batches (artist_profile.js pattern) instead of all at once
+const LIB_BATCH_SIZE = 50;
+let libraryScrollCleanup = null;
+
+function makeLibraryBatchRenderer(container, tracks) {
+    let rendered = 0;
+    const renderNext = () => {
+        const start = rendered;
+        const end = Math.min(tracks.length, start + LIB_BATCH_SIZE);
+        for (let i = start; i < end; i++) {
+            container.appendChild(createTrackElement(tracks[i], i, tracks, getCurrentTrack()));
+        }
+        rendered = end;
+        renderIcons();
+        return end;
+    };
+    return { renderNext, getRendered: () => rendered, getTotal: () => tracks.length };
+}
+
+// O-9: load further batches when the scrollable ancestor nears its bottom
+function attachLibraryScrollLoader(container, renderNext, getRendered, getTotal) {
+    let node = container.parentElement;
+    while (node && node !== document.body) {
+        const st = getComputedStyle(node);
+        if (/(auto|scroll)/.test(st.overflowY)) break;
+        node = node.parentElement;
+    }
+    const scrollParent = node || document.scrollingElement;
+    if (!scrollParent) return () => {};
+
+    // Drain batches until content overflows the scrollport (or everything is rendered)
+    let guard = 0;
+    while (getRendered() < getTotal() && scrollParent.clientHeight >= scrollParent.scrollHeight && guard < 20) {
+        renderNext();
+        guard++;
+    }
+
+    const onScroll = () => {
+        const sc = scrollParent.scrollTop + scrollParent.clientHeight;
+        if (sc >= scrollParent.scrollHeight - 200 && getRendered() < getTotal()) {
+            renderNext();
+        }
+    };
+    scrollParent.addEventListener('scroll', onScroll, { passive: true });
+    return () => scrollParent.removeEventListener('scroll', onScroll);
+}
+
+function renderLibraryList(tracksContainer, tracks) {
+    if (libraryScrollCleanup) { libraryScrollCleanup(); libraryScrollCleanup = null; }
+    tracksContainer.innerHTML = '';
+    const renderer = makeLibraryBatchRenderer(tracksContainer, tracks);
+    renderer.renderNext();
+    libraryScrollCleanup = attachLibraryScrollLoader(tracksContainer, renderer.renderNext, renderer.getRendered, renderer.getTotal);
+}
+
 export async function selectSection(type, data = null) {
     currentActiveSection = type;
     if (data) currentSelectedPlaylistData = data;
@@ -392,11 +447,7 @@ export async function selectSection(type, data = null) {
             return;
         }
 
-        tracksContainer.innerHTML = '';
-        combined.forEach((track, i) => {
-            tracksContainer.appendChild(createTrackElement(track, i, combined, getCurrentTrack()));
-        });
-        renderIcons();
+        renderLibraryList(tracksContainer, combined);
 
     } else if (type === 'offline') {
         const offCard = document.getElementById('lib-card-offline');
@@ -434,11 +485,7 @@ export async function selectSection(type, data = null) {
             return;
         }
 
-        tracksContainer.innerHTML = '';
-        downloaded.forEach((track, i) => {
-            tracksContainer.appendChild(createTrackElement(track, i, downloaded, getCurrentTrack()));
-        });
-        renderIcons();
+        renderLibraryList(tracksContainer, downloaded);
 
     } else if (type === 'playlist' && data) {
         if (titleEl) titleEl.textContent = data.name || 'Плейлист';
@@ -474,11 +521,7 @@ export async function selectSection(type, data = null) {
             return;
         }
 
-        tracksContainer.innerHTML = '';
-        tracks.forEach((track, i) => {
-            tracksContainer.appendChild(createTrackElement(track, i, tracks, getCurrentTrack()));
-        });
-        renderIcons();
+        renderLibraryList(tracksContainer, tracks);
     }
 }
 

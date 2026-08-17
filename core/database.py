@@ -27,6 +27,7 @@ class DatabaseManager:
             os.makedirs(app_data, exist_ok=True)
             db_path = os.path.join(app_data, "nedotify_storage.db")
         self.db_path = db_path
+        self._fts_available = False
         self._init_database()
 
     def get(self, key_or_id: Any = None, default: Any = None, *args, **kwargs) -> Any:
@@ -307,8 +308,10 @@ class DatabaseManager:
                         SELECT id, title, artist, album, genre FROM tracks
                     """
                 )
+            self._fts_available = True
         except Exception as e:
-            logger.warning(f"FTS Migration error: {e}")
+            self._fts_available = False
+            logger.warning(f"FTS Migration error (LIKE fallback will be used): {e}")
 
         try:
             cursor.execute("ALTER TABLE tracks ADD COLUMN lufs REAL DEFAULT NULL")
@@ -533,6 +536,30 @@ class DatabaseManager:
 
     def search_tracks(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
+        # O-10: FTS5 first, LIKE fallback
+        if getattr(self, "_fts_available", False) and query.strip():
+            try:
+                # Prefix-match each word, escaped for FTS5 quoted strings
+                terms = " ".join(
+                    '"' + w.replace('"', '""') + '"*'
+                    for w in query.split()
+                    if w
+                )
+                if terms:
+                    cursor.execute(
+                        """
+                        SELECT t.* FROM tracks_fts f JOIN tracks t ON t.id = f.rowid
+                        WHERE tracks_fts MATCH ?
+                        ORDER BY t.play_count DESC
+                        LIMIT ?
+                    """,
+                        (terms, limit),
+                    )
+                    rows = cursor.fetchall()
+                    if rows:
+                        return [dict(row) for row in rows]
+            except Exception:
+                pass  # malformed query / FTS unavailable at query time → LIKE fallback
         like_query = f"%{query}%"
         cursor.execute(
             """
@@ -871,9 +898,10 @@ class DatabaseManager:
         return result
 
     def set_cached_file(self, source: str, source_id: str, file_path: str) -> None:
+        # O-3: downloaded files are long-lived — never auto-purged by expires_at
         cursor = self.conn.cursor()
         cursor.execute(
-            "UPDATE stream_cache SET cached_file_path = ? WHERE source = ? AND source_id = ?",
+            "UPDATE stream_cache SET cached_file_path = ?, expires_at = NULL WHERE source = ? AND source_id = ?",
             (file_path, source, source_id),
         )
         self.conn.commit()
@@ -908,8 +936,8 @@ class DatabaseManager:
         cursor.execute(
             """
             INSERT INTO stream_cache 
-            (source, source_id, stream_url, title, artist, cover_url, duration, metadata_json, cached_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            (source, source_id, stream_url, title, artist, cover_url, duration, metadata_json, cached_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, datetime('now', '+24 hours'))
             ON CONFLICT(source, source_id) DO UPDATE SET
                 stream_url = excluded.stream_url,
                 title = excluded.title,
@@ -917,7 +945,8 @@ class DatabaseManager:
                 cover_url = excluded.cover_url,
                 duration = excluded.duration,
                 metadata_json = excluded.metadata_json,
-                cached_at = CURRENT_TIMESTAMP
+                cached_at = CURRENT_TIMESTAMP,
+                expires_at = datetime('now', '+24 hours')
         """,
             (source, source_id, stream_url, title, artist, cover_url, duration, meta_json),
         )
@@ -926,10 +955,22 @@ class DatabaseManager:
     def update_cached_stream_url(self, source: str, source_id: str, stream_url: str) -> None:
         cursor = self.conn.cursor()
         cursor.execute(
-            "UPDATE stream_cache SET stream_url = ?, cached_at = CURRENT_TIMESTAMP WHERE source = ? AND source_id = ?",
+            "UPDATE stream_cache SET stream_url = ?, cached_at = CURRENT_TIMESTAMP, "
+            "expires_at = datetime('now', '+24 hours') WHERE source = ? AND source_id = ?",
             (stream_url, source, source_id),
         )
         self.conn.commit()
+
+    def cleanup_expired_cache(self) -> int:
+        """O-3: purge stream_cache rows past expires_at (skips downloaded-file rows)."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "DELETE FROM stream_cache WHERE expires_at IS NOT NULL "
+            "AND datetime(expires_at) < datetime('now') "
+            "AND (cached_file_path IS NULL OR cached_file_path = '')"
+        )
+        self.conn.commit()
+        return cursor.rowcount
 
     def add_scan_folder(self, folder_path: str) -> bool:
         cursor = self.conn.cursor()

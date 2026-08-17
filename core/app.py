@@ -135,6 +135,20 @@ class AppCore:
         except Exception as we:
             logger.error(f"Failed to start watchdog: {we}")
 
+        # O-3: periodic DB cache cleanup by expires_at (every 10 minutes)
+        self._cache_cleanup_stop = threading.Event()
+
+        def _cache_cleanup_loop():
+            while not self._cache_cleanup_stop.wait(600):
+                try:
+                    deleted = self.db.cleanup_expired_cache()
+                    if deleted:
+                        logger.info("[cache] cleaned %d expired stream_cache rows", deleted)
+                except Exception as ce:
+                    logger.debug("Cache cleanup error: %s", ce)
+
+        threading.Thread(target=_cache_cleanup_loop, name="CacheCleanup", daemon=True).start()
+
     def re_resolve_stream_url_async(self, source, source_id, callback=None, on_error=None, quality="high", track=None):
         """Construct lookup URL, call get_stream_url asynchronously and trigger callbacks."""
         def worker():
@@ -316,3 +330,28 @@ class AppCore:
                 self.zapret.stop()
         except Exception:
             pass
+        try:
+            if getattr(self, "_cache_cleanup_stop", None) is not None:
+                self._cache_cleanup_stop.set()
+        except Exception:
+            pass
+        # O-15: shutdown(wait=False) all thread pools so app exit never blocks
+        try:
+            from services.base_service import BaseMusicService
+            BaseMusicService._executor.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
+        for _pool in (
+            getattr(self, "downloader", None) and getattr(self.downloader, "_pool", None),
+            getattr(self, "cache", None) and getattr(self.cache, "_executor", None),
+            getattr(self, "youtube", None) and getattr(self.youtube, "_executor", None),
+            getattr(self, "soundcloud", None) and getattr(self.soundcloud, "_executor", None),
+            getattr(self, "yandex", None) and getattr(self.yandex, "_executor", None),
+            getattr(self, "spotify", None) and getattr(self.spotify, "_executor", None),
+        ):
+            if _pool is None:
+                continue
+            try:
+                _pool.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass

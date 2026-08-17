@@ -160,6 +160,10 @@ def main():
 
     # Cleanup after window closed
     app_core.cleanup()
+    try:
+        api.cleanup()
+    except Exception:
+        pass
     sys.exit(0)
 
 if __name__ == "__main__":

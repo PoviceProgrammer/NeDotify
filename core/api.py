@@ -89,6 +89,14 @@ class AppApi:
             if hasattr(self._core.engine, "on_error"):
                 self._core.engine.on_error(self._on_audio_error)
 
+    def cleanup(self):
+        """O-15: release the shared search executor without blocking app exit."""
+        try:
+            if getattr(self, "_search_executor", None) is not None:
+                self._search_executor.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
+
     def set_window(self, window):
         """Set main webview window reference."""
         self._window = window
@@ -1313,9 +1321,9 @@ class AppApi:
         top_artists = self._core.db.get_top_artists(limit=10) or []
         return {
             "history": history,
-            "favorites_count": len(self.get_favorite_tracks()),
+            "favorites_count": self._core.db.get_tracks_count_by_favorite(),
             "total_listening_ms": total_time_ms,
-            "total_tracks": len(self._core.db.get_all_tracks()),
+            "total_tracks": self._core.db.get_tracks_count(),
             "playlists": self.get_playlists(),
             "analytics": {
                 "total_time_seconds": total_time_ms / 1000,
@@ -1372,8 +1380,8 @@ class AppApi:
         """Get profile stats."""
         history = self._core.db.get_history(limit=10000)
         return {
-            "total_tracks": len(history) if history else len(self._core.db.get_all_tracks()),
-            "favorite_count": len(self.get_favorite_tracks()),
+            "total_tracks": len(history) if history else self._core.db.get_tracks_count(),
+            "favorite_count": self._core.db.get_tracks_count_by_favorite(),
             "playlist_count": len(self.get_playlists()),
             "total_listening_time_ms": self._core.db.get_total_listening_time(),
             "most_played": self._core.db.get_most_played(limit=5),

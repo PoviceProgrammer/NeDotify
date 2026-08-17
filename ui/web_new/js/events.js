@@ -8,6 +8,18 @@ import { showToast, renderIcons, escapeHtml } from './utils.js?v=20260814_9';
 
 let isNextTrackChange = false;
 
+// O-5: track the visible page so hidden sections are not re-rendered on burst events
+let currentPageId = 'home';
+window.addEventListener('nedotify:page_changed', (e) => { currentPageId = e.detail; });
+
+function isPageVisible(pageId) {
+    const el = document.getElementById('view-' + pageId);
+    return !!(el && el.classList.contains('active'));
+}
+
+// O-5: debounce (300ms) library refresh bursts (e.g. batch downloads) into a single re-render
+let libraryRefreshTimer = null;
+
 export function initEvents() {
     window.onPythonEvent = function(eventName, data) {
         console.log('Python Event:', eventName, data);
@@ -111,11 +123,20 @@ export function initEvents() {
             case 'favorites_updated':
             case 'playlists_updated':
             case 'playlist_changed':
-                loadLibrary();
-                loadPlaylists();
-                loadHome(isNextTrackChange);
-                if (window.refreshActiveLibraryView) window.refreshActiveLibraryView();
-                isNextTrackChange = false;
+                // O-5: debounce burst events — a single refresh 300ms after the last one
+                if (libraryRefreshTimer) clearTimeout(libraryRefreshTimer);
+                libraryRefreshTimer = setTimeout(() => {
+                    libraryRefreshTimer = null;
+                    const nextTrackChange = isNextTrackChange;
+                    isNextTrackChange = false;
+                    if (isPageVisible('library')) {
+                        loadLibrary();
+                        loadPlaylists();
+                        if (window.refreshActiveLibraryView) window.refreshActiveLibraryView();
+                    }
+                    // O-5: only re-render the section the user can actually see
+                    if (isPageVisible('home')) loadHome(nextTrackChange);
+                }, 300);
                 break;
 
             case 'mini_player_toggled':
