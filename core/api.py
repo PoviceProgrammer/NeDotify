@@ -866,6 +866,25 @@ class AppApi:
             logger.error(f"add_to_queue error: {e}")
             return {"success": False, "error": str(e)}
 
+    def remove_from_queue(self, index):
+        """Remove a track from the queue by index (O-1)."""
+        try:
+            try:
+                index = int(index)
+            except (TypeError, ValueError):
+                return {"success": False, "error": "Неверный индекс очереди"}
+            queue = self._core.engine.queue
+            if not (0 <= index < len(queue.tracks)):
+                return {"success": False, "error": "Неверный индекс очереди"}
+            if index == queue._current_index:
+                return {"success": False, "error": "Cannot remove current track"}
+            queue.remove_track(index)
+            self._emit("queue_updated", self.get_queue())
+            return {"success": True}
+        except Exception as e:
+            logger.error(f"remove_from_queue error: {e}")
+            return {"success": False, "error": str(e)}
+
     def set_setting(self, section: str, key: str, value):
         """Persist a setting value (section, key, value) (O-1)."""
         try:
@@ -1219,9 +1238,76 @@ class AppApi:
         self._emit("playlist_changed", {"playlist_id": playlist_id})
         return res
 
-    def get_playlist_tracks(self, playlist_id: int):
-        """Get tracks for specified playlist."""
-        return self._core.db.get_playlist_tracks(playlist_id)
+    def get_playlist_tracks(self, playlist_id, source: str = "local", limit: int = 50):
+        """Get tracks for a playlist by source (local / youtube / soundcloud / spotify). Synchronous."""
+        source = (source or "local").lower()
+
+        if source == "local":
+            try:
+                db_tracks = self._core.db.get_playlist_tracks(playlist_id) or []
+                formatted = []
+                for t in db_tracks:
+                    if isinstance(t, dict):
+                        cov = t.get("cover_path") or t.get("cover_url") or ""
+                        formatted.append({
+                            "source": "local",
+                            "source_id": str(t.get("id") or ""),
+                            "id": t.get("id"),
+                            "title": t.get("title") or "Unknown Title",
+                            "artist": t.get("artist") or "Unknown Artist",
+                            "cover": cov,
+                            "cover_url": cov,
+                            "duration": t.get("duration", 0),
+                            "file_path": t.get("file_path") or t.get("url") or "",
+                        })
+                return {"success": True, "tracks": formatted}
+            except Exception as e:
+                logger.error(f"get_playlist_tracks local error: {e}")
+                return {"success": False, "error": str(e)}
+
+        services = {
+            "youtube": getattr(self._core, "youtube", None),
+            "soundcloud": getattr(self._core, "soundcloud", None),
+            "spotify": getattr(self._core, "spotify", None),
+        }
+        srv = services.get(source)
+        if srv is None or not hasattr(srv, "get_playlist_tracks"):
+            return {"success": False, "error": f"Неизвестный источник плейлистов: {source}"}
+
+        result = {}
+        done = threading.Event()
+
+        def _on_success(tracks):
+            formatted = []
+            for t in (tracks or []):
+                if isinstance(t, dict):
+                    cov = t.get("cover_url") or t.get("cover") or ""
+                    item = t.copy()
+                    item["cover"] = cov
+                    item["cover_url"] = cov
+                    formatted.append(item)
+            result["tracks"] = formatted
+            done.set()
+
+        def _on_error(err):
+            result["error"] = str(err)
+            done.set()
+
+        try:
+            srv.get_playlist_tracks(playlist_id, limit=limit, callback=_on_success, error_callback=_on_error)
+        except Exception as e:
+            logger.error(f"get_playlist_tracks {source} error: {e}")
+            return {"success": False, "error": str(e)}
+
+        if not done.wait(timeout=20.0):
+            return {"success": False, "error": "Таймаут получения треков плейлиста"}
+        if "error" in result:
+            return {"success": False, "error": result["error"]}
+        return {"success": True, "tracks": result.get("tracks", [])}
+
+    def get_yt_playlist_tracks(self, playlist_id, limit: int = 50):
+        """Legacy wrapper for get_playlist_tracks with source='youtube'."""
+        return self.get_playlist_tracks(playlist_id, source="youtube", limit=limit)
 
     def toggle_favorite(self, track_data: dict):
         """Toggle favorite status for track."""
@@ -1541,18 +1627,6 @@ class AppApi:
                 self._emit("authentic_home_error", {"error": str(e)})
         threading.Thread(target=run, daemon=True).start()
         return {}
-
-    def get_yt_playlist_tracks(self, playlist_id: str, limit: int = 50):
-        """Get YouTube playlist tracks asynchronously."""
-        def run():
-            try:
-                tracks = self._core.youtube.get_playlist_tracks(playlist_id, limit=limit)
-                self._emit("yt_playlist_ready", {"playlist_id": playlist_id, "tracks": tracks or []})
-            except Exception as e:
-                logger.error(f"Error fetching YT playlist: {e}")
-                self._emit("yt_playlist_ready", {"playlist_id": playlist_id, "tracks": [], "error": str(e)})
-        threading.Thread(target=run, daemon=True).start()
-        return []
 
     def get_profile_stats(self):
         """Get profile stats (counts via COUNT(*), not full-row fetches)."""

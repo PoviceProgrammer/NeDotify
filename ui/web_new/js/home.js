@@ -215,11 +215,22 @@ export function renderAuthenticHome(sections) {
                     <div class="feed-card-title">${escapeHtml(item.title)}</div>
                     <div class="feed-card-sub">${escapeHtml(item.artist || (item.type === 'album' ? 'Альбом' : 'Микс'))}</div>
                 `;
-                card.onclick = () => {
-                    // Show loading indicator somewhere or toast
-                    if (window.pywebview && window.pywebview.api && window.pywebview.api.get_yt_playlist_tracks) {
+                card.onclick = async () => {
+                    if (window.pywebview && window.pywebview.api && window.pywebview.api.get_playlist_tracks) {
                         window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Загрузка: ${item.title}...`, type: 'info' } }));
-                        window.pywebview.api.get_yt_playlist_tracks(item.id, 50);
+                        try {
+                            const res = await window.pywebview.api.get_playlist_tracks(item.id, item.source || 'youtube', 50);
+                            if (res && res.success && res.tracks && res.tracks.length > 0) {
+                                if (window.pywebview.api.play_track) {
+                                    window.pywebview.api.play_track(res.tracks[0], res.tracks, 0);
+                                }
+                            } else {
+                                const errMsg = (res && res.error) || 'Не удалось загрузить треки';
+                                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: errMsg, type: 'error' } }));
+                            }
+                        } catch (err) {
+                            window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: String(err), type: 'error' } }));
+                        }
                     }
                 };
                 scrollEl.appendChild(card);

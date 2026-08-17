@@ -323,7 +323,7 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
         moreBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
-            showTrackContextMenu(track, e, tracksArray);
+            showTrackContextMenu(track, e, tracksArray, index);
         });
     }
 
@@ -331,7 +331,7 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
     item.addEventListener('contextmenu', (e) => {
         e.stopPropagation();
         e.preventDefault();
-        showTrackContextMenu(track, e, tracksArray);
+        showTrackContextMenu(track, e, tracksArray, index);
     });
 
     return item;
@@ -436,7 +436,7 @@ document.addEventListener('nedotify:track_downloaded', (e) => {
 
 let activeRichMenu = null;
 
-export function showTrackContextMenu(track, e, tracksArray) {
+export function showTrackContextMenu(track, e, tracksArray, index) {
     if (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -616,7 +616,47 @@ export function showTrackContextMenu(track, e, tracksArray) {
                 showToast(`'${track.title || ''}' закреплен в профиле!`, 'success');
                 break;
             case 'remove_queue':
-                showToast(`Трек '${track.title || ''}' удален из очереди`, 'info');
+                (async () => {
+                    let removeIndex = index;
+                    if (removeIndex === undefined || removeIndex === null || removeIndex < 0) {
+                        if (tracksArray && Array.isArray(tracksArray)) {
+                            removeIndex = tracksArray.indexOf(track);
+                        }
+                    }
+                    if (removeIndex === undefined || removeIndex === null || removeIndex < 0) {
+                        try {
+                            if (window.pywebview?.api?.get_queue) {
+                                const q = await window.pywebview.api.get_queue();
+                                if (q && q.tracks) {
+                                    removeIndex = q.tracks.findIndex(t => 
+                                        (t.id && track.id && String(t.id) === String(track.id)) ||
+                                        (t.source_id && track.source_id && String(t.source_id) === String(track.source_id)) ||
+                                        (t.title === track.title && t.artist === track.artist)
+                                    );
+                                }
+                            }
+                        } catch (qe) {}
+                    }
+                    if (window.pywebview?.api?.remove_from_queue && removeIndex !== undefined && removeIndex !== null && removeIndex >= 0) {
+                        try {
+                            const res = await window.pywebview.api.remove_from_queue(removeIndex);
+                            if (res && res.success === false) {
+                                showToast(res.error || 'Cannot remove current track', 'error');
+                            } else {
+                                showToast(`Трек '${track.title || ''}' удален из очереди`, 'info');
+                            }
+                        } catch (err) {
+                            showToast('Ошибка удаления из очереди', 'error');
+                        }
+                    } else if (window.pywebview?.api?.remove_from_queue) {
+                        const res = await window.pywebview.api.remove_from_queue(removeIndex ?? -1);
+                        if (res && res.success === false) {
+                            showToast(res.error || 'Cannot remove current track', 'error');
+                        }
+                    } else {
+                        showToast(`Трек '${track.title || ''}' удален из очереди`, 'info');
+                    }
+                })();
                 break;
         }
 

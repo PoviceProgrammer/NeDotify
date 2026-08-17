@@ -13,6 +13,7 @@ try:
     from pypresence import Presence
     HAS_PYPRESENCE = True
 except ImportError:
+    Presence = None
     HAS_PYPRESENCE = False
 
 

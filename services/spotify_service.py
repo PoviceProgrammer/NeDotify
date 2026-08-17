@@ -94,3 +94,13 @@ class SpotifyService(BaseMusicService):
                 return []
 
         self._executor.submit(_search_thread)
+
+    def get_playlist_tracks(self, playlist_id, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
+        """Fetch Spotify playlist tracks.
+
+        Currently unavailable: this service has no real Spotify API client/token
+        (search runs through iTunes endpoints), so playlists cannot be fetched.
+        """
+        if error_callback:
+            error_callback("Spotify-клиент недоступен")
+        return None

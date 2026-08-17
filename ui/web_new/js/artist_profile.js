@@ -405,6 +405,7 @@ export class ArtistAlbumsComponent {
         `;
 
         container.querySelectorAll('.album-item-card').forEach(card => {
+            card.style.cursor = 'pointer';
             const playBtn = card.querySelector('.album-play-btn');
             if (playBtn) {
                 playBtn.addEventListener('click', (e) => {
@@ -413,6 +414,10 @@ export class ArtistAlbumsComponent {
                     if (this.onPlayAlbum) this.onPlayAlbum(this.albums[idx]);
                 });
             }
+            card.addEventListener('click', () => {
+                const idx = card.dataset.albumIndex;
+                if (this.onPlayAlbum) this.onPlayAlbum(this.albums[idx]);
+            });
         });
         
         return container;

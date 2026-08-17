@@ -280,6 +280,95 @@ class SoundCloudService(BaseMusicService):
                         error_callback(f'Поиск недоступен: {fall_err}')
         self._executor.submit(_search)
 
+    def get_playlist_tracks(self, playlist_id, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
+        """Fetch SoundCloud playlist/set tracks (v2 REST API with yt-dlp fallback)."""
+        def _fetch():
+            try:
+                cache_key = f"sc_playlist:{playlist_id}:{limit}"
+                cached = self.get_search_cache(cache_key)
+                if cached is not None:
+                    if callback:
+                        callback(cached)
+                    return
+
+                raw = str(playlist_id).strip()
+                cid = self._get_client_id()
+                if cid:
+                    try:
+                        if raw.isdigit():
+                            url = f"https://api-v2.soundcloud.com/playlists/{raw}?client_id={cid}"
+                        else:
+                            url = f"https://api-v2.soundcloud.com/resolve?url={urllib_parse.quote(raw)}&client_id={cid}"
+                        r = self._session.get(url, timeout=5.0)
+                        if r.status_code == 200:
+                            data = r.json()
+                            tracks = []
+                            for item in data.get('tracks') or []:
+                                if not item or not item.get('id') or not item.get('title'):
+                                    continue
+                                artwork = item.get('artwork_url') or ''
+                                if artwork and 'large.jpg' in artwork:
+                                    artwork = artwork.replace('large.jpg', 't500x500.jpg')
+                                user_info = item.get('user', {})
+                                artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
+                                duration = int(item.get('duration', 0) / 1000)
+                                track = {
+                                    'title': item.get('title', 'Unknown Title'),
+                                    'artist': artist,
+                                    'duration': duration,
+                                    'source': 'soundcloud',
+                                    'source_id': str(item.get('id')),
+                                    'source_url': item.get('permalink_url') or f"https://soundcloud.com/{item.get('permalink', item.get('id'))}",
+                                    'cover_url': artwork,
+                                }
+                                tracks.append(track)
+                                if limit and len(tracks) >= limit:
+                                    break
+                            if tracks:
+                                self.set_search_cache(cache_key, tracks)
+                                if callback:
+                                    callback(tracks)
+                                return
+                    except Exception as api_err:
+                        self.logger.warning(f"SoundCloud REST playlist fetch failed: {api_err}")
+
+                if HAS_YTDLP:
+                    url_to_extract = raw if raw.startswith('http') else f'https://soundcloud.com/{raw}'
+                    ydl = self._get_ydl_search()
+                    result = ydl.extract_info(url_to_extract, download=False)
+                    tracks = []
+                    if result and result.get('entries'):
+                        for entry in result['entries']:
+                            if not entry:
+                                continue
+                            track = {
+                                'title': entry.get('title', 'Unknown'),
+                                'artist': entry.get('uploader', 'Unknown'),
+                                'duration': entry.get('duration', 0),
+                                'source': 'soundcloud',
+                                'source_id': str(entry.get('id') or ''),
+                                'source_url': entry.get('url', entry.get('webpage_url', '')),
+                                'cover_url': entry.get('thumbnail', '')
+                            }
+                            tracks.append(track)
+                            if limit and len(tracks) >= limit:
+                                break
+                    if tracks:
+                        self.set_search_cache(cache_key, tracks)
+                        if callback:
+                            callback(tracks)
+                        return
+
+                if error_callback:
+                    error_callback('Не удалось получить треки плейлиста SoundCloud')
+
+            except Exception as e:
+                self.logger.warning(f'SoundCloud playlist fetch failed: {e}')
+                if error_callback:
+                    error_callback(str(e))
+
+        self._executor.submit(_fetch)
+
     def get_stream_url(self, track_url: str, callback: Callable = None, error_callback: Callable = None):
         """Extract direct audio stream URL from a SoundCloud track."""
         info = self.get_from_cache(track_url)

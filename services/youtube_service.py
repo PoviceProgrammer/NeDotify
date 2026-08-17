@@ -296,6 +296,75 @@ class YouTubeService(BaseMusicService):
         self._executor.submit(_search)
         return None
 
+    def get_playlist_tracks(self, playlist_id: str, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
+        """Fetch YouTube Music playlist tracks via ytmusicapi. Runs in background thread."""
+        if not HAS_YTDLP or not HAS_YTMUSIC:
+            if error_callback:
+                error_callback("yt-dlp или ytmusicapi не установлены")
+            return None
+
+        def _fetch():
+            try:
+                data = self._ytmusic.get_playlist(playlist_id)
+                entries = data.get("tracks", []) if isinstance(data, dict) else []
+
+                tracks = []
+                seen_ids = set()
+                for item in entries:
+                    vid = item.get("videoId")
+                    if not vid or vid in seen_ids:
+                        continue
+                    seen_ids.add(vid)
+
+                    title = item.get("title", "Unknown Title")
+
+                    artists_list = item.get("artists", []) or []
+                    artist = ", ".join([a["name"] for a in artists_list if "name" in a])
+                    if not artist:
+                        artist = "Unknown Artist"
+
+                    duration = item.get("duration_seconds", 0) or 0
+                    if isinstance(duration, str):
+                        parts = duration.split(":")
+                        if len(parts) == 2:
+                            duration = int(parts[0]) * 60 + int(parts[1])
+                        elif len(parts) == 3:
+                            duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                        else:
+                            duration = 0
+
+                    thumbnails = item.get("thumbnails", []) or []
+                    cover_url = ""
+                    if thumbnails:
+                        best = thumbnails[-1]
+                        for t in thumbnails:
+                            if (t.get("width") or 0) * (t.get("height") or 0) > (best.get("width") or 0) * (best.get("height") or 0):
+                                best = t
+                        cover_url = best.get("url", "")
+
+                    tracks.append({
+                        "source": "youtube",
+                        "source_id": vid,
+                        "title": title,
+                        "artist": artist,
+                        "duration": duration,
+                        "cover_url": cover_url,
+                        "album": item.get("album", {}).get("name", "") if isinstance(item.get("album"), dict) else "",
+                    })
+                    if limit and len(tracks) >= limit:
+                        break
+
+                if callback:
+                    callback(tracks)
+
+            except Exception as e:
+                logger.error(f"YouTube playlist fetch error: {e}")
+                if error_callback:
+                    error_callback(str(e))
+
+        self._executor.submit(_fetch)
+        return None
+
     def _extract_info_safe(self, video_url: str, quality: str, fallback: bool = False):
         opts = self._get_ydl_opts("bestaudio/best", fallback=fallback)
         if not fallback and self._ydl:
