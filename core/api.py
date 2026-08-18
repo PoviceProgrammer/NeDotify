@@ -1058,23 +1058,29 @@ class AppApi:
         def mark_done(provider_name):
             with pending_lock:
                 pending_providers.discard(provider_name)
-                if not pending_providers and not completion_emitted[0]:
+                if not pending_providers and not completion_emitted[0] and source != "local":
                     completion_emitted[0] = True
                     self._emit("search_completed", {"query": query, "source": source})
 
-        # Async Local DB Search
+        # Local DB Search
         if "local" in requested_providers:
             def _run_local():
                 try:
-                    local_tracks = self._core.db.search_tracks(query)
-                    emit_results(local_tracks, "local")
+                    if result_type in ("albums", "album"):
+                        local_results = self._core.db.search_albums(query)
+                    else:
+                        local_results = self._core.db.search_tracks(query)
+                    emit_results(local_results, "local")
                 except Exception as exc:
                     logger.error("Local search failed: %s", exc)
                     emit_results([], "local")
                 finally:
                     mark_done("local")
 
-            self._search_executor.submit(_run_local)
+            if source == "local":
+                _run_local()
+            else:
+                self._search_executor.submit(_run_local)
 
         # Async Remote Provider Searches — hard timeout per provider (12s)
         for service_name in requested_providers:
@@ -1116,7 +1122,13 @@ class AppApi:
                 timer.start()
 
                 try:
-                    srv.search(query, callback=_on_success, error_callback=_on_error)
+                    if result_type:
+                        try:
+                            srv.search(query, result_type=result_type, callback=_on_success, error_callback=_on_error)
+                        except TypeError:
+                            srv.search(query, callback=_on_success, error_callback=_on_error)
+                    else:
+                        srv.search(query, callback=_on_success, error_callback=_on_error)
                 except Exception as exc:
                     logger.error("%s search could not start: %s", name, exc)
                     _finish([])
@@ -1124,6 +1136,73 @@ class AppApi:
             self._search_executor.submit(_run_provider, service_name, service)
 
         return {"query": query, "tracks": []}
+
+    def get_album_tracks(self, album_data: dict):
+        """Fetch all tracks for an album given its metadata dictionary."""
+        if not album_data or not isinstance(album_data, dict):
+            return []
+
+        source = album_data.get("source", "youtube")
+        source_id = album_data.get("source_id") or album_data.get("id") or ""
+        album_title = album_data.get("title") or album_data.get("album") or ""
+        artist_name = album_data.get("artist") or ""
+
+        # 1. Local DB tracks
+        if source == "local" or not source_id:
+            tracks = self._core.db.get_album_tracks(album_title, artist_name)
+            if tracks:
+                return tracks
+
+        # 2. Spotify / iTunes album lookup
+        if source == "spotify" and hasattr(self._core, "spotify") and self._core.spotify:
+            coll_id = source_id.replace("spotify_album_", "")
+            res = []
+            done_event = threading.Event()
+            def _cb(trks):
+                nonlocal res
+                res = trks or []
+                done_event.set()
+            def _err(e):
+                done_event.set()
+            self._core.spotify.get_album_tracks(coll_id, callback=_cb, error_callback=_err)
+            done_event.wait(timeout=4.0)
+            if res:
+                return res
+
+        # 3. YouTube Music album lookup
+        if source == "youtube" and hasattr(self._core, "youtube") and self._core.youtube:
+            browse_id = source_id.replace("yt_album_", "")
+            if browse_id.startswith("MPRE") or browse_id.startswith("OLAK"):
+                res = []
+                done_event = threading.Event()
+                def _cb(trks):
+                    nonlocal res
+                    res = trks or []
+                    done_event.set()
+                def _err(e):
+                    done_event.set()
+                self._core.youtube.get_album_tracks(browse_id, callback=_cb, error_callback=_err)
+                done_event.wait(timeout=4.0)
+                if res:
+                    return res
+
+        # 4. Fallback search by Artist + Album Title
+        search_q = f"{artist_name} {album_title}".strip()
+        if search_q and hasattr(self._core, "youtube") and self._core.youtube:
+            res = []
+            done_event = threading.Event()
+            def _cb(trks):
+                nonlocal res
+                res = trks or []
+                done_event.set()
+            def _err(e):
+                done_event.set()
+            self._core.youtube.search(search_q, max_results=15, callback=_cb, error_callback=_err)
+            done_event.wait(timeout=4.0)
+            if res:
+                return res
+
+        return []
 
     def get_library(self):
         """Get all tracks in local library."""
@@ -1249,17 +1328,12 @@ class AppApi:
                 for t in db_tracks:
                     if isinstance(t, dict):
                         cov = t.get("cover_path") or t.get("cover_url") or ""
-                        formatted.append({
-                            "source": "local",
-                            "source_id": str(t.get("id") or ""),
-                            "id": t.get("id"),
-                            "title": t.get("title") or "Unknown Title",
-                            "artist": t.get("artist") or "Unknown Artist",
-                            "cover": cov,
-                            "cover_url": cov,
-                            "duration": t.get("duration", 0),
-                            "file_path": t.get("file_path") or t.get("url") or "",
-                        })
+                        item = dict(t)
+                        item["cover"] = cov
+                        item["cover_url"] = cov
+                        item["source"] = t.get("source") or "local"
+                        item["source_id"] = str(t.get("source_id") or t.get("id") or "")
+                        formatted.append(item)
                 return {"success": True, "tracks": formatted}
             except Exception as e:
                 logger.error(f"get_playlist_tracks local error: {e}")
@@ -1570,7 +1644,7 @@ class AppApi:
     def get_lyrics_translation(self, lyrics_text: str, target_lang: str = "ru"):
         """Get translation for lyrics text."""
         try:
-            return self._core.lyrics.translate(lyrics_text, target_lang=target_lang)
+            return self._core.lyrics.translate_lyrics(lyrics_text, target_lang=target_lang)
         except Exception as e:
             return {"error": str(e)}
 

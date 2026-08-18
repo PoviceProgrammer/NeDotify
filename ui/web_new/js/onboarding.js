@@ -1,5 +1,5 @@
 export function initOnboarding() {
-    const wizard = document.getElementById('onboarding-modal') || document.getElementById('onboarding-wizard');
+    const wizard = document.getElementById('onboarding-wizard');
     if (!wizard) return;
 
     let isDoneLocal = localStorage.getItem('aura_onboarding_done');

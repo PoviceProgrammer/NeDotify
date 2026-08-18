@@ -1,4 +1,4 @@
-﻿"""
+"""
 AURA Music - Yandex Music Service
 Search and stream audio from Yandex Music.
 """
@@ -245,3 +245,28 @@ class YandexService(BaseMusicService):
                     error_callback(msg)
 
         self._executor.submit(_extract)
+        return None
+
+    def download_audio_sync(self, source_id: str, output_dir: str) -> str:
+        """Download audio synchronously from Yandex Music."""
+        import os
+        import time
+        client = self._get_client()
+        if not client:
+            raise Exception("Yandex Music клиент не инициализирован")
+
+        raw_id = str(source_id).split(":")[0].strip()
+        tracks = client.tracks([raw_id])
+        if not tracks:
+            raise Exception("Трек не найден в Яндекс Музыке")
+
+        track = tracks[0]
+        file_name = f"ya_{raw_id}_{int(time.time())}.mp3"
+        output_path = os.path.join(output_dir, file_name)
+        track.download(output_path, codec="mp3", bitrate_in_kbps=320)
+
+        if not os.path.exists(output_path):
+            raise Exception("Файл не был создан после загрузки из Яндекс Музыки")
+
+        return output_path
+

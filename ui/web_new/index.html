@@ -11,8 +11,8 @@
     <script src="js/lucide.min.js?v=3"></script>
     <script src="js/hls.min.js"></script>
     <link rel="icon" type="image/png" href="logo.png">
-    <link rel="stylesheet" href="css/themes.css?v=20260817_2">
-    <link rel="stylesheet" href="css/styles.css?v=20260817_2">
+    <link rel="stylesheet" href="css/themes.css?v=20260817_3">
+    <link rel="stylesheet" href="css/styles.css?v=20260817_3">
 </head>
 <body>
 
@@ -1929,58 +1929,6 @@
     </button>
 </div>
 
-<!-- Onboarding Modal -->
-<div id="onboarding-modal" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 600px;">
-        <h2 style="margin-top:0; margin-bottom: 8px;">Тест х предпочтений</h2>
-        <p style="color:var(--text-sec); font-size: 13px; margin-bottom: 24px;">Давайте настроим AURA Music под ваш вкус.</p>
-        
-        <!-- Step 1: Genres -->
-        <div id="ob-step-1" class="ob-step active">
-            <h3 style="margin-bottom:16px; font-size: 16px;">Шаг 1: Выберите любимые жанры</h3>
-            <div class="ob-grid" id="ob-genres-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;">
-                <!-- Genres will be injected here -->
-            </div>
-            <div style="text-align:right; margin-top: 24px;">
-                <button class="btn-primary" id="ob-btn-next-1">Далее</button>
-            </div>
-        </div>
-        
-        <!-- Step 2: Artists -->
-        <div id="ob-step-2" class="ob-step" style="display:none;">
-            <h3 style="margin-bottom:16px; font-size: 16px;">Шаг 2: Добавьте любимых исполнителей</h3>
-            <div class="search-container" style="margin-bottom: 16px;">
-                <i data-lucide="search" class="search-icon" style="width:18px;height:18px"></i>
-                <input type="text" class="search-input" id="ob-artist-search" placeholder="Поиск исполнителя...">
-            </div>
-            <div id="ob-artist-search-results" style="max-height: 150px; overflow-y: auto; margin-bottom: 16px; border-radius: 8px; background: rgba(255,255,255,0.05); padding: 8px; display:none;"></div>
-            
-            <div style="font-size: 12px; color: var(--text-sec); margin-bottom: 8px;">Выбранные артисты: <span id="ob-selected-artists-list" style="color:var(--text-main);">Нет</span></div>
-            <div style="font-size: 12px; color: var(--text-sec); margin-bottom: 8px;">ли выберите из популярных:</div>
-            <div class="ob-grid" id="ob-artists-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;">
-                <!-- Popular artists injected here -->
-            </div>
-            
-            <div style="text-align:right; margin-top: 24px;">
-                <button class="filter-btn" id="ob-btn-prev-2" style="margin-right: 8px;">Назад</button>
-                <button class="btn-primary" id="ob-btn-next-2">Далее</button>
-            </div>
-        </div>
-        
-        <!-- Step 3: Mood -->
-        <div id="ob-step-3" class="ob-step" style="display:none;">
-            <h3 style="margin-bottom:16px; font-size: 16px;">Шаг 3: Какой у вас обычно вайб?</h3>
-            <div class="ob-grid" id="ob-moods-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px;">
-                <!-- Moods injected here -->
-            </div>
-            
-            <div style="text-align:right; margin-top: 24px;">
-                <button class="filter-btn" id="ob-btn-prev-3" style="margin-right: 8px;">Назад</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Create Playlist Glassmorphism Modal -->
 <div id="modal-create-playlist" class="modal-overlay" style="display: none;">
     <div class="glass-modal-card">
@@ -2185,7 +2133,7 @@
     </div>
 </div>
 
-<script type="module" src="js/main.js?v=20260817_2"></script><script>
+<script type="module" src="js/main.js?v=20260817_3"></script><script>
     // Initialize Lucide icons after DOM is ready
     document.addEventListener('DOMContentLoaded', () => {
         if (window.lucide) lucide.createIcons();

@@ -57,6 +57,40 @@ def _cached_spotify_search(query: str, limit: int = 20) -> tuple:
     return tuple(results)
 
 
+@lru_cache(maxsize=256)
+def _cached_spotify_album_search(query: str, limit: int = 20) -> tuple:
+    encoded_query = urllib.parse.quote(query)
+    results = []
+    try:
+        url = f"https://itunes.apple.com/search?term={encoded_query}&entity=album&limit={limit}"
+        resp = _session.get(url, timeout=3.5)
+        if resp.status_code == 200:
+            data = resp.json()
+            for idx, item in enumerate(data.get("results", [])):
+                artist = item.get("artistName", "Unknown Artist")
+                title = item.get("collectionName", "Unknown Album")
+                year = item.get("releaseDate", "")[:4] if item.get("releaseDate") else ""
+                track_count = item.get("trackCount", 0)
+                raw_artwork = item.get("artworkUrl100", "")
+                cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
+                collection_id = str(item.get("collectionId", idx))
+
+                results.append((
+                    f"spotify_album_{collection_id}",
+                    title,
+                    artist,
+                    year,
+                    track_count,
+                    cover_url,
+                    "spotify",
+                    collection_id,
+                    "album"
+                ))
+    except Exception as e:
+        logger.error(f"Error in cached Spotify album search: {e}")
+    return tuple(results)
+
+
 class SpotifyService(BaseMusicService):
     """Blazingly fast Spotify track search and metadata provider."""
 
@@ -66,27 +100,48 @@ class SpotifyService(BaseMusicService):
         self._executor = ThreadPoolExecutor(max_workers=5)
         self.logger = logging.getLogger(__name__)
 
-    def search(self, query: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, limit: int = 20):
+    def search(self, query: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, limit: int = 20, result_type: str = None):
         def _search_thread():
             try:
-                raw_tuple = _cached_spotify_search(query, limit)
-                tracks = []
-                for item in raw_tuple:
-                    tracks.append({
-                        "id": item[0],
-                        "title": item[1],
-                        "artist": item[2],
-                        "album": item[3],
-                        "duration": item[4],
-                        "cover_url": item[5],
-                        "source": item[6],
-                        "source_id": item[7],
-                        "source_url": item[8],
-                        "is_favorite": False
-                    })
-                if callback:
-                    callback(tracks)
-                return tracks
+                is_album_search = result_type in ("albums", "album")
+                if is_album_search:
+                    raw_tuple = _cached_spotify_album_search(query, limit)
+                    albums = []
+                    for item in raw_tuple:
+                        albums.append({
+                            "id": item[0],
+                            "title": item[1],
+                            "artist": item[2],
+                            "album": item[1],
+                            "year": item[3],
+                            "track_count": item[4],
+                            "cover_url": item[5],
+                            "source": item[6],
+                            "source_id": item[7],
+                            "type": item[8]
+                        })
+                    if callback:
+                        callback(albums)
+                    return albums
+                else:
+                    raw_tuple = _cached_spotify_search(query, limit)
+                    tracks = []
+                    for item in raw_tuple:
+                        tracks.append({
+                            "id": item[0],
+                            "title": item[1],
+                            "artist": item[2],
+                            "album": item[3],
+                            "duration": item[4],
+                            "cover_url": item[5],
+                            "source": item[6],
+                            "source_id": item[7],
+                            "source_url": item[8],
+                            "is_favorite": False
+                        })
+                    if callback:
+                        callback(tracks)
+                    return tracks
             except Exception as e:
                 self.logger.error(f"Spotify search error: {e}")
                 if error_callback:
@@ -95,12 +150,51 @@ class SpotifyService(BaseMusicService):
 
         self._executor.submit(_search_thread)
 
-    def get_playlist_tracks(self, playlist_id, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
-        """Fetch Spotify playlist tracks.
+    def get_album_tracks(self, collection_id: str, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
+        """Fetch album tracks from iTunes metadata."""
+        def _fetch():
+            try:
+                url = f"https://itunes.apple.com/lookup?id={collection_id}&entity=song&limit={limit}"
+                resp = _session.get(url, timeout=4.0)
+                tracks = []
+                if resp.status_code == 200:
+                    data = resp.json()
+                    results = data.get("results", [])
+                    song_items = results[1:] if len(results) > 1 else results
+                    for idx, item in enumerate(song_items):
+                        if item.get("wrapperType") != "track" and item.get("kind") != "song":
+                            continue
+                        artist = item.get("artistName", "Unknown Artist")
+                        title = item.get("trackName", "Unknown Title")
+                        album = item.get("collectionName", "Album")
+                        duration = int(item.get("trackTimeMillis", 180000) / 1000)
+                        raw_artwork = item.get("artworkUrl100", "")
+                        cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
 
-        Currently unavailable: this service has no real Spotify API client/token
-        (search runs through iTunes endpoints), so playlists cannot be fetched.
-        """
+                        tracks.append({
+                            "id": f"spotify_{item.get('trackId', idx)}",
+                            "title": title,
+                            "artist": artist,
+                            "album": album,
+                            "duration": duration,
+                            "cover_url": cover_url,
+                            "source": "spotify",
+                            "source_id": f"ytsearch1: {artist} - {title}",
+                            "source_url": item.get("trackViewUrl", ""),
+                            "is_favorite": False
+                        })
+                if callback:
+                    callback(tracks)
+            except Exception as e:
+                self.logger.error(f"Spotify get_album_tracks error: {e}")
+                if error_callback:
+                    error_callback(str(e))
+
+        self._executor.submit(_fetch)
+        return None
+
+    def get_playlist_tracks(self, playlist_id, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
+        """Fetch Spotify playlist tracks."""
         if error_callback:
             error_callback("Spotify-клиент недоступен")
         return None

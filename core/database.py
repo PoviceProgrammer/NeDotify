@@ -250,6 +250,22 @@ class DatabaseManager:
             except Exception as e:
                 logger.debug(f"Dup migration: {e}")
 
+        # Migrate legacy history rows with 0 duration to track duration
+        try:
+            cursor.execute(
+                """
+                UPDATE history 
+                SET duration_listened = (
+                    SELECT COALESCE(NULLIF(t.duration, 0), 180.0) 
+                    FROM tracks t 
+                    WHERE t.id = history.track_id
+                )
+                WHERE duration_listened IS NULL OR duration_listened <= 0
+                """
+            )
+        except Exception as e:
+            logger.debug(f"History duration migration: {e}")
+
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS smart_playlists (
@@ -515,6 +531,13 @@ class DatabaseManager:
 
     def log_listening_history(self, track_id: int, duration_listened: float = 0, completed: bool = False) -> int:
         cursor = self.conn.cursor()
+        if duration_listened <= 0:
+            cursor.execute("SELECT duration FROM tracks WHERE id = ?", (track_id,))
+            t_row = cursor.fetchone()
+            if t_row and t_row[0] and float(t_row[0]) > 0:
+                duration_listened = float(t_row[0])
+            else:
+                duration_listened = 180.0
         cursor.execute(
             "INSERT INTO history (track_id, duration_listened, completed) VALUES (?, ?, ?)",
             (track_id, duration_listened, 1 if completed else 0),
@@ -586,6 +609,36 @@ class DatabaseManager:
         """,
             (like_query, limit),
         )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def search_albums(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        cursor = self.conn.cursor()
+        like_query = f"%{query}%"
+        cursor.execute(
+            """
+            SELECT album as title, artist, cover_path, cover_url, COUNT(id) as track_count, MAX(year) as year, 'local' as source, 'album' as type
+            FROM tracks
+            WHERE (album LIKE ? OR artist LIKE ?) AND album IS NOT NULL AND album != '' AND album != 'Unknown Album'
+            GROUP BY LOWER(album), LOWER(artist)
+            ORDER BY track_count DESC
+            LIMIT ?
+        """,
+            (like_query, like_query, limit),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_album_tracks(self, album_title: str, artist: str = None) -> List[Dict[str, Any]]:
+        cursor = self.conn.cursor()
+        if artist:
+            cursor.execute(
+                "SELECT * FROM tracks WHERE LOWER(album) = LOWER(?) AND (LOWER(artist) = LOWER(?) OR artist = 'Unknown Artist') ORDER BY track_number ASC, title ASC",
+                (album_title, artist)
+            )
+        else:
+            cursor.execute(
+                "SELECT * FROM tracks WHERE LOWER(album) = LOWER(?) ORDER BY track_number ASC, title ASC",
+                (album_title,)
+            )
         return [dict(row) for row in cursor.fetchall()]
 
     def delete_track(self, track_id: int) -> bool:
@@ -673,8 +726,13 @@ class DatabaseManager:
         # 1. Total listening time & plays count
         query_totals = f"""
             SELECT COUNT(h.id) as total_plays, 
-                   COALESCE(SUM(h.duration_listened), 0) as total_sec
+                   COALESCE(SUM(CASE 
+                        WHEN h.duration_listened > 0 THEN h.duration_listened 
+                        WHEN t.duration > 0 THEN t.duration 
+                        ELSE 180.0 
+                   END), 0) as total_sec
             FROM history h
+            LEFT JOIN tracks t ON h.track_id = t.id
             {where_clause}
         """
         cursor.execute(query_totals)
@@ -685,7 +743,12 @@ class DatabaseManager:
         # 2. Top 5 tracks for period
         query_top_tracks = f"""
             SELECT t.id, t.title, t.artist, t.album, t.cover_path, t.cover_url, t.source, t.source_id,
-                   COUNT(h.id) as plays, COALESCE(SUM(h.duration_listened), 0) as total_listened_sec
+                   COUNT(h.id) as plays, 
+                   COALESCE(SUM(CASE 
+                        WHEN h.duration_listened > 0 THEN h.duration_listened 
+                        WHEN t.duration > 0 THEN t.duration 
+                        ELSE 180.0 
+                   END), 0) as total_listened_sec
             FROM history h
             JOIN tracks t ON h.track_id = t.id
             {where_clause}
@@ -698,7 +761,13 @@ class DatabaseManager:
 
         # 3. Top 5 artists for period
         query_top_artists = f"""
-            SELECT t.artist, COUNT(h.id) as plays, COALESCE(SUM(h.duration_listened), 0) as total_listened_sec
+            SELECT t.artist, 
+                   COUNT(h.id) as plays, 
+                   COALESCE(SUM(CASE 
+                        WHEN h.duration_listened > 0 THEN h.duration_listened 
+                        WHEN t.duration > 0 THEN t.duration 
+                        ELSE 180.0 
+                   END), 0) as total_listened_sec
             FROM history h
             JOIN tracks t ON h.track_id = t.id
             {where_clause}
@@ -714,8 +783,13 @@ class DatabaseManager:
         query_activity = f"""
             SELECT strftime('%w', h.played_at) as day_idx,
                    COUNT(h.id) as plays,
-                   COALESCE(SUM(h.duration_listened), 0) / 60.0 as minutes
+                   COALESCE(SUM(CASE 
+                        WHEN h.duration_listened > 0 THEN h.duration_listened 
+                        WHEN t.duration > 0 THEN t.duration 
+                        ELSE 180.0 
+                   END), 0) / 60.0 as minutes
             FROM history h
+            LEFT JOIN tracks t ON h.track_id = t.id
             {where_clause}
             GROUP BY day_idx
         """
@@ -758,7 +832,15 @@ class DatabaseManager:
         cursor.execute("SELECT COUNT(*) FROM playlists")
         total_playlists = cursor.fetchone()[0]
 
-        cursor.execute("SELECT SUM(duration_listened) FROM history")
+        cursor.execute("""
+            SELECT COALESCE(SUM(CASE 
+                WHEN h.duration_listened > 0 THEN h.duration_listened 
+                WHEN t.duration > 0 THEN t.duration 
+                ELSE 180.0 
+            END), 0) 
+            FROM history h
+            LEFT JOIN tracks t ON h.track_id = t.id
+        """)
         total_time_row = cursor.fetchone()[0]
         total_time = total_time_row if total_time_row else 0
 

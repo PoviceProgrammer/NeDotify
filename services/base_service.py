@@ -61,6 +61,12 @@ class BaseMusicService:
                 cls._search_cache.pop(oldest_key, None)
             cls._search_cache[key] = {'data': data, 'ts': time.time()}
 
+    @classmethod
+    def clear_search_cache(cls) -> None:
+        """Clear all search cache entries."""
+        with cls._cache_lock:
+            cls._search_cache.clear()
+
     @staticmethod
     def _parse_yt_entry(entry: dict) -> Optional[dict]:
         """Convert a yt-dlp entry dict into a standardized track dictionary.

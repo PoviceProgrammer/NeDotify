@@ -179,8 +179,16 @@ class AppCore:
         """Construct lookup URL, call get_stream_url asynchronously and trigger callbacks."""
         def worker():
             url = None
-            if source == "youtube":
-                url = f"https://www.youtube.com/watch?v={source_id}"
+            if source in ("youtube", "spotify"):
+                sid_str = str(source_id or "").strip()
+                if sid_str.startswith("http://") or sid_str.startswith("https://") or sid_str.startswith("ytsearch"):
+                    url = sid_str
+                elif track and (not sid_str or sid_str == "None" or sid_str.startswith("spotify_")):
+                    t_art = track.get("artist", "")
+                    t_tit = track.get("title", "")
+                    url = f"ytsearch1:{t_art} - {t_tit}"
+                else:
+                    url = f"https://www.youtube.com/watch?v={sid_str}"
                 service = self.youtube
             elif source == "soundcloud":
                 if "/" in str(source_id):

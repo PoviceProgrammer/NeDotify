@@ -220,73 +220,100 @@ class YouTubeService(BaseMusicService):
     def available(self) -> bool:
         return HAS_YTDLP
 
-    def search(self, query: str, max_results: int = 20, callback: Callable = None, error_callback: Callable = None):
-        """Search YouTube for tracks. Runs in background thread."""
+    def search(self, query: str, max_results: int = 20, result_type: str = None, callback: Callable = None, error_callback: Callable = None):
+        """Search YouTube for tracks or albums. Runs in background thread."""
         if not HAS_YTDLP or not HAS_YTMUSIC:
             if error_callback:
                 error_callback("yt-dlp или ytmusicapi не установлены")
             return None
 
-
         def _search():
             try:
-
-                cache_key = f"yt_search:{query}"
+                is_album_search = result_type in ("albums", "album")
+                yt_filter = "albums" if is_album_search else None
+                cache_key = f"yt_search:{query}:{yt_filter}"
                 cached = self.get_search_cache(cache_key)
                 if cached is not None:
                     if callback:
                         callback(cached)
                     return None
 
-                results = self._ytmusic.search(query, filter=None, limit=max_results)
+                results = self._ytmusic.search(query, filter=yt_filter, limit=max_results)
 
                 tracks = []
                 seen_ids = set()
-                for item in results:
-                    rtype = item.get("resultType", "")
-                    if rtype not in ("song", "video"):
-                        continue
-                    vid = item.get("videoId")
-                    if not vid or vid in seen_ids:
-                        continue
+                for idx, item in enumerate(results):
+                    if is_album_search:
+                        bid = item.get("browseId") or item.get("playlistId") or f"yt_album_{idx}"
+                        if bid in seen_ids:
+                            continue
+                        seen_ids.add(bid)
 
-                    seen_ids.add(vid)
+                        title = item.get("title", "Unknown Album")
+                        artists_list = item.get("artists", []) or []
+                        artist = ", ".join([a["name"] for a in artists_list if "name" in a]) or "Unknown Artist"
+                        thumbnails = item.get("thumbnails", []) or []
+                        cover_url = thumbnails[-1]["url"] if thumbnails else ""
+                        year = item.get("year") or ""
 
-                    source_id = vid
-                    title = item.get("title", "Unknown Title")
+                        tracks.append({
+                            "id": f"yt_album_{bid}",
+                            "source": "youtube",
+                            "source_id": bid,
+                            "title": title,
+                            "artist": artist,
+                            "album": title,
+                            "year": year,
+                            "cover_url": cover_url,
+                            "type": "album",
+                            "track_count": item.get("track_count") or 0
+                        })
+                    else:
+                        rtype = item.get("resultType", "")
+                        if rtype not in ("song", "video"):
+                            continue
+                        vid = item.get("videoId")
+                        if not vid or vid in seen_ids:
+                            continue
 
-                    artists_list = item.get("artists", [])
-                    artist = ", ".join([a["name"] for a in artists_list if "name" in a])
-                    if not artist:
-                        artist = "Unknown Artist"
+                        seen_ids.add(vid)
 
-                    duration_str = item.get("duration", "0:00")
-                    duration = 0
-                    if duration_str:
-                        parts = duration_str.split(":")
-                        if len(parts) == 2:
-                            duration = int(parts[0]) * 60 + int(parts[1])
-                        elif len(parts) == 3:
-                            duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                        source_id = vid
+                        title = item.get("title", "Unknown Title")
 
-                    thumbnails = item.get("thumbnails", [])
-                    cover_url = thumbnails[-1]["url"] if thumbnails else ""
+                        artists_list = item.get("artists", []) or []
+                        artist = ", ".join([a["name"] for a in artists_list if "name" in a])
+                        if not artist:
+                            artist = "Unknown Artist"
 
-                    tracks.append({
-                        "source": "youtube",
-                        "source_id": source_id,
-                        "title": title,
-                        "artist": artist,
-                        "duration": duration,
-                        "cover_url": cover_url,
-                        "album": item.get("album", {}).get("name", "") if isinstance(item.get("album"), dict) else "",
-                    })
+                        duration_str = item.get("duration", "0:00")
+                        duration = 0
+                        if duration_str:
+                            parts = duration_str.split(":")
+                            if len(parts) == 2:
+                                duration = int(parts[0]) * 60 + int(parts[1])
+                            elif len(parts) == 3:
+                                duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+
+                        thumbnails = item.get("thumbnails", []) or []
+                        cover_url = thumbnails[-1]["url"] if thumbnails else ""
+
+                        tracks.append({
+                            "source": "youtube",
+                            "source_id": source_id,
+                            "title": title,
+                            "artist": artist,
+                            "duration": duration,
+                            "cover_url": cover_url,
+                            "album": item.get("album", {}).get("name", "") if isinstance(item.get("album"), dict) else "",
+                        })
 
                 self.set_search_cache(cache_key, tracks)
                 if callback:
                     callback(tracks)
 
-                self._executor.submit(self._prefetch_top_tracks, tracks)
+                if not is_album_search:
+                    self._executor.submit(self._prefetch_top_tracks, tracks)
 
             except Exception as e:
                 logger.error(f"YouTube search error: {e}")
@@ -294,6 +321,66 @@ class YouTubeService(BaseMusicService):
                     error_callback(str(e))
 
         self._executor.submit(_search)
+        return None
+
+    def get_album_tracks(self, browse_id: str, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
+        """Fetch YouTube Music album tracks via ytmusicapi. Runs in background thread."""
+        if not HAS_YTDLP or not HAS_YTMUSIC:
+            if error_callback:
+                error_callback("yt-dlp или ytmusicapi не установлены")
+            return None
+
+        def _fetch():
+            try:
+                data = self._ytmusic.get_album(browse_id)
+                entries = data.get("tracks", []) if isinstance(data, dict) else []
+                album_title = data.get("title", "Album")
+                album_artist = ", ".join([a["name"] for a in data.get("artists", []) if "name" in a]) or "Unknown Artist"
+                thumbnails = data.get("thumbnails", [])
+                album_cover = thumbnails[-1].get("url", "") if thumbnails else ""
+
+                tracks = []
+                seen_ids = set()
+                for item in entries:
+                    vid = item.get("videoId")
+                    if not vid or vid in seen_ids:
+                        continue
+                    seen_ids.add(vid)
+
+                    title = item.get("title", "Unknown Title")
+                    artists_list = item.get("artists", []) or []
+                    artist = ", ".join([a["name"] for a in artists_list if "name" in a]) or album_artist
+
+                    duration = item.get("duration_seconds", 0) or 0
+                    if isinstance(duration, str):
+                        parts = duration.split(":")
+                        if len(parts) == 2:
+                            duration = int(parts[0]) * 60 + int(parts[1])
+                        elif len(parts) == 3:
+                            duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                        else:
+                            duration = 0
+
+                    tracks.append({
+                        "source": "youtube",
+                        "source_id": vid,
+                        "title": title,
+                        "artist": artist,
+                        "album": album_title,
+                        "duration": duration,
+                        "cover_url": album_cover,
+                    })
+                    if limit and len(tracks) >= limit:
+                        break
+
+                if callback:
+                    callback(tracks)
+            except Exception as e:
+                logger.error(f"YouTube get_album_tracks error: {e}")
+                if error_callback:
+                    error_callback(str(e))
+
+        self._executor.submit(_fetch)
         return None
 
     def get_playlist_tracks(self, playlist_id: str, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
@@ -563,3 +650,41 @@ class YouTubeService(BaseMusicService):
 
         self._executor.submit(_download)
         return None
+
+    def download_audio_sync(self, source_id: str, output_dir: str) -> str:
+        """Download audio synchronously from YouTube via yt-dlp."""
+        import os
+        import time
+        if not HAS_YTDLP:
+            raise Exception("yt-dlp не установлен")
+
+        clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id))
+        file_name = f"yt_{clean_id}_{int(time.time())}.mp3"
+        output_path = os.path.join(output_dir, file_name)
+
+        url = source_id if str(source_id).startswith("http") or str(source_id).startswith("ytsearch") else f"https://www.youtube.com/watch?v={source_id}"
+
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "format": "bestaudio/best",
+            "outtmpl": output_path,
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "320",
+                }
+            ],
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+
+        if not os.path.exists(output_path):
+            base, _ = os.path.splitext(output_path)
+            for ext in (".mp3", ".m4a", ".webm", ".opus"):
+                if os.path.exists(base + ext):
+                    return base + ext
+            raise Exception("Файл не был создан после загрузки с YouTube")
+
+        return output_path

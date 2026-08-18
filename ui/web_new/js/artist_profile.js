@@ -1,6 +1,6 @@
 // NeDotify РІР‚" Artist Profile Module
-import { createTrackElement, renderIcons, formatTime, filterVisibleTracks, escapeHtml } from './utils.js?v=20260817_2';
-import { getCurrentTrack } from './player.js?v=20260817_2';
+import { createTrackElement, renderIcons, formatTime, filterVisibleTracks, escapeHtml } from './utils.js?v=20260817_3';
+import { getCurrentTrack } from './player.js?v=20260817_3';
 
 // Gradient seed backgrounds for fallback covers (visible ONLY if image loading fails)
 const colors = [
@@ -670,10 +670,37 @@ export async function loadArtistProfile(artistName, targetContainer) {
         const bioComp = new ArtistBioComponent(artistData);
         leftCol.appendChild(bioComp.render());
         
-        const onPlayAlbum = (album) => {
-            const albumTracks = (artistData.tracks || []).filter(t => t.album === album.title);
-            const playList = albumTracks.length > 0 ? albumTracks : artistData.tracks;
-            if (window.pywebview && window.pywebview.api && playList.length > 0) {
+        const onPlayAlbum = async (album) => {
+            if (!album) return;
+            const albumTracks = (artistData.tracks || []).filter(t => t.album && t.album.toLowerCase() === (album.title || '').toLowerCase());
+            if (albumTracks.length > 0) {
+                if (window.pywebview?.api?.play_track) {
+                    window.pywebview.api.play_track(albumTracks[0], albumTracks, 0);
+                }
+                return;
+            }
+
+            // If not found in already loaded artist tracks, fetch via get_album_tracks
+            if (window.pywebview?.api?.get_album_tracks) {
+                try {
+                    const fetched = await window.pywebview.api.get_album_tracks({
+                        title: album.title,
+                        artist: artistData.name,
+                        source: album.source || 'youtube',
+                        source_id: album.source_id || ''
+                    });
+                    if (fetched && fetched.length > 0) {
+                        window.pywebview.api.play_track(fetched[0], fetched, 0);
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Error playing album via get_album_tracks:", e);
+                }
+            }
+
+            // Fallback: play available tracks
+            const playList = artistData.tracks || [];
+            if (window.pywebview?.api?.play_track && playList.length > 0) {
                 window.pywebview.api.play_track(playList[0], playList, 0);
             }
         };
