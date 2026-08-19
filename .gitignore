@@ -12,7 +12,6 @@ __pycache__/
 venv/
 dist/
 build/
-*.spec
 *.db
 *.db-shm
 *.db-wal
@@ -21,12 +20,9 @@ restored_sources/
 backups/
 *.zip
 *.pkg
-*.exe
 *.msi
 
 # Tests & Dev Artifacts
-test_*.py
-tests/
 .test_runs/
 .vite/
 user_prompts*.md
@@ -58,38 +54,6 @@ ui/web/
 
 # Agent internal files
 .agents/
-
-# Generated build artifacts
-icon.ico
-icon.png
-
-# Old / legacy build scripts
-build_beta5_installer.py
-build_installer.py
-build_nuitka.bat
-build_v150_installer.py
-
-# Legacy Inno Setup configs
-installer.cfg
-installer.iss
-
-# Debug / one-off utility scripts
-check_all_icons.py
-check_db.py
-check_icons.py
-search_opt.py
-pytest.py
-run_tests.py
-
-# Orphaned UI experiments
-settings_new.html
-settings_logic.js
-
-# Agent-generated internal docs
-progress.md
-ORIGINAL_REQUEST.md
-TEST_INFRA.md
-TEST_READY.md
 
 # Cached album art (generated at runtime)
 ui/web_new/covers/
