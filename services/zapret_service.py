@@ -580,47 +580,68 @@ class ZapretService:
 
     def _launch_elevated(self, exe: str, raw_args: str) -> Tuple[bool, str]:
         """Elevation required (WinError 740 / missing rights) — use ShellExecuteW 'runas'.
-        The elevated process has a different PID, so it is discovered by matching our
-        unique cmdline signature via wmic (Z-2)."""
+        Launches winws.exe with elevation and writes its PID directly to run.pid."""
         import ctypes
         logger.info("Elevating Zapret via ShellExecuteW 'runas'...")
+
+        escaped_pidfile = self.pid_file.replace("'", "''")
+        escaped_exe = exe.replace("'", "''")
+
+        # PowerShell launcher that starts winws and writes PID reliably on Win10/Win11
+        ps_cmd = (
+            f"$p = Start-Process -FilePath '{escaped_exe}' -ArgumentList '{raw_args}' "
+            f"-WindowStyle Hidden -PassThru; "
+            f"Set-Content -Path '{escaped_pidfile}' -Value $p.Id"
+        )
+
         ret = ctypes.windll.shell32.ShellExecuteW(
             None,
             "runas",
-            exe,
-            raw_args,
+            "powershell.exe",
+            f"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"{ps_cmd}\"",
             os.path.dirname(exe),
             0  # SW_HIDE = 0
         )
         if ret == 5:
             msg = "Запуск отменён: требуются права Администратора для драйвера WinDivert (UAC отклонён)."
             logger.warning(msg)
-            self._clear_pidfile()
             return False, msg
         if ret <= 32:
-            msg = f"Ошибка запуска с правами Администратора (код {ret}). См. лог zapret.log."
-            logger.error(msg)
-            self._clear_pidfile()
-            return False, msg
+            # Fallback to direct exe elevation if PowerShell execution is restricted
+            ret_direct = ctypes.windll.shell32.ShellExecuteW(
+                None, "runas", exe, raw_args, os.path.dirname(exe), 0
+            )
+            if ret_direct <= 32:
+                msg = f"Ошибка запуска с правами Администратора (код {ret_direct}). См. лог zapret.log."
+                logger.error(msg)
+                return False, msg
 
-        # Discover the elevated PID by our cmdline signature (3-5s window)
+        # Wait up to 5s for PID to appear in pidfile or via signature scan
         pid = None
         deadline = time.time() + 5.0
         while time.time() < deadline:
+            file_pid = self._read_pidfile()
+            if file_pid and self._pid_alive(file_pid):
+                pid = file_pid
+                break
             pids = self._scan_pids_with(raw_args)
             if pids:
                 pid = pids[0]
+                self._write_pidfile(pid)
                 break
-            time.sleep(0.5)
+            time.sleep(0.3)
 
         if pid:
-            self._write_pidfile(pid)
             logger.info("Elevated winws.exe detected (PID %s)", pid)
             return True, "Zapret активен"
 
+        # Check if an existing valid PID is still running — NEVER clear if alive
+        existing_pid = self._read_pidfile()
+        if existing_pid and self._pid_alive(existing_pid):
+            return True, "Zapret активен (ранее запущен)"
+
         tail = self._read_log_tail()
         msg = self._analyze_crash(tail) if tail else "winws.exe не запустился с правами Администратора. См. лог zapret.log."
-        self._clear_pidfile()
         return False, msg
 
     def stop(self) -> Tuple[bool, str]:
