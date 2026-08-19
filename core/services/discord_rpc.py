@@ -31,6 +31,8 @@ class DiscordRPCService:
         self.duration_sec = 0
         self._lock = threading.Lock()
         self._connecting = False
+        self._pending_update = None
+        self._last_update_ts = 0.0
 
     def is_enabled(self) -> bool:
         if self.settings:
@@ -58,6 +60,11 @@ class DiscordRPCService:
                 self.rpc.connect()
                 self.connected = True
                 logger.info("Discord RPC connected successfully.")
+                with self._lock:
+                    pending = self._pending_update
+                    self._pending_update = None
+                if pending:
+                    self.update_presence(**pending)
             except Exception as e:
                 self.connected = False
                 logger.debug(f"Discord RPC connection attempt failed (Discord client not running): {e}")
@@ -81,9 +88,16 @@ class DiscordRPCService:
             return
 
         if not self.connected:
+            with self._lock:
+                self._pending_update = {
+                    "track_title": track_title,
+                    "track_artist": track_artist,
+                    "is_playing": is_playing,
+                    "duration_sec": duration_sec,
+                    "current_pos_sec": current_pos_sec
+                }
             self.start()
-            if not self.connected or not self.rpc:
-                return
+            return
 
         try:
             title = (track_title or "Неизвестный трек").strip()

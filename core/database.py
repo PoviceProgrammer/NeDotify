@@ -132,6 +132,7 @@ class DatabaseManager:
         """
         )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_played_at ON history(played_at);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_track_id ON history(track_id);")
 
         cursor.execute(
             """
