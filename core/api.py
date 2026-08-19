@@ -2210,4 +2210,24 @@ class AppApi:
             logger.error(f"Error clearing cache: {e}")
             return {"success": False, "error": str(e)}
 
+    def get_flow_tracks(self, seed_track: dict, limit: int = 6, exclude_ids: list = None) -> list:
+        """
+        Generate smart autoplay / flow tracks for continuous listening (Phase 3).
+        Directly returns a list of tracks synchronously to the JS Promise (Decision 2).
+        """
+        if not seed_track or not isinstance(seed_track, dict):
+            return []
+        try:
+            if hasattr(self._core, "recommendations") and self._core.recommendations:
+                return self._core.recommendations.get_flow_tracks_sync(
+                    seed_track=seed_track,
+                    limit=limit,
+                    exclude_ids=exclude_ids or []
+                )
+            return []
+        except Exception as e:
+            logger.warning(f"Flow tracks retrieval failed: {e}")
+            return []
+
+
 

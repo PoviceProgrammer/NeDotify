@@ -32,6 +32,10 @@ class RecommendationService(BaseMusicService):
         self.db = db
         self.logger = logging.getLogger(self.__class__.__name__)
 
+        self.soundcloud_service = soundcloud_service
+        self.sc_service = soundcloud_service
+        self.youtube_service = youtube_service
+
         self.lastfm = LastFMService(settings=settings)
         self.resolver = TrackResolver(db=db, soundcloud_service=soundcloud_service, youtube_service=youtube_service)
 
@@ -847,3 +851,24 @@ class RecommendationService(BaseMusicService):
             self._executor.submit(_task)
             return None
         return _task()
+
+    def get_flow_tracks_sync(self, seed_track: dict, limit: int = 6, exclude_ids: list = None) -> list:
+        """Synchronously generate flow recommendations for smart autoplay (Phase 3)."""
+        tracks = self.get_wave_for_track(seed_track, limit=limit, exclude_ids=exclude_ids, callback=None)
+        if (not tracks or len(tracks) < limit) and seed_track and self.youtube_service:
+            try:
+                artist = seed_track.get("artist") or ""
+                title = seed_track.get("title") or ""
+                query = f"{artist} {title}".strip()
+                if query:
+                    yt_results = self.youtube_service.search_sync(f"{query}", limit=limit + 4)
+                    if yt_results:
+                        exclude_set = {str(eid).strip().lower() for eid in (exclude_ids or []) if eid}
+                        filtered = [
+                            self._format_ui_track(t) for t in yt_results
+                            if str(t.get("source_id", "")).lower() not in exclude_set
+                        ]
+                        tracks = (tracks or []) + filtered
+            except Exception as ye:
+                self.logger.debug(f"YouTube flow fallback ignored: {ye}")
+        return (tracks or [])[:limit]

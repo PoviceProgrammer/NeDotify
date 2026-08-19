@@ -88,6 +88,36 @@ function loadAudioSource(audioEl, src) {
     try { audioEl.load(); } catch(e) {}
 }
 
+// Flow Autoplay & Prefetch State (Phase 3 & Phase 4)
+let isFlowEnabled = localStorage.getItem('nedotify_player_flow_enabled') !== 'false';
+let lastFlowFetchTime = 0;
+let flowSessionCount = 0;
+const flowHistoryKeys = new Set();
+let isFlowFetching = false;
+
+let lastPrefetchedTrackId = null;
+let isPreloadingNextTrack = false;
+
+export function updateFlowButtons() {
+    const pbFlow = document.getElementById('pb-btn-flow');
+    const ppFlow = document.getElementById('pp-btn-flow');
+    if (pbFlow) pbFlow.classList.toggle('active', isFlowEnabled);
+    if (ppFlow) ppFlow.classList.toggle('active', isFlowEnabled);
+}
+
+export function toggleFlow() {
+    isFlowEnabled = !isFlowEnabled;
+    localStorage.setItem('nedotify_player_flow_enabled', isFlowEnabled ? 'true' : 'false');
+    updateFlowButtons();
+    window.dispatchEvent(new CustomEvent('nedotify:toast', {
+        detail: {
+            msg: isFlowEnabled ? '📻 «Бесконечная волна (Flow)» включена' : '📻 «Бесконечная волна (Flow)» выключена',
+            type: 'info'
+        }
+    }));
+}
+
+
 // Web Audio API for Equalizer
 let audioCtx = null;
 let mediaSourcesCreated = false;
@@ -569,6 +599,12 @@ export function initPlayer() {
         }
     });
 
+    const ppFlow = document.getElementById('pp-btn-flow');
+    const pbFlow = document.getElementById('pb-btn-flow');
+    if (ppFlow) ppFlow.addEventListener('click', toggleFlow);
+    if (pbFlow) pbFlow.addEventListener('click', toggleFlow);
+    updateFlowButtons();
+
     const ppQueue = document.getElementById('pp-btn-queue');
     if (ppQueue) ppQueue.addEventListener('click', () => {
         const queueDrawer = document.getElementById('queue-drawer') || document.getElementById('queue-overlay');
@@ -895,58 +931,93 @@ function animateProgress(timestamp) {
 
             const remainingSec = (currentDuration - currentPosMs) / 1000;
 
-            // 1. Queue Autopilot Trigger (at 12s remaining, before prefetch)
-            if (remainingSec <= 12 && !window._isAutopilotFetching) {
-                const autopilotEnabled = localStorage.getItem('nedotify_player_queue_autopilot') !== 'false';
-                if (autopilotEnabled && window.pywebview?.api?.get_queue) {
-                    window.pywebview.api.get_queue().then(q => {
-                        if (q && q.tracks && (q.current_index >= q.tracks.length - 1)) {
-                            window._isAutopilotFetching = true;
-                            if (window.pywebview?.api?.get_track_wave && currentTrack) {
-                                const excludeIds = (q.tracks || []).map(t => t.id || t.source_id).filter(Boolean);
-                                window.pywebview.api.get_track_wave(currentTrack, 6, excludeIds).then(newTracks => {
-                                    if (newTracks && newTracks.length > 0) {
-                                        incrementQueueVersion();
-                                        newTracks.forEach(nt => {
-                                            if (window.pywebview?.api?.add_to_queue) {
-                                                window.pywebview.api.add_to_queue(nt);
-                                            }
-                                        });
-                                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: '📻 Автопилот добавил похожие треки в очередь', type: 'info' } }));
-                                    }
-                                }).catch(err => console.error('Autopilot error:', err))
-                                .finally(() => {
-                                    setTimeout(() => { window._isAutopilotFetching = false; }, 12000);
-                                });
-                            }
-                        }
-                    }).catch(() => {});
-                }
-            }
-
-            // 2. Next Track Prefetching (at 7s remaining, after autopilot appended tracks)
-            if (remainingSec <= 7 && !window._isPreloadingNextTrack) {
-                window._isPreloadingNextTrack = true;
+            // 1. Next Track Prefetching (Phase 4: at 20s remaining, single-flight pre-warm)
+            if (remainingSec <= 20 && currentDuration > 25000 && !isPreloadingNextTrack) {
                 const prefetchEnabled = localStorage.getItem('nedotify_player_player_prefetch') !== 'false';
-                const capturedQueueVer = currentQueueVersion;
-
                 if (prefetchEnabled && window.pywebview?.api?.get_next_track) {
+                    isPreloadingNextTrack = true;
+                    const capturedQueueVer = currentQueueVersion;
+
                     window.pywebview.api.get_next_track().then(nextTrack => {
-                        // Check if queue mutated during async resolution
                         if (nextTrack && capturedQueueVer === currentQueueVersion) {
-                            if (window.pywebview?.api?.prefetch_track) {
-                                window.pywebview.api.prefetch_track(nextTrack);
-                            }
-                            if (nextTrack.stream_url) {
-                                const inactiveAudio = activeAudio === audioA ? audioB : audioA;
-                                if (inactiveAudio.src !== nextTrack.stream_url) {
-                                    inactiveAudio.src = nextTrack.stream_url;
-                                    inactiveAudio.load();
+                            const trackKey = nextTrack.id || nextTrack.source_id;
+                            if (trackKey && lastPrefetchedTrackId !== trackKey) {
+                                lastPrefetchedTrackId = trackKey;
+                                if (window.pywebview?.api?.prefetch_track) {
+                                    window.pywebview.api.prefetch_track(nextTrack);
+                                }
+                                if (nextTrack.stream_url) {
+                                    const inactiveAudio = activeAudio === audioA ? audioB : audioA;
+                                    if (inactiveAudio && inactiveAudio.src !== nextTrack.stream_url) {
+                                        try {
+                                            inactiveAudio.src = nextTrack.stream_url;
+                                            inactiveAudio.load();
+                                        } catch (preErr) {
+                                            inactiveAudio.src = "";
+                                            inactiveAudio.removeAttribute("src");
+                                            try { inactiveAudio.load(); } catch(e) {}
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }).catch(() => {}).finally(() => {
-                        setTimeout(() => { window._isPreloadingNextTrack = false; }, 8000);
+                    }).catch(err => {
+                        console.debug('Prefetch error:', err);
+                    }).finally(() => {
+                        setTimeout(() => { isPreloadingNextTrack = false; }, 8000);
+                    });
+                }
+            }
+
+            // 2. Queue Flow / Autoplay Trigger (Phase 3: at 15s remaining on the LAST track of queue)
+            const now = Date.now();
+            if (isFlowEnabled && remainingSec <= 15 && !isFlowFetching && (now - lastFlowFetchTime > 30000) && flowSessionCount < 200) {
+                if (window.pywebview?.api?.get_queue && window.pywebview?.api?.get_flow_tracks && currentTrack) {
+                    isFlowFetching = true;
+                    lastFlowFetchTime = now;
+
+                    window.pywebview.api.get_queue().then(async q => {
+                        if (q && q.tracks && (q.current_index >= q.tracks.length - 1)) {
+                            const queueIds = (q.tracks || []).map(t => t.id || t.source_id).filter(Boolean);
+                            const excludeIds = [...queueIds, ...Array.from(flowHistoryKeys)];
+
+                            try {
+                                const newTracks = await window.pywebview.api.get_flow_tracks(currentTrack, 6, excludeIds);
+                                if (newTracks && Array.isArray(newTracks) && newTracks.length > 0) {
+                                    const filtered = newTracks.filter(nt => {
+                                        const k1 = nt.id || nt.source_id;
+                                        const k2 = `${(nt.artist || '').toLowerCase()}:${(nt.title || '').toLowerCase()}`;
+                                        if (k1 && flowHistoryKeys.has(k1)) return false;
+                                        if (flowHistoryKeys.has(k2)) return false;
+                                        if (queueIds.includes(k1)) return false;
+                                        return true;
+                                    });
+
+                                    if (filtered.length > 0) {
+                                        incrementQueueVersion();
+                                        for (const nt of filtered) {
+                                            const k1 = nt.id || nt.source_id;
+                                            const k2 = `${(nt.artist || '').toLowerCase()}:${(nt.title || '').toLowerCase()}`;
+                                            if (k1) flowHistoryKeys.add(k1);
+                                            flowHistoryKeys.add(k2);
+                                            if (window.pywebview?.api?.add_to_queue) {
+                                                await window.pywebview.api.add_to_queue(nt);
+                                            }
+                                        }
+                                        flowSessionCount += filtered.length;
+                                        window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                                            detail: { msg: `📻 «Бесконечная волна»: подобрано ${filtered.length} похожих треков`, type: 'info' }
+                                        }));
+                                    }
+                                }
+                            } catch (flowErr) {
+                                console.debug('Flow autoplay error:', flowErr);
+                            }
+                        }
+                    }).catch(qErr => {
+                        console.debug('Flow get_queue error:', qErr);
+                    }).finally(() => {
+                        setTimeout(() => { isFlowFetching = false; }, 15000);
                     });
                 }
             }
