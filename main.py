@@ -18,6 +18,18 @@ _PINNED_WEBVIEW2 = os.path.join(
 )
 if os.path.exists(os.path.join(_PINNED_WEBVIEW2, 'msedgewebview2.exe')):
     webview.settings['WEBVIEW2_RUNTIME_PATH'] = _PINNED_WEBVIEW2
+    os.environ['WEBVIEW2_BROWSER_EXECUTABLE_FOLDER'] = _PINNED_WEBVIEW2
+
+_ADDITIONAL_ARGS = (
+    '--no-first-run '
+    '--disable-background-networking '
+    '--disable-component-update '
+    '--disable-features=CalculateNativeWinOcclusion,msSmartScreenProtection'
+)
+if 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS' in os.environ:
+    os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] += ' ' + _ADDITIONAL_ARGS
+else:
+    os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = _ADDITIONAL_ARGS
 
 # Capture the pywebview HTTP server's Bottle app so the app can register its own
 # bridge-free routes (e.g. /__aura_close) even when the JS bridge is dead.
@@ -176,14 +188,11 @@ def main():
         logging.info(f"[startup] window loaded (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
         if app_core.engine.queue.current_track:
             app_core.engine._on_track_changed(app_core.engine.queue.current_track)
-        # Zapret must start AFTER the window is up: a cold winws DPI-desync launch
-        # slows WebView2 HTTPS handshakes and delays bridge injection.
-        threading.Thread(target=app_core.start_zapret_if_enabled, daemon=True).start()
             
     window.events.loaded += on_loaded
 
     # Watchdog: if the JS bridge never comes up (WebView2 init hang), log it,
-    # force one reload, and register a bridge-free close endpoint on the local server.
+    # and perform a real detached process restart after registering bridge-free close route.
     def _register_close_route():
         import time as _time
         for _ in range(200):
@@ -213,36 +222,39 @@ def main():
             logging.warning(f"[startup] close endpoint registration failed: {e}")
 
     def _startup_watchdog():
-        # First load may be slow (observed up to ~16s on cold WebView2); give a
-        # generous window, then silently reload twice (manual/auto reload is
-        # confirmed to restore the bridge). The frontend shows the error overlay
-        # only after 45s of bridge absence on the 3rd load (2 reloads done).
-        for attempt in range(1, 3):
-            if window.events.loaded.wait(45):
-                logging.info(f"[startup] bridge initialized after {attempt} load attempt(s)")
-                return
-            logging.warning(
-                f"[startup] bridge not initialized after {attempt * 45}s; "
-                f"silently reloading (attempt {attempt}/2)"
+        # First load may take ~10-20s on cold WebView2; give it 35s.
+        # If bridge is still dead, do a REAL process restart (detached child + os._exit).
+        if window.events.loaded.wait(35):
+            logging.info("[startup] bridge initialized after 1 load attempt(s)")
+            return
+        logging.warning("[startup] bridge not initialized after 35s; reloading (real restart)")
+        try:
+            import subprocess
+            creation_flags = 0
+            if sys.platform == "win32":
+                creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            subprocess.Popen(
+                [sys.executable] + sys.argv,
+                creationflags=creation_flags,
+                close_fds=True
             )
             try:
-                window.load_url(window.real_url)
-            except Exception as e:
-                logging.warning(f"[startup] forced reload failed: {e}")
-                return
-        if not window.events.loaded.wait(45):
-            logging.error(
-                "[startup] bridge STILL unavailable after 2 auto reloads. "
-                "Close via the tray icon or Alt+F4, or reinstall/repair the WebView2 "
-                f"runtime (pinned: {_PINNED_WEBVIEW2})."
-            )
+                app_core.cleanup()
+            except Exception:
+                pass
+            os._exit(3)
+        except Exception as e:
+            logging.error(f"[startup] watchdog real restart failed: {e}")
 
     threading.Thread(target=_register_close_route, daemon=True).start()
     threading.Thread(target=_startup_watchdog, daemon=True).start()
 
     # Start the application loop (debug=False disables DevTools; use F12 for debugging via debug flag)
+    logging.info(f"[startup] WebView2 runtime setting: {webview.settings.get('WEBVIEW2_RUNTIME_PATH', 'default')}")
     logging.info(f"[startup] webview loop starting (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
-    webview.start(http_server=True, debug=False)
+    _storage_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'webview2_data')
+    os.makedirs(_storage_dir, exist_ok=True)
+    webview.start(http_server=True, debug=False, private_mode=False, storage_path=_storage_dir)
 
     # Save session before exit
     try:
