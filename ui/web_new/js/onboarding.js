@@ -1,17 +1,43 @@
-export function initOnboarding() {
+function waitForSettings(timeout = 2000) {
+    return new Promise((resolve) => {
+        const start = Date.now();
+        const check = () => {
+            if (window.settings) return resolve(window.settings);
+            if (Date.now() - start > timeout) return resolve(null);
+            setTimeout(check, 50);
+        };
+        check();
+    });
+}
+
+export async function initOnboarding() {
     const wizard = document.getElementById('onboarding-wizard');
     if (!wizard) return;
 
+    // Check localStorage first (fast)
     const isDoneLocal = localStorage.getItem('aura_onboarding_done') === 'true' || 
                         localStorage.getItem('nedotify_general_first_launch_done') === 'true' || 
                         localStorage.getItem('nedotify_personalization_onboarding_completed') === 'true';
-    const isDoneBackend = window.settings?.general?.first_launch_done === true || 
-                          window.settings?.personalization?.onboarding_completed === true;
-
-    if (isDoneLocal || isDoneBackend) {
+    if (isDoneLocal) {
         wizard.style.display = 'none';
         wizard.classList.add('hidden');
         return;
+    }
+
+    // Wait for backend settings (slow)
+    try {
+        await waitForSettings(2000);
+        const isDoneBackend = window.settings?.general?.first_launch_done === true || 
+                              window.settings?.personalization?.onboarding_completed === true ||
+                              window.settings?.onboarding_done === true;
+        if (isDoneBackend) {
+            localStorage.setItem('aura_onboarding_done', 'true');
+            wizard.style.display = 'none';
+            wizard.classList.add('hidden');
+            return;
+        }
+    } catch (err) {
+        console.warn('Settings timeout in onboarding:', err);
     }
 
     wizard.style.display = 'flex';

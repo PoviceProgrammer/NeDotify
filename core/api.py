@@ -346,9 +346,10 @@ class AppApi:
             self._window = main_window
 
     def close(self):
-        """Close window and shutdown application."""
+        """Close window and shutdown application asynchronously to prevent deadlock on Windows WebView2."""
         if self._window:
-            self._window.destroy()
+            threading.Timer(0.1, self._window.destroy).start()
+        return {"success": True, "message": "Window closing..."}
 
     def shutdown(self):
         """Release API-owned resources before the application exits."""
@@ -357,8 +358,8 @@ class AppApi:
         self._mini_window = None
 
     def close_window(self):
-        """Close application window."""
-        self.close()
+        """Close application window asynchronously."""
+        return self.close()
 
     def minimize(self):
         """Minimize application window."""

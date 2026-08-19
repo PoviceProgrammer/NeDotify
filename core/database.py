@@ -497,6 +497,25 @@ class DatabaseManager:
         cursor.execute("SELECT * FROM tracks WHERE is_favorite = 1 ORDER BY added_at DESC")
         return [dict(row) for row in cursor.fetchall()]
 
+    def get_most_played_tracks(self, limit: int = 10) -> List[Dict[str, Any]]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM tracks WHERE play_count > 0 ORDER BY play_count DESC, last_played DESC LIMIT ?", (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_recently_added_tracks(self, limit: int = 10) -> List[Dict[str, Any]]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM tracks ORDER BY added_at DESC LIMIT ?", (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_user_history_tracks(self, limit: int = 10) -> List[Dict[str, Any]]:
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT t.* FROM tracks t
+            JOIN history h ON t.id = h.track_id
+            ORDER BY h.played_at DESC LIMIT ?
+        """, (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
     def toggle_favorite(self, track_id: int) -> bool:
         cursor = self.conn.cursor()
         cursor.execute("SELECT is_favorite FROM tracks WHERE id = ?", (track_id,))

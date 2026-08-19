@@ -20,6 +20,17 @@ from services.track_resolver import TrackResolver, resolve_track
 
 logger = logging.getLogger(__name__)
 
+CURATED_WELCOME_TRACKS = [
+    {"id": "yt_4NRXx6U8ABQ", "title": "Blinding Lights", "artist": "The Weeknd", "source": "youtube", "source_id": "4NRXx6U8ABQ", "duration": 200, "cover_url": "https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg"},
+    {"id": "yt_TUVcZfQe-Kw", "title": "Levitating", "artist": "Dua Lipa", "source": "youtube", "source_id": "TUVcZfQe-Kw", "duration": 203, "cover_url": "https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg"},
+    {"id": "yt_uelHwf8o7_U", "title": "Love The Way You Lie", "artist": "Eminem ft. Rihanna", "source": "youtube", "source_id": "uelHwf8o7_U", "duration": 263, "cover_url": "https://i.ytimg.com/vi/uelHwf8o7_U/hqdefault.jpg"},
+    {"id": "yt_fJ9rUzIMcZQ", "title": "Bohemian Rhapsody", "artist": "Queen", "source": "youtube", "source_id": "fJ9rUzIMcZQ", "duration": 359, "cover_url": "https://i.ytimg.com/vi/fJ9rUzIMcZQ/hqdefault.jpg"},
+    {"id": "yt_YykjpeuMNEk", "title": "Hymn for the Weekend", "artist": "Coldplay", "source": "youtube", "source_id": "YykjpeuMNEk", "duration": 258, "cover_url": "https://i.ytimg.com/vi/YykjpeuMNEk/hqdefault.jpg"},
+    {"id": "yt_JGwWNGJdvx8", "title": "Shape of You", "artist": "Ed Sheeran", "source": "youtube", "source_id": "JGwWNGJdvx8", "duration": 233, "cover_url": "https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg"},
+    {"id": "yt_7wtfhZwyrcc", "title": "Believer", "artist": "Imagine Dragons", "source": "youtube", "source_id": "7wtfhZwyrcc", "duration": 204, "cover_url": "https://i.ytimg.com/vi/7wtfhZwyrcc/hqdefault.jpg"},
+    {"id": "yt_DyDfgMOUjCI", "title": "bad guy", "artist": "Billie Eilish", "source": "youtube", "source_id": "DyDfgMOUjCI", "duration": 194, "cover_url": "https://i.ytimg.com/vi/DyDfgMOUjCI/hqdefault.jpg"},
+]
+
 
 class RecommendationService(BaseMusicService):
     """Generates track and mix recommendations using Last.fm API, UserTasteProfile, and TrackResolver."""
@@ -272,9 +283,9 @@ class RecommendationService(BaseMusicService):
 
     def get_charts(self, country='US', max_results=20, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None):
         def _task():
+            tracks = []
             try:
-                chart_raw = self.lastfm.chart.getTopTracks(limit=max_results * 2)
-                tracks = []
+                chart_raw = self.lastfm.chart.getTopTracks(limit=max_results * 2) if hasattr(self, 'lastfm') and self.lastfm else []
                 seen = set()
 
                 for item in chart_raw:
@@ -295,18 +306,24 @@ class RecommendationService(BaseMusicService):
                     tracks.append(ui_track)
                     if len(tracks) >= max_results:
                         break
-
-                if callback:
-                    callback(tracks[:max_results])
             except Exception as e:
-                self.logger.error(f'Error fetching charts: {e}')
-                if error_callback:
-                    error_callback(str(e))
+                self.logger.warning(f"Last.fm get_charts failed ({e}), falling back to local DB/curated")
+
+            if not tracks:
+                if self.db:
+                    db_tracks = self.db.get_most_played_tracks(limit=max_results)
+                    tracks = [self._format_ui_track(t) for t in db_tracks] if db_tracks else []
+                if not tracks:
+                    tracks = CURATED_WELCOME_TRACKS[:max_results]
+
+            if callback:
+                callback(tracks[:max_results])
 
         self._executor.submit(_task)
 
-    def get_feed(self, history: List[dict], personalization: dict = None, max_results: int = 20, callback: Callable = None, error_callback: Callable = None):
+    def get_feed(self, history: List[dict] = None, personalization: dict = None, max_results: int = 20, callback: Callable = None, error_callback: Callable = None):
         def _task():
+            resolved_list = []
             try:
                 if self.db:
                     taste_profile = UserTasteProfile().build_from_db(self.db)
@@ -317,18 +334,16 @@ class RecommendationService(BaseMusicService):
 
                 all_candidates = []
                 for artist in seed_artists[:3]:
-                    top_trks = self.lastfm.artist.getTopTracks(artist, limit=5)
+                    top_trks = self.lastfm.artist.getTopTracks(artist, limit=5) if hasattr(self, 'lastfm') and self.lastfm else []
                     for tt in top_trks:
                         all_candidates.append({'artist': tt.get('artist', artist), 'title': tt.get('name', '')})
 
-                if not all_candidates:
+                if not all_candidates and hasattr(self, 'lastfm') and self.lastfm:
                     chart_trks = self.lastfm.chart.getTopTracks(limit=10)
                     for ct in chart_trks:
                         all_candidates.append({'artist': ct.get('artist', ''), 'title': ct.get('name', '')})
 
-                resolved_list = []
                 seen = set()
-
                 for cand in all_candidates:
                     key = f"{cand['artist'].lower()}:{cand['title'].lower()}"
                     if key in seen:
@@ -348,13 +363,18 @@ class RecommendationService(BaseMusicService):
                 resolved_list.sort(key=lambda x: x.get('_weight', 0.5), reverse=True)
                 for t in resolved_list:
                     t.pop('_weight', None)
-
-                if callback:
-                    callback(resolved_list[:max_results])
             except Exception as e:
-                self.logger.error(f'Exception in get_feed: {e}')
-                if error_callback:
-                    error_callback(str(e))
+                self.logger.warning(f"Last.fm get_feed failed ({e}), falling back to local DB/curated")
+
+            if not resolved_list:
+                if self.db:
+                    db_tracks = self.db.get_user_history_tracks(limit=max_results)
+                    resolved_list = [self._format_ui_track(t) for t in db_tracks] if db_tracks else []
+                if not resolved_list:
+                    resolved_list = CURATED_WELCOME_TRACKS[:max_results]
+
+            if callback:
+                callback(resolved_list[:max_results])
 
         self._executor.submit(_task)
 
@@ -385,10 +405,13 @@ class RecommendationService(BaseMusicService):
                 for sa in seed_artists:
                     add_artist(sa)
 
-                if len(artists) < max_results:
-                    chart_arts = self.lastfm.chart.getTopArtists(limit=max_results)
-                    for ca in chart_arts:
-                        add_artist(ca.get('name'), ca.get('image'))
+                if len(artists) < max_results and hasattr(self, 'lastfm') and self.lastfm:
+                    try:
+                        chart_arts = self.lastfm.chart.getTopArtists(limit=max_results)
+                        for ca in chart_arts:
+                            add_artist(ca.get('name'), ca.get('image'))
+                    except Exception:
+                        pass
 
                 if callback:
                     callback(artists[:max_results])
@@ -401,13 +424,13 @@ class RecommendationService(BaseMusicService):
 
     def get_releases(self, favorite_artists: List[str] = None, max_results: int = 10, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None):
         def _task():
+            tracks = []
             try:
                 artists_pool = favorite_artists or self.DEFAULT_FALLBACK_ARTISTS
-                tracks = []
                 seen = set()
 
                 for artist in artists_pool[:5]:
-                    top_trks = self.lastfm.artist.getTopTracks(artist, limit=4)
+                    top_trks = self.lastfm.artist.getTopTracks(artist, limit=4) if hasattr(self, 'lastfm') and self.lastfm else []
                     for tt in top_trks:
                         t_name = tt.get('name')
                         key = f'{artist.lower()}:{t_name.lower()}'
@@ -426,24 +449,18 @@ class RecommendationService(BaseMusicService):
                             break
                     if len(tracks) >= max_results:
                         break
-
-                if not tracks:
-                    chart_trks = self.lastfm.chart.getTopTracks(limit=max_results)
-                    for ct in chart_trks:
-                        resolved = self.resolver.resolve_track(ct.get('name', ''), ct.get('artist', ''))
-                        if not resolved:
-                            continue
-                        if resolved.get('source') not in ('soundcloud', 'youtube', 'local'):
-                            continue
-
-                        tracks.append(self._format_ui_track(resolved))
-
-                if callback:
-                    callback(tracks[:max_results])
             except Exception as e:
-                self.logger.error(f'Error fetching releases: {e}')
-                if error_callback:
-                    error_callback(str(e))
+                self.logger.warning(f"Last.fm get_releases failed ({e}), falling back to local DB/curated")
+
+            if not tracks:
+                if self.db:
+                    db_tracks = self.db.get_recently_added_tracks(limit=max_results)
+                    tracks = [self._format_ui_track(t) for t in db_tracks] if db_tracks else []
+                if not tracks:
+                    tracks = CURATED_WELCOME_TRACKS[:max_results]
+
+            if callback:
+                callback(tracks[:max_results])
 
         self._executor.submit(_task)
 
