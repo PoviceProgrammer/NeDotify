@@ -244,13 +244,19 @@ class ZapretService:
     # ─── liveness (Z-5) ───
 
     def is_running(self) -> bool:
-        """Fast check: own Popen handle or saved pidfile PID."""
+        """Fast check: own Popen handle, saved pidfile PID, or running winws process."""
         with self._lock:
             if self.process and self.process.poll() is None:
                 return True
         pid = self._read_pidfile()
         if pid and self._pid_alive(pid):
             return True
+        signature = self._last_args or self._read_cmd_file()
+        if signature:
+            pids = self._scan_pids_with(signature)
+            if pids:
+                self._write_pidfile(pids[0])
+                return True
         return False
 
     # ─── stderr log & crash analysis (Z-3) ───

@@ -180,16 +180,70 @@ def main():
         easy_drag=False
     )
 
+    # Single Instance Guard
+    import tempfile
+    def _acquire_instance_lock():
+        lock_path = os.path.join(tempfile.gettempdir(), 'nedotify_instance.lock')
+        if os.path.exists(lock_path):
+            try:
+                with open(lock_path, 'r') as f:
+                    old_pid = int(f.read().strip())
+                if old_pid != os.getpid():
+                    import ctypes
+                    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+                    STILL_ACTIVE = 259
+                    kernel32 = ctypes.windll.kernel32
+                    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, old_pid)
+                    if handle:
+                        try:
+                            code = ctypes.c_ulong()
+                            if kernel32.GetExitCodeProcess(handle, ctypes.byref(code)) and code.value == STILL_ACTIVE:
+                                logging.info(f"[startup] Another instance is already running (PID {old_pid}); exiting cleanly.")
+                                sys.exit(0)
+                        finally:
+                            kernel32.CloseHandle(handle)
+            except Exception:
+                pass
+        try:
+            with open(lock_path, 'w') as f:
+                f.write(str(os.getpid()))
+        except Exception:
+            pass
+
+    def _release_instance_lock():
+        try:
+            lock_path = os.path.join(tempfile.gettempdir(), 'nedotify_instance.lock')
+            if os.path.exists(lock_path):
+                with open(lock_path, 'r') as f:
+                    cur_pid = int(f.read().strip())
+                if cur_pid == os.getpid():
+                    os.remove(lock_path)
+        except Exception:
+            pass
+
+    _acquire_instance_lock()
+
     # Pass window reference to api
     api.set_window(window)
     logging.info(f"[startup] window created (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
+
+    _INTENTIONAL_CLOSE = threading.Event()
 
     def on_loaded():
         logging.info(f"[startup] window loaded (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
         if app_core.engine.queue.current_track:
             app_core.engine._on_track_changed(app_core.engine.queue.current_track)
-            
+        # Deferred Zapret autostart: runs strictly AFTER window loaded
+        threading.Thread(target=app_core.start_zapret_if_enabled, daemon=True).start()
+
+    def on_closed():
+        _INTENTIONAL_CLOSE.set()
+        _release_instance_lock()
+
     window.events.loaded += on_loaded
+    window.events.closed += on_closed
+
+    _FALLBACK_PNG = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\rIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82'
 
     # Watchdog: if the JS bridge never comes up (WebView2 init hang), log it,
     # and perform a real detached process restart after registering bridge-free close route.
@@ -203,41 +257,66 @@ def main():
             logging.warning("[startup] HTTP server app unavailable; bridge-free close disabled")
             return
         try:
+            app = _BOTTLE_APP[0]
+
             def _close_handler():
+                _INTENTIONAL_CLOSE.set()
+                _release_instance_lock()
                 try:
                     window.destroy()
                 except Exception:
                     pass
                 return 'ok'
-            app = _BOTTLE_APP[0]
-            route = app.route('/__aura_close', method='POST')(_close_handler)
-            # Bottle matches routes in registration order; move ours ahead of the
-            # static-file catch-all ('/<file:path>') so it is actually reached.
+
+            def _assets_fallback(filepath=''):
+                static_file = os.path.join(base_dir, "ui", "web_new", "assets", filepath)
+                if os.path.exists(static_file):
+                    return _bottle.static_file(filepath, root=os.path.join(base_dir, "ui", "web_new", "assets"))
+                _bottle.response.content_type = 'image/png'
+                return _FALLBACK_PNG
+
+            route_close = app.route('/__aura_close', method='POST')(_close_handler)
+            route_assets = app.route('/assets/<filepath:path>')(_assets_fallback)
+
+            # Bottle matches routes in registration order; move ours ahead of catch-all
             routes = getattr(app, 'routes', None)
-            if isinstance(routes, list) and route in routes:
-                routes.remove(route)
-                routes.insert(0, route)
-            logging.info(f"[startup] bridge-free close endpoint registered (/__aura_close, page={window.real_url})")
+            if isinstance(routes, list):
+                for r in (route_assets, route_close):
+                    if r in routes:
+                        routes.remove(r)
+                        routes.insert(0, r)
+            logging.info(f"[startup] bridge-free close and fallback assets endpoints registered")
         except Exception as e:
             logging.warning(f"[startup] close endpoint registration failed: {e}")
 
     def _startup_watchdog():
         # First load may take ~10-20s on cold WebView2; give it 35s.
-        # If bridge is still dead, do a REAL process restart (detached child + os._exit).
         if window.events.loaded.wait(35):
             logging.info("[startup] bridge initialized after 1 load attempt(s)")
             return
+        if _INTENTIONAL_CLOSE.is_set():
+            return
+
+        restart_count = int(os.environ.get('NEDOTIFY_RESTART_COUNT', '0'))
+        if restart_count >= 1:
+            logging.error("[startup] bridge still not initialized after 1 auto-restart; showing overlay, no more respawns.")
+            return
+
         logging.warning("[startup] bridge not initialized after 35s; reloading (real restart)")
         try:
             import subprocess
             creation_flags = 0
             if sys.platform == "win32":
                 creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            env = os.environ.copy()
+            env['NEDOTIFY_RESTART_COUNT'] = str(restart_count + 1)
             subprocess.Popen(
                 [sys.executable] + sys.argv,
                 creationflags=creation_flags,
-                close_fds=True
+                close_fds=True,
+                env=env
             )
+            _release_instance_lock()
             try:
                 app_core.cleanup()
             except Exception:
@@ -249,12 +328,12 @@ def main():
     threading.Thread(target=_register_close_route, daemon=True).start()
     threading.Thread(target=_startup_watchdog, daemon=True).start()
 
-    # Start the application loop (debug=False disables DevTools; use F12 for debugging via debug flag)
+    # Start the application loop (debug=True enables DevTools via F12 / Right-click Inspect)
     logging.info(f"[startup] WebView2 runtime setting: {webview.settings.get('WEBVIEW2_RUNTIME_PATH', 'default')}")
     logging.info(f"[startup] webview loop starting (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
     _storage_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'webview2_data')
     os.makedirs(_storage_dir, exist_ok=True)
-    webview.start(http_server=True, debug=False, private_mode=False, storage_path=_storage_dir)
+    webview.start(http_server=True, debug=True, private_mode=False, storage_path=_storage_dir)
 
     # Save session before exit
     try:
@@ -273,6 +352,7 @@ def main():
         print(f"Failed to save session: {e}")
 
     # Cleanup after window closed
+    _release_instance_lock()
     app_core.cleanup()
     try:
         api.cleanup()
