@@ -10,13 +10,15 @@ from typing import Optional
 
 try:
     from mutagen import File as MutagenFile
-    from mutagen.id3 import ID3
+    from mutagen.id3 import ID3, TIT2, TPE1, TALB, TCON, TYER, TDRC, APIC, ID3NoHeaderError
     from mutagen.mp3 import MP3
-    from mutagen.flac import FLAC
+    from mutagen.flac import FLAC, Picture
     from mutagen.oggvorbis import OggVorbis
+    from mutagen.mp4 import MP4, MP4Cover
     HAS_MUTAGEN = True
 except ImportError:
     HAS_MUTAGEN = False
+
 
 SUPPORTED_FORMATS = {'.mp3', '.flac', '.wav', '.ogg', '.m4a', '.wma', '.aac'}
 
@@ -203,3 +205,167 @@ def save_cover_to_file(cover_data: bytes, cover_mime: str,
         return filepath
     except IOError:
         return None
+
+
+def write_tags(
+    filepath: str,
+    title: Optional[str] = None,
+    artist: Optional[str] = None,
+    album: Optional[str] = None,
+    genre: Optional[str] = None,
+    year: Optional[int] = None,
+    cover_bytes: Optional[bytes] = None,
+    cover_mime: str = "image/jpeg"
+) -> bool:
+    """
+    Safely write physical ID3v2/Vorbis/MP4 tags to an audio file using mutagen.
+    Checks write permissions, embeds cover art, and writes atomically.
+    """
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"Аудиофайл не найден: {filepath}")
+
+    if not os.access(filepath, os.W_OK):
+        raise PermissionError(f"Файл доступен только для чтения: {filepath}")
+
+    if not HAS_MUTAGEN:
+        raise RuntimeError("Модуль mutagen не установлен")
+
+    import shutil
+    import tempfile
+    import base64
+
+    # Create a temporary backup for atomic transaction
+    temp_dir = tempfile.gettempdir()
+    backup_path = os.path.join(temp_dir, f"aura_tag_backup_{os.path.basename(filepath)}")
+    shutil.copy2(filepath, backup_path)
+
+    try:
+        _, ext = os.path.splitext(filepath.lower())
+
+        if ext == '.mp3':
+            try:
+                tags = ID3(filepath)
+            except ID3NoHeaderError:
+                tags = ID3()
+
+            if title is not None:
+                tags.setall('TIT2', [TIT2(encoding=3, text=str(title))])
+            if artist is not None:
+                tags.setall('TPE1', [TPE1(encoding=3, text=str(artist))])
+            if album is not None:
+                tags.setall('TALB', [TALB(encoding=3, text=str(album))])
+            if genre is not None:
+                tags.setall('TCON', [TCON(encoding=3, text=str(genre))])
+            if year is not None and str(year).strip():
+                tags.setall('TDRC', [TDRC(encoding=3, text=str(year))])
+                tags.setall('TYER', [TYER(encoding=3, text=str(year))])
+
+            if cover_bytes:
+                tags.setall(
+                    'APIC',
+                    [APIC(
+                        encoding=3,
+                        mime=cover_mime or 'image/jpeg',
+                        type=3,  # 3 is cover front
+                        desc='Cover',
+                        data=cover_bytes
+                    )]
+                )
+
+            tags.save(filepath, v2_version=3)
+
+        elif ext == '.flac':
+            audio = FLAC(filepath)
+            if title is not None:
+                audio['title'] = [str(title)]
+            if artist is not None:
+                audio['artist'] = [str(artist)]
+            if album is not None:
+                audio['album'] = [str(album)]
+            if genre is not None:
+                audio['genre'] = [str(genre)]
+            if year is not None and str(year).strip():
+                audio['date'] = [str(year)]
+
+            if cover_bytes:
+                pic = Picture()
+                pic.type = 3
+                pic.mime = cover_mime or 'image/jpeg'
+                pic.desc = 'Cover'
+                pic.data = cover_bytes
+                audio.clear_pictures()
+                audio.add_picture(pic)
+
+            audio.save()
+
+        elif ext in ('.m4a', '.mp4', '.aac'):
+            audio = MP4(filepath)
+            if title is not None:
+                audio['\xa9nam'] = [str(title)]
+            if artist is not None:
+                audio['\xa9ART'] = [str(artist)]
+            if album is not None:
+                audio['\xa9alb'] = [str(album)]
+            if genre is not None:
+                audio['\xa9gen'] = [str(genre)]
+            if year is not None and str(year).strip():
+                audio['\xa9day'] = [str(year)]
+
+            if cover_bytes:
+                fmt = MP4Cover.FORMAT_JPEG
+                if cover_mime and 'png' in cover_mime.lower():
+                    fmt = MP4Cover.FORMAT_PNG
+                audio['covr'] = [MP4Cover(cover_bytes, imageformat=fmt)]
+
+            audio.save()
+
+        elif ext == '.ogg':
+            audio = OggVorbis(filepath)
+            if title is not None:
+                audio['title'] = [str(title)]
+            if artist is not None:
+                audio['artist'] = [str(artist)]
+            if album is not None:
+                audio['album'] = [str(album)]
+            if genre is not None:
+                audio['genre'] = [str(genre)]
+            if year is not None and str(year).strip():
+                audio['date'] = [str(year)]
+
+            if cover_bytes:
+                pic = Picture()
+                pic.type = 3
+                pic.mime = cover_mime or 'image/jpeg'
+                pic.desc = 'Cover'
+                pic.data = cover_bytes
+                audio['metadata_block_picture'] = [base64.b64encode(pic.write()).decode('ascii')]
+
+            audio.save()
+
+        else:
+            # Fallback for other formats with EasyID3/EasyMutagen
+            audio = MutagenFile(filepath, easy=True)
+            if audio is not None:
+                if title is not None:
+                    audio['title'] = [str(title)]
+                if artist is not None:
+                    audio['artist'] = [str(artist)]
+                if album is not None:
+                    audio['album'] = [str(album)]
+                if genre is not None:
+                    audio['genre'] = [str(genre)]
+                if year is not None and str(year).strip():
+                    audio['date'] = [str(year)]
+                audio.save()
+
+        if os.path.exists(backup_path):
+            os.remove(backup_path)
+        return True
+
+    except Exception as e:
+        # Atomic rollback on any mutagen write failure
+        if os.path.exists(backup_path):
+            shutil.copy2(backup_path, filepath)
+            os.remove(backup_path)
+        raise RuntimeError(f"Ошибка при записи тегов в файл: {e}")
+

@@ -2060,3 +2060,110 @@ class AppApi:
         except Exception as e:
             logger.error(f"Error deleting duplicate track: {e}")
             return {"success": False, "error": str(e)}
+
+    def update_track_tags(self, track_id: int, tags: dict) -> dict:
+        """Update physical ID3/Vorbis/MP4 tags and SQLite metadata for a track."""
+        try:
+            track = self._core.db.get_track(track_id)
+            if not track:
+                return {"success": False, "error": f"Трек с ID {track_id} не найден в базе данных"}
+
+            file_path = track.get("file_path")
+            title = (tags.get("title") or track.get("title") or "").strip()
+            artist = (tags.get("artist") or track.get("artist") or "").strip()
+            album = (tags.get("album") or track.get("album") or "").strip()
+            genre = (tags.get("genre") or track.get("genre") or "").strip()
+
+            raw_year = tags.get("year")
+            year = None
+            if raw_year is not None and str(raw_year).strip():
+                try:
+                    year = int(str(raw_year).strip()[:4])
+                except (ValueError, TypeError):
+                    year = None
+
+            cover_path = track.get("cover_path")
+            cover_bytes = None
+            cover_mime = "image/jpeg"
+
+            # Check for new cover image provided
+            new_cover_path = tags.get("cover_path") or tags.get("cover_file")
+            if new_cover_path and os.path.exists(new_cover_path):
+                try:
+                    with open(new_cover_path, "rb") as cf:
+                        cover_bytes = cf.read()
+                    if new_cover_path.lower().endswith(".png"):
+                        cover_mime = "image/png"
+                    elif new_cover_path.lower().endswith(".webp"):
+                        cover_mime = "image/webp"
+
+                    # Save copy to ~/.nedotify/covers/ for fast UI loading
+                    covers_dir = os.path.join(os.path.expanduser("~"), ".nedotify", "covers")
+                    os.makedirs(covers_dir, exist_ok=True)
+                    cached_cover = os.path.join(covers_dir, f"{track_id}.jpg")
+                    with open(cached_cover, "wb") as f:
+                        f.write(cover_bytes)
+                    cover_path = cached_cover
+                except Exception as ce:
+                    logger.warning(f"Error caching new cover image: {ce}")
+
+            # Write physical audio tags if file exists on disk
+            if file_path and os.path.exists(file_path):
+                if not os.access(file_path, os.W_OK):
+                    return {"success": False, "error": "Файл доступен только для чтения (нет прав на запись)"}
+
+                from utils.tag_parser import write_tags
+                write_tags(
+                    file_path,
+                    title=title,
+                    artist=artist,
+                    album=album,
+                    genre=genre,
+                    year=year,
+                    cover_bytes=cover_bytes,
+                    cover_mime=cover_mime
+                )
+
+            # Update database record and FTS index
+            db_res = self._core.db.update_track_metadata(
+                track_id=track_id,
+                title=title,
+                artist=artist,
+                album=album,
+                genre=genre,
+                year=year,
+                cover_path=cover_path
+            )
+
+            if not db_res:
+                return {"success": False, "error": "Не удалось обновить запись в базе данных"}
+
+            updated_track = self._core.db.get_track(track_id)
+            self._emit("library_updated", True)
+            self._emit("track_updated", updated_track)
+
+            return {"success": True, "track": updated_track}
+
+        except Exception as e:
+            logger.error(f"Error in update_track_tags: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+
+    def choose_cover_image(self) -> dict:
+        """Open native file dialog to select a cover art image."""
+        try:
+            if not self._window:
+                return {"success": False, "error": "Окно приложения недоступно"}
+            import pywebview
+            file_types = ('Изображения (*.jpg;*.jpeg;*.png;*.webp)', 'Все файлы (*.*)')
+            result = self._window.create_file_dialog(
+                pywebview.OPEN_DIALOG,
+                allow_multiple=False,
+                file_types=file_types
+            )
+            if result and len(result) > 0:
+                return {"success": True, "path": result[0]}
+            return {"success": False, "cancelled": True}
+        except Exception as e:
+            logger.error(f"Error selecting cover image: {e}")
+            return {"success": False, "error": str(e)}
+

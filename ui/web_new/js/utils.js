@@ -515,6 +515,11 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
             <span>Закрепить в профиле</span>
         </button>
 
+        <button class="rich-menu-item" data-action="edit_tags">
+            <i data-lucide="edit-3" style="width:16px;height:16px"></i>
+            <span>Редактировать теги</span>
+        </button>
+
         <div class="rich-menu-divider"></div>
 
         <button class="rich-menu-item red-action" data-action="remove_queue">
@@ -615,6 +620,9 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
                 }
                 showToast(`'${track.title || ''}' закреплен в профиле!`, 'success');
                 break;
+            case 'edit_tags':
+                openEditTagsModal(track);
+                break;
             case 'remove_queue':
                 (async () => {
                     let removeIndex = index;
@@ -691,6 +699,105 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
 }
 
 
+
+export function openEditTagsModal(track) {
+    if (!track) return;
+    const modal = document.getElementById('modal-edit-tags');
+    if (!modal) return;
+
+    const idInput = document.getElementById('modal-et-track-id');
+    const titleInput = document.getElementById('modal-et-title');
+    const artistInput = document.getElementById('modal-et-artist');
+    const albumInput = document.getElementById('modal-et-album');
+    const genreInput = document.getElementById('modal-et-genre');
+    const yearInput = document.getElementById('modal-et-year');
+    const coverPathInput = document.getElementById('modal-et-cover-path');
+    const coverImg = document.getElementById('modal-et-cover-img');
+
+    if (idInput) idInput.value = track.id || '';
+    if (titleInput) titleInput.value = track.title || '';
+    if (artistInput) artistInput.value = track.artist || '';
+    if (albumInput) albumInput.value = track.album || '';
+    if (genreInput) genreInput.value = track.genre || '';
+    if (yearInput) yearInput.value = track.year || '';
+    if (coverPathInput) coverPathInput.value = '';
+
+    const coverUrl = getCoverUrl(track);
+    if (coverImg) coverImg.src = coverUrl || './assets/default_cover.png';
+
+    modal.style.display = 'flex';
+    modal.classList.remove('hidden');
+    renderIcons();
+
+    const closeBtn = document.getElementById('modal-et-close');
+    const cancelBtn = document.getElementById('modal-et-cancel');
+    const submitBtn = document.getElementById('modal-et-submit');
+    const coverBtn = document.getElementById('modal-et-btn-cover');
+
+    function closeModal() {
+        modal.style.display = 'none';
+        modal.classList.add('hidden');
+    }
+
+    if (closeBtn) closeBtn.onclick = closeModal;
+    if (cancelBtn) cancelBtn.onclick = closeModal;
+
+    if (coverBtn) {
+        coverBtn.onclick = async () => {
+            if (window.pywebview?.api?.choose_cover_image) {
+                try {
+                    const res = await window.pywebview.api.choose_cover_image();
+                    if (res && res.success && res.path) {
+                        if (coverPathInput) coverPathInput.value = res.path;
+                        const cleanPath = res.path.replace(/\\/g, '/');
+                        if (coverImg) coverImg.src = `file:///${encodeURI(cleanPath.replace(/^\//, ''))}`;
+                    }
+                } catch(e) {
+                    console.error('Error selecting cover image:', e);
+                }
+            }
+        };
+    }
+
+    if (submitBtn) {
+        submitBtn.onclick = async () => {
+            const trackId = parseInt(idInput?.value || track.id);
+            if (!trackId) {
+                showToast('Ошибка: ID трека не найден', 'error');
+                return;
+            }
+
+            const tagsData = {
+                title: titleInput ? titleInput.value.trim() : '',
+                artist: artistInput ? artistInput.value.trim() : '',
+                album: albumInput ? albumInput.value.trim() : '',
+                genre: genreInput ? genreInput.value.trim() : '',
+                year: yearInput && yearInput.value ? parseInt(yearInput.value) || null : null,
+                cover_path: coverPathInput ? coverPathInput.value : ''
+            };
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Сохранение...';
+
+            try {
+                if (window.pywebview?.api?.update_track_tags) {
+                    const res = await window.pywebview.api.update_track_tags(trackId, tagsData);
+                    if (res && res.success) {
+                        showToast('Теги и метаданные сохранены!', 'success');
+                        closeModal();
+                    } else {
+                        showToast(res?.error || 'Ошибка сохранения тегов', 'error');
+                    }
+                }
+            } catch(err) {
+                showToast(`Ошибка: ${err.message || err}`, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Сохранить теги';
+            }
+        };
+    }
+}
 
 export function getSkeletonGrid(count = 10) {
     let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px;">';

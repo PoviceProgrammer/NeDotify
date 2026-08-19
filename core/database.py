@@ -658,6 +658,59 @@ class DatabaseManager:
         self.conn.commit()
         return cursor.rowcount > 0
 
+    def update_track_metadata(
+        self,
+        track_id: int,
+        title: str,
+        artist: str,
+        album: Optional[str] = None,
+        genre: Optional[str] = None,
+        year: Optional[int] = None,
+        cover_path: Optional[str] = None
+    ) -> bool:
+        """Update track metadata in SQLite and explicitly rebuild FTS index row."""
+        try:
+            old = self.get_track(track_id)
+            if not old:
+                return False
+
+            cursor = self.conn.cursor()
+            query = """
+                UPDATE tracks
+                SET title = ?,
+                    artist = ?,
+                    album = COALESCE(?, album),
+                    genre = COALESCE(?, genre),
+                    year = COALESCE(?, year),
+                    cover_path = COALESCE(?, cover_path)
+                WHERE id = ?
+            """
+            cursor.execute(
+                query,
+                (title, artist, album, genre, year, cover_path, track_id)
+            )
+
+            # Explicit FTS index row rebuild (delete old + insert new)
+            if getattr(self, "_fts_available", False):
+                try:
+                    cursor.execute(
+                        "INSERT INTO tracks_fts(tracks_fts, rowid, title, artist, album, genre) VALUES('delete', ?, ?, ?, ?, ?)",
+                        (track_id, old.get("title"), old.get("artist"), old.get("album"), old.get("genre"))
+                    )
+                    cursor.execute(
+                        "INSERT INTO tracks_fts(rowid, title, artist, album, genre) VALUES(?, ?, ?, ?, ?)",
+                        (track_id, title, artist, album or old.get("album"), genre or old.get("genre"))
+                    )
+                except Exception as fts_err:
+                    logger.debug(f"FTS resync warning during metadata update: {fts_err}")
+
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error in update_track_metadata for track {track_id}: {e}")
+            return False
+
+
     def add_to_history(self, track_id: int, duration_listened: float = 0, completed: bool = False) -> int:
         return self.log_listening_history(track_id, duration_listened, completed)
 
