@@ -2,11 +2,15 @@ export function initOnboarding() {
     const wizard = document.getElementById('onboarding-wizard');
     if (!wizard) return;
 
-    let isDoneLocal = localStorage.getItem('aura_onboarding_done');
-    let isDoneBackend = window.settings && window.settings.general && window.settings.general.first_launch_done;
+    const isDoneLocal = localStorage.getItem('aura_onboarding_done') === 'true' || 
+                        localStorage.getItem('nedotify_general_first_launch_done') === 'true' || 
+                        localStorage.getItem('nedotify_personalization_onboarding_completed') === 'true';
+    const isDoneBackend = window.settings?.general?.first_launch_done === true || 
+                          window.settings?.personalization?.onboarding_completed === true;
 
-    if (isDoneLocal === 'true' || isDoneBackend === true) {
+    if (isDoneLocal || isDoneBackend) {
         wizard.style.display = 'none';
+        wizard.classList.add('hidden');
         return;
     }
 
@@ -118,11 +122,16 @@ export function initOnboarding() {
         }
 
         localStorage.setItem('aura_onboarding_done', 'true');
+        localStorage.setItem('nedotify_general_first_launch_done', 'true');
+        localStorage.setItem('nedotify_personalization_onboarding_completed', 'true');
         wizard.style.display = 'none';
+        wizard.classList.add('hidden');
     }
 
     const btnFinish = document.getElementById('ob-btn-finish');
     const btnSkip = document.getElementById('ob-btn-skip');
+    const btnClose = document.getElementById('ob-btn-close');
     if (btnFinish) btnFinish.addEventListener('click', () => finishOnboarding(false));
     if (btnSkip) btnSkip.addEventListener('click', () => finishOnboarding(true));
+    if (btnClose) btnClose.addEventListener('click', () => finishOnboarding(true));
 }

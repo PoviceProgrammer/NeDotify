@@ -1,4 +1,4 @@
-﻿"""
+"""
 NeDotify - Settings Manager
 Centralized settings with default values, database storage, and convenient getters/setters.
 """
@@ -153,11 +153,11 @@ DEFAULT_SETTINGS = {
         "transparency_level": 0.8,
         "glass_blur": 15,
         "glass_color_intensity": 0.5,
-        "accent_color": "#6366f1",
+        "accent_color": "#a855f7",
         "custom_themes": [],
     },
     "ui": {
-        "particles_enabled": False,
+        "particles_enabled": True,
         "particles_count": 30,
         "particles_speed": 1.0,
         "particles_size": 2.0,

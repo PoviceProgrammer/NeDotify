@@ -1691,7 +1691,16 @@ class AppApi:
 
     def get_popular_tracks(self, region: str = "US"):
         """Request popular tracks and deliver them through the frontend event contract."""
-        fallback = self._core.db.get_history(limit=10)
+        fallback = self._core.db.get_history(limit=10) or [
+            {"id": "yt_4NRXx6U8ABQ", "title": "Blinding Lights", "artist": "The Weeknd", "source": "youtube", "source_id": "4NRXx6U8ABQ", "duration": 200, "cover_url": "https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg"},
+            {"id": "yt_TUVcZfQe-Kw", "title": "Levitating", "artist": "Dua Lipa", "source": "youtube", "source_id": "TUVcZfQe-Kw", "duration": 203, "cover_url": "https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg"},
+            {"id": "yt_uelHwf8o7_U", "title": "Love The Way You Lie", "artist": "Eminem ft. Rihanna", "source": "youtube", "source_id": "uelHwf8o7_U", "duration": 263, "cover_url": "https://i.ytimg.com/vi/uelHwf8o7_U/hqdefault.jpg"},
+            {"id": "yt_fJ9rUzIMcZQ", "title": "Bohemian Rhapsody", "artist": "Queen", "source": "youtube", "source_id": "fJ9rUzIMcZQ", "duration": 359, "cover_url": "https://i.ytimg.com/vi/fJ9rUzIMcZQ/hqdefault.jpg"},
+            {"id": "yt_YykjpeuMNEk", "title": "Hymn for the Weekend", "artist": "Coldplay", "source": "youtube", "source_id": "YykjpeuMNEk", "duration": 258, "cover_url": "https://i.ytimg.com/vi/YykjpeuMNEk/hqdefault.jpg"},
+            {"id": "yt_JGwWNGJdvx8", "title": "Shape of You", "artist": "Ed Sheeran", "source": "youtube", "source_id": "JGwWNGJdvx8", "duration": 233, "cover_url": "https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg"},
+            {"id": "yt_7wtfhZwyrcc", "title": "Believer", "artist": "Imagine Dragons", "source": "youtube", "source_id": "7wtfhZwyrcc", "duration": 204, "cover_url": "https://i.ytimg.com/vi/7wtfhZwyrcc/hqdefault.jpg"},
+            {"id": "yt_DyDfgMOUjCI", "title": "bad guy", "artist": "Billie Eilish", "source": "youtube", "source_id": "DyDfgMOUjCI", "duration": 194, "cover_url": "https://i.ytimg.com/vi/DyDfgMOUjCI/hqdefault.jpg"},
+        ]
         try:
             provider = getattr(self._core.recommendations, "get_charts", None)
             if provider:
@@ -1954,8 +1963,22 @@ class AppApi:
         return []
 
     def get_home_artists(self, max_results: int = 10):
-        """Get top artists for home page."""
+        """Get top artists for home page with fallback to popular artists when local history is empty."""
         artists = self._core.db.get_top_artists(limit=max_results)
+        if not artists:
+            fallback_artists = [
+                {"name": "The Weeknd", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb214f3cf1cbe7139c1e26ffbb"},
+                {"name": "Dua Lipa", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb98165c7f8f6b49e0b82f0c76"},
+                {"name": "Eminem", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eba00b11c129b27a88fc72f36b"},
+                {"name": "Taylor Swift", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb5a00969a4698c3132a15fbb0"},
+                {"name": "Drake", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb4293385d324db8558179afd9"},
+                {"name": "Billie Eilish", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5ebd8b9980db67ba102fe319c87"},
+                {"name": "Queen", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb94bb714528c11e5f0378ea9f"},
+                {"name": "Coldplay", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb86523da9730f579d54a2753a"},
+                {"name": "Imagine Dragons", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb920798797f1f9a888c3e8003"},
+                {"name": "Ed Sheeran", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb12a2f49da3c235730317b3c7"}
+            ]
+            artists = fallback_artists[:max_results]
         self._emit("artists_ready", artists)
         return artists
 

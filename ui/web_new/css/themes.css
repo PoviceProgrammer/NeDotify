@@ -6,13 +6,20 @@
 :root {
     /* Global Semantic Tokens */
     --text-main: #ffffff;
-    --text-sec: rgba(255, 255, 255, 0.6);
-    --text-dim: rgba(255, 255, 255, 0.4);
+    --text-sec: rgba(255, 255, 255, 0.7);
+    --text-dim: rgba(255, 255, 255, 0.45);
     --border: rgba(255, 255, 255, 0.08);
     --bg-panel: rgba(255, 255, 255, 0.03);
-    --bg-card: rgba(255, 255, 255, 0.02);
-    --bg-hover: rgba(255, 255, 255, 0.06);
-    --bg-active: rgba(255, 255, 255, 0.1);
+    --bg-card: rgba(255, 255, 255, 0.03);
+    --bg-hover: rgba(255, 255, 255, 0.08);
+    --bg-active: rgba(255, 255, 255, 0.12);
+
+    --primary: #a855f7;
+    --primary-rgb: 168, 85, 247;
+    --primary-fg: #ffffff;
+    --accent: #a855f7;
+    --accent-glow: rgba(168, 85, 247, 0.25);
+    --ambient-glow: rgba(168, 85, 247, 0.2);
     
     --success: #10b981;
     --error: #ef4444;
@@ -34,14 +41,15 @@
 
 /* 2. Dark */
 :root[data-theme="dark"] {
-    --bg-main: #121212;
-    --bg-surface: #1e1e1e;
-    --accent: #ffffff;
-    --accent-glow: rgba(255, 255, 255, 0.15);
-    --border-glow: rgba(255, 255, 255, 0.08);
-    --primary: var(--accent);
-    --primary-rgb: 255, 255, 255;
-    --primary-fg: #000000;
+    --bg-main: #0f0f14;
+    --bg-surface: #181820;
+    --accent: #a855f7;
+    --accent-glow: rgba(168, 85, 247, 0.25);
+    --ambient-glow: rgba(168, 85, 247, 0.2);
+    --border-glow: rgba(168, 85, 247, 0.12);
+    --primary: #a855f7;
+    --primary-rgb: 168, 85, 247;
+    --primary-fg: #ffffff;
 }
 
 /* 3. Midnight */

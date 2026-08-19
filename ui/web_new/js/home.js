@@ -1,4 +1,4 @@
-import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, coverImgHtml } from './utils.js?v=20260817_2';
+import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, coverImgHtml } from './utils.js?v=20260817_3';
 
 const feedTimeouts = new Map();
 let trackChangeCount = 0;
@@ -124,6 +124,8 @@ export function renderPopular(tracks) {
 
 export function renderRecommendations(tracks) {
     clearFeedTimeout('home-recommended');
+    const sec = document.getElementById('home-recommended-section');
+    if (sec) sec.style.display = (tracks && tracks.length > 0) ? 'block' : 'none';
     renderFeedSection('home-recommended', tracks);
 }
 
@@ -285,7 +287,8 @@ export function renderHomePlaylists(playlists) {
         `;
         card.addEventListener('click', async () => {
             if (window.pywebview?.api?.get_playlist_tracks) {
-                const tracks = await window.pywebview.api.get_playlist_tracks(pl.id);
+                const res = await window.pywebview.api.get_playlist_tracks(pl.id);
+                const tracks = Array.isArray(res) ? res : (res && Array.isArray(res.tracks) ? res.tracks : []);
                 if (tracks && tracks.length > 0) {
                     window.pywebview.api.play_track(tracks[0], tracks);
                 }

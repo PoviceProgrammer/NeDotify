@@ -16,6 +16,7 @@ import threading
 import logging
 
 from core.api import _is_ssrf_safe_url  # mirrors core/api.py:_is_ssrf_safe_url; imported (not copied) — core.api does not import core.proxy, so no import cycle
+_is_safe_url = _is_ssrf_safe_url
 
 logger = logging.getLogger(__name__)
 
