@@ -611,6 +611,32 @@ export function initPlayer() {
         if (queueDrawer) queueDrawer.classList.toggle('open');
     });
 
+    // Tray Context Menu Action Listener (Phase 5)
+    window.addEventListener('nedotify:tray_action', (evt) => {
+        const action = evt.detail?.action;
+        switch(action) {
+            case 'toggle_play':
+                togglePlayPause();
+                break;
+            case 'next':
+                api('next_track');
+                break;
+            case 'prev':
+                api('prev_track');
+                break;
+            case 'toggle_like':
+                if (currentTrack) {
+                    api('toggle_favorite', currentTrack).then(res => {
+                        if (res && res.success) {
+                            currentTrack.is_favorite = res.is_favorite;
+                            updateLikeButtons();
+                        }
+                    });
+                }
+                break;
+        }
+    });
+
     // Mini Player Controls
     const mpPlay = document.getElementById('mp-btn-play');
     const mpStop = document.getElementById('mp-btn-stop');

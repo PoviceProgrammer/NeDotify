@@ -86,8 +86,20 @@ class AppApi:
             if hasattr(self._core.engine, "on_error"):
                 self._core.engine.on_error(self._on_audio_error)
 
+        try:
+            from core.tray import TrayIcon
+            self._tray = TrayIcon(self)
+        except Exception as te:
+            logger.debug(f"Tray initialization ignored: {te}")
+            self._tray = None
+
     def cleanup(self):
         """O-15: release the shared search executor without blocking app exit."""
+        try:
+            if getattr(self, "_tray", None):
+                self._tray.stop()
+        except Exception:
+            pass
         try:
             if getattr(self, "_search_executor", None) is not None:
                 self._search_executor.shutdown(wait=False, cancel_futures=True)
@@ -101,6 +113,9 @@ class AppApi:
         if hasattr(self._window, 'events'):
             self._window.events.minimized += self._on_minimized
             self._window.events.restored += self._on_restored
+
+        if getattr(self, "_tray", None):
+            self._tray.start()
             
         try:
             import threading
@@ -537,6 +552,8 @@ class AppApi:
             logger.debug(f"Discord RPC update error: {dre}")
 
         self._emit("track_changed", track_copy)
+        if getattr(self, "_tray", None):
+            self._tray.update_state(track=track_copy, force=True)
 
     def _on_audio_error(self, err):
         """Callback invoked when audio engine encounters playback error."""
@@ -547,6 +564,8 @@ class AppApi:
     def report_state(self, state: str, elapsed_ms: int = 0):
         """Report playback state update (playing, paused, stopped)."""
         self._emit("state_changed", {"state": state, "elapsed_ms": elapsed_ms})
+        if getattr(self, "_tray", None):
+            self._tray.update_state(is_playing=(state == "playing"))
         try:
             if hasattr(self._core, "discord_rpc") and self._core.discord_rpc:
                 curr = getattr(self, "_current_track", None) or {}
