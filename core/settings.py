@@ -201,6 +201,14 @@ DEFAULT_SETTINGS = {
         "is_valid": False,
         "signature": "",
     },
+    "zapret": {
+        "enabled": False,
+        "auto_start": False,
+        "mode": "youtube_discord",
+        "custom_args": "",
+        "binary_path": "",
+        "autoupdate": False,
+    },
 }
 
 
@@ -238,15 +246,29 @@ class SettingsManager:
                 self._cache[cat] = {}
             self._cache[cat][k] = value
 
-    def get(self, category: str, key: str, default: Optional[Any] = None) -> Any:
-        """Get a setting value."""
+    def get(self, category: str, key: Optional[Any] = None, default: Optional[Any] = None) -> Any:
+        """Get a setting value, supporting both (category, key, default) and ('category.key', default)."""
+        if "." in category and key is not None and default is None and not isinstance(key, str):
+            default = key
+            cat, k = category.split(".", 1)
+            return self.get(cat, k, default)
+        elif "." in category and key is None:
+            cat, k = category.split(".", 1)
+            return self.get(cat, k, default)
+
         if category in self._cache and key in self._cache[category]:
             return self._cache[category][key]
         if category in DEFAULT_SETTINGS and key in DEFAULT_SETTINGS[category]:
             return DEFAULT_SETTINGS[category][key]
         return default
-    def set(self, category: str, key: str, value: Any) -> None:
-        """Set a setting value and persist it."""
+
+    def set(self, category: str, key: Any = None, value: Any = None) -> None:
+        """Set a setting value and persist it. Supports set('zapret', 'auto_start', True) and set('zapret.auto_start', True)."""
+        if "." in category and value is None and key is not None:
+            cat, k = category.split(".", 1)
+            val = key
+            return self.set(cat, k, val)
+
         if category not in self._cache:
             self._cache[category] = {}
         self._cache[category][key] = value

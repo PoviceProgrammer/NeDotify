@@ -927,11 +927,34 @@ class AppApi:
             logger.error(f"remove_from_queue error: {e}")
             return {"success": False, "error": str(e)}
 
-    def set_setting(self, section: str, key: str, value):
-        """Persist a setting value (section, key, value) (O-1)."""
+    def get_setting(self, key: str, default=None):
+        """Get a setting by dotted key 'category.key' or (category, key)."""
         try:
-            self._core.settings.set(section, key, value)
-            return {"success": True}
+            if "." in key:
+                cat, k = key.split(".", 1)
+                return self._core.settings.get(cat, k, default)
+            return self._core.settings.get("zapret", key, default)
+        except Exception as e:
+            logger.error(f"get_setting error: {e}")
+            return default
+
+    def set_setting(self, section: str, key=None, value=None):
+        """Persist a setting value. Supports set_setting('zapret.auto_start', True) and set_setting('zapret', 'auto_start', True)."""
+        try:
+            if value is None and key is not None:
+                full_key = str(section)
+                val = key
+                if "." in full_key:
+                    cat, k = full_key.split(".", 1)
+                else:
+                    cat, k = "zapret", full_key
+                self._core.settings.set(cat, k, val)
+                self._emit("setting_changed", {"category": cat, "key": k, "value": val})
+                return {"success": True}
+            else:
+                self._core.settings.set(section, key, value)
+                self._emit("setting_changed", {"category": section, "key": key, "value": value})
+                return {"success": True}
         except Exception as e:
             logger.error(f"set_setting error: {e}")
             return {"success": False, "error": str(e)}
@@ -2084,12 +2107,13 @@ class AppApi:
             status = self._core.zapret.get_status()
             status["mode"] = self._core.settings.get("zapret", "mode", "youtube_discord")
             status["enabled"] = self._core.settings.get("zapret", "enabled", False)
+            status["auto_start"] = self._core.settings.get("zapret", "auto_start", False)
             status["autoupdate"] = self._core.settings.get("zapret", "autoupdate", False)
             status["custom_args"] = self._core.settings.get("zapret", "custom_args", "")
             status["binary_path"] = self._core.settings.get("zapret", "binary_path", "")
             return status
         except Exception as e:
-            return {"running": False, "enabled": False, "mode": "youtube_discord", "error": str(e), "binary_found": False}
+            return {"running": False, "enabled": False, "auto_start": False, "mode": "youtube_discord", "error": str(e), "binary_found": False}
 
     def check_zapret_update(self):
         """Check for updates to the Zapret binary bundle."""

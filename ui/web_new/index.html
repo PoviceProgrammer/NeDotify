@@ -1824,9 +1824,17 @@
                             <div class="setting-row">
                                 <div>
                                     <div class="setting-label">Включить службы Zapret</div>
-                                    <div class="setting-sublabel">Автоматически маскировать трафик YouTube и сторонних музыкальных сервисов</div>
+                                    <div class="setting-sublabel">Маскировать трафик YouTube и сторонних музыкальных сервисов в текущей сессии</div>
                                 </div>
                                 <button class="toggle-switch" id="toggle-zapret-enabled"><div class="toggle-dot"></div></button>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Автоматический запуск Zapret</div>
+                                    <div class="setting-sublabel">Запускать службу обхода блокировок автоматически при старте приложения</div>
+                                </div>
+                                <button class="toggle-switch" id="toggle-zapret-autostart" aria-label="Автозапуск Zapret"><div class="toggle-dot"></div></button>
+                                <input type="checkbox" id="zapret-auto-start" style="display: none;" />
                             </div>
                             <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
                                 <div>

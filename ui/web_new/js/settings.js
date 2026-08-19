@@ -1291,6 +1291,8 @@ function applyThemeMode(mode) {
 
 function setupZapretPanel() {
     const toggleZapret = document.getElementById('toggle-zapret-enabled');
+    const toggleAutoStart = document.getElementById('toggle-zapret-autostart');
+    const chkAutoStart = document.getElementById('zapret-auto-start');
     const selectZapretMode = document.getElementById('select-zapret-mode');
     const toggleAutoUpdate = document.getElementById('toggle-zapret-autoupdate');
     const btnUpdateZapret = document.getElementById('btn-update-zapret');
@@ -1300,6 +1302,37 @@ function setupZapretPanel() {
     let selectedMode = 'youtube_discord';
     let savedCustomArgs = '';
     let savedBinaryPath = '';
+
+    function setAutoStartState(isOn) {
+        if (toggleAutoStart) toggleAutoStart.classList.toggle('on', isOn);
+        if (chkAutoStart) chkAutoStart.checked = isOn;
+    }
+
+    if (toggleAutoStart) {
+        toggleAutoStart.addEventListener('click', async () => {
+            const isOn = toggleAutoStart.classList.toggle('on');
+            if (chkAutoStart) chkAutoStart.checked = isOn;
+            if (window.pywebview?.api?.set_setting) {
+                await window.pywebview.api.set_setting('zapret', 'auto_start', isOn);
+                window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                    detail: { msg: isOn ? 'Автозапуск Zapret включен' : 'Автозапуск Zapret отключен', type: 'info' }
+                }));
+            }
+        });
+    }
+
+    if (chkAutoStart) {
+        chkAutoStart.addEventListener('change', async (e) => {
+            const isOn = e.target.checked;
+            if (toggleAutoStart) toggleAutoStart.classList.toggle('on', isOn);
+            if (window.pywebview?.api?.set_setting) {
+                await window.pywebview.api.set_setting('zapret', 'auto_start', isOn);
+                window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                    detail: { msg: isOn ? 'Автозапуск Zapret включен' : 'Автозапуск Zapret отключен', type: 'info' }
+                }));
+            }
+        });
+    }
 
     if (selectZapretMode) {
         selectZapretMode.addEventListener('change', (e) => {
@@ -1388,6 +1421,8 @@ function setupZapretPanel() {
             if (status) {
                 const isRunning = !!(status.running || status.enabled);
                 if (toggleZapret) toggleZapret.classList.toggle('on', isRunning);
+                const isAutoStart = !!status.auto_start;
+                setAutoStartState(isAutoStart);
                 if (status.mode && selectZapretMode) {
                     selectedMode = status.mode;
                     selectZapretMode.value = status.mode;

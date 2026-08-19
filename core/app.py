@@ -162,11 +162,12 @@ class AppCore:
         threading.Thread(target=_cache_cleanup_loop, name="CacheCleanup", daemon=True).start()
 
     def start_zapret_if_enabled(self):
-        """Start Zapret only if enabled in settings. Called AFTER the WebView2
+        """Start Zapret only if auto_start is enabled in settings. Called AFTER the WebView2
         window finished loading: a cold Zapret launch (winws DPI-desync) slows
         down WebView2 HTTPS handshakes and delays bridge injection."""
         try:
-            if self.settings.get("zapret", "enabled", False):
+            auto_start = bool(self.settings.get("zapret", "auto_start", False) or self.settings.get("zapret.auto_start", False))
+            if auto_start:
                 mode = self.settings.get("zapret", "mode", "youtube_discord")
                 custom_args = self.settings.get("zapret", "custom_args", "")
                 bin_path = self.settings.get("zapret", "binary_path", "")
