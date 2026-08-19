@@ -37,7 +37,8 @@ function renderRetryButton(containerId, retryFn) {
 }
 
 export async function loadHome(isTrackChange = false) {
-    if (!window.pywebview || !window.pywebview.api) return;
+    await window.awaitBridge();
+    if (!window.pywebview?.api) return;
 
     try {
         const data = await window.pywebview.api.get_home_data();
@@ -514,7 +515,8 @@ let currentWrappedPeriod = 'week';
 
 export async function loadWrappedStats(period = 'week') {
     currentWrappedPeriod = period;
-    if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.get_wrapped_stats) return;
+    await window.awaitBridge();
+    if (!window.pywebview?.api || !window.pywebview.api.get_wrapped_stats) return;
 
     try {
         const stats = await window.pywebview.api.get_wrapped_stats(period);

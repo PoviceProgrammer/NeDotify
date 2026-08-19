@@ -17,6 +17,20 @@ import { initContextMenu } from './contextmenu.js?v=20260817_3';
 import { initHotkeys } from './hotkeys.js?v=20260817_3';
 import { initEfficiency, initBlurObserver } from './efficiency.js?v=20260817_3';
 
+// Bridge gate: resolves as soon as window.pywebview.api exists. Cold WebView2
+// starts can take ~16s to inject the bridge; callers await this instead of
+// exiting early, so the UI comes alive by itself on the FIRST load.
+window.awaitBridge = function awaitBridge() {
+    if (window.pywebview?.api) return Promise.resolve();
+    return new Promise((resolve) => {
+        const check = () => {
+            if (window.pywebview?.api) return resolve();
+            setTimeout(check, 150);
+        };
+        check();
+    });
+};
+
 
 
 
@@ -49,7 +63,7 @@ window.NeDotify = {
             window.pywebview.api.download_track(track);
         }
     },
-    startTrackWave: (seedTrack) => {
+    startTrackWave: async (seedTrack) => {
         if (!seedTrack) return;
         const toastFn = (msg, type) => window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg, type } }));
         toastFn(`📻 Собираем волну по треку «${seedTrack.title || 'выбранному треку'}»...`, 'info');
@@ -59,6 +73,7 @@ window.NeDotify = {
             window.pywebview.api.play_track(seedTrack, [seedTrack], 0);
         }
 
+        await window.awaitBridge();
         if (!window.pywebview?.api?.get_track_wave) return;
 
         const longWaitTimer = setTimeout(() => toastFn('⏳ Волна собирается дольше обычного...', 'info'), 8000);
@@ -235,26 +250,33 @@ window.toggleMiniPlayerMode = toggleMiniPlayerMode;
     } catch(e) {}
 })();
 
-// Wait for PyWebView to be ready
-window.addEventListener('pywebviewready', () => {
-    console.log('PyWebView Ready!');
-    init();
-});
+// Wait for the pywebview bridge (can take ~16s on a cold WebView2 start).
+// NEVER run init() without the bridge: its guards would exit and the UI would
+// stay dead on the skeleton splash. Skeleton stays visible until the bridge arrives.
+function tryInit() {
+    if (window.pywebview?.api) init();
+}
+if (window.pywebview?.api) {
+    tryInit();
+} else {
+    window.addEventListener('pywebviewready', tryInit, { once: true });
+}
 
-// Fallback: if pywebviewready doesn't fire (standalone dev mode)
+// Bridge-dead last resort: count page loads that happened without a bridge
+// (the backend watchdog silently reloads twice), and only then show the error
+// overlay — after 45s of bridge absence on the 3rd load (initial + 2 reloads).
+if (!window.pywebview?.api) {
+    const strikes = parseInt(sessionStorage.getItem('nedotify_bridge_strikes') || '0', 10) + 1;
+    sessionStorage.setItem('nedotify_bridge_strikes', String(strikes));
+}
 setTimeout(() => {
-    if (!window._nedotifyInitialized) init();
-}, 2000);
-
-// Bridge-dead fallback: if the pywebview bridge never materializes, show an
-// explicit error instead of silent empty pages/spinners (close still works via
-// the /__aura_close HTTP endpoint or window.close()).
-setTimeout(() => {
-    if ((window.pywebview && !window.pywebview.api) ||
-        (!window.pywebview && (location.protocol === 'http:' || location.protocol === 'https:'))) {
+    if (window.pywebview?.api) return;
+    const strikes = parseInt(sessionStorage.getItem('nedotify_bridge_strikes') || '0', 10);
+    if (strikes >= 3) {
+        sessionStorage.removeItem('nedotify_bridge_strikes');
         showBridgeError();
     }
-}, 3500);
+}, 45000);
 
 async function init() {
     if (window._nedotifyInitialized) return;
@@ -472,6 +494,7 @@ async function loadProfile() {
             avatarIcon.style.display = 'none';
         }
 
+        await window.awaitBridge();
         if (!window.pywebview?.api?.get_profile_stats) return;
 
         const data = await window.pywebview.api.get_profile_stats();

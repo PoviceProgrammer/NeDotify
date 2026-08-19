@@ -342,7 +342,8 @@ export function initSettings() {
     // Yandex Device Auth button
     const btnYandexAuth = document.getElementById('btn-yandex-auth');
     if (btnYandexAuth) {
-        btnYandexAuth.addEventListener('click', () => {
+        btnYandexAuth.addEventListener('click', async () => {
+            await window.awaitBridge();
             if (!window.pywebview?.api) return;
             const statusEl = document.getElementById('yandex-device-status');
             if (statusEl) {

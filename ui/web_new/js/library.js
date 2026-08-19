@@ -551,7 +551,9 @@ function savePlaylistOrder(ids) {
 
 export async function loadPlaylists() {
     const sidebarList = document.getElementById('lib-sidebar-playlists');
-    if (!sidebarList || !window.pywebview?.api) return;
+    if (!sidebarList) return;
+    await window.awaitBridge();
+    if (!window.pywebview?.api) return;
 
     try {
         const playlists = await window.pywebview.api.get_playlists();

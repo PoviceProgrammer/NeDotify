@@ -66,6 +66,7 @@ export function initQueue() {
 }
 
 async function loadQueue() {
+    await window.awaitBridge();
     if (!window.pywebview?.api?.get_queue) return;
     const q = await window.pywebview.api.get_queue();
     currentQueue = q.tracks || [];

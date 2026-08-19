@@ -1,9 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 /* =============================================
    NeDotify — Core Styles
    Modern glassmorphism dark UI
    ============================================= */
+
+/* Fonts load non-blocking via index.html (media="print" onload) + display=swap;
+   local fallback stack: --font-family = 'Segoe UI', system-ui, ... */
 
 /* ─── Reset & Base ─── */
 *, *::before, *::after {

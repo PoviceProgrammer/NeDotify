@@ -176,6 +176,9 @@ def main():
         logging.info(f"[startup] window loaded (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
         if app_core.engine.queue.current_track:
             app_core.engine._on_track_changed(app_core.engine.queue.current_track)
+        # Zapret must start AFTER the window is up: a cold winws DPI-desync launch
+        # slows WebView2 HTTPS handshakes and delays bridge injection.
+        threading.Thread(target=app_core.start_zapret_if_enabled, daemon=True).start()
             
     window.events.loaded += on_loaded
 
@@ -210,26 +213,29 @@ def main():
             logging.warning(f"[startup] close endpoint registration failed: {e}")
 
     def _startup_watchdog():
-        # First load may be slow (observed up to ~12s); give it a generous window,
-        # then auto-reload up to 3 times. Manual reload is known to restore the bridge.
-        for attempt in range(1, 4):
-            if window.events.loaded.wait(30):
+        # First load may be slow (observed up to ~16s on cold WebView2); give a
+        # generous window, then silently reload twice (manual/auto reload is
+        # confirmed to restore the bridge). The frontend shows the error overlay
+        # only after 45s of bridge absence on the 3rd load (2 reloads done).
+        for attempt in range(1, 3):
+            if window.events.loaded.wait(45):
                 logging.info(f"[startup] bridge initialized after {attempt} load attempt(s)")
                 return
             logging.warning(
-                f"[startup] bridge not initialized after {attempt * 30}s; "
-                f"reloading (attempt {attempt}/3)"
+                f"[startup] bridge not initialized after {attempt * 45}s; "
+                f"silently reloading (attempt {attempt}/2)"
             )
             try:
                 window.load_url(window.real_url)
             except Exception as e:
                 logging.warning(f"[startup] forced reload failed: {e}")
                 return
-        logging.error(
-            "[startup] bridge STILL unavailable after 3 reloads. "
-            "Close via the tray icon or Alt+F4, or reinstall/repair the WebView2 "
-            f"runtime (pinned: {_PINNED_WEBVIEW2})."
-        )
+        if not window.events.loaded.wait(45):
+            logging.error(
+                "[startup] bridge STILL unavailable after 2 auto reloads. "
+                "Close via the tray icon or Alt+F4, or reinstall/repair the WebView2 "
+                f"runtime (pinned: {_PINNED_WEBVIEW2})."
+            )
 
     threading.Thread(target=_register_close_route, daemon=True).start()
     threading.Thread(target=_startup_watchdog, daemon=True).start()

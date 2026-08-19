@@ -127,20 +127,6 @@ class AppCore:
         # Safe background yt-dlp update
         threading.Thread(target=update_ytdlp_safely, daemon=True).start()
 
-        # Auto-start Zapret if enabled
-        try:
-            if self.settings.get("zapret", "enabled", False):
-                mode = self.settings.get("zapret", "mode", "youtube_discord")
-                custom_args = self.settings.get("zapret", "custom_args", "")
-                bin_path = self.settings.get("zapret", "binary_path", "")
-                threading.Thread(
-                    target=self.zapret.start,
-                    kwargs={"mode": mode, "custom_args": custom_args, "binary_path": bin_path},
-                    daemon=True
-                ).start()
-        except Exception as ze:
-            logger.error(f"Failed to auto-start Zapret: {ze}")
-
         # Periodic background check for Zapret updates
         if hasattr(self, "zapret") and self.zapret:
             self.zapret.auto_update_in_background()
@@ -174,6 +160,23 @@ class AppCore:
                     logger.debug("Cache cleanup error: %s", ce)
 
         threading.Thread(target=_cache_cleanup_loop, name="CacheCleanup", daemon=True).start()
+
+    def start_zapret_if_enabled(self):
+        """Start Zapret only if enabled in settings. Called AFTER the WebView2
+        window finished loading: a cold Zapret launch (winws DPI-desync) slows
+        down WebView2 HTTPS handshakes and delays bridge injection."""
+        try:
+            if self.settings.get("zapret", "enabled", False):
+                mode = self.settings.get("zapret", "mode", "youtube_discord")
+                custom_args = self.settings.get("zapret", "custom_args", "")
+                bin_path = self.settings.get("zapret", "binary_path", "")
+                threading.Thread(
+                    target=self.zapret.start,
+                    kwargs={"mode": mode, "custom_args": custom_args, "binary_path": bin_path},
+                    daemon=True
+                ).start()
+        except Exception as ze:
+            logger.error(f"Failed to auto-start Zapret: {ze}")
 
     def re_resolve_stream_url_async(self, source, source_id, callback=None, on_error=None, quality="high", track=None):
         """Construct lookup URL, call get_stream_url asynchronously and trigger callbacks."""
