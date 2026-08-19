@@ -23,6 +23,27 @@ logger = logging.getLogger(__name__)
 HOP_BY_HOP = frozenset({'trailer', 'upgrade', 'proxy-authenticate', 'proxy-authorization', 'connection', 'te', 'transfer-encoding', 'keep-alive'})
 
 
+class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Custom redirect handler that validates all redirect destinations against SSRF protection."""
+    def __init__(self, max_redirects=5):
+        self.max_redirects = max_redirects
+        self.redirect_count = 0
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        self.redirect_count += 1
+        if self.redirect_count > self.max_redirects:
+            raise urllib.error.HTTPError(req.full_url, code, "Too many redirects (max 5)", headers, fp)
+        if not _is_ssrf_safe_url(newurl):
+            raise urllib.error.HTTPError(req.full_url, code, f"SSRF blocked redirect destination: {newurl}", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _safe_urlopen(req, timeout=12.0):
+    """Open URL using custom SafeRedirectHandler enforcing strict SSRF checks on every redirect."""
+    opener = urllib.request.build_opener(SafeRedirectHandler(max_redirects=5))
+    return opener.open(req, timeout=timeout)
+
+
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     """
     Multi-threaded HTTP server holding a reference to the application core.
@@ -267,7 +288,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
 
         for attempt in range(max_retries + 1):
             try:
-                resp = urllib.request.urlopen(req, timeout=12.0)
+                resp = _safe_urlopen(req, timeout=12.0)
                 if hasattr(self.server.app_core, 'api') and hasattr(self.server.app_core.api, 'emit_event'):
                     self.server.app_core.api.emit_event('proxy_status', {'proxy': 'connected'})
                 break

@@ -19,11 +19,14 @@ def get_system_region():
     try:
         import ctypes
         buf = ctypes.create_unicode_buffer(10)
-        ctypes.windll.kernel32.GetUserDefaultGeoName(16, buf, 10)
-        region = buf.value.strip().upper()
-        if len(region) == 2:
-            return region
-    except:
+        ctypes.windll.kernel32.GetUserDefaultGeoName.restype = ctypes.c_int
+        ctypes.windll.kernel32.GetUserDefaultGeoName.argtypes = [ctypes.c_wchar_p, ctypes.c_int]
+        result = ctypes.windll.kernel32.GetUserDefaultGeoName(buf, 10)
+        if result > 0:
+            region = buf.value.strip().upper()
+            if len(region) == 2:
+                return region
+    except Exception:
         pass
 
     try:

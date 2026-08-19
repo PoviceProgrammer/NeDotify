@@ -33,24 +33,46 @@ MINI_EXPANDED_SIZE = (400, 180)
 
 
 def _is_ssrf_safe_url(url: str) -> bool:
-    """SSRF Protection: Validates external playlist import URLs to prevent internal network scanning."""
+    """SSRF Protection: Validates URLs to prevent internal network scanning and SSRF."""
     if not url or not isinstance(url, str):
         return False
     try:
         parsed = urllib.parse.urlparse(url.strip())
         if parsed.scheme not in ("http", "https"):
             return False
-        hostname = (parsed.hostname or "").lower()
+        hostname = (parsed.hostname or "").lower().strip()
         if not hostname:
             return False
         if hostname in ("localhost", "0.0.0.0", "::1"):
             return False
+
+        # Check numeric integer IP representations (e.g. 2130706433 -> 127.0.0.1)
+        if hostname.isdigit():
+            try:
+                num_ip = ipaddress.ip_address(int(hostname))
+                if num_ip.is_loopback or num_ip.is_private or num_ip.is_link_local or num_ip.is_reserved or num_ip.is_multicast or num_ip.is_unspecified:
+                    return False
+            except Exception:
+                return False
+
+        # Check direct IP address (IPv4 / IPv6 / hex)
         try:
-            ip_str = socket.gethostbyname(hostname)
-            ip = ipaddress.ip_address(ip_str)
-            if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            direct_ip = ipaddress.ip_address(hostname)
+            if direct_ip.is_loopback or direct_ip.is_private or direct_ip.is_link_local or direct_ip.is_reserved or direct_ip.is_multicast or direct_ip.is_unspecified:
                 return False
         except Exception:
+            pass
+
+        # Resolve all DNS records (IPv4 & IPv6)
+        try:
+            addr_info = socket.getaddrinfo(hostname, None)
+            for family, socktype, proto, canonname, sockaddr in addr_info:
+                ip_str = sockaddr[0]
+                ip = ipaddress.ip_address(ip_str)
+                if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+                    return False
+        except Exception:
+            # If DNS resolution fails, fallback string check
             if hostname.startswith("169.254.") or hostname.startswith("10.") or hostname.startswith("192.168.") or hostname.startswith("127."):
                 return False
         return True
