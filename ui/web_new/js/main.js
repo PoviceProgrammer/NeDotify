@@ -246,6 +246,16 @@ setTimeout(() => {
     if (!window._nedotifyInitialized) init();
 }, 2000);
 
+// Bridge-dead fallback: if the pywebview bridge never materializes, show an
+// explicit error instead of silent empty pages/spinners (close still works via
+// the /__aura_close HTTP endpoint or window.close()).
+setTimeout(() => {
+    if ((window.pywebview && !window.pywebview.api) ||
+        (!window.pywebview && (location.protocol === 'http:' || location.protocol === 'https:'))) {
+        showBridgeError();
+    }
+}, 3500);
+
 async function init() {
     if (window._nedotifyInitialized) return;
     window._nedotifyInitialized = true;
@@ -296,8 +306,17 @@ async function init() {
         document.getElementById('btn-maximize')?.addEventListener('click', () => {
             if (window.pywebview?.api?.maximize) window.pywebview.api.maximize();
         });
-        document.getElementById('btn-close')?.addEventListener('click', () => {
-            if (window.pywebview?.api) window.pywebview.api.close_window();
+        document.getElementById('btn-close')?.addEventListener('click', async () => {
+            if (window.pywebview?.api) {
+                window.pywebview.api.close_window();
+                return;
+            }
+            try {
+                const res = await fetch('/__aura_close', { method: 'POST' });
+                if (!res.ok) window.close();
+            } catch (e) {
+                window.close();
+            }
         });
 
         const safeInit = async (name, fn) => {
@@ -641,6 +660,35 @@ function setupProfileAndGreeting() {
             }
         });
     }
+}
+
+function showBridgeError() {
+    const existing = document.getElementById('bridge-error-overlay');
+    if (existing) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'bridge-error-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(10,10,15,0.96);color:#e5e7eb;font-family:Inter,sans-serif;text-align:center;padding:24px;';
+    overlay.innerHTML = `
+        <div style="font-size:15px;line-height:1.6;max-width:420px;">
+            Связь с приложением не установлена (WebView2 bridge не инициализировался).
+            <br>Нажмите «Перезагрузить», чтобы попробовать снова.
+        </div>
+        <div style="display:flex;gap:12px;">
+            <button id="bridge-error-reload" style="background:#a855f7;color:#fff;border:none;border-radius:8px;padding:10px 22px;cursor:pointer;font-size:14px;">Перезагрузить</button>
+            <button id="bridge-error-close" style="background:#27272a;color:#e5e7eb;border:none;border-radius:8px;padding:10px 22px;cursor:pointer;font-size:14px;">Закрыть</button>
+        </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#bridge-error-reload').addEventListener('click', () => {
+        try { location.reload(); } catch (e) {}
+    });
+    overlay.querySelector('#bridge-error-close').addEventListener('click', async () => {
+        try {
+            const res = await fetch('/__aura_close', { method: 'POST' });
+            if (!res.ok) window.close();
+        } catch (e) {
+            window.close();
+        }
+    });
 }
 
 

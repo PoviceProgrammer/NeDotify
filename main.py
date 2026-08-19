@@ -6,7 +6,33 @@ and advanced customization. (PyWebView Edition)
 
 import sys
 import os
+import threading
 import webview
+
+# Pin WebView2 runtime to a known-good version: Evergreen 151.0.4129.93 hangs
+# bridge injection (loaded/_pywebviewready never fire) on this machine, while
+# 151.0.4129.86 works. Falls back to system runtime if the pinned copy is gone.
+_PINNED_WEBVIEW2 = os.path.join(
+    os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)'),
+    'Microsoft', 'EdgeWebView', 'Application', '151.0.4129.86',
+)
+if os.path.exists(os.path.join(_PINNED_WEBVIEW2, 'msedgewebview2.exe')):
+    webview.settings['WEBVIEW2_RUNTIME_PATH'] = _PINNED_WEBVIEW2
+
+# Capture the pywebview HTTP server's Bottle app so the app can register its own
+# bridge-free routes (e.g. /__aura_close) even when the JS bridge is dead.
+_BOTTLE_APP = [None]
+try:
+    import bottle as _bottle
+    _orig_bottle_run = _bottle.run
+
+    def _capture_bottle_run(app=None, **kwargs):
+        _BOTTLE_APP[0] = app
+        return _orig_bottle_run(app=app, **kwargs)
+
+    _bottle.run = _capture_bottle_run
+except Exception:
+    pass
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
@@ -152,6 +178,61 @@ def main():
             app_core.engine._on_track_changed(app_core.engine.queue.current_track)
             
     window.events.loaded += on_loaded
+
+    # Watchdog: if the JS bridge never comes up (WebView2 init hang), log it,
+    # force one reload, and register a bridge-free close endpoint on the local server.
+    def _register_close_route():
+        import time as _time
+        for _ in range(200):
+            if _BOTTLE_APP[0] is not None:
+                break
+            _time.sleep(0.1)
+        if _BOTTLE_APP[0] is None:
+            logging.warning("[startup] HTTP server app unavailable; bridge-free close disabled")
+            return
+        try:
+            def _close_handler():
+                try:
+                    window.destroy()
+                except Exception:
+                    pass
+                return 'ok'
+            app = _BOTTLE_APP[0]
+            route = app.route('/__aura_close', method='POST')(_close_handler)
+            # Bottle matches routes in registration order; move ours ahead of the
+            # static-file catch-all ('/<file:path>') so it is actually reached.
+            routes = getattr(app, 'routes', None)
+            if isinstance(routes, list) and route in routes:
+                routes.remove(route)
+                routes.insert(0, route)
+            logging.info(f"[startup] bridge-free close endpoint registered (/__aura_close, page={window.real_url})")
+        except Exception as e:
+            logging.warning(f"[startup] close endpoint registration failed: {e}")
+
+    def _startup_watchdog():
+        # First load may be slow (observed up to ~12s); give it a generous window,
+        # then auto-reload up to 3 times. Manual reload is known to restore the bridge.
+        for attempt in range(1, 4):
+            if window.events.loaded.wait(30):
+                logging.info(f"[startup] bridge initialized after {attempt} load attempt(s)")
+                return
+            logging.warning(
+                f"[startup] bridge not initialized after {attempt * 30}s; "
+                f"reloading (attempt {attempt}/3)"
+            )
+            try:
+                window.load_url(window.real_url)
+            except Exception as e:
+                logging.warning(f"[startup] forced reload failed: {e}")
+                return
+        logging.error(
+            "[startup] bridge STILL unavailable after 3 reloads. "
+            "Close via the tray icon or Alt+F4, or reinstall/repair the WebView2 "
+            f"runtime (pinned: {_PINNED_WEBVIEW2})."
+        )
+
+    threading.Thread(target=_register_close_route, daemon=True).start()
+    threading.Thread(target=_startup_watchdog, daemon=True).start()
 
     # Start the application loop (debug=False disables DevTools; use F12 for debugging via debug flag)
     logging.info(f"[startup] webview loop starting (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
