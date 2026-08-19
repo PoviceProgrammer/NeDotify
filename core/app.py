@@ -92,7 +92,7 @@ class AppCore:
         self.db = DatabaseManager()
         self.settings = SettingsManager(self.db)
         self.session = SessionManager(self.settings)
-        self.cache = CacheManager(self.db)
+        self.cache = CacheManager(self.db, self.settings)
         self.scanner = FileScanner(self.db)
 
         # C-3: stream URL cache + single-flight coordinator

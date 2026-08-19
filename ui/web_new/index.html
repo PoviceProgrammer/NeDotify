@@ -1740,11 +1740,24 @@
                                     <div class="setting-label">Статистика локального хранилища</div>
                                     <div class="setting-sublabel">Здесь отображается объем кэша и сохраненных данных на вашем ПК</div>
                                 </div>
-                                <div style="display: flex; gap: 20px; font-size: 13px; color: var(--text-sec); margin-top: 5px;">
+                                <div style="display: flex; gap: 20px; font-size: 13px; color: var(--text-sec); margin-top: 5px; flex-wrap: wrap;">
                                     <div>Всего: <span id="storage-total" style="color: var(--text); font-weight: 600;">0 MB</span></div>
-                                    <div>Треки: <span id="storage-tracks" style="color: var(--text); font-weight: 600;">0</span></div>
-                                    <div>Обложки: <span id="storage-covers" style="color: var(--text); font-weight: 600;">0</span></div>
+                                    <div>Кэш: <span id="storage-streams" style="color: var(--text); font-weight: 600;">0 MB</span></div>
+                                    <div>Защищено (Избранное/Загрузки): <span id="storage-protected" style="color: var(--primary); font-weight: 600;">0</span></div>
                                 </div>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Лимит кэша (Smart Storage)</div>
+                                    <div class="setting-sublabel">Автоматическая LRU-очистка при превышении лимита (скачанное и избранное не удаляются)</div>
+                                </div>
+                                <select id="select-cache-quota" class="glass-select" style="min-width:140px; padding:6px 12px; border-radius:8px;">
+                                    <option value="1">1 ГБ</option>
+                                    <option value="2">2 ГБ</option>
+                                    <option value="5" selected>5 ГБ (Реком.)</option>
+                                    <option value="10">10 ГБ</option>
+                                    <option value="0">Без лимита</option>
+                                </select>
                             </div>
                             <div class="setting-row">
                                 <div>

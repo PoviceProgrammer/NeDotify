@@ -2167,3 +2167,47 @@ class AppApi:
             logger.error(f"Error selecting cover image: {e}")
             return {"success": False, "error": str(e)}
 
+    def get_storage_details(self) -> dict:
+        """Get storage metrics including used bytes, quota bytes, and protected tracks count."""
+        try:
+            if hasattr(self._core, "cache") and self._core.cache:
+                return self._core.cache.get_storage_details()
+            return {"used_bytes": 0, "quota_bytes": 5 * 1024 * 1024 * 1024, "quota_gb": 5, "protected_count": 0}
+        except Exception as e:
+            logger.error(f"Error getting storage details: {e}")
+            return {"used_bytes": 0, "quota_bytes": 5 * 1024 * 1024 * 1024, "quota_gb": 5, "protected_count": 0}
+
+    def set_cache_quota(self, quota_gb: int) -> dict:
+        """Set storage cache quota in GB and trigger LRU eviction if quota is exceeded."""
+        try:
+            quota_val = max(0, int(quota_gb))
+            if hasattr(self._core, "settings") and self._core.settings:
+                self._core.settings.set("storage", "cache_quota_gb", quota_val)
+
+            freed = 0
+            if hasattr(self._core, "cache") and self._core.cache:
+                freed = self._core.cache.purge_stream_cache(quota_bytes=quota_val * 1024 * 1024 * 1024 if quota_val > 0 else 0)
+                details = self._core.cache.get_storage_details()
+            else:
+                details = {"quota_gb": quota_val, "used_bytes": 0}
+
+            self._emit("storage_updated", details)
+            return {"success": True, "freed_bytes": freed, "details": details}
+        except Exception as e:
+            logger.error(f"Error setting cache quota: {e}")
+            return {"success": False, "error": str(e)}
+
+    def clear_storage_cache(self) -> dict:
+        """Safely clear temporary stream cache and cover caches."""
+        try:
+            if hasattr(self._core, "cache") and self._core.cache:
+                self._core.cache.clear_all()
+                details = self._core.cache.get_storage_details()
+                self._emit("storage_updated", details)
+                return {"success": True, "details": details}
+            return {"success": False, "error": "Кэш-менеджер недоступен"}
+        except Exception as e:
+            logger.error(f"Error clearing cache: {e}")
+            return {"success": False, "error": str(e)}
+
+

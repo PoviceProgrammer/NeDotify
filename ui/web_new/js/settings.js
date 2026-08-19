@@ -187,9 +187,35 @@ export function initSettings() {
     const clearStorageBtn = document.getElementById('btn-clear-storage');
     if (clearStorageBtn) {
         clearStorageBtn.addEventListener('click', async () => {
-            if (window.pywebview?.api) {
+            if (window.pywebview?.api?.clear_storage_cache) {
+                const res = await window.pywebview.api.clear_storage_cache();
+                if (res && res.success) {
+                    showToast('Кэш успешно очищен!', 'success');
+                    if (res.details) onStorageInfo(res.details);
+                } else {
+                    showToast('Ошибка очистки кэша', 'error');
+                }
+            } else if (window.pywebview?.api?.clear_storage) {
                 await window.pywebview.api.clear_storage('all');
                 window.pywebview.api.get_storage_info();
+            }
+        });
+    }
+
+    const selectCacheQuota = document.getElementById('select-cache-quota');
+    if (selectCacheQuota) {
+        const savedQuota = getLocalSetting('nedotify_storage_cache_quota_gb', 5);
+        selectCacheQuota.value = String(savedQuota);
+
+        selectCacheQuota.addEventListener('change', async (e) => {
+            const val = parseInt(e.target.value);
+            saveSetting('cache_quota_gb', val, 'storage');
+            if (window.pywebview?.api?.set_cache_quota) {
+                const res = await window.pywebview.api.set_cache_quota(val);
+                if (res && res.success) {
+                    showToast(val === 0 ? 'Лимит кэша отключен' : `Лимит кэша установлен на ${val} ГБ`, 'info');
+                    if (res.details) onStorageInfo(res.details);
+                }
             }
         });
     }
@@ -756,9 +782,20 @@ export function setYandexWarning(visible) {
 
 export function onStorageInfo(data) {
     if (!data) return;
-    setElText('storage-total', `${(data.total || 0).toFixed(1)} MB`);
-    if (data.tracks) setElText('storage-tracks', `${data.tracks.count} файлов • ${data.tracks.size}`);
-    if (data.covers) setElText('storage-covers', `${data.covers.count} файлов • ${data.covers.size}`);
+    if (data.used_bytes !== undefined) {
+        const usedMb = (data.used_bytes / (1024 * 1024)).toFixed(1);
+        setElText('storage-total', `${usedMb} MB`);
+        setElText('storage-streams', `${usedMb} MB`);
+        setElText('storage-protected', `${data.protected_count || 0} треков`);
+        if (data.quota_gb !== undefined) {
+            const quotaSelect = document.getElementById('select-cache-quota');
+            if (quotaSelect) quotaSelect.value = String(data.quota_gb);
+        }
+    } else {
+        setElText('storage-total', `${(data.total || 0).toFixed(1)} MB`);
+        if (data.tracks) setElText('storage-streams', `${data.tracks.size || '0 MB'}`);
+        if (data.covers) setElText('storage-protected', `${data.covers.count || 0} обложек`);
+    }
 }
 
 function saveSetting(key, value, category) {

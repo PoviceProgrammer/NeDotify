@@ -403,6 +403,10 @@ class DatabaseManager:
                 self.conn.commit()
                 return t_id
 
+        is_downloaded = int(kwargs.pop("is_downloaded", 0))
+        is_favorite = int(kwargs.pop("is_favorite", 0))
+        is_cached = int(kwargs.pop("is_cached", 0))
+
         metadata_json = json.dumps(kwargs) if kwargs else None
         fp_to_save = file_path or None
 
@@ -410,8 +414,8 @@ class DatabaseManager:
             """
             INSERT INTO tracks (title, artist, album, duration, file_path,
                 source, source_id, source_url, cover_path, cover_url,
-                bitrate, format, genre, year, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                bitrate, format, genre, year, is_downloaded, is_favorite, is_cached, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 title,
@@ -428,6 +432,9 @@ class DatabaseManager:
                 format_,
                 genre,
                 year,
+                is_downloaded,
+                is_favorite,
+                is_cached,
                 metadata_json,
             ),
         )
