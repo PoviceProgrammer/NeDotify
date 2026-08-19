@@ -1022,7 +1022,7 @@ class DatabaseManager:
         return cursor.rowcount > 0
 
     def set_setting(self, key: str, value: Any, category: str = "general") -> None:
-        if isinstance(value, (dict, list)):
+        if isinstance(value, (dict, list, bool, int, float)):
             val_str = json.dumps(value)
         elif value is None:
             val_str = ""
@@ -1040,17 +1040,33 @@ class DatabaseManager:
         cursor = self.conn.cursor()
         cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
         row = cursor.fetchone()
-        return row["value"] if row else default
+        if not row:
+            return default
+        raw_v = row["value"]
+        try:
+            return json.loads(raw_v)
+        except (json.JSONDecodeError, TypeError):
+            if raw_v in ("True", "true"):
+                return True
+            elif raw_v in ("False", "false"):
+                return False
+            return raw_v
 
     def get_settings_by_category(self, category: str) -> Dict[str, Any]:
         cursor = self.conn.cursor()
         cursor.execute("SELECT key, value FROM settings WHERE category = ?", (category,))
         result = {}
         for row in cursor.fetchall():
+            k, raw_v = row[0], row[1]
             try:
-                result[row[0]] = json.loads(row[1])
+                result[k] = json.loads(raw_v)
             except (json.JSONDecodeError, TypeError):
-                result[row[0]] = row[1]
+                if raw_v in ("True", "true"):
+                    result[k] = True
+                elif raw_v in ("False", "false"):
+                    result[k] = False
+                else:
+                    result[k] = raw_v
         return result
 
     def get_all_settings(self) -> Dict[str, Any]:
@@ -1058,10 +1074,16 @@ class DatabaseManager:
         cursor.execute("SELECT key, value FROM settings")
         result = {}
         for row in cursor.fetchall():
+            k, raw_v = row[0], row[1]
             try:
-                result[row[0]] = json.loads(row[1])
+                result[k] = json.loads(raw_v)
             except (json.JSONDecodeError, TypeError):
-                result[row[0]] = row[1]
+                if raw_v in ("True", "true"):
+                    result[k] = True
+                elif raw_v in ("False", "false"):
+                    result[k] = False
+                else:
+                    result[k] = raw_v
         return result
 
     def set_cached_file(self, source: str, source_id: str, file_path: str) -> None:

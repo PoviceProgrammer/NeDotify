@@ -69,6 +69,7 @@ export function initSettings() {
             if (panelName === 'icons') setupIconsPanel();
             if (panelName === 'workshop') setupWorkshopPanel();
             if (panelName === 'optimization') setupOptimizationPanel();
+            if (panelName === 'zapret') setupZapretPanel();
 
             try {
                 if (window.lucide) window.lucide.createIcons();
@@ -1289,6 +1290,14 @@ function applyThemeMode(mode) {
     applyAuraOrbs(getLocalSetting('nedotify_player_aura_orbs_enabled', true));
 }
 
+let _zapretListenersAttached = false;
+
+function _toBool(v) {
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'string') return v.trim().toLowerCase() === 'true' || v === '1';
+    return !!v;
+}
+
 function setupZapretPanel() {
     const toggleZapret = document.getElementById('toggle-zapret-enabled');
     const toggleAutoStart = document.getElementById('toggle-zapret-autostart');
@@ -1304,83 +1313,9 @@ function setupZapretPanel() {
     let savedBinaryPath = '';
 
     function setAutoStartState(isOn) {
-        if (toggleAutoStart) toggleAutoStart.classList.toggle('on', isOn);
-        if (chkAutoStart) chkAutoStart.checked = isOn;
-    }
-
-    if (toggleAutoStart) {
-        toggleAutoStart.addEventListener('click', async () => {
-            const isOn = toggleAutoStart.classList.toggle('on');
-            if (chkAutoStart) chkAutoStart.checked = isOn;
-            if (window.pywebview?.api?.set_setting) {
-                await window.pywebview.api.set_setting('zapret', 'auto_start', isOn);
-                window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                    detail: { msg: isOn ? 'Автозапуск Zapret включен' : 'Автозапуск Zapret отключен', type: 'info' }
-                }));
-            }
-        });
-    }
-
-    if (chkAutoStart) {
-        chkAutoStart.addEventListener('change', async (e) => {
-            const isOn = e.target.checked;
-            if (toggleAutoStart) toggleAutoStart.classList.toggle('on', isOn);
-            if (window.pywebview?.api?.set_setting) {
-                await window.pywebview.api.set_setting('zapret', 'auto_start', isOn);
-                window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                    detail: { msg: isOn ? 'Автозапуск Zapret включен' : 'Автозапуск Zapret отключен', type: 'info' }
-                }));
-            }
-        });
-    }
-
-    if (selectZapretMode) {
-        selectZapretMode.addEventListener('change', (e) => {
-            selectedMode = e.target.value;
-            if (toggleZapret && toggleZapret.classList.contains('on')) {
-                applyZapret(true);
-            }
-        });
-    }
-
-    if (toggleAutoUpdate) {
-        toggleAutoUpdate.addEventListener('click', () => {
-            const isOn = toggleAutoUpdate.classList.toggle('on');
-            if (window.pywebview?.api?.set_setting) {
-                window.pywebview.api.set_setting('zapret', 'autoupdate', isOn);
-            }
-        });
-    }
-
-    if (btnUpdateZapret) {
-        btnUpdateZapret.addEventListener('click', async () => {
-            btnUpdateZapret.disabled = true;
-            btnUpdateZapret.style.opacity = '0.6';
-            if (updateStatus) updateStatus.textContent = 'Проверка и загрузка актуальной версии...';
-
-            try {
-                if (window.pywebview?.api?.update_zapret) {
-                    const res = await window.pywebview.api.update_zapret(true);
-                    if (res?.success) {
-                        if (versionBadge && res.status?.version) versionBadge.textContent = res.status.version;
-                        if (updateStatus) updateStatus.textContent = 'Установлена последняя версия';
-                        window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                            detail: { msg: res.message || 'Zapret успешно обновлен!', type: 'success' }
-                        }));
-                    } else {
-                        if (updateStatus) updateStatus.textContent = 'Ошибка проверки обновления';
-                        window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                            detail: { msg: res.message || 'Не удалось обновить Zapret', type: 'error' }
-                        }));
-                    }
-                }
-            } catch (err) {
-                if (updateStatus) updateStatus.textContent = 'Ошибка сети при обновлении';
-            } finally {
-                btnUpdateZapret.disabled = false;
-                btnUpdateZapret.style.opacity = '1';
-            }
-        });
+        const flag = Boolean(isOn);
+        if (toggleAutoStart) toggleAutoStart.classList.toggle('on', flag);
+        if (chkAutoStart) chkAutoStart.checked = flag;
     }
 
     async function applyZapret(enable) {
@@ -1408,20 +1343,102 @@ function setupZapretPanel() {
         }
     }
 
-    if (toggleZapret) {
-        toggleZapret.addEventListener('click', () => {
-            const isOn = toggleZapret.classList.toggle('on');
-            applyZapret(isOn);
-        });
+    if (!_zapretListenersAttached) {
+        _zapretListenersAttached = true;
+
+        if (toggleAutoStart) {
+            toggleAutoStart.addEventListener('click', async () => {
+                const isOn = toggleAutoStart.classList.toggle('on');
+                if (chkAutoStart) chkAutoStart.checked = isOn;
+                saveSetting('auto_start', isOn, 'zapret');
+                if (window.pywebview?.api?.set_setting) {
+                    await window.pywebview.api.set_setting('zapret', 'auto_start', isOn);
+                }
+                window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                    detail: { msg: isOn ? 'Автозапуск Zapret включен' : 'Автозапуск Zapret отключен', type: 'info' }
+                }));
+            });
+        }
+
+        if (chkAutoStart) {
+            chkAutoStart.addEventListener('change', async (e) => {
+                const isOn = e.target.checked;
+                if (toggleAutoStart) toggleAutoStart.classList.toggle('on', isOn);
+                saveSetting('auto_start', isOn, 'zapret');
+                if (window.pywebview?.api?.set_setting) {
+                    await window.pywebview.api.set_setting('zapret', 'auto_start', isOn);
+                }
+                window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                    detail: { msg: isOn ? 'Автозапуск Zapret включен' : 'Автозапуск Zapret отключен', type: 'info' }
+                }));
+            });
+        }
+
+        if (selectZapretMode) {
+            selectZapretMode.addEventListener('change', (e) => {
+                selectedMode = e.target.value;
+                if (toggleZapret && toggleZapret.classList.contains('on')) {
+                    applyZapret(true);
+                }
+            });
+        }
+
+        if (toggleAutoUpdate) {
+            toggleAutoUpdate.addEventListener('click', () => {
+                const isOn = toggleAutoUpdate.classList.toggle('on');
+                saveSetting('autoupdate', isOn, 'zapret');
+                if (window.pywebview?.api?.set_setting) {
+                    window.pywebview.api.set_setting('zapret', 'autoupdate', isOn);
+                }
+            });
+        }
+
+        if (btnUpdateZapret) {
+            btnUpdateZapret.addEventListener('click', async () => {
+                btnUpdateZapret.disabled = true;
+                btnUpdateZapret.style.opacity = '0.6';
+                if (updateStatus) updateStatus.textContent = 'Проверка и загрузка актуальной версии...';
+
+                try {
+                    if (window.pywebview?.api?.update_zapret) {
+                        const res = await window.pywebview.api.update_zapret(true);
+                        if (res?.success) {
+                            if (versionBadge && res.status?.version) versionBadge.textContent = res.status.version;
+                            if (updateStatus) updateStatus.textContent = 'Установлена последняя версия';
+                            window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                                detail: { msg: res.message || 'Zapret успешно обновлен!', type: 'success' }
+                            }));
+                        } else {
+                            if (updateStatus) updateStatus.textContent = 'Ошибка проверки обновления';
+                            window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                                detail: { msg: res.message || 'Не удалось обновить Zapret', type: 'error' }
+                            }));
+                        }
+                    }
+                } catch (err) {
+                    if (updateStatus) updateStatus.textContent = 'Ошибка сети при обновлении';
+                } finally {
+                    btnUpdateZapret.disabled = false;
+                    btnUpdateZapret.style.opacity = '1';
+                }
+            });
+        }
+
+        if (toggleZapret) {
+            toggleZapret.addEventListener('click', () => {
+                const isOn = toggleZapret.classList.toggle('on');
+                applyZapret(isOn);
+            });
+        }
     }
 
-    // Initial Status Check
+    // Refresh Status
     if (window.pywebview?.api?.get_zapret_status) {
         window.pywebview.api.get_zapret_status().then(status => {
             if (status) {
-                const isRunning = !!(status.running || status.enabled);
+                const isRunning = _toBool(status.running);
                 if (toggleZapret) toggleZapret.classList.toggle('on', isRunning);
-                const isAutoStart = !!status.auto_start;
+                const isAutoStart = _toBool(status.auto_start);
                 setAutoStartState(isAutoStart);
                 if (status.mode && selectZapretMode) {
                     selectedMode = status.mode;
@@ -1433,7 +1450,7 @@ function setupZapretPanel() {
                 savedCustomArgs = status.custom_args || '';
                 savedBinaryPath = status.binary_path || '';
                 if (toggleAutoUpdate && status.autoupdate !== undefined) {
-                    toggleAutoUpdate.classList.toggle('on', status.autoupdate === true);
+                    toggleAutoUpdate.classList.toggle('on', _toBool(status.autoupdate));
                 }
             }
         }).catch(() => {});

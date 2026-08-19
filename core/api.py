@@ -1543,9 +1543,7 @@ class AppApi:
             import copy
             return copy.deepcopy(self._core.settings._settings)
             
-        # 'auth' is kept on purpose: the settings UI reads/writes yandex_token,
-        # oauth_client_id, oauth_client_secret, cookies_file_path and proxy_url there.
-        categories = ['app', 'appearance', 'player', 'lyrics', 'system', 'general', 'audio', 'overlay', 'efficiency', 'optimization', 'hotkeys', 'storage', 'player_appearance', 'personalization', 'interface', 'ui', 'theme', 'equalizer', 'auth', 'services', 'session']
+        categories = ['app', 'appearance', 'player', 'lyrics', 'system', 'general', 'audio', 'overlay', 'efficiency', 'optimization', 'hotkeys', 'storage', 'player_appearance', 'personalization', 'interface', 'ui', 'theme', 'equalizer', 'auth', 'services', 'session', 'zapret']
         res = {}
         for c in categories:
             try:

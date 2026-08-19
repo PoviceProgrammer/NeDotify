@@ -256,11 +256,18 @@ class SettingsManager:
             cat, k = category.split(".", 1)
             return self.get(cat, k, default)
 
+        val = default
         if category in self._cache and key in self._cache[category]:
-            return self._cache[category][key]
-        if category in DEFAULT_SETTINGS and key in DEFAULT_SETTINGS[category]:
-            return DEFAULT_SETTINGS[category][key]
-        return default
+            val = self._cache[category][key]
+        elif category in DEFAULT_SETTINGS and key in DEFAULT_SETTINGS[category]:
+            val = DEFAULT_SETTINGS[category][key]
+
+        if isinstance(val, str):
+            if val.lower() == "true":
+                return True
+            elif val.lower() == "false":
+                return False
+        return val
 
     def set(self, category: str, key: Any = None, value: Any = None) -> None:
         """Set a setting value and persist it. Supports set('zapret', 'auto_start', True) and set('zapret.auto_start', True)."""

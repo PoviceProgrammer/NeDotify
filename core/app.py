@@ -166,7 +166,12 @@ class AppCore:
         window finished loading: a cold Zapret launch (winws DPI-desync) slows
         down WebView2 HTTPS handshakes and delays bridge injection."""
         try:
-            auto_start = bool(self.settings.get("zapret", "auto_start", False) or self.settings.get("zapret.auto_start", False))
+            val = self.settings.get("zapret", "auto_start", False)
+            if isinstance(val, str):
+                auto_start = val.strip().lower() in ("true", "1", "yes", "on")
+            else:
+                auto_start = bool(val)
+
             if auto_start:
                 mode = self.settings.get("zapret", "mode", "youtube_discord")
                 custom_args = self.settings.get("zapret", "custom_args", "")
