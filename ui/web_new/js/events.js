@@ -1,10 +1,10 @@
 // NeDotify — Python Event Bridge
-import { onTrackChanged, onStateChanged, onPositionChanged, applySettings } from './player.js?v=20260820_1';
-import { onSearchResults } from './search.js?v=20260820_1';
-import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome } from './home.js?v=20260820_1';
-import { loadLibrary, loadDownloaded, loadPlaylists } from './library.js?v=20260820_1';
-import { applySettingsFromBackend, onStorageInfo, setYandexWarning } from './settings.js?v=20260820_1';
-import { showToast, renderIcons, escapeHtml } from './utils.js?v=20260820_1';
+import { onTrackChanged, onStateChanged, onPositionChanged, applySettings } from './player.js?v=20260820_2';
+import { onSearchResults } from './search.js?v=20260820_2';
+import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome } from './home.js?v=20260820_2';
+import { loadLibrary, loadDownloaded, loadPlaylists } from './library.js?v=20260820_2';
+import { applySettingsFromBackend, onStorageInfo, setYandexWarning } from './settings.js?v=20260820_2';
+import { showToast, renderIcons, escapeHtml } from './utils.js?v=20260820_2';
 
 let isNextTrackChange = false;
 

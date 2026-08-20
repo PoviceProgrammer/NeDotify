@@ -306,6 +306,28 @@ a { color: var(--primary); text-decoration: none; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
 
+/* ─── Custom Background & Dimming Layers ─── */
+#custom-bg-layer {
+    position: fixed;
+    inset: -25px;
+    z-index: 0;
+    pointer-events: none;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    transition: filter 0.25s ease, transform 0.25s ease;
+    display: none;
+}
+
+#custom-bg-dim-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    transition: background-color 0.25s ease;
+    display: none;
+}
+
 /* ─── Layout ─── */
 #app-container {
     display: flex;
@@ -313,7 +335,43 @@ a { color: var(--primary); text-decoration: none; }
     width: 100vw;
     position: relative;
     z-index: 1;
-    background-color: var(--bg-main, #0a0a0f);
+    background-color: var(--app-bg-color, var(--bg-main, #0a0a0f));
+    transition: background-color 0.3s ease;
+}
+
+html.has-custom-bg,
+body.has-custom-bg {
+    background: transparent !important;
+}
+
+html.has-custom-bg #app-container,
+body.has-custom-bg #app-container,
+#app-container.has-custom-bg {
+    background-color: transparent !important;
+}
+
+html.has-custom-bg #app-container::before,
+body.has-custom-bg #app-container::before,
+#app-container.has-custom-bg::before {
+    opacity: 0.15 !important;
+}
+
+html.has-custom-bg #sidebar {
+    background: color-mix(in srgb, var(--bg-main, #0a0a0f) calc(var(--app-bg-opacity, 0.75) * 55%), transparent);
+    backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
+    -webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
+}
+
+html.has-custom-bg #main-content {
+    background: color-mix(in srgb, var(--bg-surface, #14141d) calc(var(--app-bg-opacity, 0.75) * 70%), transparent);
+    backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
+    -webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
+}
+
+html.has-custom-bg #player-bar {
+    background: color-mix(in srgb, var(--bg-surface, #14141d) calc(var(--app-bg-opacity, 0.75) * 80%), transparent);
+    backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
+    -webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
 }
 
 #app-container::before {

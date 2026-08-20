@@ -1,5 +1,5 @@
 // NeDotify Р Р†Р вЂљ" Player Module
-import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml } from './utils.js?v=20260820_1';
+import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml } from './utils.js?v=20260820_2';
 
 let currentTrack = null;
 let isPlaying = false;
@@ -852,7 +852,7 @@ export function initPlayer() {
                             btn.addEventListener('click', async () => {
                                 await api('add_to_playlist', plId, currentTrack);
                                 optMenu.classList.remove('visible');
-                                const { showToast } = await import('./utils.js?v=20260820_1');
+                                const { showToast } = await import('./utils.js?v=20260820_2');
                                 showToast(`Добавлено в «${pl.name}»`, 'success');
                             });
                             itemsEl.appendChild(btn);

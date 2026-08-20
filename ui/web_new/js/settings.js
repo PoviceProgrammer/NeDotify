@@ -1,9 +1,9 @@
 // NeDotify Р Р†Р вЂљ" Settings Module
-import { renderIcons, escapeHtml, compressBackgroundImage, showToast } from './utils.js?v=20260820_1';
-import { initParticles, stopParticles, setParticlesFps } from './particles.js?v=20260820_1';
-import { setVisualizerFps } from './visualizer.js?v=20260820_1';
-import { initOnboarding } from './onboarding.js?v=20260820_1';
-import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js?v=20260820_1';
+import { renderIcons, escapeHtml, compressBackgroundImage, showToast } from './utils.js?v=20260820_2';
+import { initParticles, stopParticles, setParticlesFps } from './particles.js?v=20260820_2';
+import { setVisualizerFps } from './visualizer.js?v=20260820_2';
+import { initOnboarding } from './onboarding.js?v=20260820_2';
+import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js?v=20260820_2';
 
 // Helper: read a localStorage setting that was saved by saveSetting()
 function getLocalSetting(key, defaultVal) {
@@ -119,17 +119,13 @@ export function initSettings() {
         initParticles();
     });
     setupSlider('slider-glass-blur', 'glass_blur', 'theme', (v) => {
-        setElText('label-glass-blur', `${v}px`);
-        setElText('label-bg-blur', `${v}px`);
-        const bgBlurSlider = document.getElementById('slider-bg-blur');
-        if (bgBlurSlider) bgBlurSlider.value = v;
-        document.documentElement.style.setProperty('--glass-blur', `${v}px`);
-        document.documentElement.style.setProperty('--blur-sm', `${Math.max(4, Math.round(v * 0.4))}px`);
-        const dataUrl = localStorage.getItem('nedotify_theme_custom_bg_image');
-        const dimVal = document.getElementById('slider-bg-dim')?.value || 30;
-        if (dataUrl) {
-            try { applyCustomBg(JSON.parse(dataUrl), v, dimVal); } catch(e) {}
-        }
+        const val = parseInt(v) || 0;
+        setElText('label-glass-blur', `${val}px`);
+        document.documentElement.style.setProperty('--glass-blur', `${val}px`);
+        document.documentElement.style.setProperty('--blur-sm', `${Math.max(2, Math.round(val * 0.4))}px`);
+        document.documentElement.style.setProperty('--blur-md', `${val}px`);
+        document.documentElement.style.setProperty('--blur-lg', `${Math.round(val * 1.3)}px`);
+        document.documentElement.style.setProperty('--blur-xl', `${Math.round(val * 1.6)}px`);
     });
 
     // Font Selection Bindings
@@ -1464,32 +1460,40 @@ export function applyCustomBg(bgDataUrl, blurPx = 0, dimPct = 30) {
     const previewImg = document.getElementById('bg-image-preview');
 
     if (!bgDataUrl) {
+        document.documentElement.classList.remove('has-custom-bg');
+        document.body.classList.remove('has-custom-bg');
+        const appCont = document.getElementById('app-container');
+        if (appCont) appCont.classList.remove('has-custom-bg');
         if (bgLayer) bgLayer.style.display = 'none';
         if (dimLayer) dimLayer.style.display = 'none';
         if (previewRow) previewRow.style.display = 'none';
         return;
     }
 
+    document.documentElement.classList.add('has-custom-bg');
+    document.body.classList.add('has-custom-bg');
+    const appCont = document.getElementById('app-container');
+    if (appCont) appCont.classList.add('has-custom-bg');
+
     if (!bgLayer) {
         bgLayer = document.createElement('div');
         bgLayer.id = 'custom-bg-layer';
-        bgLayer.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:-2; pointer-events:none; background-size:cover; background-position:center; transition: filter 0.3s ease;';
         document.body.insertBefore(bgLayer, document.body.firstChild);
     }
 
     if (!dimLayer) {
         dimLayer = document.createElement('div');
         dimLayer.id = 'custom-bg-dim-layer';
-        dimLayer.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:-1; pointer-events:none; transition: background 0.3s ease;';
         document.body.insertBefore(dimLayer, document.body.firstChild);
     }
 
     bgLayer.style.display = 'block';
     bgLayer.style.backgroundImage = `url("${bgDataUrl}")`;
     bgLayer.style.filter = `blur(${blurPx || 0}px)`;
+    bgLayer.style.transform = `scale(${blurPx > 0 ? 1.06 : 1})`;
 
     dimLayer.style.display = 'block';
-    dimLayer.style.background = `rgba(0, 0, 0, ${(dimPct !== undefined ? dimPct : 30) / 100})`;
+    dimLayer.style.backgroundColor = `rgba(0, 0, 0, ${(dimPct !== undefined ? dimPct : 30) / 100})`;
 
     if (previewRow) previewRow.style.display = 'flex';
     if (previewImg) previewImg.style.backgroundImage = `url("${bgDataUrl}")`;
@@ -1508,11 +1512,10 @@ function setupBackgroundPanel() {
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     const dataUrl = event.target.result;
-                    // M-2: downscale to 256px JPEG so the 5MB localStorage quota isn't eaten by backgrounds
                     compressBackgroundImage(dataUrl, (compressed) => {
                         saveSetting('custom_bg_image', compressed, 'theme');
-                        const blurVal = document.getElementById('slider-bg-blur')?.value || 0;
-                        const dimVal = document.getElementById('slider-bg-dim')?.value || 30;
+                        const blurVal = parseInt(document.getElementById('slider-bg-blur')?.value || 0);
+                        const dimVal = parseInt(document.getElementById('slider-bg-dim')?.value || 30);
                         applyCustomBg(compressed, blurVal, dimVal);
                     });
                 };
@@ -1529,40 +1532,48 @@ function setupBackgroundPanel() {
     }
 
     setupSlider('slider-bg-blur', 'bg_blur', 'theme', (v) => {
-        setElText('label-bg-blur', `${v}px`);
-        setElText('label-glass-blur', `${v}px`);
+        const val = parseInt(v) || 0;
+        setElText('label-bg-blur', `${val}px`);
+        setElText('label-glass-blur', `${val}px`);
         const glassSlider = document.getElementById('slider-glass-blur');
-        if (glassSlider) glassSlider.value = v;
-        document.documentElement.style.setProperty('--glass-blur', `${v}px`);
-        document.documentElement.style.setProperty('--blur-sm', `${Math.max(4, Math.round(v * 0.4))}px`);
-        const dataUrl = localStorage.getItem('nedotify_theme_custom_bg_image');
-        const dimVal = document.getElementById('slider-bg-dim')?.value || 30;
-        if (dataUrl) {
-            try { applyCustomBg(JSON.parse(dataUrl), v, dimVal); } catch(e) {}
+        if (glassSlider) glassSlider.value = val;
+        document.documentElement.style.setProperty('--glass-blur', `${val}px`);
+        document.documentElement.style.setProperty('--blur-sm', `${Math.max(4, Math.round(val * 0.4))}px`);
+        const bgUrl = getLocalSetting('nedotify_theme_custom_bg_image', '') || window.settings?.theme?.custom_bg_image;
+        const dimVal = parseInt(document.getElementById('slider-bg-dim')?.value || 30);
+        if (bgUrl) {
+            applyCustomBg(bgUrl, val, dimVal);
         }
     });
 
     setupSlider('slider-bg-dim', 'bg_dim', 'theme', (v) => {
-        setElText('label-bg-dim', `${v}%`);
-        const dataUrl = localStorage.getItem('nedotify_theme_custom_bg_image');
-        const blurVal = document.getElementById('slider-bg-blur')?.value || 0;
-        if (dataUrl) {
-            try { applyCustomBg(JSON.parse(dataUrl), blurVal, v); } catch(e) {}
+        const val = parseInt(v) || 0;
+        setElText('label-bg-dim', `${val}%`);
+        const bgUrl = getLocalSetting('nedotify_theme_custom_bg_image', '') || window.settings?.theme?.custom_bg_image;
+        const blurVal = parseInt(document.getElementById('slider-bg-blur')?.value || 0);
+        if (bgUrl) {
+            applyCustomBg(bgUrl, blurVal, val);
         }
     });
 
     // Restore saved custom background image on setup
-    const savedBg = localStorage.getItem('nedotify_theme_custom_bg_image');
-    const savedBlurRaw = localStorage.getItem('nedotify_theme_bg_blur');
-    const savedDimRaw = localStorage.getItem('nedotify_theme_bg_dim');
+    const savedBg = getLocalSetting('nedotify_theme_custom_bg_image', '') || window.settings?.theme?.custom_bg_image;
+    const savedBlur = getLocalSetting('nedotify_theme_bg_blur', 0);
+    const savedDim = getLocalSetting('nedotify_theme_bg_dim', 30);
+
+    const blurSlider = document.getElementById('slider-bg-blur');
+    if (blurSlider) {
+        blurSlider.value = savedBlur;
+        setElText('label-bg-blur', `${savedBlur}px`);
+    }
+    const dimSlider = document.getElementById('slider-bg-dim');
+    if (dimSlider) {
+        dimSlider.value = savedDim;
+        setElText('label-bg-dim', `${savedDim}%`);
+    }
 
     if (savedBg) {
-        try {
-            const url = JSON.parse(savedBg);
-            const savedBlur = savedBlurRaw ? JSON.parse(savedBlurRaw) : 0;
-            const savedDim = savedDimRaw ? JSON.parse(savedDimRaw) : 30;
-            if (url) applyCustomBg(url, savedBlur, savedDim);
-        } catch(e) {}
+        applyCustomBg(savedBg, savedBlur, savedDim);
     }
 }
 

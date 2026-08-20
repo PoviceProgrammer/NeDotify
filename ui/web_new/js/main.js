@@ -1,21 +1,21 @@
 // NeDotify - Main Entry Point
-import { initPlayer, applySettings, playTrack } from './player.js?v=20260820_1';
-import { initPages, showPage } from './pages.js?v=20260820_1';
-import { initSearch } from './search.js?v=20260820_1';
-import { loadHome } from './home.js?v=20260820_1';
-import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlaylist } from './library.js?v=20260820_1';
-import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js?v=20260820_1';
-import { initParticles } from './particles.js?v=20260820_1';
-import { initVisualizer } from './visualizer.js?v=20260820_1';
-import { initEvents } from './events.js?v=20260820_1';
-import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota } from './utils.js?v=20260820_1';
-import { initLyrics } from './lyrics.js?v=20260820_1';
-import { initEqualizer } from './equalizer.js?v=20260820_1';
-import { initQueue } from './queue.js?v=20260820_1';
-import { initOnboarding } from './onboarding.js?v=20260820_1';
-import { initContextMenu } from './contextmenu.js?v=20260820_1';
-import { initHotkeys } from './hotkeys.js?v=20260820_1';
-import { initEfficiency, initBlurObserver } from './efficiency.js?v=20260820_1';
+import { initPlayer, applySettings, playTrack } from './player.js?v=20260820_2';
+import { initPages, showPage } from './pages.js?v=20260820_2';
+import { initSearch } from './search.js?v=20260820_2';
+import { loadHome } from './home.js?v=20260820_2';
+import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlaylist } from './library.js?v=20260820_2';
+import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js?v=20260820_2';
+import { initParticles } from './particles.js?v=20260820_2';
+import { initVisualizer } from './visualizer.js?v=20260820_2';
+import { initEvents } from './events.js?v=20260820_2';
+import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota } from './utils.js?v=20260820_2';
+import { initLyrics } from './lyrics.js?v=20260820_2';
+import { initEqualizer } from './equalizer.js?v=20260820_2';
+import { initQueue } from './queue.js?v=20260820_2';
+import { initOnboarding } from './onboarding.js?v=20260820_2';
+import { initContextMenu } from './contextmenu.js?v=20260820_2';
+import { initHotkeys } from './hotkeys.js?v=20260820_2';
+import { initEfficiency, initBlurObserver } from './efficiency.js?v=20260820_2';
 
 // Bridge gate: resolves as soon as window.pywebview.api exists. Cold WebView2
 // starts can take ~16s to inject the bridge; callers await this instead of
@@ -222,29 +222,35 @@ window.toggleMiniPlayerMode = toggleMiniPlayerMode;
         // Instant background image restoration on boot
         const customBgRaw = localStorage.getItem('nedotify_theme_custom_bg_image');
         if (customBgRaw) {
-            const bgUrl = JSON.parse(customBgRaw);
-            if (bgUrl) {
+            let bgUrl = customBgRaw;
+            try {
+                if (typeof customBgRaw === 'string' && (customBgRaw.startsWith('"') || customBgRaw.startsWith('{'))) {
+                    bgUrl = JSON.parse(customBgRaw);
+                }
+            } catch(e) {}
+            if (bgUrl && typeof bgUrl === 'string' && bgUrl.trim() !== '') {
                 const blur = JSON.parse(localStorage.getItem('nedotify_theme_bg_blur') || '0');
                 const dim = JSON.parse(localStorage.getItem('nedotify_theme_bg_dim') || '30');
+                document.documentElement.classList.add('has-custom-bg');
+                document.body.classList.add('has-custom-bg');
                 let bgLayer = document.getElementById('custom-bg-layer');
                 let dimLayer = document.getElementById('custom-bg-dim-layer');
                 if (!bgLayer) {
                     bgLayer = document.createElement('div');
                     bgLayer.id = 'custom-bg-layer';
-                    bgLayer.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:-2; pointer-events:none; background-size:cover; background-position:center; transition: filter 0.3s ease;';
                     document.body.insertBefore(bgLayer, document.body.firstChild);
                 }
                 if (!dimLayer) {
                     dimLayer = document.createElement('div');
                     dimLayer.id = 'custom-bg-dim-layer';
-                    dimLayer.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:-1; pointer-events:none; transition: background 0.3s ease;';
                     document.body.insertBefore(dimLayer, document.body.firstChild);
                 }
                 bgLayer.style.display = 'block';
                 bgLayer.style.backgroundImage = `url("${bgUrl}")`;
                 bgLayer.style.filter = `blur(${blur}px)`;
+                bgLayer.style.transform = `scale(${blur > 0 ? 1.06 : 1})`;
                 dimLayer.style.display = 'block';
-                dimLayer.style.background = `rgba(0, 0, 0, ${dim / 100})`;
+                dimLayer.style.backgroundColor = `rgba(0, 0, 0, ${dim / 100})`;
             }
         }
     } catch(e) {}
@@ -471,7 +477,7 @@ async function init() {
 
 // ─── Profile Page ───
 // M-4: single cache-busting version — must match the ?v= used by static imports
-const CACHE_VERSION = '20260820_1';
+const CACHE_VERSION = '20260820_2';
 
 async function loadProfile() {
     try {

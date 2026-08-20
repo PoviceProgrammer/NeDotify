@@ -1,6 +1,6 @@
 // NeDotify РІР‚" Artist Profile Module
-import { createTrackElement, renderIcons, formatTime, filterVisibleTracks, escapeHtml } from './utils.js?v=20260820_1';
-import { getCurrentTrack } from './player.js?v=20260820_1';
+import { createTrackElement, renderIcons, formatTime, filterVisibleTracks, escapeHtml } from './utils.js?v=20260820_2';
+import { getCurrentTrack } from './player.js?v=20260820_2';
 
 // Gradient seed backgrounds for fallback covers (visible ONLY if image loading fails)
 const colors = [
