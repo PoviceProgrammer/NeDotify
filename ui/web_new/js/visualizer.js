@@ -1,5 +1,5 @@
 // NeDotify вЂ” Audio-Reactive Visualizer (GPU-Optimized)
-import { getIsPlaying, getVolume, getCurrentTrack, getAudioFrequencyData } from './player.js?v=20260817_2';
+import { getIsPlaying, getVolume, getCurrentTrack, getAudioFrequencyData } from './player.js';
 
 let animFrameId = null;
 let bars = [];

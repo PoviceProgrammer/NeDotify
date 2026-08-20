@@ -18,6 +18,7 @@ Phase 2 reliability contract:
 
 import logging
 import os
+import re
 import shlex
 import socket
 import subprocess
@@ -50,6 +51,46 @@ PRESET_STRATEGIES = {
     "aggressive": "--wf-tcp=80,443 --filter-tcp=80,443 --dpi-desync=disorder2 --dpi-desync-split-pos=1 --dpi-desync-fooling=badseq",
     "multisplit": "--wf-tcp=80,443 --filter-tcp=80,443 --dpi-desync=fake,multisplit --dpi-desync-split-pos=1,5 --dpi-desync-repeats=6 --dpi-desync-fooling=badseq"
 }
+
+# Security: winws arguments reach an ELEVATED process, so every token is validated
+# against this grammar before it is ever passed to ShellExecuteW. Anything outside
+# it (quotes, semicolons, ampersands, backticks, pipes, redirects) is rejected.
+_ALLOWED_ARG_RE = re.compile(r'^--[A-Za-z0-9][A-Za-z0-9\-]*(=[A-Za-z0-9,.:_/\-]*)?$')
+
+# Only these executable names may ever be launched, elevated or not.
+_ALLOWED_BINARY_NAMES = frozenset({"winws.exe", "zapret.exe", "winws"})
+
+
+def sanitize_zapret_args(raw_args: str) -> List[str]:
+    """Split and validate winws arguments. Raises ValueError on anything unsafe.
+
+    Returns the validated token list. Callers must pass this list to Popen or
+    join it with subprocess.list2cmdline — never interpolate raw_args into a shell
+    or PowerShell command string.
+    """
+    if not raw_args:
+        return []
+    try:
+        tokens = shlex.split(raw_args)
+    except ValueError as exc:
+        raise ValueError(f"Не удалось разобрать аргументы: {exc}") from exc
+    for tok in tokens:
+        if not _ALLOWED_ARG_RE.match(tok):
+            raise ValueError(f"Недопустимый аргумент Zapret: {tok!r}")
+    return tokens
+
+
+def validate_zapret_binary(path: str) -> bool:
+    """True only for an existing file whose name is an approved winws binary."""
+    if not path:
+        return False
+    try:
+        if not os.path.isfile(path):
+            return False
+    except OSError:
+        return False
+    return os.path.basename(path).lower() in _ALLOWED_BINARY_NAMES
+
 
 # Z-4: internet probe hosts — TCP-connect to port 443, first success = online.
 INTERNET_CHECK_HOSTS = ["ya.ru", "gosuslugi.ru", "77.88.8.8", "8.8.8.8"]
@@ -224,8 +265,10 @@ class ZapretService:
 
     def find_binary(self, custom_path=None) -> str | None:
         """Find path to winws.exe, zapret.exe or winws binary."""
-        if custom_path and os.path.exists(custom_path):
-            return custom_path
+        if custom_path:
+            if validate_zapret_binary(custom_path):
+                return custom_path
+            logger.warning("Rejected binary_path %r: not an approved winws executable", custom_path)
 
         candidates = [
             os.path.join(self.app_dir, "winws.exe"),
@@ -510,8 +553,13 @@ class ZapretService:
                 logger.warning(msg)
                 return False, msg
 
-        if mode == "custom" and custom_args.strip():
+        if mode == "custom" and (custom_args or "").strip():
             raw_args = custom_args.strip()
+            try:
+                sanitize_zapret_args(raw_args)
+            except ValueError as exc:
+                logger.warning("Rejected custom Zapret args: %s", exc)
+                return False, str(exc)
         else:
             raw_args = PRESET_STRATEGIES.get(mode, PRESET_STRATEGIES["youtube_discord"])
 
@@ -534,9 +582,10 @@ class ZapretService:
         if sys.platform == "win32":
             import ctypes
             try:
-                args_list = [exe] + shlex.split(raw_args)
-            except Exception:
-                args_list = [exe] + raw_args.split()
+                args_list = [exe] + sanitize_zapret_args(raw_args)
+            except ValueError as exc:
+                logger.error("Refusing to launch Zapret with unsafe arguments: %s", exc)
+                return False, str(exc)
 
             self._open_log_handle()
             try:
@@ -572,7 +621,7 @@ class ZapretService:
         # Non-Windows
         try:
             self._open_log_handle()
-            args_list = [exe] + shlex.split(raw_args)
+            args_list = [exe] + sanitize_zapret_args(raw_args)
             self.process = subprocess.Popen(
                 args_list,
                 stdout=subprocess.DEVNULL,
@@ -590,37 +639,32 @@ class ZapretService:
         import ctypes
         logger.info("Elevating Zapret via ShellExecuteW 'runas'...")
 
-        escaped_pidfile = self.pid_file.replace("'", "''")
-        escaped_exe = exe.replace("'", "''")
+        if not validate_zapret_binary(exe):
+            msg = f"Отказано в запуске: {os.path.basename(exe)} не является разрешённым исполняемым файлом Zapret."
+            logger.error(msg)
+            return False, msg
+        try:
+            tokens = sanitize_zapret_args(raw_args)
+        except ValueError as exc:
+            logger.error("Refusing elevated launch with unsafe arguments: %s", exc)
+            return False, str(exc)
 
-        # PowerShell launcher that starts winws and writes PID reliably on Win10/Win11
-        ps_cmd = (
-            f"$p = Start-Process -FilePath '{escaped_exe}' -ArgumentList '{raw_args}' "
-            f"-WindowStyle Hidden -PassThru; "
-            f"Set-Content -Path '{escaped_pidfile}' -Value $p.Id"
-        )
-
+        # The executable is elevated DIRECTLY. An intermediate PowerShell -Command
+        # string was previously used to capture the PID, but interpolating arguments
+        # into it allowed arbitrary code execution as Administrator. The PID is now
+        # recovered from the pidfile or the cmdline signature scan below instead.
+        params = subprocess.list2cmdline(tokens)
         ret = ctypes.windll.shell32.ShellExecuteW(
-            None,
-            "runas",
-            "powershell.exe",
-            f"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"{ps_cmd}\"",
-            os.path.dirname(exe),
-            0  # SW_HIDE = 0
+            None, "runas", exe, params, os.path.dirname(exe), 0  # SW_HIDE
         )
         if ret == 5:
             msg = "Запуск отменён: требуются права Администратора для драйвера WinDivert (UAC отклонён)."
             logger.warning(msg)
             return False, msg
         if ret <= 32:
-            # Fallback to direct exe elevation if PowerShell execution is restricted
-            ret_direct = ctypes.windll.shell32.ShellExecuteW(
-                None, "runas", exe, raw_args, os.path.dirname(exe), 0
-            )
-            if ret_direct <= 32:
-                msg = f"Ошибка запуска с правами Администратора (код {ret_direct}). См. лог zapret.log."
-                logger.error(msg)
-                return False, msg
+            msg = f"Ошибка запуска с правами Администратора (код {ret}). См. лог zapret.log."
+            logger.error(msg)
+            return False, msg
 
         # Wait up to 5s for PID to appear in pidfile or via signature scan
         pid = None

@@ -4,9 +4,11 @@ Desktop audio player with modern dark UI, streaming integration,
 and advanced customization. (PyWebView Edition)
 """
 
-import sys
+import logging
 import os
+import sys
 import threading
+
 import webview
 
 # Pin WebView2 runtime to a known-good version: Evergreen 151.0.4129.93 hangs
@@ -34,6 +36,13 @@ else:
 # Capture the pywebview HTTP server's Bottle app so the app can register its own
 # bridge-free routes (e.g. /__aura_close) even when the JS bridge is dead.
 _BOTTLE_APP = [None]
+# Populated by main() before webview.start(). Invoked synchronously the moment
+# pywebview hands us its Bottle app, i.e. BEFORE the server begins serving, so the
+# asset fallback routes are guaranteed to exist before the page requests an image.
+# The previous implementation registered them from a polling background thread and
+# lost the race on slow starts, producing a storm of /assets/*.png 404s that the
+# image onerror handlers amplified until the renderer stalled.
+_ROUTE_INSTALLER = [None]
 try:
     import bottle as _bottle
     _orig_bottle_run = _bottle.run
@@ -48,12 +57,18 @@ try:
                     _bottle.response.headers['Pragma'] = 'no-cache'
                     _bottle.response.headers['Expires'] = '0'
             except Exception:
-                pass
+                logging.debug("Cache-Control hook install failed", exc_info=True)
+            installer = _ROUTE_INSTALLER[0]
+            if installer is not None:
+                try:
+                    installer(app)
+                except Exception:
+                    logging.warning("Asset fallback route install failed", exc_info=True)
         return _orig_bottle_run(app=app, **kwargs)
 
     _bottle.run = _capture_bottle_run
 except Exception:
-    pass
+    logging.debug("Bottle capture unavailable", exc_info=True)
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
@@ -64,7 +79,6 @@ except AttributeError:
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import logging
 from logging.handlers import RotatingFileHandler
 
 # File logging: rotating ~/.nedotify/logs/app.log (2MB x 3 backups); console handler is kept too.
@@ -86,6 +100,34 @@ logging.basicConfig(
         ),
     ],
 )
+
+def _install_global_excepthooks():
+    """Route uncaught exceptions into the rotating log file.
+
+    Without these, an exception in any of the app's background threads went to bare
+    stderr and never reached ~/.nedotify/logs/app.log, so field failures were
+    undiagnosable.
+    """
+    def _hook(exc_type, exc, tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc, tb)
+            return
+        logging.critical("Uncaught exception", exc_info=(exc_type, exc, tb))
+
+    def _thread_hook(args):
+        if issubclass(args.exc_type, SystemExit):
+            return
+        logging.critical(
+            "Uncaught exception in thread %s",
+            getattr(args.thread, "name", "?"),
+            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+        )
+
+    sys.excepthook = _hook
+    threading.excepthook = _thread_hook
+
+
+_install_global_excepthooks()
 
 from core.app import AppCore
 from core.api import AppApi
@@ -273,17 +315,13 @@ def main():
 
     # Watchdog: if the JS bridge never comes up (WebView2 init hang), log it,
     # and perform a real detached process restart after registering bridge-free close route.
-    def _register_close_route():
-        import time as _time
-        for _ in range(200):
-            if _BOTTLE_APP[0] is not None:
-                break
-            _time.sleep(0.1)
-        if _BOTTLE_APP[0] is None:
-            logging.warning("[startup] HTTP server app unavailable; bridge-free close disabled")
-            return
+    def _install_routes(app):
+        """Register bridge-free close and asset fallback routes on pywebview's Bottle app.
+
+        Called synchronously from _capture_bottle_run before the HTTP server starts,
+        so no request can ever arrive before these routes exist.
+        """
         try:
-            app = _BOTTLE_APP[0]
 
             def _close_handler():
                 _INTENTIONAL_CLOSE.set()
@@ -336,9 +374,9 @@ def main():
             except Exception as re_err:
                 logging.debug(f"[startup] Router recompile note: {re_err}")
 
-            logging.info(f"[startup] bridge-free close and fallback assets endpoints registered")
+            logging.info("[startup] bridge-free close and fallback asset endpoints registered")
         except Exception as e:
-            logging.warning(f"[startup] close endpoint registration failed: {e}")
+            logging.warning(f"[startup] route registration failed: {e}", exc_info=True)
 
     def _startup_watchdog():
         # First load may take ~10-20s on cold WebView2; give it 35s.
@@ -376,7 +414,7 @@ def main():
         except Exception as e:
             logging.error(f"[startup] watchdog real restart failed: {e}")
 
-    threading.Thread(target=_register_close_route, daemon=True).start()
+    _ROUTE_INSTALLER[0] = _install_routes
     threading.Thread(target=_startup_watchdog, daemon=True).start()
 
     # Start the application loop (debug=False disables DevTools)

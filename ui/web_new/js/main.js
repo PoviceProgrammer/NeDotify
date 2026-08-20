@@ -1,21 +1,21 @@
 // NeDotify - Main Entry Point
-import { initPlayer, applySettings, playTrack } from './player.js?v=20260820_2';
-import { initPages, showPage } from './pages.js?v=20260820_2';
-import { initSearch } from './search.js?v=20260820_2';
-import { loadHome } from './home.js?v=20260820_2';
-import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlaylist } from './library.js?v=20260820_2';
-import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js?v=20260820_2';
-import { initParticles } from './particles.js?v=20260820_2';
-import { initVisualizer } from './visualizer.js?v=20260820_2';
-import { initEvents } from './events.js?v=20260820_2';
-import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota } from './utils.js?v=20260820_2';
-import { initLyrics } from './lyrics.js?v=20260820_2';
-import { initEqualizer } from './equalizer.js?v=20260820_2';
-import { initQueue } from './queue.js?v=20260820_2';
-import { initOnboarding } from './onboarding.js?v=20260820_2';
-import { initContextMenu } from './contextmenu.js?v=20260820_2';
-import { initHotkeys } from './hotkeys.js?v=20260820_2';
-import { initEfficiency, initBlurObserver } from './efficiency.js?v=20260820_2';
+import { initPlayer, applySettings, playTrack } from './player.js';
+import { initPages, showPage } from './pages.js';
+import { initSearch } from './search.js';
+import { loadHome } from './home.js';
+import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlaylist } from './library.js';
+import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js';
+import { initParticles } from './particles.js';
+import { initVisualizer } from './visualizer.js';
+import { initEvents } from './events.js';
+import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota } from './utils.js';
+import { initLyrics } from './lyrics.js';
+import { initEqualizer } from './equalizer.js';
+import { initQueue } from './queue.js';
+import { initOnboarding } from './onboarding.js';
+import { initContextMenu } from './contextmenu.js';
+import { initHotkeys } from './hotkeys.js';
+import { initEfficiency, initBlurObserver } from './efficiency.js';
 
 // Bridge gate: resolves as soon as window.pywebview.api exists. Cold WebView2
 // starts can take ~16s to inject the bridge; callers await this instead of
@@ -476,13 +476,14 @@ async function init() {
 }
 
 // ─── Profile Page ───
-// M-4: single cache-busting version — must match the ?v= used by static imports
-const CACHE_VERSION = '20260820_2';
+// Module URLs carry no query string: ES module identity is keyed by full URL, so a
+// version mismatch between two importers would instantiate the module twice and split
+// its state. Freshness is guaranteed by the no-store Cache-Control hook in main.py.
 
 async function loadProfile() {
     try {
-        const { createTrackElement, renderIcons, formatListeningTimeShort } = await import(`./utils.js?v=${CACHE_VERSION}`);
-        const { getCurrentTrack } = await import(`./player.js?v=${CACHE_VERSION}`);
+        const { createTrackElement, renderIcons, formatListeningTimeShort } = await import('./utils.js');
+        const { getCurrentTrack } = await import('./player.js');
 
         // Refresh nickname and avatar
         const nicknameInput = document.getElementById('profile-name-input');

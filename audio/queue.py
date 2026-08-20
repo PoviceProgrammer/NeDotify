@@ -165,7 +165,7 @@ class PlaybackQueue:
 
         return self.current_track
 
-    def prev_track(self) -> Optional[dict]:
+    def previous_track(self) -> Optional[dict]:
         """Move to the previous track. Returns the track or None."""
         if self.is_empty:
             return None
@@ -176,6 +176,9 @@ class PlaybackQueue:
             self._current_index = max(0, self._current_index - 1)
 
         return self.current_track
+
+    # Historical alias: callers exist under both spellings.
+    prev_track = previous_track
 
     def jump_to(self, index: int) -> Optional[dict]:
         """Jump to a specific track in the queue."""

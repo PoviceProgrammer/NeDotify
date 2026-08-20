@@ -39,6 +39,11 @@ class CacheManager:
         self._last_size_scan = 0.0
 
     @property
+    def cache_dir(self) -> str:
+        """Root of the on-disk cache (covers/, streams/, temp/ live inside it)."""
+        return self._base_dir
+
+    @property
     def covers_dir(self) -> str:
         return self._covers_dir
 
@@ -254,6 +259,22 @@ class CacheManager:
         self.mark_cache_dirty()
         self.logger.info(f"Purged {len(deleted_files)} cached streams, freed {freed_bytes / (1024 * 1024):.2f} MB")
         return freed_bytes
+
+    def enforce_cache_limit(self, max_bytes: Optional[int] = None, max_mb: Optional[float] = None) -> int:
+        """Evict least-recently-used stream cache files down to the quota.
+
+        Thin delegate over purge_stream_cache(), which already implements the
+        LRU policy, the protection of downloaded/favourite tracks and the DB
+        synchronisation. `max_bytes` (or `max_mb`) overrides the configured
+        quota; a quota of zero means "keep no temporary streams at all", and
+        omitting both reads the quota from settings.
+        Returns the number of bytes freed.
+        """
+        if max_bytes is None and max_mb is not None:
+            max_bytes = int(max_mb * 1024 * 1024)
+        if max_bytes is not None and max_bytes <= 0:
+            return self.purge_stream_cache(force_all_temporary=True)
+        return self.purge_stream_cache(quota_bytes=max_bytes)
 
     def download_audio_stream(self, source: str, source_id: str, url: str):
         """Asynchronously download audio stream to disk with active tracking and LRU enforcement."""

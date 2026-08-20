@@ -7,8 +7,20 @@ import os
 import threading
 from typing import Callable, Optional
 
-from utils.tag_parser import is_audio_file, parse_tags, save_cover_to_file
+from utils.tag_parser import SUPPORTED_FORMATS, parse_tags, save_cover_to_file
 from core.database import DatabaseManager
+
+# Single source of truth for "is this file playable audio?".
+# Built on top of utils.tag_parser.SUPPORTED_FORMATS (never duplicated here) plus
+# the container formats mutagen can still read but tag_parser does not list.
+AUDIO_EXTENSIONS = frozenset(SUPPORTED_FORMATS) | frozenset({'.opus', '.alac', '.aiff'})
+
+
+def is_audio_file(path: str) -> bool:
+    """Return True when `path` has a supported audio extension."""
+    if not path:
+        return False
+    return os.path.splitext(str(path).lower())[1] in AUDIO_EXTENSIONS
 
 
 class FileScanner:

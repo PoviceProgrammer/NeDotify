@@ -13,15 +13,74 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Whitelist of columns that update_track() may write. Mirrors the `tracks`
+# CREATE TABLE in _init_database plus the ALTER-added columns (is_downloaded,
+# lufs, peak_volume). `id` is deliberately absent: it is the WHERE key of the
+# UPDATE, never a SET target. Anything not listed here is refused, so
+# caller-supplied kwargs keys can never reach the SQL text.
+TRACKS_UPDATABLE_COLUMNS = frozenset({
+    "title",
+    "artist",
+    "album",
+    "duration",
+    "file_path",
+    "source",
+    "source_id",
+    "source_url",
+    "cover_path",
+    "cover_url",
+    "bitrate",
+    "sample_rate",
+    "format",
+    "file_size",
+    "loudness_lufs",
+    "genre",
+    "year",
+    "track_number",
+    "added_at",
+    "last_played",
+    "play_count",
+    "is_favorite",
+    "is_cached",
+    "metadata_json",
+    "is_downloaded",
+    "lufs",
+    "peak_volume",
+})
+
+# Whitelist of ORDER BY expressions accepted by get_all_tracks(). The value is
+# interpolated into the SQL text, so anything outside this set is replaced by
+# the default.
+ALLOWED_TRACK_ORDER_BY = frozenset({
+    "added_at DESC",
+    "added_at ASC",
+    "title ASC",
+    "title DESC",
+    "artist ASC",
+    "artist DESC",
+    "album ASC",
+    "album DESC",
+    "duration ASC",
+    "duration DESC",
+    "play_count DESC",
+    "play_count ASC",
+    "last_played DESC",
+    "last_played ASC",
+})
+
+DEFAULT_TRACK_ORDER_BY = "added_at DESC"
+
 
 class DatabaseManager:
     """
     Thread-safe SQLite database manager for NeDotify.
     """
 
-    _local = threading.local()
-
     def __init__(self, db_path: str = None) -> None:
+        # Per-instance thread-local storage. This MUST NOT be a class attribute:
+        # a shared store makes every DatabaseManager instance hand back the first
+        # connection the calling thread ever opened, i.e. the wrong database file.
+        self._local = threading.local()
         if db_path is None:
             app_data = os.path.join(os.path.expanduser("~"), ".nedotify")
             os.makedirs(app_data, exist_ok=True)
@@ -41,13 +100,18 @@ class DatabaseManager:
 
     def _get_connection(self) -> sqlite3.Connection:
         if not hasattr(self._local, "connection") or self._local.connection is None:
-            self._local.connection = sqlite3.connect(self.db_path, timeout=20.0)
-            self._local.connection.row_factory = sqlite3.Row
-            self._local.connection.execute("PRAGMA journal_mode=WAL")
-            self._local.connection.execute("PRAGMA synchronous=NORMAL")
-            self._local.connection.execute("PRAGMA temp_store=MEMORY")
-            self._local.connection.execute("PRAGMA cache_size=-64000")
-            self._local.connection.execute("PRAGMA foreign_keys=ON")
+            conn = sqlite3.connect(self.db_path, timeout=20.0)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA temp_store=MEMORY")
+            # 8 MB page cache per connection: one connection is opened per
+            # thread and the stream proxy is thread-per-request, so this value
+            # is multiplied by the number of live threads.
+            conn.execute("PRAGMA cache_size=-8000")
+            conn.execute("PRAGMA busy_timeout=10000")
+            conn.execute("PRAGMA foreign_keys=ON")
+            self._local.connection = conn
         return self._local.connection
 
     @property
@@ -131,6 +195,8 @@ class DatabaseManager:
             )
         """
         )
+        # One index on history(played_at) is enough - SQLite walks it in either
+        # direction, so a second DESC copy would only add write cost.
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_played_at ON history(played_at);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_track_id ON history(track_id);")
 
@@ -189,10 +255,22 @@ class DatabaseManager:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_source ON tracks(source)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_favorite ON tracks(is_favorite)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_artist ON tracks(artist)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_played ON history(played_at DESC)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_cache_source ON stream_cache(source, source_id)")
+        # stream_cache(source, source_id) needs no explicit index: the
+        # UNIQUE(source, source_id) constraint on the table already provides one.
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_playlist_tracks_pid ON playlist_tracks(playlist_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_playlist_tracks_tid ON playlist_tracks(track_id)")
+        # get_track_by_path() runs on every watchdog and LUFS file event, and
+        # older databases were created without UNIQUE on file_path, so they have
+        # no implicit index to lean on.
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_file_path ON tracks(file_path)")
+        # Intentionally NOT UNIQUE: existing user databases may already hold
+        # duplicate (source, source_id) rows, and a failing CREATE UNIQUE INDEX
+        # would abort startup.
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_source_sid ON tracks(source, source_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_added_at ON tracks(added_at DESC)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tracks_play_count ON tracks(play_count DESC, last_played DESC)"
+        )
 
         try:
             cursor.execute("ALTER TABLE tracks ADD COLUMN is_downloaded INTEGER DEFAULT 0")
@@ -469,15 +547,22 @@ class DatabaseManager:
         source: Optional[str] = None,
         limit: Optional[int] = None,
         offset: int = 0,
-        order_by: str = "added_at DESC",
+        order_by: str = DEFAULT_TRACK_ORDER_BY,
     ) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
+        safe_order_by = (order_by or "").strip()
+        if safe_order_by not in ALLOWED_TRACK_ORDER_BY:
+            logger.warning(
+                f"get_all_tracks: rejected ORDER BY {order_by!r}, "
+                f"falling back to {DEFAULT_TRACK_ORDER_BY!r}"
+            )
+            safe_order_by = DEFAULT_TRACK_ORDER_BY
         sql = "SELECT * FROM tracks"
         params: list = []
         if source:
             sql += " WHERE source = ?"
             params.append(source)
-        sql += f" ORDER BY {order_by}"
+        sql += f" ORDER BY {safe_order_by}"
         if limit:
             sql += " LIMIT ? OFFSET ?"
             params.extend([limit, offset])
@@ -710,13 +795,26 @@ class DatabaseManager:
         return cursor.rowcount > 0
 
     def update_track(self, track_id: int, **kwargs: Any) -> bool:
+        """Update whitelisted columns of one track. Unknown keys are dropped."""
         if not kwargs:
             return False
+
+        set_clauses = []
+        params: list = []
+        for key, value in kwargs.items():
+            if key not in TRACKS_UPDATABLE_COLUMNS:
+                logger.warning(f"update_track: ignoring unknown column {key!r}")
+                continue
+            set_clauses.append(f"{key} = ?")
+            params.append(value)
+
+        if not set_clauses:
+            logger.warning(f"update_track: no valid columns supplied for track {track_id}")
+            return False
+
+        params.append(track_id)
         cursor = self.conn.cursor()
-        set_clauses = [f"{k} = ?" for k in kwargs.keys()]
-        sql = f"UPDATE tracks SET {', '.join(set_clauses)} WHERE id = ?"
-        params = list(kwargs.values()) + [track_id]
-        cursor.execute(sql, params)
+        cursor.execute(f"UPDATE tracks SET {', '.join(set_clauses)} WHERE id = ?", params)
         self.conn.commit()
         return cursor.rowcount > 0
 
@@ -1056,20 +1154,43 @@ class DatabaseManager:
         self.conn.commit()
         return cursor.rowcount > 0
 
-    def set_setting(self, key: str, value: Any, category: str = "general") -> None:
+    @staticmethod
+    def _serialize_setting(value: Any) -> str:
         if isinstance(value, (dict, list, bool, int, float)):
-            val_str = json.dumps(value)
-        elif value is None:
-            val_str = ""
-        else:
-            val_str = str(value)
-            
+            return json.dumps(value)
+        if value is None:
+            return ""
+        return str(value)
+
+    def set_setting(self, key: str, value: Any, category: str = "general") -> None:
         cursor = self.conn.cursor()
         cursor.execute(
             "INSERT OR REPLACE INTO settings (key, value, category, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
-            (key, val_str, category),
+            (key, self._serialize_setting(value), category),
         )
         self.conn.commit()
+
+    def set_settings_batch(self, items: Any) -> int:
+        """Persist many settings inside a single transaction.
+
+        `items` is a sequence of (key, value, category) tuples; returns the
+        number of rows written. SettingsManager's write-behind batching uses
+        this so a burst of set() calls costs one COMMIT instead of one each.
+        """
+        rows = [
+            (key, self._serialize_setting(value), category)
+            for key, value, category in items
+        ]
+        if not rows:
+            return 0
+        conn = self.conn
+        with conn:
+            conn.executemany(
+                "INSERT OR REPLACE INTO settings (key, value, category, updated_at) "
+                "VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                rows,
+            )
+        return len(rows)
 
     def get_setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
         cursor = self.conn.cursor()
@@ -1238,16 +1359,26 @@ class DatabaseManager:
         cursor.execute("SELECT COALESCE(SUM(duration_ms), 0) FROM listening_stats")
         return cursor.fetchone()[0]
 
+    def close_thread_connection(self) -> None:
+        """Close and forget the calling thread's connection, if it has one.
+
+        Safe to call from any thread, repeatedly, and when no connection was
+        ever opened; it never raises. Worker threads (stream proxy requests,
+        scan workers) should call this when they finish so their page cache is
+        released instead of living until process exit.
+        """
+        for attr in ("connection", "conn"):
+            existing = getattr(self._local, attr, None)
+            if existing is None:
+                continue
+            try:
+                existing.close()
+            except Exception:
+                pass
+            try:
+                setattr(self._local, attr, None)
+            except Exception:
+                pass
+
     def close(self) -> None:
-        if hasattr(self._local, "connection") and self._local.connection:
-            try:
-                self._local.connection.close()
-            except Exception:
-                pass
-            self._local.connection = None
-        if hasattr(self._local, "conn") and self._local.conn:
-            try:
-                self._local.conn.close()
-            except Exception:
-                pass
-            self._local.conn = None
+        self.close_thread_connection()

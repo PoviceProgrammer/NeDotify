@@ -10,7 +10,7 @@ from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
 
-extra_datas = [('ui', 'ui')] + collect_data_files('ytmusicapi')
+extra_datas = [('ui/web_new', 'ui/web_new')] + collect_data_files('ytmusicapi')
 for extra_folder in ['zapret', 'bin']:
     if os.path.exists(extra_folder):
         extra_datas.append((extra_folder, extra_folder))
@@ -42,11 +42,7 @@ a = Analysis(
         'PIL',
         'PIL.Image',
         'pyloudnorm',
-        'soundfile',
-        'colorthief',
         'sqlite3',
-        'zeroconf',
-        'ifaddr',
         'clr',
         'pythonnet',
         'watchdog',
@@ -72,6 +68,9 @@ a = Analysis(
     noarchive=False,
 )
 
+# ui/web_new/covers/ is a runtime-generated album-art cache - never ship it in the exe
+a.datas = [d for d in a.datas if 'web_new/covers/' not in d[0].replace(os.sep, '/')]
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
@@ -85,7 +84,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,  # UPX on a music-downloader exe trips antivirus heuristics and can break WebView2 DLL loading
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,  # --noconsole

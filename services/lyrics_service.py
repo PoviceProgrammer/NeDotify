@@ -13,11 +13,16 @@ import html
 import ssl
 import concurrent.futures
 
+from services.base_service import BaseMusicService
+
 logger = logging.getLogger(__name__)
 
 # Verified TLS context (default). Certificate checks are restored for all
 # metadata/lyrics requests; stream extraction is handled by yt-dlp separately.
 ssl_ctx = ssl.create_default_context()
+
+# Every outbound lyrics request gets this ceiling so a hung host cannot pin a worker.
+HTTP_TIMEOUT = 6.0
 
 class LyricsService:
     def __init__(self, settings=None):
@@ -29,14 +34,14 @@ class LyricsService:
         else:
             req = req_or_url
         return urllib.request.urlopen(req, timeout=timeout, context=ssl_ctx)
-        
+
     def translate_lyrics(self, lyrics: str, target_lang="ru") -> str:
         if not lyrics:
             return ""
         try:
             url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_lang}&dt=t&q={urllib.parse.quote(lyrics)}"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=5) as resp:
+            with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
                 data = json.loads(resp.read().decode('utf-8'))
                 return "".join([x[0] for x in data[0] if x[0]])
         except Exception as e:
@@ -46,10 +51,10 @@ class LyricsService:
     def get_lyrics(self, track_name: str, artist_name: str = "", duration_ms: int = 0, file_path: str = None) -> dict:
         if not track_name:
             return {"syncedLyrics": None, "plainLyrics": None, "instrumental": False, "weight": 3}
-            
+
         track = track_name.strip()
         artist = artist_name.strip() if artist_name else ""
-        
+
         # Define 6 fetcher methods to run concurrently
         fetchers = [
             self._fetch_lrclib,
@@ -59,56 +64,55 @@ class LyricsService:
             self._fetch_genius,
             self._fetch_duckduckgo
         ]
-        
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=len(fetchers))
-        future_to_name = {executor.submit(f, track, artist): f.__name__ for f in fetchers}
-        not_done = set(future_to_name.keys())
-        
+
+        # Reuse the shared pool instead of building (and leaking) one per lookup.
+        futures = {}
+        for f in fetchers:
+            future = BaseMusicService.submit(f, track, artist)
+            if future is not None:
+                futures[future] = f.__name__
+        if not futures:
+            logger.debug('Lyrics lookup skipped: shared executor unavailable')
+            return {"syncedLyrics": None, "plainLyrics": None, "instrumental": False, "weight": 3}
+        not_done = set(futures.keys())
+
         best_weight_2 = None
         weight2_found_time = None
         timeout = 2.5
         start_time = time.time()
-        
-        try:
-            while not_done:
-                elapsed = time.time() - start_time
-                if elapsed >= timeout:
-                    break
-                    
-                # Fast exit: If plain lyrics found (weight 2) and 0.6s passed with no synced lyrics, return immediately
-                if best_weight_2 and (time.time() - weight2_found_time) >= 0.6:
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    return best_weight_2
 
-                time_left = min(0.2, timeout - elapsed)
-                done, not_done = concurrent.futures.wait(
-                    not_done, 
-                    timeout=time_left, 
-                    return_when=concurrent.futures.FIRST_COMPLETED
-                )
-                
-                for fut in done:
-                    try:
-                        res = fut.result()
-                        if res:
-                            w = res.get('weight', 3)
-                            if w == 1:
-                                executor.shutdown(wait=False, cancel_futures=True)
-                                return res # Immediate WIN
-                            elif w == 2 and not best_weight_2:
-                                best_weight_2 = res
-                                weight2_found_time = time.time()
-                    except Exception:
-                        pass
-        finally:
-            try:
-                executor.shutdown(wait=False, cancel_futures=True)
-            except Exception:
-                pass
-                
+        while not_done:
+            elapsed = time.time() - start_time
+            if elapsed >= timeout:
+                break
+
+            # Fast exit: If plain lyrics found (weight 2) and 0.6s passed with no synced lyrics, return immediately
+            if best_weight_2 and (time.time() - weight2_found_time) >= 0.6:
+                return best_weight_2
+
+            time_left = min(0.2, timeout - elapsed)
+            done, not_done = concurrent.futures.wait(
+                not_done,
+                timeout=time_left,
+                return_when=concurrent.futures.FIRST_COMPLETED
+            )
+
+            for fut in done:
+                try:
+                    res = fut.result()
+                    if res:
+                        w = res.get('weight', 3)
+                        if w == 1:
+                            return res # Immediate WIN
+                        elif w == 2 and not best_weight_2:
+                            best_weight_2 = res
+                            weight2_found_time = time.time()
+                except Exception as e:
+                    logger.debug(f"Lyrics fetcher {futures.get(fut, '?')} failed: {e}", exc_info=True)
+
         if best_weight_2:
             return best_weight_2
-            
+
         return {"syncedLyrics": None, "plainLyrics": None, "instrumental": False, "weight": 3}
 
     def _make_result(self, synced, plain):
@@ -139,8 +143,8 @@ class LyricsService:
                 res = self._make_result(data.get("syncedLyrics"), data.get("plainLyrics"))
                 if res:
                     return res
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"lrclib exact lookup failed for '{c_artist} - {c_track}': {e}", exc_info=True)
 
         # 2. Fallback to /api/search
         try:
@@ -157,8 +161,8 @@ class LyricsService:
                     first_res = self._make_result(results[0].get("syncedLyrics"), results[0].get("plainLyrics"))
                     if first_res:
                         return first_res
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"lrclib search lookup failed for '{c_artist} {c_track}': {e}", exc_info=True)
 
         return None
 

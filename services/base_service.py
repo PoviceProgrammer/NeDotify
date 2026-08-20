@@ -5,25 +5,107 @@ service contracts for the different music providers.
 """
 
 import logging
+import sys
 import time
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable, Dict, Optional
+
+logger = logging.getLogger(__name__)
+
+
+class _SharedExecutor:
+    """Lazy, shutdown-safe stand-in for the shared ThreadPoolExecutor.
+
+    The real pool is only built on the first submit (behind a lock), so importing
+    a service never spawns threads. `submit()` returns None instead of raising
+    once the pool has been shut down or the interpreter is finalizing, which is
+    what used to produce `RuntimeError: cannot schedule new futures after
+    interpreter shutdown` during teardown.
+    """
+
+    def __init__(self, max_workers: int, thread_name_prefix: str = 'aura-shared'):
+        self._max_workers = max_workers
+        self._thread_name_prefix = thread_name_prefix
+        self._lock = threading.Lock()
+        self._pool: Optional[ThreadPoolExecutor] = None
+        self._shutdown = False
+
+    def submit(self, fn: Callable, *args, **kwargs) -> Optional[Future]:
+        """Schedule `fn`; return its Future, or None when scheduling is impossible."""
+        if self._shutdown or sys.is_finalizing():
+            logger.debug('Shared executor unavailable (shutdown=%s); dropping task %r',
+                         self._shutdown, getattr(fn, '__name__', fn))
+            return None
+        pool = self._pool
+        if pool is None:
+            with self._lock:
+                if self._shutdown:
+                    logger.debug('Shared executor shut down while acquiring lock; dropping task %r',
+                                 getattr(fn, '__name__', fn))
+                    return None
+                if self._pool is None:
+                    self._pool = ThreadPoolExecutor(
+                        max_workers=self._max_workers,
+                        thread_name_prefix=self._thread_name_prefix,
+                    )
+                pool = self._pool
+        try:
+            return pool.submit(fn, *args, **kwargs)
+        except RuntimeError as e:
+            self._shutdown = True
+            logger.debug('Shared executor refused task %r: %s', getattr(fn, '__name__', fn), e)
+            return None
+
+    def shutdown(self, wait: bool = False, cancel_futures: bool = True) -> None:
+        """Stop accepting work and tear the pool down without blocking."""
+        with self._lock:
+            self._shutdown = True
+            pool, self._pool = self._pool, None
+        if pool is None:
+            return
+        try:
+            pool.shutdown(wait=wait, cancel_futures=cancel_futures)
+        except Exception as e:
+            logger.debug('Shared executor shutdown error: %s', e, exc_info=True)
 
 
 class BaseMusicService:
     """Base class for music services providing a shared thread pool and caching."""
 
-    _executor = ThreadPoolExecutor(max_workers=15)
+    _executor = _SharedExecutor(max_workers=8)
     _cache_lock = threading.RLock()
     _stream_cache: Dict[str, Any] = {}
     _MAX_CACHE_SIZE = 2000
     _search_cache: Dict[str, Dict[str, Any]] = {}
     _SEARCH_CACHE_TTL = 300
-    _SEARCH_CACHE_MAX_SIZE = 500
+    _SEARCH_CACHE_MAX_SIZE = 300
 
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
+
+    @classmethod
+    def submit(cls, fn: Callable, *args, **kwargs) -> Optional[Future]:
+        """Submit work to the shared pool. Returns None (never raises) when the
+        pool is gone — e.g. after cleanup or during interpreter shutdown."""
+        executor = cls._executor
+        try:
+            return executor.submit(fn, *args, **kwargs)
+        except RuntimeError as e:
+            logger.debug('Rejected task %r: %s', getattr(fn, '__name__', fn), e)
+            return None
+
+    @classmethod
+    def shutdown_executor(cls) -> None:
+        """Shut the shared pool down without waiting; later submits become no-ops."""
+        executor = cls._executor
+        shutdown = getattr(executor, 'shutdown', None)
+        if not callable(shutdown):
+            return
+        try:
+            shutdown(wait=False, cancel_futures=True)
+        except Exception as e:
+            logger.debug('shutdown_executor failed: %s', e, exc_info=True)
 
     @classmethod
     def get_from_cache(cls, key: str) -> Optional[dict]:

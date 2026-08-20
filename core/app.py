@@ -233,7 +233,9 @@ class AppCore:
                                         self.cache.download_audio_stream(source, source_id, url)
                             except Exception:
                                 pass
-                        threading.Timer(5.0, delayed_download).start()
+                        _t = threading.Timer(5.0, delayed_download)
+                        _t.daemon = True
+                        _t.start()
 
                 if callback:
                     callback(stream_url, metadata or {"source": source, "source_id": source_id})
@@ -336,49 +338,49 @@ class AppCore:
         threading.Thread(target=worker, daemon=True).start()
 
     def cleanup(self):
-        """Clean up all resources upon exit."""
+        """Clean up all resources upon exit.
+
+        Every step is isolated so one failing component cannot abort the rest, but
+        each failure is logged: silently swallowing them here previously hid leaked
+        proxies, orphaned zapret processes and stuck thread pools.
+        """
         logger.info("Cleaning up AppCore resources...")
-        try:
-            if hasattr(self, "watchdog") and self.watchdog:
-                self.watchdog.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "lufs_scanner") and self.lufs_scanner:
-                self.lufs_scanner.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "downloader") and self.downloader:
-                self.downloader.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "plugins") and self.plugins:
-                self.plugins.unload_all()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "proxy") and self.proxy:
-                self.proxy.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "zapret") and self.zapret:
-                self.zapret.stop()
-        except Exception:
-            pass
-        try:
-            if getattr(self, "_cache_cleanup_stop", None) is not None:
-                self._cache_cleanup_stop.set()
-        except Exception:
-            pass
+
+        def _step(name, fn):
+            try:
+                fn()
+            except Exception:
+                logger.warning("Cleanup step %r failed", name, exc_info=True)
+
+        if getattr(self, "watchdog", None):
+            _step("watchdog.stop", self.watchdog.stop)
+        if getattr(self, "lufs_scanner", None):
+            _step("lufs_scanner.stop", self.lufs_scanner.stop)
+        if getattr(self, "downloader", None):
+            _step("downloader.stop", self.downloader.stop)
+        if getattr(self, "plugins", None):
+            _step("plugins.unload_all", self.plugins.unload_all)
+        if getattr(self, "discord_rpc", None) and hasattr(self.discord_rpc, "stop"):
+            _step("discord_rpc.stop", self.discord_rpc.stop)
+        if getattr(self, "proxy", None):
+            _step("proxy.stop", self.proxy.stop)
+        if getattr(self, "zapret", None):
+            _step("zapret.stop", self.zapret.stop)
+        if getattr(self, "_cache_cleanup_stop", None) is not None:
+            _step("cache_cleanup.stop", self._cache_cleanup_stop.set)
+        if getattr(self, "settings", None) and hasattr(self.settings, "flush"):
+            _step("settings.flush", self.settings.flush)
+
         # O-15: shutdown(wait=False) all thread pools so app exit never blocks
-        try:
+        def _shutdown_shared_pool():
             from services.base_service import BaseMusicService
-            BaseMusicService._executor.shutdown(wait=False, cancel_futures=True)
-        except Exception:
-            pass
+            shutdown = getattr(BaseMusicService, "shutdown_executor", None)
+            if callable(shutdown):
+                shutdown()
+            else:
+                BaseMusicService._executor.shutdown(wait=False, cancel_futures=True)
+
+        _step("base_service pool", _shutdown_shared_pool)
         for _pool in (
             getattr(self, "downloader", None) and getattr(self.downloader, "_pool", None),
             getattr(self, "cache", None) and getattr(self.cache, "_executor", None),
@@ -392,4 +394,4 @@ class AppCore:
             try:
                 _pool.shutdown(wait=False, cancel_futures=True)
             except Exception:
-                pass
+                logger.debug("Thread pool shutdown failed", exc_info=True)

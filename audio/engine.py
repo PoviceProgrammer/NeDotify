@@ -58,19 +58,21 @@ class AudioEngine:
         self.queue.add_track(track, play_next=play_next)
 
     def next_track(self):
+        """Advance the queue and notify the UI. Returns the new track or None at the end."""
         track = self.queue.next_track()
         if track:
             self._notify_track_changed()
-            return None
+            return track
         if self._on_queue_end:
             self._on_queue_end()
-            return None
+        return None
 
     def prev_track(self):
+        """Step back in the queue and notify the UI. Returns the new track or None."""
         track = self.queue.previous_track()
         if track:
             self._notify_track_changed()
-            return None
+        return track
 
     def toggle_shuffle(self) -> bool:
         self.queue.shuffle = not self.queue.shuffle
@@ -99,10 +101,14 @@ class AudioEngine:
                         artist = urllib_parse.quote(str(track.get("artist") or ""))
                         if not any(d in fp for d in ("youtube.com", "youtu.be", "soundcloud.com", "music.yandex.ru")):
                             quoted_url = urllib_parse.quote(fp)
-                            proxy_url = f"http://127.0.0.1:{self.proxy.port}/?url={quoted_url}&source={src}&source_id={src_id}&title={title}&artist={artist}"
+                            proxy_url = (f"http://127.0.0.1:{self.proxy.port}/?url={quoted_url}&source={src}"
+                                         f"&source_id={src_id}&title={title}&artist={artist}"
+                                         f"{self.proxy.auth_query()}")
                         else:
                             t_id = track.get("id") or 0
-                            proxy_url = f"http://127.0.0.1:{self.proxy.port}/api/stream?track_id={t_id}&source={src}&source_id={src_id}&title={title}&artist={artist}"
+                            proxy_url = (f"http://127.0.0.1:{self.proxy.port}/api/stream?track_id={t_id}&source={src}"
+                                         f"&source_id={src_id}&title={title}&artist={artist}"
+                                         f"{self.proxy.auth_query()}")
                         track["stream_url"] = proxy_url
                 elif fp and os.path.exists(fp):
                     # Local cached file: always serve through proxy - browsers cannot play raw fs paths
@@ -112,7 +118,9 @@ class AudioEngine:
                         src_id = urllib_parse.quote(str(track.get("source_id") or ""))
                         title = urllib_parse.quote(str(track.get("title") or ""))
                         artist = urllib_parse.quote(str(track.get("artist") or ""))
-                        track["stream_url"] = f"http://127.0.0.1:{self.proxy.port}/api/stream?track_id={t_id}&source={src}&source_id={src_id}&title={title}&artist={artist}"
+                        track["stream_url"] = (f"http://127.0.0.1:{self.proxy.port}/api/stream?track_id={t_id}&source={src}"
+                                               f"&source_id={src_id}&title={title}&artist={artist}"
+                                               f"{self.proxy.auth_query()}")
                 # else: stream not resolved yet - leave stream_url empty; frontend shows loading state
             self._on_track_changed(track)
 

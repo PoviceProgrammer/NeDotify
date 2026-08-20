@@ -24,6 +24,8 @@ backups/
 
 # Tests & Dev Artifacts
 .test_runs/
+.jscheck/
+.audit_test_out.txt
 .vite/
 user_prompts*.md
 out*.txt
@@ -48,9 +50,6 @@ git_phase0.py
 # OS
 .DS_Store
 Thumbs.db
-
-# Legacy dead UI (intentionally deleted)
-ui/web/
 
 # Agent internal files
 .agents/

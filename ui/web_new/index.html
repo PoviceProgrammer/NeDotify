@@ -3,23 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- The pywebview bridge exposes the whole backend API to this document, so an
+         injected script would be remote code execution. 'unsafe-inline' is required
+         for style attributes used throughout the UI, but script-src stays locked to
+         same-origin files, so no inline or remote script can execute. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: http://127.0.0.1:*; media-src 'self' blob: http://127.0.0.1:* https:; connect-src 'self' http://127.0.0.1:* https:; object-src 'none'; base-uri 'none'; form-action 'none'">
     <title>NeDotify</title>
     <!-- Fonts (async non-blocking) -->
-    <script>
-        window.addEventListener('load', function() {
-            setTimeout(function() {
-                var l = document.createElement('link');
-                l.rel = 'stylesheet';
-                l.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Montserrat:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap';
-                document.head.appendChild(l);
-            }, 1000);
-        });
-    </script>
-    <script src="js/lucide.min.js?v=20260820_2"></script>
-    <script src="js/hls.min.js?v=20260820_2"></script>
-    <link rel="icon" type="image/png" href="logo.png?v=20260820_2">
-    <link rel="stylesheet" href="css/themes.css?v=20260820_2">
-    <link rel="stylesheet" href="css/styles.css?v=20260820_2">
+    <script src="js/lucide.min.js"></script>
+    <script src="js/hls.min.js"></script>
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="stylesheet" href="css/themes.css">
+    <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 
@@ -2229,12 +2224,8 @@
     </div>
 </div>
 
-<script type="module" src="js/main.js?v=20260820_2"></script><script>
-    // Initialize Lucide icons after DOM is ready
-    document.addEventListener('DOMContentLoaded', () => {
-        if (window.lucide) lucide.createIcons();
-    });
-</script>
+<script src="js/boot.js"></script>
+<script type="module" src="js/main.js"></script>
 
     <!-- QUEUE DRAWER -->
     <div id="queue-drawer">

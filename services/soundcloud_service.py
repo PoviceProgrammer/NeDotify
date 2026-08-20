@@ -15,31 +15,38 @@ logger = logging.getLogger(__name__)
 
 
 class _TTLCache:
-    """M-8: bounded cache with TTL and LRU eviction."""
+    """M-8: bounded cache with TTL and LRU eviction. Thread-safe: instances are
+    shared across the service's worker pool, so every mutation happens under a
+    lock and the OrderedDict is touched in exactly one place per operation."""
 
     def __init__(self, max_entries=100, ttl_seconds=600):
         self._data = collections.OrderedDict()
         self._max = max_entries
         self._ttl = ttl_seconds
+        self._lock = threading.Lock()
 
     def get(self, key):
-        entry = self._data.pop(key, None)
-        if entry is None:
-            return None
-        timestamp, value = entry
-        if time.time() - timestamp > self._ttl:
-            return None
-        self._data[key] = entry  # refresh recency
-        return value
+        with self._lock:
+            entry = self._data.get(key)
+            if entry is None:
+                return None
+            timestamp, value = entry
+            if time.time() - timestamp > self._ttl:
+                self._data.pop(key, None)
+                return None
+            self._data.move_to_end(key)  # refresh recency
+            return value
 
     def set(self, key, value):
-        self._data.pop(key, None)
-        self._data[key] = (time.time(), value)
-        while len(self._data) > self._max:
-            self._data.popitem(last=False)
+        with self._lock:
+            self._data[key] = (time.time(), value)
+            self._data.move_to_end(key)
+            while len(self._data) > self._max:
+                self._data.popitem(last=False)
 
     def __len__(self):
-        return len(self._data)
+        with self._lock:
+            return len(self._data)
 
 
 try:
@@ -105,8 +112,8 @@ class SoundCloudService(BaseMusicService):
                     if r.status_code == 200:
                         self._client_id = cid
                         return cid
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.logger.debug(f'SoundCloud fallback client_id {cid[:6]}... rejected: {e}', exc_info=True)
 
             try:
                 r = self._session.get('https://soundcloud.com', timeout=8.0)
@@ -121,11 +128,10 @@ class SoundCloudService(BaseMusicService):
                                 if test_r.status_code == 200:
                                     self._client_id = m
                                     return self._client_id
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            self.logger.debug(f'SoundCloud client_id scrape failed for {url}: {e}', exc_info=True)
             except Exception as e:
                 self.logger.warning(f'Could not scrape SoundCloud client_id: {e}')
-            pass
         return None
 
     def reset_ydl(self):
@@ -380,6 +386,7 @@ class SoundCloudService(BaseMusicService):
         
 
         def _extract():
+            stream_url = None
             try:
                 cid = self._get_client_id()
                 track_id = None
@@ -546,7 +553,8 @@ class SoundCloudService(BaseMusicService):
         
         try:
             info = ydl.extract_info(sc_url, download=False)
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f'SoundCloud metadata probe failed for {sc_url}: {e}', exc_info=True)
             info = None
             
         is_preview = False

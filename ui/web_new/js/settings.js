@@ -1,9 +1,9 @@
 // NeDotify Р Р†Р вЂљ" Settings Module
-import { renderIcons, escapeHtml, compressBackgroundImage, showToast } from './utils.js?v=20260820_2';
-import { initParticles, stopParticles, setParticlesFps } from './particles.js?v=20260820_2';
-import { setVisualizerFps } from './visualizer.js?v=20260820_2';
-import { initOnboarding } from './onboarding.js?v=20260820_2';
-import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js?v=20260820_2';
+import { renderIcons, escapeHtml, compressBackgroundImage, showToast } from './utils.js';
+import { initParticles, stopParticles, setParticlesFps } from './particles.js';
+import { setVisualizerFps } from './visualizer.js';
+import { initOnboarding } from './onboarding.js';
+import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js';
 
 // Helper: read a localStorage setting that was saved by saveSetting()
 function getLocalSetting(key, defaultVal) {

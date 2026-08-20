@@ -1,5 +1,5 @@
-import { formatTime, renderIcons, getCoverUrl, escapeHtml } from './utils.js?v=20260817_2';
-import { getCurrentTrack, playTrack, incrementQueueVersion } from './player.js?v=20260817_2';
+import { formatTime, renderIcons, getCoverUrl, escapeHtml } from './utils.js';
+import { getCurrentTrack, playTrack, incrementQueueVersion } from './player.js';
 
 let isQueueVisible = false;
 let draggedItemIndex = null;

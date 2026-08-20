@@ -1,5 +1,5 @@
 // NeDotify - Equalizer Module
-import { setEq } from './player.js?v=20260817_2';
+import { setEq } from './player.js';
 
 let eqPreamp = 0;
 let eqBands = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];

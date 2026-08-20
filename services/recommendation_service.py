@@ -57,6 +57,20 @@ class RecommendationService(BaseMusicService):
     def reset_service(self):
         pass
 
+    def _prefetch_resolutions(self, pairs: List[Any], limit: int = 20) -> None:
+        """Resolve up to `limit` (title, artist) candidates in parallel before the
+        sequential loop consumes them, so a section costs ~one timeout, not N."""
+        prefetch = getattr(self.resolver, 'prefetch', None)
+        if not callable(prefetch) or not pairs:
+            return
+        cleaned = [(p[0] or '', p[1] or '') for p in pairs if p and (p[0] or p[1])]
+        if not cleaned:
+            return
+        try:
+            prefetch(cleaned[:max(8, limit)])
+        except Exception as e:
+            self.logger.debug(f'Resolution prefetch skipped: {e}', exc_info=True)
+
     def _format_ui_track(self, track: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(track, dict):
             return {}
@@ -222,6 +236,11 @@ class RecommendationService(BaseMusicService):
         resolved_tracks = []
         seen_keys = set()
 
+        self._prefetch_resolutions(
+            [(c.get('title', ''), c.get('artist', '')) for c in raw_candidates],
+            max_results + 5,
+        )
+
         for cand in raw_candidates:
             c_artist = cand.get('artist', '')
             c_title = cand.get('title', '')
@@ -287,6 +306,11 @@ class RecommendationService(BaseMusicService):
             try:
                 chart_raw = self.lastfm.chart.getTopTracks(limit=max_results * 2) if hasattr(self, 'lastfm') and self.lastfm else []
                 seen = set()
+
+                self._prefetch_resolutions(
+                    [(item.get('name', ''), item.get('artist', '')) for item in chart_raw],
+                    max_results + 5,
+                )
 
                 for item in chart_raw:
                     t_name = item.get('name', '')
@@ -355,6 +379,10 @@ class RecommendationService(BaseMusicService):
                         all_candidates.append({'artist': ct.get('artist', ''), 'title': ct.get('name', '')})
 
                 seen = set()
+                self._prefetch_resolutions(
+                    [(cand['title'], cand['artist']) for cand in all_candidates],
+                    max_results + 5,
+                )
                 for cand in all_candidates:
                     key = f"{cand['artist'].lower()}:{cand['title'].lower()}"
                     if key in seen:
@@ -453,6 +481,7 @@ class RecommendationService(BaseMusicService):
 
                 for artist in artists_pool[:5]:
                     top_trks = self.lastfm.artist.getTopTracks(artist, limit=4) if hasattr(self, 'lastfm') and self.lastfm else []
+                    self._prefetch_resolutions([(tt.get('name'), artist) for tt in top_trks], max_results)
                     for tt in top_trks:
                         t_name = tt.get('name')
                         key = f'{artist.lower()}:{t_name.lower()}'
@@ -532,6 +561,7 @@ class RecommendationService(BaseMusicService):
                 for artist in seed_artists[:3]:
                     top_trks = self.lastfm.artist.getTopTracks(artist, limit=8)
                     resolved_mix_tracks = []
+                    self._prefetch_resolutions([(tt.get('name', ''), tt.get('artist', artist)) for tt in top_trks], 10)
                     for tt in top_trks:
                         t_title = tt.get('name', '')
                         t_artist = tt.get('artist', artist)
@@ -565,6 +595,7 @@ class RecommendationService(BaseMusicService):
                 ctx = self._get_time_of_day_context()
                 chart_trks = self.lastfm.chart.getTopTracks(limit=10)
                 flow_tracks = []
+                self._prefetch_resolutions([(ct.get('name', ''), ct.get('artist', '')) for ct in chart_trks], 10)
                 for ct in chart_trks:
                     t_title = ct.get('name', '')
                     t_artist = ct.get('artist', '')
@@ -640,6 +671,7 @@ class RecommendationService(BaseMusicService):
                 contextual_tracks = []
                 for artist in seed_artists[:2]:
                     top_trks = self.lastfm.artist.getTopTracks(artist, limit=5)
+                    self._prefetch_resolutions([(tt.get('name', ''), tt.get('artist', artist)) for tt in top_trks], 10)
                     for tt in top_trks:
                         res = _resolve_deduped(tt.get('name', ''), tt.get('artist', artist))
                         if not res:
@@ -648,6 +680,7 @@ class RecommendationService(BaseMusicService):
 
                 if not contextual_tracks:
                     chart_trks = self.lastfm.chart.getTopTracks(limit=8)
+                    self._prefetch_resolutions([(ct.get('name', ''), ct.get('artist', '')) for ct in chart_trks], 10)
                     for ct in chart_trks:
                         res = _resolve_deduped(ct.get('name', ''), ct.get('artist', ''))
                         if not res:
@@ -684,6 +717,7 @@ class RecommendationService(BaseMusicService):
                 for artist in seed_artists[:2]:
                     top_trks = self.lastfm.artist.getTopTracks(artist, limit=6)
                     mix_trks = []
+                    self._prefetch_resolutions([(tt.get('name', ''), tt.get('artist', artist)) for tt in top_trks], 10)
                     for tt in top_trks:
                         res = _resolve_deduped(tt.get('name', ''), tt.get('artist', artist))
                         if not res:

@@ -8,6 +8,8 @@ import time
 import logging
 import threading
 
+from utils.file_scanner import is_audio_file
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -56,16 +58,17 @@ class AudioFileHandler(FileSystemEventHandler):
                 for path, timestamp in list(self._pending_files.items()):
                     if now - timestamp >= 3.0:
                         try:
-                            with open(path, 'rb') as f:
+                            with open(path, 'rb'):
                                 ready_files.append(path)
                                 del self._pending_files[path]
-                        except IOError:
+                        except IOError as e:
+                            logger.debug(f'Watchdog: {path} still locked by the writer: {e}')
                             self._pending_files[path] = now
             for path in ready_files:
                 try:
                     self.callback(path)
                 except Exception as e:
-                    logger.error(f'Watchdog import error for {path}: {e}')
+                    logger.error(f'Watchdog import error for {path}: {e}', exc_info=True)
 
     def stop(self):
         self._running = False

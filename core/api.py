@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 # until they are replaced with a remote, server-owned licensing service.
 LICENSE_VALIDATION_ENABLED = False
 
+# Hard per-provider search deadline. Single source of truth: the docstring, the
+# timer below and the test suite all read this constant.
+PROVIDER_SEARCH_TIMEOUT = 4.0
+
 # Window geometry: main window, compact mini player, and expanded mini player.
 MAIN_WINDOW_SIZE = (1100, 800)
 MINI_WINDOW_SIZE = (380, 110)
@@ -114,6 +118,56 @@ class AppApi:
         except Exception as te:
             logger.debug(f"Tray initialization ignored: {te}")
             self._tray = None
+
+        self._install_bridge_error_logging()
+
+    # Methods that must never be wrapped: the wrapper itself, lifecycle hooks that
+    # run while the window reference is being torn down, and the emit primitives it
+    # depends on (wrapping those would recurse on failure).
+    _UNWRAPPED = frozenset({
+        "cleanup", "shutdown", "set_window", "set_windows", "emit_event",
+    })
+
+    def _install_bridge_error_logging(self):
+        """Wrap every exposed bridge method so exceptions are logged and surfaced.
+
+        pywebview turns an exception inside a js_api call into a rejected JS promise
+        with no server-side trace, which is why a broken bridge method used to look
+        like a button that silently does nothing. The wrapper logs the full traceback
+        and pushes an `api_error` event to the UI, then re-raises so no caller's
+        contract or return type changes.
+        """
+        import functools
+        import types
+
+        for name in dir(type(self)):
+            if name.startswith("_") or name in self._UNWRAPPED:
+                continue
+            attr = getattr(type(self), name, None)
+            if not callable(attr):
+                continue
+
+            def _make(func, method_name):
+                @functools.wraps(func)
+                def _wrapped(inner_self, *args, **kwargs):
+                    try:
+                        return func(inner_self, *args, **kwargs)
+                    except Exception as exc:
+                        logger.error(
+                            "bridge call %s() failed: %s: %s",
+                            method_name, type(exc).__name__, exc, exc_info=True,
+                        )
+                        try:
+                            inner_self._emit("api_error", {
+                                "method": method_name,
+                                "error": f"{type(exc).__name__}: {exc}",
+                            })
+                        except Exception:
+                            logger.debug("api_error emit failed", exc_info=True)
+                        raise
+                return _wrapped
+
+            setattr(self, name, types.MethodType(_make(attr, name), self))
 
     def cleanup(self):
         """O-15: release the shared search executor without blocking app exit."""
@@ -370,7 +424,9 @@ class AppApi:
     def close(self):
         """Close window and shutdown application asynchronously to prevent deadlock on Windows WebView2."""
         if self._window:
-            threading.Timer(0.1, self._window.destroy).start()
+            closer = threading.Timer(0.1, self._window.destroy)
+            closer.daemon = True
+            closer.start()
         return {"success": True, "message": "Window closing..."}
 
     def shutdown(self):
@@ -1077,14 +1133,21 @@ class AppApi:
                         src_id = urllib_parse.quote(str(track.get("source_id") or ""))
                         title = urllib_parse.quote(str(track.get("title") or ""))
                         artist = urllib_parse.quote(str(track.get("artist") or ""))
-                        track["stream_url"] = f"http://127.0.0.1:{self._core.engine.proxy.port}/api/stream?track_id={t_id}&source={src}&source_id={src_id}&title={title}&artist={artist}"
+                        auth = self._core.engine.proxy.auth_query() if hasattr(self._core.engine.proxy, "auth_query") else ""
+                        track["stream_url"] = (f"http://127.0.0.1:{self._core.engine.proxy.port}/api/stream"
+                                               f"?track_id={t_id}&source={src}&source_id={src_id}"
+                                               f"&title={title}&artist={artist}{auth}")
                 return track
         except Exception as e:
             logger.error(f"get_next_track error: {e}")
         return None
 
     def search(self, query: str, source: str = "all", result_type: str = None):
-        """Search without blocking the UI bridge. Providers run in parallel with 6s timeout each."""
+        """Search without blocking the UI bridge.
+
+        Providers run in parallel, each bounded by PROVIDER_SEARCH_TIMEOUT seconds.
+        Results arrive via the search_results / search_completed events.
+        """
         logger.info(f"api.py -> search called: query='{query}', source='{source}', result_type='{result_type}'")
         query = (query or "").strip()
         if not query:
@@ -1123,7 +1186,7 @@ class AppApi:
         def mark_done(provider_name):
             with pending_lock:
                 pending_providers.discard(provider_name)
-                if not pending_providers and not completion_emitted[0] and source != "local":
+                if not pending_providers and not completion_emitted[0]:
                     completion_emitted[0] = True
                     self._emit("search_completed", {"query": query, "source": source})
 
@@ -1149,7 +1212,7 @@ class AppApi:
             else:
                 self._search_executor.submit(_run_local)
 
-        # Async Remote Provider Searches — hard timeout per provider (12s)
+        # Async Remote Provider Searches — hard timeout per provider
         for service_name in requested_providers:
             if service_name == "local":
                 continue
@@ -1168,6 +1231,12 @@ class AppApi:
                         if is_done[0]:
                             return
                         is_done[0] = True
+                    # Release the deadline timer immediately; leaving it armed kept a
+                    # live thread per keystroke and delayed process exit.
+                    try:
+                        timer.cancel()
+                    except Exception:
+                        logger.debug("search timer cancel failed", exc_info=True)
                     emit_results(tracks or [], name)
                     mark_done(name)
 
@@ -1182,10 +1251,11 @@ class AppApi:
                     with lock:
                         if is_done[0]:
                             return
-                    logger.warning("%s search timed out after 12.0s", name)
+                    logger.warning("%s search timed out after %.1fs", name, PROVIDER_SEARCH_TIMEOUT)
                     _finish([])
 
-                timer = threading.Timer(12.0, _on_timeout)
+                timer = threading.Timer(PROVIDER_SEARCH_TIMEOUT, _on_timeout)
+                timer.daemon = True
                 timer.start()
 
                 try:
@@ -1504,7 +1574,7 @@ class AppApi:
         try:
             import winreg
             key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
             app_name = "NeDotify"
             if enabled:
                 if getattr(sys, 'frozen', False):
@@ -1518,7 +1588,10 @@ class AppApi:
                     winreg.DeleteValue(key, app_name)
                 except FileNotFoundError:
                     pass
-            winreg.CloseKey(key)
+            try:
+                winreg.CloseKey(key)
+            except OSError:
+                logger.debug("Registry key close failed", exc_info=True)
             self._core.settings.set("app", "autostart", enabled)
             return True
         except Exception as e:
@@ -1552,8 +1625,8 @@ class AppApi:
                 cat_data = self._core.settings.get_category(c)
                 if cat_data:
                     res[c] = cat_data
-            except:
-                pass
+            except Exception:
+                logger.debug("settings category %s unavailable", c, exc_info=True)
         return res
 
     def save_setting(self, key: str, value, category: str = "app"):
@@ -2252,10 +2325,10 @@ class AppApi:
         try:
             if not self._window:
                 return {"success": False, "error": "Окно приложения недоступно"}
-            import pywebview
             file_types = ('Изображения (*.jpg;*.jpeg;*.png;*.webp)', 'Все файлы (*.*)')
+            dialog_type = getattr(webview, 'FileDialog', webview).OPEN if hasattr(webview, 'FileDialog') else webview.OPEN_DIALOG
             result = self._window.create_file_dialog(
-                pywebview.OPEN_DIALOG,
+                dialog_type,
                 allow_multiple=False,
                 file_types=file_types
             )

@@ -2,8 +2,10 @@
 NeDotify - Local HTTP Stream Proxy
 Proxies cloud stream requests to inject authentication headers/cookies and support self-healing stream URL re-resolution.
 """
+import hmac
 import os
 import re
+import secrets
 import time
 import json
 import mimetypes
@@ -21,6 +23,49 @@ _is_safe_url = _is_ssrf_safe_url
 logger = logging.getLogger(__name__)
 
 HOP_BY_HOP = frozenset({'trailer', 'upgrade', 'proxy-authenticate', 'proxy-authorization', 'connection', 'te', 'transfer-encoding', 'keep-alive'})
+
+# Query parameter carrying the per-session proxy token.
+AUTH_PARAM = 'k'
+
+# Upstream credentials are attached ONLY when the target host belongs to the
+# provider that owns them. Without this, a caller could point ?url= at any host
+# and have the user's Yandex OAuth token or provider cookies forwarded to it.
+CREDENTIAL_HOSTS = {
+    'yandex': ('yandex.ru', 'yandex.net', 'yandex.com'),
+    'youtube': ('youtube.com', 'youtu.be', 'googlevideo.com', 'ytimg.com', 'google.com'),
+    'soundcloud': ('soundcloud.com', 'sndcdn.com'),
+}
+
+
+def _host_of(url: str) -> str:
+    try:
+        return (urllib.parse.urlparse(url).hostname or '').lower()
+    except Exception:
+        return ''
+
+
+def _host_allows_credentials(url: str, source: str) -> bool:
+    """True when `url`'s host is owned by `source`, so its credentials may be sent."""
+    suffixes = CREDENTIAL_HOSTS.get(source or '')
+    if not suffixes:
+        return False
+    host = _host_of(url)
+    if not host:
+        return False
+    return any(host == sfx or host.endswith('.' + sfx) for sfx in suffixes)
+
+
+def _is_loopback_origin(origin: str) -> bool:
+    """True for http(s)://127.0.0.1[:port] / localhost[:port] / [::1][:port]."""
+    if not origin:
+        return False
+    try:
+        parsed = urllib.parse.urlparse(origin)
+        if parsed.scheme not in ('http', 'https'):
+            return False
+        return (parsed.hostname or '').lower() in ('127.0.0.1', 'localhost', '::1')
+    except Exception:
+        return False
 
 
 class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -50,8 +95,9 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     """
     block_on_close = False
 
-    def __init__(self, server_address, RequestHandlerClass, app_core):
+    def __init__(self, server_address, RequestHandlerClass, app_core, auth_token=''):
         self.app_core = app_core
+        self.auth_token = auth_token or ''
         super().__init__(server_address, RequestHandlerClass)
 
     def process_request(self, request, client_address):
@@ -72,6 +118,37 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         logger.debug(format % args)
+
+    def _authorized(self, query_params) -> bool:
+        """Constant-time check of the per-session proxy token.
+
+        The loopback proxy forwards provider credentials and serves cached audio,
+        so an unauthenticated port is readable by any local process or by any web
+        page that guesses the port. Every request must carry ?k=<token>.
+        """
+        expected = getattr(self.server, 'auth_token', '') or ''
+        if not expected:
+            return True  # token generation failed; fail open rather than break playback
+        supplied = (query_params.get(AUTH_PARAM) or [''])[0]
+        return hmac.compare_digest(str(supplied), str(expected))
+
+    def _reject_unauthorized(self):
+        self.send_response(403)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        try:
+            self.wfile.write(b'{"error": "forbidden: missing or invalid proxy token"}')
+        except OSError:
+            pass
+
+    def _send_cors_headers(self):
+        """Echo a loopback Origin only. A wildcard would let any web page read
+        proxied responses, including provider-authenticated ones."""
+        origin = self.headers.get('Origin', '')
+        if _is_loopback_origin(origin):
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Vary', 'Origin')
+
     def serve_local_file(self, file_path):
         file_size = os.path.getsize(file_path)
         content_type, _ = mimetypes.guess_type(file_path)
@@ -91,7 +168,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 self.send_header('Accept-Ranges', 'bytes')
                 self.send_header('Content-Range', f'bytes {start_byte}-{end_byte}/{file_size}')
                 self.send_header('Content-Length', str(length))
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self._send_cors_headers()
                 self.end_headers()
                 with open(file_path, 'rb') as f:
                     f.seek(start_byte)
@@ -117,15 +194,15 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             self.send_header('Content-Type', content_type)
             self.send_header('Accept-Ranges', 'bytes')
             self.send_header('Content-Length', str(file_size))
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_headers()
             self.end_headers()
             with open(file_path, 'rb') as f:
                 import shutil
                 shutil.copyfileobj(f, self.wfile)
 
     def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_response(204)
+        self._send_cors_headers()
         self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization')
         self.end_headers()
@@ -133,6 +210,12 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urllib.parse.urlparse(self.path)
         query_params = urllib.parse.parse_qs(parsed_path.query)
+
+        if not self._authorized(query_params):
+            logger.warning('Rejected unauthenticated proxy request: %s', parsed_path.path)
+            self._reject_unauthorized()
+            return None
+
         if parsed_path.path == '/api/stream':
             track_id = query_params.get('track_id', [None])[0]
             source = query_params.get('source', [None])[0]
@@ -201,6 +284,16 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     pass
                 return None
 
+            # Same SSRF gate as the ?url= branch: a resolver or a poisoned DB cache
+            # row must never be able to make the proxy fetch an internal address.
+            if not _is_ssrf_safe_url(target_url):
+                logger.warning('SSRF guard blocked resolved stream URL for %s:%s', source, source_id)
+                try:
+                    self.send_error(400, 'Resolved stream URL blocked by SSRF validation')
+                except Exception:
+                    pass
+                return None
+
             final_path = os.path.join(streams_dir, f"{cache_name}.m4a")
             unique_tag = f"{os.getpid()}_{threading.get_ident()}_{int(time.time() * 1000)}"
             temp_path = os.path.join(self.server.app_core.cache._temp_dir, f"{cache_name}_{unique_tag}.tmp")
@@ -238,7 +331,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             if not _is_ssrf_safe_url(target_url):
                 self.send_response(400)
                 self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self._send_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': 'URL blocked: SSRF validation failed'}).encode('utf-8'))
                 logger.warning(f'SSRF guard blocked proxied URL: {target_url[:120]}')
@@ -261,7 +354,14 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 return None
             return None
 
-        if source == 'youtube':
+        token = ''
+        if not _host_allows_credentials(target_url, source):
+            if source in CREDENTIAL_HOSTS:
+                logger.warning(
+                    'Withholding %s credentials: target host %r is not owned by that provider',
+                    source, _host_of(target_url)
+                )
+        elif source == 'youtube':
             try:
                 ydl = self.server.app_core.youtube._get_ydl('high')
                 _inject_ydl_cookies(ydl, req)
@@ -274,7 +374,6 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 logger.warning(f'Error injecting SoundCloud cookies: {e}')
         elif source == 'yandex':
-            token = ''
             if self.server.app_core.settings:
                 token = self.server.app_core.settings.get('auth', 'yandex_token', '')
             if token:
@@ -307,7 +406,11 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                             resolve_event = threading.Event()
                             new_url = None
 
-                            def _on_resolved(url):
+                            def _on_resolved(url, metadata=None):
+                                # AppCore.re_resolve_stream_url_async invokes this with
+                                # (stream_url, metadata); a 1-arg signature raised TypeError
+                                # here, so the event was never set and every expired URL
+                                # stalled for the full 7s timeout before failing.
                                 nonlocal new_url
                                 new_url = url
                                 resolve_event.set()
@@ -315,13 +418,21 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                             self.server.app_core.re_resolve_stream_url_async(source, source_id, _on_resolved)
                             resolve_event.wait(timeout=7)
 
+                            if new_url and not _is_ssrf_safe_url(new_url):
+                                logger.warning('SSRF guard blocked re-resolved URL for %s:%s', source, source_id)
+                                new_url = None
                             if new_url:
                                 req = urllib.request.Request(new_url)
                                 if 'Range' in self.headers:
                                     req.add_header('Range', self.headers['Range'])
                                 req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
 
-                                if source == 'youtube':
+                                if not _host_allows_credentials(new_url, source):
+                                    logger.warning(
+                                        'Withholding %s credentials on re-resolved host %r',
+                                        source, _host_of(new_url)
+                                    )
+                                elif source == 'youtube':
                                     ydl = self.server.app_core.youtube._get_ydl('high')
                                     if hasattr(ydl, '_cookiejar') and ydl._cookiejar:
                                         ydl._cookiejar.add_cookie_header(req)
@@ -390,7 +501,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             if h_low not in HOP_BY_HOP and not h_low.startswith('access-control-'):
                 self.send_header(header, val)
 
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._send_cors_headers()
         self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization')
         self.send_header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges')
@@ -487,10 +598,14 @@ class LocalProxyManager:
         self.server = None
         self.thread = None
         self.port = 0
+        # Per-session bearer for the loopback proxy. Regenerated on every start so a
+        # token captured from an earlier run is useless.
+        self.token = ''
 
     def start(self):
         try:
-            self.server = ThreadingHTTPServer(('127.0.0.1', 0), StreamProxyHandler, self.app_core)
+            self.token = secrets.token_urlsafe(24)
+            self.server = ThreadingHTTPServer(('127.0.0.1', 0), StreamProxyHandler, self.app_core, self.token)
             self.port = self.server.server_port
             thread_cls = get_real_thread_class()
             self.thread = thread_cls(target=self.server.serve_forever, daemon=True)
@@ -500,6 +615,7 @@ class LocalProxyManager:
             logger.error(f'Failed to start local proxy server: {e}')
 
     def stop(self):
+        self.token = ''
         if self.server:
             try:
                 self.server.shutdown()
@@ -514,6 +630,10 @@ class LocalProxyManager:
         self.port = 0
         logger.info('Local HTTP stream proxy stopped')
 
+    def auth_query(self) -> str:
+        """'&k=<token>' fragment for callers that assemble proxy URLs themselves."""
+        return f'&{AUTH_PARAM}={urllib.parse.quote(self.token)}' if self.token else ''
+
     def get_proxy_url(self, source, source_id, original_url=None, track_id=None):
         if not self.port:
             return original_url or ''
@@ -523,6 +643,8 @@ class LocalProxyManager:
                 'source': source if source else '',
                 'source_id': source_id if source_id else '',
             }
+            if self.token:
+                params[AUTH_PARAM] = self.token
             query = urllib.parse.urlencode(params)
             return f'http://127.0.0.1:{self.port}/?{query}'
         
@@ -539,5 +661,7 @@ class LocalProxyManager:
             params['source_id'] = source_id
         if not params:
             return ''
+        if self.token:
+            params[AUTH_PARAM] = self.token
         query = urllib.parse.urlencode(params)
         return f'http://127.0.0.1:{self.port}/api/stream?{query}'
