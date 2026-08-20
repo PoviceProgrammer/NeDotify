@@ -230,7 +230,8 @@ class YouTubeService(BaseMusicService):
         def _search():
             try:
                 is_album_search = result_type in ("albums", "album")
-                yt_filter = "albums" if is_album_search else None
+                is_playlist_search = result_type in ("playlists", "playlist")
+                yt_filter = "playlists" if is_playlist_search else ("albums" if is_album_search else None)
                 cache_key = f"yt_search:{query}:{yt_filter}"
                 cached = self.get_search_cache(cache_key)
                 if cached is not None:
@@ -243,7 +244,26 @@ class YouTubeService(BaseMusicService):
                 tracks = []
                 seen_ids = set()
                 for idx, item in enumerate(results):
-                    if is_album_search:
+                    if is_playlist_search:
+                        browse_id = item.get("browseId") or item.get("playlistId")
+                        if not browse_id or browse_id in seen_ids:
+                            continue
+                        seen_ids.add(browse_id)
+                        title = item.get("title", "Unknown Playlist")
+                        author = ", ".join([a.get("name", "") for a in item.get("artists", []) or [] if a.get("name")]) or (item.get("author") or "YouTube Music")
+                        thumbnails = item.get("thumbnails", []) or []
+                        cover_url = thumbnails[-1]["url"] if thumbnails else ""
+                        tracks.append({
+                            "source": "youtube",
+                            "source_id": browse_id,
+                            "title": title,
+                            "artist": author,
+                            "author": author,
+                            "cover_url": cover_url,
+                            "type": "playlist",
+                            "track_count": item.get("track_count") or item.get("itemCount") or 0
+                        })
+                    elif is_album_search:
                         bid = item.get("browseId") or item.get("playlistId") or f"yt_album_{idx}"
                         if bid in seen_ids:
                             continue
@@ -312,7 +332,7 @@ class YouTubeService(BaseMusicService):
                 if callback:
                     callback(tracks)
 
-                if not is_album_search:
+                if not is_album_search and not is_playlist_search:
                     self._executor.submit(self._prefetch_top_tracks, tracks)
 
             except Exception as e:

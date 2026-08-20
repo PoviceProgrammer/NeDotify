@@ -318,7 +318,7 @@ class RecommendationService(BaseMusicService):
                         tracks = []
                 elif self.db:
                     try:
-                        cursor = self.db.cursor()
+                        cursor = self.db.conn.cursor()
                         cursor.execute("SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path FROM tracks LIMIT ?", (max_results,))
                         rows = cursor.fetchall()
                         tracks = [self._format_ui_track(r) for r in rows] if rows else []
@@ -386,7 +386,7 @@ class RecommendationService(BaseMusicService):
                         resolved_list = []
                 elif self.db:
                     try:
-                        cursor = self.db.cursor()
+                        cursor = self.db.conn.cursor()
                         cursor.execute("SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path FROM tracks LIMIT ?", (max_results,))
                         rows = cursor.fetchall()
                         resolved_list = [self._format_ui_track(r) for r in rows] if rows else []
@@ -483,7 +483,7 @@ class RecommendationService(BaseMusicService):
                         tracks = []
                 elif self.db:
                     try:
-                        cursor = self.db.cursor()
+                        cursor = self.db.conn.cursor()
                         cursor.execute("SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path FROM tracks LIMIT ?", (max_results,))
                         rows = cursor.fetchall()
                         tracks = [self._format_ui_track(r) for r in rows] if rows else []

@@ -50,9 +50,9 @@ const covers = [
     'https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=300'  // Headphones
 ];
 
-// в”Ђв”Ђв”Ђ Massive Predefined Mock Database (strictly YouTube & SoundCloud) в”Ђв”Ђв”Ђ
+// ─── Massive Predefined Mock Database (strictly YouTube & SoundCloud) ───
 
-
+let profileGenerationId = 0;
 
 const STATIC_TRACKS_PHARAOH = [
     { id: "g0XKrUoI5XA", title: "Дико, например", artist: "PHARAOH", playCount: "16 млн", year: 2017 },
@@ -197,24 +197,23 @@ export async function fetchArtistTracks(artistName) {
     if (window.pywebview?.api?.search) {
         return new Promise((resolve) => {
             let collectedTracks = [];
-            const handleSearch = (e) => {
-                const data = e.detail;
-                if (data) {
-                    const raw = Array.isArray(data) ? data : (data.tracks || []);
-                    const filtered = filterVisibleTracks(raw).filter(t => 
-                        (t.title || '').length > 0 && 
-                        isTrackByArtist(t, artistName)
-                    );
-                    collectedTracks = collectedTracks.concat(filtered);
-                }
-            };
-            window.addEventListener('app:search_results', handleSearch);
-            window.addEventListener('python:search_results', handleSearch);
-            window.pywebview.api.search(artistName, 'all');
+            let isResolved = false;
+            let timerId = null;
 
-            setTimeout(() => {
+            const cleanup = () => {
                 window.removeEventListener('app:search_results', handleSearch);
                 window.removeEventListener('python:search_results', handleSearch);
+                if (timerId) {
+                    clearTimeout(timerId);
+                    timerId = null;
+                }
+            };
+
+            const finish = () => {
+                if (isResolved) return;
+                isResolved = true;
+                cleanup();
+
                 if (collectedTracks.length > 0) {
                     collectedTracks.sort((a, b) => (b.views || b.play_count || 0) - (a.views || a.play_count || 0));
                     const uniqueTracks = [];
@@ -229,16 +228,43 @@ export async function fetchArtistTracks(artistName) {
                     resolve(uniqueTracks);
                 } else {
                     const queryKey = artistName.toLowerCase().trim();
-                    let artistData = MOCK_ARTISTS[queryKey] || generateFallbackArtist(artistName);
+                    let artistData = MOCK_ARTISTS[queryKey] ? JSON.parse(JSON.stringify(MOCK_ARTISTS[queryKey])) : generateFallbackArtist(artistName);
                     resolve(artistData.tracks || []);
                 }
-            }, 1400);
+            };
+
+            const handleSearch = (e) => {
+                const data = e.detail;
+                if (data) {
+                    const raw = Array.isArray(data) ? data : (data.tracks || []);
+                    const filtered = filterVisibleTracks(raw).filter(t => 
+                        (t.title || '').length > 0 && 
+                        isTrackByArtist(t, artistName)
+                    );
+                    if (filtered.length > 0) {
+                        collectedTracks = collectedTracks.concat(filtered);
+                    }
+                }
+            };
+
+            window.addEventListener('app:search_results', handleSearch);
+            window.addEventListener('python:search_results', handleSearch);
+
+            try {
+                window.pywebview.api.search(artistName, 'all');
+            } catch (err) {
+                console.warn('Failed to call api.search for artist tracks:', err);
+                finish();
+                return;
+            }
+
+            timerId = setTimeout(finish, 1400);
         });
     }
 
     return new Promise((resolve) => {
         const queryKey = artistName.toLowerCase().trim();
-        let artistData = MOCK_ARTISTS[queryKey] || generateFallbackArtist(artistName);
+        let artistData = MOCK_ARTISTS[queryKey] ? JSON.parse(JSON.stringify(MOCK_ARTISTS[queryKey])) : generateFallbackArtist(artistName);
         resolve(artistData.tracks || []);
     });
 }
@@ -385,12 +411,14 @@ export class ArtistAlbumsComponent {
                     const title = album.title || 'Unknown';
                     const gradIndex = Math.abs(hashString(title)) % colors.length;
                     const grad = colors[gradIndex];
+                    const coverSrc = (album.cover && album.cover !== 'null') ? escapeHtml(album.cover) : '';
+                    const imgTag = coverSrc ? `<img src="${coverSrc}" alt="${escapeHtml(album.title)}" onerror="this.onerror=null;this.style.display='none'" loading="lazy">` : '';
                     
                     return `
                     <div class="album-item-card" data-album-index="${index}">
                         <div class="album-cover-wrap fallback-gradient" style="background: ${grad}">
                             ${SVG_NOTE_FALLBACK}
-                            <img src="${escapeHtml(album.cover)}" alt="${escapeHtml(album.title)}" onerror="this.onerror=null;this.style.display='none'" loading="lazy">
+                            ${imgTag}
                             <div class="album-play-overlay">
                                 <button class="album-play-btn" title="Воспроизвести альбом">
                                     <i data-lucide="play" style="width:18px;height:18px;fill:currentColor"></i>
@@ -398,7 +426,7 @@ export class ArtistAlbumsComponent {
                             </div>
                         </div>
                         <div class="album-title" title="${escapeHtml(album.title)}">${escapeHtml(album.title)}</div>
-                        <div class="album-year">${album.year} г.</div>
+                        <div class="album-year">${album.year ? album.year + ' г.' : ''}</div>
                     </div>
                 `}).join('')}
             </div>
@@ -598,6 +626,7 @@ export class ArtistTracksComponent {
 // в”Ђв”Ђв”Ђ Primary Loader: Combines Skeletons, API fetch and Components в”Ђв”Ђв”Ђ
 export async function loadArtistProfile(artistName, targetContainer) {
     if (!targetContainer) return;
+    const currentGen = ++profileGenerationId;
     
     // Clear and render layout shells
     targetContainer.innerHTML = '';
@@ -622,11 +651,7 @@ export async function loadArtistProfile(artistName, targetContainer) {
     renderIcons();
 
     const queryKey = artistName.toLowerCase().trim();
-    let artistData = MOCK_ARTISTS[queryKey];
-    
-    if (!artistData) {
-        artistData = generateFallbackArtist(artistName);
-    }
+    let artistData = MOCK_ARTISTS[queryKey] ? JSON.parse(JSON.stringify(MOCK_ARTISTS[queryKey])) : generateFallbackArtist(artistName);
     
     // 2. Fetch avatar and tracks concurrently (API promise model)
     try {
@@ -635,6 +660,8 @@ export async function loadArtistProfile(artistName, targetContainer) {
             fetchArtistTracks(artistData.name)
         ]);
         
+        if (currentGen !== profileGenerationId) return; // Stale render protection
+
         artistData.avatarUrl = resolvedAvatar;
         if (tracks && tracks.length > 0) {
             artistData.tracks = tracks;
@@ -715,6 +742,7 @@ export async function loadArtistProfile(artistName, targetContainer) {
         
         renderIcons();
     } catch (e) {
+        if (currentGen !== profileGenerationId) return;
         console.error('Failed to load artist profile:', e);
         targetContainer.innerHTML = `<div class="empty-state">Ошибка загрузки профиля: ${escapeHtml(e.message)}</div>`;
     }

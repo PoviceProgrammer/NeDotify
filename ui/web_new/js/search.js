@@ -229,6 +229,36 @@ function renderResults(tracks) {
     // Filter by selected sub-type (all, tracks, playlists, albums, artists)
     let displayTracks = tracks;
 
+    if (currentType === 'playlists') {
+        const playlistMap = new Map();
+        tracks.forEach((t, idx) => {
+            if (t.type === 'playlist') {
+                const key = String(t.source_id || t.id || idx);
+                if (!playlistMap.has(key)) playlistMap.set(key, t);
+            } else {
+                const key = String(t.source_id || t.id || idx);
+                if (!playlistMap.has(key)) {
+                    playlistMap.set(key, {
+                        id: t.id || `playlist_${idx}`,
+                        title: t.title || 'Плейлист',
+                        author: t.artist || t.author || 'AURA Music',
+                        cover_url: t.cover_url || t.cover_path || '',
+                        source: t.source || 'youtube',
+                        source_id: t.source_id || '',
+                        type: 'playlist',
+                        track_count: t.track_count || 10
+                    });
+                }
+            }
+        });
+        const playlistList = Array.from(playlistMap.values());
+        if (playlistList.length > 0) {
+            renderPlaylistGrid(playlistList, container);
+            renderIcons();
+            return;
+        }
+    }
+
     if (currentType === 'albums') {
         const albumsMap = new Map();
         tracks.forEach((t, idx) => {
@@ -534,6 +564,220 @@ export async function openAlbumModal(album) {
         }
     });
 }
+
+export function renderPlaylistGrid(playlists, container) {
+    const playlistGrid = document.createElement('div');
+    playlistGrid.className = 'playlist-cards-grid';
+    playlistGrid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 18px; margin-bottom: 24px; animation: fadeIn 0.3s ease;';
+
+    const colors = [
+        'linear-gradient(135deg, #1db954 0%, #191414 100%)',
+        'linear-gradient(135deg, #ff5500 0%, #202020 100%)',
+        'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+        'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
+        'linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%)',
+        'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
+        'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+        'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)'
+    ];
+
+    playlists.forEach((pl, idx) => {
+        const title = pl.title || pl.name || 'Плейлист';
+        const author = pl.author || pl.artist || 'AURA Music';
+        const cover = pl.cover_url || pl.cover_path || pl.cover || '';
+        const trackCount = pl.track_count || 10;
+        const trackCountStr = typeof trackCount === 'number' ? `${trackCount} треков` : 'Плейлист';
+
+        let hash = 0;
+        for (let i = 0; i < title.length; i++) hash = ((hash << 5) - hash) + title.charCodeAt(i);
+        const grad = colors[Math.abs(hash) % colors.length];
+
+        const card = document.createElement('div');
+        card.className = 'feed-card playlist-card';
+        card._playlistData = pl;
+        card.dataset.playlist = JSON.stringify(pl);
+        card.dataset.id = pl.id || '';
+        card.dataset.sourceId = pl.source_id || pl.id || '';
+        card.dataset.source = pl.source || 'youtube';
+        card.style.cssText = 'padding: 14px; border-radius: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative;';
+
+        card.innerHTML = `
+            <div class="feed-card-cover playlist-cover-wrap fallback-gradient" style="width: 100%; aspect-ratio: 1/1; border-radius: 12px; overflow: hidden; background: ${grad}; display: flex; align-items: center; justify-content: center; position: relative; box-shadow: 0 8px 20px rgba(0,0,0,0.35);">
+                <svg class="fallback-note-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40%;height:40%;opacity:0.6;position:relative;z-index:1;"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                ${cover ? `<img src="${escapeHtml(cover)}" alt="" onerror="this.onerror=null;this.style.display='none'" style="width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;z-index:2;">` : ''}
+                <div class="playlist-play-overlay" style="position:absolute; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity 0.2s; z-index:3;">
+                    <button class="playlist-play-btn" style="width:44px; height:44px; border-radius:50%; background:var(--primary); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.4); transition:transform 0.2s;">
+                        <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
+                    </button>
+                </div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:3px; overflow:hidden;">
+                <div style="font-weight: 700; font-size: 14px; color: #ffffff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+                <div style="font-size: 12px; color: var(--text-sec); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(author)}</div>
+                <div style="font-size: 11px; color: var(--primary); font-weight:600; margin-top:2px;">${escapeHtml(trackCountStr)}</div>
+            </div>
+        `;
+
+        // Click play button directly
+        const playBtn = card.querySelector('.playlist-play-btn');
+        if (playBtn) {
+            playBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                playPlaylist(pl, card);
+            });
+        }
+
+        // Card click -> Open Playlist Modal / Details
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('.playlist-play-btn')) return;
+            openPlaylistModal(pl);
+        });
+
+        // Hover effects
+        card.addEventListener('mouseenter', () => {
+            card.style.transform = 'translateY(-4px)';
+            card.style.background = 'rgba(255,255,255,0.08)';
+            const overlay = card.querySelector('.playlist-play-overlay');
+            if (overlay) overlay.style.opacity = '1';
+        });
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = 'translateY(0)';
+            card.style.background = 'rgba(255,255,255,0.05)';
+            const overlay = card.querySelector('.playlist-play-overlay');
+            if (overlay) overlay.style.opacity = '0';
+        });
+
+        playlistGrid.appendChild(card);
+    });
+
+    container.appendChild(playlistGrid);
+}
+
+export async function playPlaylist(playlist, cardElement = null) {
+    if (!playlist) return;
+    const playBtn = cardElement?.querySelector('.playlist-play-btn');
+    if (playBtn) {
+        playBtn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px;"></div>';
+    }
+
+    try {
+        let tracks = [];
+        const plId = playlist.source_id || playlist.id;
+        const source = playlist.source || 'youtube';
+
+        if (window.pywebview?.api?.get_playlist_tracks) {
+            const res = await window.pywebview.api.get_playlist_tracks(plId, source);
+            tracks = Array.isArray(res) ? res : (res?.tracks || []);
+        }
+
+        if (tracks && tracks.length > 0) {
+            if (window.pywebview?.api?.play_track) {
+                window.pywebview.api.play_track(tracks[0], tracks, 0);
+            } else if (window.NeDotify?.playTrack) {
+                window.NeDotify.playTrack(tracks[0], tracks);
+            }
+        } else {
+            // Fallback: search query for playlist title
+            const q = (playlist.title || playlist.name || '').trim();
+            if (q && window.pywebview?.api?.search) {
+                window.pywebview.api.search(q, source);
+            }
+        }
+    } catch (e) {
+        console.error("Error playing playlist:", e);
+    } finally {
+        if (playBtn) {
+            playBtn.innerHTML = '<i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>';
+            renderIcons();
+        }
+    }
+}
+
+export async function openPlaylistModal(playlist) {
+    let modal = document.getElementById('playlist-detail-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'playlist-detail-modal';
+        modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:9999; display:flex; align-items:center; justify-content:center; animation:fadeIn 0.25s ease; padding:20px;';
+        document.body.appendChild(modal);
+    }
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div style="background:var(--bg-card, #181818); border:1px solid rgba(255,255,255,0.12); border-radius:20px; width:100%; max-width:680px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.6);">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid rgba(255,255,255,0.08);">
+                <span style="font-weight:700; font-size:15px; color:var(--text-main);">Плейлист</span>
+                <button id="close-playlist-modal" style="background:none; border:none; color:var(--text-sec); cursor:pointer; padding:4px;">
+                    <i data-lucide="x" style="width:20px;height:20px"></i>
+                </button>
+            </div>
+            <div style="padding:20px; display:flex; gap:20px; align-items:center; background:linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%);">
+                <img src="${escapeHtml(playlist.cover_url || playlist.cover || playlist.cover_path || '')}" alt="" onerror="this.onerror=null;this.style.display='none'" style="width:110px; height:110px; border-radius:12px; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+                <div style="display:flex; flex-direction:column; gap:6px; flex:1; overflow:hidden;">
+                    <div style="font-size:20px; font-weight:800; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(playlist.title || playlist.name || 'Плейлист')}</div>
+                    <div style="font-size:14px; color:var(--text-sec);">${escapeHtml(playlist.author || playlist.artist || 'AURA Music')}</div>
+                    <div style="font-size:12px; color:var(--text-sec); opacity:0.8;">${playlist.track_count ? playlist.track_count + ' треков' : 'Плейлист'}</div>
+                    <div style="margin-top:8px; display:flex; gap:10px;">
+                        <button id="btn-play-full-playlist" style="padding:8px 18px; border-radius:24px; border:none; background:var(--primary); color:#fff; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                            <i data-lucide="play" style="width:14px;height:14px;fill:currentColor"></i> Слушать всё
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div id="playlist-modal-tracks" class="feed-scroll" style="flex:1; overflow-y:auto; padding:12px 20px; display:flex; flex-direction:column; gap:4px;">
+                <div class="empty-state" style="padding:30px;"><div class="spinner"></div><span>Загрузка треков плейлиста...</span></div>
+            </div>
+        </div>
+    `;
+    renderIcons();
+
+    document.getElementById('close-playlist-modal')?.addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.style.display = 'none';
+    });
+
+    let playlistTracks = [];
+    if (window.pywebview?.api?.get_playlist_tracks) {
+        try {
+            const plId = playlist.source_id || playlist.id;
+            const source = playlist.source || 'youtube';
+            const res = await window.pywebview.api.get_playlist_tracks(plId, source);
+            playlistTracks = Array.isArray(res) ? res : (res?.tracks || []);
+        } catch (e) {
+            console.error("Error loading playlist tracks:", e);
+        }
+    }
+
+    const tracksContainer = document.getElementById('playlist-modal-tracks');
+    if (!tracksContainer) return;
+
+    if (!playlistTracks || playlistTracks.length === 0) {
+        tracksContainer.innerHTML = '<div class="empty-state" style="padding:30px 0;">Треки этого плейлиста недоступны</div>';
+        return;
+    }
+
+    tracksContainer.innerHTML = '';
+    playlistTracks.forEach((t, idx) => {
+        tracksContainer.appendChild(createTrackElement(t, idx, playlistTracks, getCurrentTrack()));
+    });
+    renderIcons();
+
+    document.getElementById('btn-play-full-playlist')?.addEventListener('click', () => {
+        if (playlistTracks.length > 0) {
+            if (window.pywebview?.api?.play_track) {
+                window.pywebview.api.play_track(playlistTracks[0], playlistTracks, 0);
+            } else if (window.NeDotify?.playTrack) {
+                window.NeDotify.playTrack(playlistTracks[0], playlistTracks);
+            }
+            modal.style.display = 'none';
+        }
+    });
+}
+
+window.renderPlaylistGrid = renderPlaylistGrid;
+window.playPlaylist = playPlaylist;
+window.openPlaylistModal = openPlaylistModal;
 
 function showLoading() {
     const container = document.getElementById('search-results');

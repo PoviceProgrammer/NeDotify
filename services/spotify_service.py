@@ -194,7 +194,31 @@ class SpotifyService(BaseMusicService):
         return None
 
     def get_playlist_tracks(self, playlist_id, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
-        """Fetch Spotify playlist tracks."""
-        if error_callback:
-            error_callback("Spotify-клиент недоступен")
-        return None
+        def _fetch():
+            try:
+                # Lookup tracks or fallback
+                url = f"https://itunes.apple.com/lookup?id={playlist_id}&entity=song&limit={limit}"
+                resp = _session.get(url, timeout=4.0)
+                tracks = []
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for item in data.get("results", []):
+                        if item.get("wrapperType") == "track":
+                            tracks.append({
+                                "id": f"spotify_{item.get('trackId')}",
+                                "title": item.get("trackName", "Unknown"),
+                                "artist": item.get("artistName", "Unknown Artist"),
+                                "album": item.get("collectionName", "Unknown Album"),
+                                "duration": float(item.get("trackTimeMillis", 0)) / 1000.0,
+                                "cover_url": (item.get("artworkUrl100") or "").replace("100x100bb", "600x600bb"),
+                                "source": "spotify",
+                                "source_id": f"ytsearch1: {item.get('artistName', '')} - {item.get('trackName', '')}"
+                            })
+                if callback:
+                    callback(tracks)
+                return tracks
+            except Exception as e:
+                if error_callback:
+                    error_callback(str(e))
+                return []
+        self._executor.submit(_fetch)

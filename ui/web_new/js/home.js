@@ -321,16 +321,17 @@ export function renderArtists(artists) {
         card.style.minWidth = '120px';
         card.style.maxWidth = '120px';
         const cover = getCoverUrl(artist);
+        const artistName = artist.artist || artist.name || 'Unknown';
         card.innerHTML = `
             <div class="feed-card-cover">
-                ${coverImgHtml({ src: cover, coverUrl: artist.cover_url || '' })}
+                ${coverImgHtml({ src: cover, coverUrl: artist.cover_url || '', alt: artistName })}
             </div>
-            <div class="feed-card-title" style="text-align:center">${escapeHtml(artist.artist)}</div>
+            <div class="feed-card-title" style="text-align:center">${escapeHtml(artistName)}</div>
         `;
         card.addEventListener('click', () => {
             const input = document.getElementById('search-input');
             if (input) {
-                input.value = artist.artist;
+                input.value = artistName;
                 if (window.showPage) window.showPage('search');
                 input.dispatchEvent(new Event('input', { bubbles: true }));
             }
@@ -455,6 +456,7 @@ export function renderTopTracks(tracks) {
         const cover = getCoverUrl(track);
         const card = document.createElement('div');
         card.className = 'feed-card';
+        const playCount = track.play_count || track.plays || track.total_plays || 0;
         card.innerHTML = `
             <div class="feed-card-cover">
                 ${coverImgHtml({ src: cover, coverUrl: track.cover_url || '', sourceId: track.source_id || '', source: track.source || '' })}
@@ -463,7 +465,7 @@ export function renderTopTracks(tracks) {
                 </div>
             </div>
             <div class="feed-card-title">${escapeHtml(track.title || 'Unknown Title')}</div>
-            <div class="feed-card-sub">${escapeHtml(track.artist || 'Unknown')} (${track.plays || 0})</div>
+            <div class="feed-card-sub">${escapeHtml(track.artist || 'Unknown')} (${playCount})</div>
         `;
         card.onclick = () => {
             if (window.pywebview?.api) window.pywebview.api.play_track(track, tracks, i);
@@ -486,16 +488,18 @@ export function renderTopArtists(artists) {
     artists.forEach(artist => {
         const card = document.createElement('div');
         card.className = 'feed-card artist-card';
+        const artistName = artist.artist || artist.name || 'Unknown';
+        const playsCount = artist.total_plays || artist.play_count || artist.plays || 0;
         card.innerHTML = `
             <div class="feed-card-cover" style="border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, var(--accent), var(--bg-surface)); display: flex; align-items: center; justify-content: center;">
                 <i data-lucide="user" style="width:48px;height:48px;color:rgba(255,255,255,0.5)"></i>
             </div>
-            <div class="feed-card-title" style="text-align: center;">${escapeHtml(artist.artist || 'Unknown')}</div>
-            <div class="feed-card-sub" style="text-align: center;">${artist.plays || 0} раз</div>
+            <div class="feed-card-title" style="text-align: center;">${escapeHtml(artistName)}</div>
+            <div class="feed-card-sub" style="text-align: center;">${playsCount} раз</div>
         `;
         card.onclick = () => {
             window.appConfig = window.appConfig || {};
-            window.appConfig.searchQuery = artist.artist;
+            window.appConfig.searchQuery = artistName;
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
             const searchNav = document.querySelector('[data-page="search"]');
             if (searchNav) searchNav.classList.add('active');

@@ -505,7 +505,9 @@ export async function selectSection(type, data = null) {
         let tracks = [];
         try {
             if (window.pywebview?.api?.get_playlist_tracks) {
-                tracks = await window.pywebview.api.get_playlist_tracks(data.id) || [];
+                const res = await window.pywebview.api.get_playlist_tracks(data.id);
+                const rawTracks = Array.isArray(res) ? res : (res?.tracks || []);
+                tracks = Array.isArray(rawTracks) ? rawTracks : [];
             }
         } catch (e) {
             console.error('get_playlist_tracks failed:', e);
@@ -513,10 +515,13 @@ export async function selectSection(type, data = null) {
         }
         if (viewGen !== libraryGeneration) return;
 
+        if (!Array.isArray(tracks)) tracks = [];
+
         // Deduplicate tracks by id / source_id
         const seen = new Set();
         const uniqueTracks = [];
         tracks.forEach(t => {
+            if (!t) return;
             const key = String(t.id || t.source_id || `${(t.title || '').toLowerCase().trim()}___${(t.artist || '').toLowerCase().trim()}`);
             if (!seen.has(key)) {
                 seen.add(key);
@@ -525,7 +530,7 @@ export async function selectSection(type, data = null) {
         });
         tracks = uniqueTracks;
 
-        currentActiveTracks = tracks;
+        currentActiveTracks = Array.isArray(tracks) ? tracks : [];
         if (subEl) subEl.textContent = `${tracks.length} треков`;
 
         if (tracks.length === 0) {

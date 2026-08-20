@@ -198,6 +198,10 @@ class DatabaseManager:
             cursor.execute("ALTER TABLE tracks ADD COLUMN is_downloaded INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
             pass
+        try:
+            cursor.execute("ALTER TABLE playlists ADD COLUMN cover_url TEXT")
+        except sqlite3.OperationalError:
+            pass
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_downloaded ON tracks(is_downloaded)")
 
         # Dup cleanup migration
@@ -627,7 +631,7 @@ class DatabaseManager:
         like_query = f"%{query}%"
         cursor.execute(
             """
-            SELECT artist, COUNT(*) as track_count, SUM(play_count) as total_plays
+            SELECT artist, COUNT(*) as track_count, SUM(play_count) as total_plays, SUM(play_count) as play_count, SUM(play_count) as plays
             FROM tracks
             WHERE artist LIKE ?
             GROUP BY artist
@@ -653,6 +657,37 @@ class DatabaseManager:
             (like_query, like_query, limit),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+    def get_playlist_track_count(self, playlist_id: int) -> int:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = ?", (int(playlist_id),))
+        row = cursor.fetchone()
+        return row[0] if row else 0
+
+    def search_playlists(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        cursor = self.conn.cursor()
+        pattern = f"%{query.strip()}%"
+        try:
+            cursor.execute("SELECT id, name, description, created_at, cover_url FROM playlists WHERE name LIKE ? ORDER BY name ASC LIMIT ?", (pattern, limit))
+        except Exception:
+            cursor.execute("SELECT id, name, description, created_at, cover_path as cover_url FROM playlists WHERE name LIKE ? ORDER BY name ASC LIMIT ?", (pattern, limit))
+        rows = cursor.fetchall()
+        return [
+            {
+                "id": r["id"],
+                "title": r["name"],
+                "name": r["name"],
+                "description": dict(r).get("description") or "",
+                "author": "Local",
+                "artist": "Local",
+                "source": "local",
+                "source_id": str(r["id"]),
+                "type": "playlist",
+                "cover_url": dict(r).get("cover_url") or dict(r).get("cover_path") or "",
+                "track_count": self.get_playlist_track_count(r["id"]) if hasattr(self, "get_playlist_track_count") else 0,
+            }
+            for r in rows
+        ]
 
     def get_album_tracks(self, album_title: str, artist: str = None) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
@@ -780,7 +815,7 @@ class DatabaseManager:
         cursor = self.conn.cursor()
         cursor.execute(
             """
-            SELECT artist, COUNT(*) as track_count, SUM(play_count) as total_plays
+            SELECT artist, COUNT(*) as track_count, SUM(play_count) as total_plays, SUM(play_count) as play_count, SUM(play_count) as plays
             FROM tracks
             WHERE artist != 'Unknown Artist'
             GROUP BY artist

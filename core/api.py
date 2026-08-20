@@ -1133,6 +1133,8 @@ class AppApi:
                 try:
                     if result_type in ("albums", "album"):
                         local_results = self._core.db.search_albums(query)
+                    elif result_type in ("playlists", "playlist"):
+                        local_results = self._core.db.search_playlists(query) if hasattr(self._core.db, "search_playlists") else []
                     else:
                         local_results = self._core.db.search_tracks(query)
                     emit_results(local_results, "local")
@@ -1759,19 +1761,29 @@ class AppApi:
         return []
 
     def get_authentic_home_feed(self, limit: int = 20):
-        """Get personalized home feed recommendations asynchronously."""
-        def run():
-            try:
+        """Emit authentic home recommendations based on history & taste profile."""
+        try:
+            if hasattr(self._core.db, "get_user_history_tracks"):
+                history = self._core.db.get_user_history_tracks(limit=limit)
+            else:
                 history = self._core.db.get_history(limit=limit)
-                feed = self._core.recommendations.get_feed(history)
-                if isinstance(feed, dict):
-                    self._emit("authentic_home_ready", feed)
-                else:
-                    self._emit("authentic_home_ready", {"sections": feed or []})
-            except Exception as e:
-                logger.error(f"Error in get_authentic_home_feed: {e}")
-                self._emit("authentic_home_error", {"error": str(e)})
-        threading.Thread(target=run, daemon=True).start()
+
+            def _on_feed(feed_data):
+                sections = feed_data.get("sections", []) if isinstance(feed_data, dict) else (feed_data or [])
+                self._emit("authentic_home_ready", {"sections": sections})
+
+            def _on_err(err):
+                logger.warning(f"get_authentic_home_feed error: {err}")
+                # Fallback to popular tracks / default sections
+                self._emit("authentic_home_ready", {"sections": []})
+
+            if hasattr(self._core, "recommendations") and self._core.recommendations:
+                self._core.recommendations.get_feed(history=history, callback=_on_feed, error_callback=_on_err)
+            else:
+                self._emit("authentic_home_ready", {"sections": []})
+        except Exception as e:
+            logger.error(f"get_authentic_home_feed exception: {e}")
+            self._emit("authentic_home_ready", {"sections": []})
         return {}
 
     def get_profile_stats(self):
@@ -2011,16 +2023,16 @@ class AppApi:
         artists = self._core.db.get_top_artists(limit=max_results)
         if not artists:
             fallback_artists = [
-                {"name": "The Weeknd", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb214f3cf1cbe7139c1e26ffbb"},
-                {"name": "Dua Lipa", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb98165c7f8f6b49e0b82f0c76"},
-                {"name": "Eminem", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eba00b11c129b27a88fc72f36b"},
-                {"name": "Taylor Swift", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb5a00969a4698c3132a15fbb0"},
-                {"name": "Drake", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb4293385d324db8558179afd9"},
-                {"name": "Billie Eilish", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5ebd8b9980db67ba102fe319c87"},
-                {"name": "Queen", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb94bb714528c11e5f0378ea9f"},
-                {"name": "Coldplay", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb86523da9730f579d54a2753a"},
-                {"name": "Imagine Dragons", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb920798797f1f9a888c3e8003"},
-                {"name": "Ed Sheeran", "play_count": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb12a2f49da3c235730317b3c7"}
+                {"artist": "The Weeknd", "name": "The Weeknd", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb214f3cf1cbe7139c1e26ffbb"},
+                {"artist": "Dua Lipa", "name": "Dua Lipa", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb98165c7f8f6b49e0b82f0c76"},
+                {"artist": "Eminem", "name": "Eminem", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eba00b11c129b27a88fc72f36b"},
+                {"artist": "Taylor Swift", "name": "Taylor Swift", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb5a00969a4698c3132a15fbb0"},
+                {"artist": "Drake", "name": "Drake", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb4293385d324db8558179afd9"},
+                {"artist": "Billie Eilish", "name": "Billie Eilish", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5ebd8b9980db67ba102fe319c87"},
+                {"artist": "Queen", "name": "Queen", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb94bb714528c11e5f0378ea9f"},
+                {"artist": "Coldplay", "name": "Coldplay", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb86523da9730f579d54a2753a"},
+                {"artist": "Imagine Dragons", "name": "Imagine Dragons", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb920798797f1f9a888c3e8003"},
+                {"artist": "Ed Sheeran", "name": "Ed Sheeran", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb12a2f49da3c235730317b3c7"}
             ]
             artists = fallback_artists[:max_results]
         self._emit("artists_ready", artists)
