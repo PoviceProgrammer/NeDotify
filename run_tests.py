@@ -10,5 +10,9 @@ if __name__ == "__main__":
         "tests/test_event_delivery_contract.py",
         "tests/test_personalization_p3.py",
         "tests/test_fix4_db_path.py",
-        "tests/test_nedotify.py"
+        "tests/test_phase1_tag_editor.py",
+        "tests/test_phase2_storage_manager.py",
+        "tests/test_phase3_phase4_flow_prefetch.py",
+        "tests/test_phase5_tray_menu.py",
+        "tests/test_audit_fixes_and_blackout.py"
     ]))

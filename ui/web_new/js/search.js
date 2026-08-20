@@ -1,13 +1,13 @@
 // NeDotify вЂ” Search Module Redesign
-import { createTrackElement, renderIcons, filterVisibleTracks, escapeHtml } from './utils.js?v=20260817_3';
-import { getCurrentTrack } from './player.js?v=20260817_3';
+import { createTrackElement, renderIcons, filterVisibleTracks, escapeHtml } from './utils.js?v=20260820_1';
+import { getCurrentTrack } from './player.js?v=20260820_1';
 import { 
     loadArtistProfile, 
     ArtistPhotoComponent, 
     ArtistBioComponent, 
     ArtistAlbumsComponent, 
     ArtistTracksComponent 
-} from './artist_profile.js?v=20260817_3';
+} from './artist_profile.js?v=20260820_1';
 
 let searchDebounce = null;
 let currentSource = 'youtube'; // Default source is YouTube Music as shown in screenshot 1
@@ -299,7 +299,7 @@ function renderResults(tracks) {
             card.style.cssText = 'padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; cursor: pointer; transition: transform 0.2s, background 0.2s;';
             card.innerHTML = `
                 <div class="feed-card-cover" style="width: 90px; height: 90px; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, var(--primary), rgba(255,255,255,0.1)); display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px rgba(0,0,0,0.3);">
-                    ${cover ? `<img src="${escapeHtml(cover)}" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;">` : '<i data-lucide="user" style="width:40px;height:40px;color:rgba(255,255,255,0.6)"></i>'}
+                    ${cover ? `<img src="${escapeHtml(cover)}" alt="" onerror="this.onerror=null;this.style.display='none'" style="width:100%;height:100%;object-fit:cover;">` : '<i data-lucide="user" style="width:40px;height:40px;color:rgba(255,255,255,0.6)"></i>'}
                 </div>
                 <div style="font-weight: 700; font-size: 14px; color: #ffffff; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(artistName)}</div>
                 <div style="font-size: 11px; color: var(--text-sec);">Исполнитель • Профиль</div>
@@ -377,7 +377,7 @@ function renderAlbumGrid(albums, container) {
         card.innerHTML = `
             <div class="feed-card-cover album-cover-wrap fallback-gradient" style="width: 100%; aspect-ratio: 1/1; border-radius: 12px; overflow: hidden; background: ${grad}; display: flex; align-items: center; justify-content: center; position: relative; box-shadow: 0 8px 20px rgba(0,0,0,0.35);">
                 <svg class="fallback-note-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40%;height:40%;opacity:0.6;position:relative;z-index:1;"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-                ${cover ? `<img src="${escapeHtml(cover)}" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;z-index:2;">` : ''}
+                ${cover ? `<img src="${escapeHtml(cover)}" alt="" onerror="this.onerror=null;this.style.display='none'" style="width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;z-index:2;">` : ''}
                 <div class="album-play-overlay" style="position:absolute; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity 0.2s; z-index:3;">
                     <button class="album-play-btn" style="width:44px; height:44px; border-radius:50%; background:var(--primary); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.4); transition:transform 0.2s;">
                         <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
@@ -478,7 +478,7 @@ export async function openAlbumModal(album) {
                 </button>
             </div>
             <div style="padding:20px; display:flex; gap:20px; align-items:center; background:linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%);">
-                <img src="${escapeHtml(album.cover_url || album.cover || album.cover_path || '')}" alt="" onerror="this.style.display='none'" style="width:110px; height:110px; border-radius:12px; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+                <img src="${escapeHtml(album.cover_url || album.cover || album.cover_path || '')}" alt="" onerror="this.onerror=null;this.style.display='none'" style="width:110px; height:110px; border-radius:12px; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
                 <div style="display:flex; flex-direction:column; gap:6px; flex:1; overflow:hidden;">
                     <div style="font-size:20px; font-weight:800; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(album.title || 'Альбом')}</div>
                     <div style="font-size:14px; color:var(--text-sec);">${escapeHtml(album.artist || 'Исполнитель')}</div>

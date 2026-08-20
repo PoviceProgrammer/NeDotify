@@ -1,21 +1,21 @@
 // NeDotify - Main Entry Point
-import { initPlayer, applySettings, playTrack } from './player.js?v=20260817_3';
-import { initPages, showPage } from './pages.js?v=20260817_3';
-import { initSearch } from './search.js?v=20260817_3';
-import { loadHome } from './home.js?v=20260817_3';
-import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlaylist } from './library.js?v=20260817_3';
-import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js?v=20260817_3';
-import { initParticles } from './particles.js?v=20260817_3';
-import { initVisualizer } from './visualizer.js?v=20260817_3';
-import { initEvents } from './events.js?v=20260817_3';
-import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota } from './utils.js?v=20260817_3';
-import { initLyrics } from './lyrics.js?v=20260817_3';
-import { initEqualizer } from './equalizer.js?v=20260817_3';
-import { initQueue } from './queue.js?v=20260817_3';
-import { initOnboarding } from './onboarding.js?v=20260817_3';
-import { initContextMenu } from './contextmenu.js?v=20260817_3';
-import { initHotkeys } from './hotkeys.js?v=20260817_3';
-import { initEfficiency, initBlurObserver } from './efficiency.js?v=20260817_3';
+import { initPlayer, applySettings, playTrack } from './player.js?v=20260820_1';
+import { initPages, showPage } from './pages.js?v=20260820_1';
+import { initSearch } from './search.js?v=20260820_1';
+import { loadHome } from './home.js?v=20260820_1';
+import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlaylist } from './library.js?v=20260820_1';
+import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js?v=20260820_1';
+import { initParticles } from './particles.js?v=20260820_1';
+import { initVisualizer } from './visualizer.js?v=20260820_1';
+import { initEvents } from './events.js?v=20260820_1';
+import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota } from './utils.js?v=20260820_1';
+import { initLyrics } from './lyrics.js?v=20260820_1';
+import { initEqualizer } from './equalizer.js?v=20260820_1';
+import { initQueue } from './queue.js?v=20260820_1';
+import { initOnboarding } from './onboarding.js?v=20260820_1';
+import { initContextMenu } from './contextmenu.js?v=20260820_1';
+import { initHotkeys } from './hotkeys.js?v=20260820_1';
+import { initEfficiency, initBlurObserver } from './efficiency.js?v=20260820_1';
 
 // Bridge gate: resolves as soon as window.pywebview.api exists. Cold WebView2
 // starts can take ~16s to inject the bridge; callers await this instead of
@@ -471,7 +471,7 @@ async function init() {
 
 // ─── Profile Page ───
 // M-4: single cache-busting version — must match the ?v= used by static imports
-const CACHE_VERSION = '20260817_3';
+const CACHE_VERSION = '20260820_1';
 
 async function loadProfile() {
     try {

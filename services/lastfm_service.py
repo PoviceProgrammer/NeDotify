@@ -285,6 +285,7 @@ class LastFMService(BaseMusicService):
                 continue
             except Exception as e:
                 self.logger.warning(f'Last.fm request failed: {e}')
+                break
 
         stale = self._get_stale_cache(cache_key)
         if stale is not None:

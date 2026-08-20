@@ -1,5 +1,5 @@
 // NeDotify Р Р†Р вЂљ" Player Module
-import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml } from './utils.js?v=20260817_3';
+import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml } from './utils.js?v=20260820_1';
 
 let currentTrack = null;
 let isPlaying = false;
@@ -852,7 +852,7 @@ export function initPlayer() {
                             btn.addEventListener('click', async () => {
                                 await api('add_to_playlist', plId, currentTrack);
                                 optMenu.classList.remove('visible');
-                                const { showToast } = await import('./utils.js?v=20260817_3');
+                                const { showToast } = await import('./utils.js?v=20260820_1');
                                 showToast(`Добавлено в «${pl.name}»`, 'success');
                             });
                             itemsEl.appendChild(btn);
@@ -1498,15 +1498,19 @@ function setElSrc(id, src) {
             el.style.display = 'block';
             el.src = src;
             el.onerror = () => {
+                el.onerror = null;
                 if (el.src && el.src.includes('maxresdefault.jpg')) {
+                    el.onerror = () => { el.onerror = null; el.style.display = 'none'; };
                     el.src = el.src.replace('maxresdefault.jpg', 'hqdefault.jpg');
                 } else if (el.src && el.src.includes('sddefault.jpg')) {
+                    el.onerror = () => { el.onerror = null; el.style.display = 'none'; };
                     el.src = el.src.replace('sddefault.jpg', 'hqdefault.jpg');
                 } else {
                     el.style.display = 'none';
                 }
             };
         } else {
+            el.onerror = null;
             el.style.display = 'none';
         }
     }

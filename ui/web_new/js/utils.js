@@ -456,7 +456,7 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
     menu.innerHTML = `
         <div class="rich-menu-header">
             ${coverUrl ? `<div class="rich-menu-header-bg" style="background-image: url('${escapeHtml(coverUrl)}')"></div>` : ''}
-            <img class="rich-menu-cover" src="${escapeHtml(coverUrl || './assets/default_cover.png')}" onerror="this.style.opacity='0.4'">
+            <img class="rich-menu-cover" src="${escapeHtml(coverUrl || './assets/default_cover.png')}" onerror="this.onerror=null;this.style.opacity='0.4'">
             <div class="rich-menu-title-col">
                 <div class="rich-menu-title-row">
                     <span class="rich-menu-title">${escapeHtml(track.title || 'Неизвестный трек')}</span>

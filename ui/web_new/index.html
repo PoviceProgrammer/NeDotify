@@ -15,11 +15,11 @@
             }, 1000);
         });
     </script>
-    <script src="js/lucide.min.js?v=3"></script>
-    <script src="js/hls.min.js"></script>
-    <link rel="icon" type="image/png" href="logo.png">
-    <link rel="stylesheet" href="css/themes.css?v=20260817_3">
-    <link rel="stylesheet" href="css/styles.css?v=20260817_3">
+    <script src="js/lucide.min.js?v=20260820_1"></script>
+    <script src="js/hls.min.js?v=20260820_1"></script>
+    <link rel="icon" type="image/png" href="logo.png?v=20260820_1">
+    <link rel="stylesheet" href="css/themes.css?v=20260820_1">
+    <link rel="stylesheet" href="css/styles.css?v=20260820_1">
 </head>
 <body>
 
@@ -2042,7 +2042,7 @@
             <!-- Cover Art Column -->
             <div style="display:flex; flex-direction:column; align-items:center; gap:10px; width:130px; flex-shrink:0;">
                 <div style="position:relative; width:120px; height:120px; border-radius:10px; overflow:hidden; border:1px solid rgba(255,255,255,0.15); background:rgba(0,0,0,0.3);">
-                    <img id="modal-et-cover-img" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' fill='%2318181f'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23666' font-size='12' font-family='sans-serif'%3ENo Cover%3C/text%3E%3C/svg%3E" style="width:100%; height:100%; object-fit:cover;" onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'120\' height=\'120\' viewBox=\'0 0 120 120\'%3E%3Crect width=\'120\' height=\'120\' fill=\'%2318181f\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23666\' font-size=\'12\' font-family=\'sans-serif\'%3ENo Cover%3C/text%3E%3C/svg%3E';">
+                    <img id="modal-et-cover-img" src="assets/default_cover.png" alt="" style="width:100%; height:100%; object-fit:cover;" onerror="this.onerror=null;this.style.display='none';">
                 </div>
                 <button class="filter-btn" id="modal-et-btn-cover" style="width:100%; font-size:11px; padding:6px 4px; display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer;">
                     <i data-lucide="image" style="width:12px;height:12px"></i> Обложка
@@ -2225,7 +2225,7 @@
     </div>
 </div>
 
-<script type="module" src="js/main.js?v=20260817_3"></script><script>
+<script type="module" src="js/main.js?v=20260820_1"></script><script>
     // Initialize Lucide icons after DOM is ready
     document.addEventListener('DOMContentLoaded', () => {
         if (window.lucide) lucide.createIcons();

@@ -94,7 +94,7 @@ function renderQueue(tracks, currentIndex) {
             <div style="display:flex; align-items:center; color:var(--text-dim); cursor:grab; padding:0 8px;" class="drag-handle" title="Зажмите чтобы перетащить">
                 <i data-lucide="grip-vertical" style="width:16px;height:16px"></i>
             </div>
-            <img class="track-item-cover" src="${escapeHtml(getCoverUrl(track))}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM1NTUiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNOSAxOHYtN20wIDd2LW0wIDdhNSA1IDAgMCAxLTUgNW01LTV2LTRtMC00VjRtMCAwdjNtMCAwaDlNMCAwdjNtMCAwdi0zbTkgM2g5bTAgMHYzbTAgMHYtM20tOSAzdi0zbTkgM2gybTAgMHYtbTAgMGgyIi8+PC9zdmc+'">
+            ${getCoverUrl(track) ? `<img class="track-item-cover" src="${escapeHtml(getCoverUrl(track))}" alt="" onerror="this.onerror=null;this.style.display=\'none\';" loading="lazy">` : `<div class="track-item-cover fallback-note-cover" style="display:flex;align-items:center;justify-content:center;background:#18181f;border-radius:4px;"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#555" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`}
             <div class="track-item-info">
                 <div class="track-item-title" style="${index === currentIndex ? 'color:var(--primary)' : ''}">${escapeHtml(track.title || 'Unknown')}</div>
                 <div class="track-item-artist">${escapeHtml(track.artist || 'Unknown Artist')}</div>

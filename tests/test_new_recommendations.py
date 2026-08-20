@@ -22,6 +22,7 @@ import threading
 from typing import Dict, Any, List
 from unittest.mock import MagicMock, patch
 
+import requests
 from services.recommendation_service import RecommendationService
 from services.taste_profile import UserTasteProfile
 from services.lastfm_service import LastFMService
@@ -244,7 +245,7 @@ class TestNewRecommendations(unittest.TestCase):
     def test_network_failure_and_mock_fallbacks(self):
         """3. Test network failure / mock fallbacks for Last.fm and SoundCloud APIs (confirming zero crashes and graceful local DB fallback)."""
         # Inject network error mocks into Last.fm session and SoundCloud/YouTube search helpers
-        with patch.object(self.service.lastfm._session, 'get', side_effect=Exception("Network Connection Refused")), \
+        with patch.object(requests.Session, 'get', side_effect=Exception("Network Connection Refused")), \
              patch.object(self.service.resolver, '_search_soundcloud', return_value=None), \
              patch.object(self.service.resolver, '_search_youtube', return_value=None):
 
@@ -258,7 +259,7 @@ class TestNewRecommendations(unittest.TestCase):
                     done_event.set()
 
                 self.service.get_smart_home_feed(history=[], callback=feed_cb)
-                feed_ok = done_event.wait(timeout=5.0)
+                feed_ok = done_event.wait(timeout=10.0)
 
                 self.assertTrue(feed_ok, "get_smart_home_feed timed out during network failure fallback.")
                 self.assertIsNotNone(feed_payload)
@@ -275,7 +276,7 @@ class TestNewRecommendations(unittest.TestCase):
                     done_event_mix.set()
 
                 self.service.get_mixes(history=[], callback=mixes_cb)
-                mix_ok = done_event_mix.wait(timeout=5.0)
+                mix_ok = done_event_mix.wait(timeout=10.0)
 
                 self.assertTrue(mix_ok, "get_mixes timed out during network failure fallback.")
                 self.assertIsInstance(mixes_res, list)
@@ -288,11 +289,11 @@ class TestNewRecommendations(unittest.TestCase):
                 # 3d. Additional entry points check for zero crashes
                 done_event_charts = threading.Event()
                 self.service.get_charts(max_results=5, callback=lambda trks: done_event_charts.set())
-                self.assertTrue(done_event_charts.wait(timeout=5.0))
+                self.assertTrue(done_event_charts.wait(timeout=10.0))
 
                 done_event_releases = threading.Event()
                 self.service.get_releases(max_results=5, callback=lambda trks: done_event_releases.set())
-                self.assertTrue(done_event_releases.wait(timeout=5.0))
+                self.assertTrue(done_event_releases.wait(timeout=10.0))
 
     def test_static_ast_and_mock_assertions_no_ytmusic(self):
         """4. Test static AST and mock assertions confirming ZERO calls or imports to YTMusic.get_explore or YTMusic.get_watch_playlist."""

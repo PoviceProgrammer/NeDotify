@@ -1,6 +1,6 @@
 // NeDotify РІР‚" Artist Profile Module
-import { createTrackElement, renderIcons, formatTime, filterVisibleTracks, escapeHtml } from './utils.js?v=20260817_3';
-import { getCurrentTrack } from './player.js?v=20260817_3';
+import { createTrackElement, renderIcons, formatTime, filterVisibleTracks, escapeHtml } from './utils.js?v=20260820_1';
+import { getCurrentTrack } from './player.js?v=20260820_1';
 
 // Gradient seed backgrounds for fallback covers (visible ONLY if image loading fails)
 const colors = [
@@ -390,7 +390,7 @@ export class ArtistAlbumsComponent {
                     <div class="album-item-card" data-album-index="${index}">
                         <div class="album-cover-wrap fallback-gradient" style="background: ${grad}">
                             ${SVG_NOTE_FALLBACK}
-                            <img src="${escapeHtml(album.cover)}" alt="${escapeHtml(album.title)}" onerror="this.style.display='none'" loading="lazy">
+                            <img src="${escapeHtml(album.cover)}" alt="${escapeHtml(album.title)}" onerror="this.onerror=null;this.style.display='none'" loading="lazy">
                             <div class="album-play-overlay">
                                 <button class="album-play-btn" title="Воспроизвести альбом">
                                     <i data-lucide="play" style="width:18px;height:18px;fill:currentColor"></i>

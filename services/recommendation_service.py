@@ -310,9 +310,20 @@ class RecommendationService(BaseMusicService):
                 self.logger.warning(f"Last.fm get_charts failed ({e}), falling back to local DB/curated")
 
             if not tracks:
-                if self.db:
-                    db_tracks = self.db.get_most_played_tracks(limit=max_results)
-                    tracks = [self._format_ui_track(t) for t in db_tracks] if db_tracks else []
+                if self.db and hasattr(self.db, 'get_most_played_tracks'):
+                    try:
+                        db_tracks = self.db.get_most_played_tracks(limit=max_results)
+                        tracks = [self._format_ui_track(t) for t in db_tracks] if db_tracks else []
+                    except Exception:
+                        tracks = []
+                elif self.db:
+                    try:
+                        cursor = self.db.cursor()
+                        cursor.execute("SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path FROM tracks LIMIT ?", (max_results,))
+                        rows = cursor.fetchall()
+                        tracks = [self._format_ui_track(r) for r in rows] if rows else []
+                    except Exception:
+                        tracks = []
                 if not tracks:
                     tracks = CURATED_WELCOME_TRACKS[:max_results]
 
@@ -367,9 +378,20 @@ class RecommendationService(BaseMusicService):
                 self.logger.warning(f"Last.fm get_feed failed ({e}), falling back to local DB/curated")
 
             if not resolved_list:
-                if self.db:
-                    db_tracks = self.db.get_user_history_tracks(limit=max_results)
-                    resolved_list = [self._format_ui_track(t) for t in db_tracks] if db_tracks else []
+                if self.db and hasattr(self.db, 'get_user_history_tracks'):
+                    try:
+                        db_tracks = self.db.get_user_history_tracks(limit=max_results)
+                        resolved_list = [self._format_ui_track(t) for t in db_tracks] if db_tracks else []
+                    except Exception:
+                        resolved_list = []
+                elif self.db:
+                    try:
+                        cursor = self.db.cursor()
+                        cursor.execute("SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path FROM tracks LIMIT ?", (max_results,))
+                        rows = cursor.fetchall()
+                        resolved_list = [self._format_ui_track(r) for r in rows] if rows else []
+                    except Exception:
+                        resolved_list = []
                 if not resolved_list:
                     resolved_list = CURATED_WELCOME_TRACKS[:max_results]
 
@@ -453,9 +475,20 @@ class RecommendationService(BaseMusicService):
                 self.logger.warning(f"Last.fm get_releases failed ({e}), falling back to local DB/curated")
 
             if not tracks:
-                if self.db:
-                    db_tracks = self.db.get_recently_added_tracks(limit=max_results)
-                    tracks = [self._format_ui_track(t) for t in db_tracks] if db_tracks else []
+                if self.db and hasattr(self.db, 'get_recently_added_tracks'):
+                    try:
+                        db_tracks = self.db.get_recently_added_tracks(limit=max_results)
+                        tracks = [self._format_ui_track(t) for t in db_tracks] if db_tracks else []
+                    except Exception:
+                        tracks = []
+                elif self.db:
+                    try:
+                        cursor = self.db.cursor()
+                        cursor.execute("SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path FROM tracks LIMIT ?", (max_results,))
+                        rows = cursor.fetchall()
+                        tracks = [self._format_ui_track(r) for r in rows] if rows else []
+                    except Exception:
+                        tracks = []
                 if not tracks:
                     tracks = CURATED_WELCOME_TRACKS[:max_results]
 

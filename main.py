@@ -40,6 +40,15 @@ try:
 
     def _capture_bottle_run(app=None, **kwargs):
         _BOTTLE_APP[0] = app
+        if app is not None:
+            try:
+                @app.hook('after_request')
+                def _disable_http_cache():
+                    _bottle.response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+                    _bottle.response.headers['Pragma'] = 'no-cache'
+                    _bottle.response.headers['Expires'] = '0'
+            except Exception:
+                pass
         return _orig_bottle_run(app=app, **kwargs)
 
     _bottle.run = _capture_bottle_run
@@ -243,7 +252,7 @@ def main():
     window.events.loaded += on_loaded
     window.events.closed += on_closed
 
-    _FALLBACK_PNG = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\rIDATx\x9cc`\x00\x00\x00\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82'
+    _FALLBACK_PNG = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc````\x00\x00\x00\x05\x00\x01\xa5\xf6E@\x00\x00\x00\x00IEND\xaeB`\x82'
 
     # Watchdog: if the JS bridge never comes up (WebView2 init hang), log it,
     # and perform a real detached process restart after registering bridge-free close route.
@@ -275,16 +284,41 @@ def main():
                 _bottle.response.content_type = 'image/png'
                 return _FALLBACK_PNG
 
+            def _covers_fallback(filepath=''):
+                static_file = os.path.join(base_dir, "ui", "web_new", "covers", filepath)
+                if os.path.exists(static_file):
+                    return _bottle.static_file(filepath, root=os.path.join(base_dir, "ui", "web_new", "covers"))
+                _bottle.response.content_type = 'image/png'
+                return _FALLBACK_PNG
+
             route_close = app.route('/__aura_close', method='POST')(_close_handler)
             route_assets = app.route('/assets/<filepath:path>')(_assets_fallback)
+            route_covers = app.route('/covers/<filepath:path>')(_covers_fallback)
 
-            # Bottle matches routes in registration order; move ours ahead of catch-all
-            routes = getattr(app, 'routes', None)
-            if isinstance(routes, list):
-                for r in (route_assets, route_close):
-                    if r in routes:
-                        routes.remove(r)
-                        routes.insert(0, r)
+            # Global 404 safety net: intercept any broken image queries and return transparent 1x1 PNG
+            @app.error(404)
+            def _image_404_handler(error):
+                try:
+                    req_path = _bottle.request.path.lower()
+                    if any(req_path.endswith(ext) for ext in ('.png', '.jpg', '.jpeg', '.webp', '.ico', '.svg', '.gif')):
+                        _bottle.response.content_type = 'image/png'
+                        return _FALLBACK_PNG
+                except Exception:
+                    pass
+                return error.body
+
+            # Properly recompile Bottle Router so custom dynamic routes match before pywebview catch-all
+            try:
+                app.router.__init__()
+                custom_callbacks = {_assets_fallback, _covers_fallback, _close_handler}
+                custom_routes = [r for r in app.routes if getattr(r, 'callback', None) in custom_callbacks]
+                other_routes = [r for r in app.routes if getattr(r, 'callback', None) not in custom_callbacks]
+                app.routes[:] = custom_routes + other_routes
+                for r in app.routes:
+                    app.router.add(r.rule, r.method, r, name=r.name)
+            except Exception as re_err:
+                logging.debug(f"[startup] Router recompile note: {re_err}")
+
             logging.info(f"[startup] bridge-free close and fallback assets endpoints registered")
         except Exception as e:
             logging.warning(f"[startup] close endpoint registration failed: {e}")
@@ -328,12 +362,12 @@ def main():
     threading.Thread(target=_register_close_route, daemon=True).start()
     threading.Thread(target=_startup_watchdog, daemon=True).start()
 
-    # Start the application loop (debug=True enables DevTools via F12 / Right-click Inspect)
+    # Start the application loop (debug=False disables DevTools)
     logging.info(f"[startup] WebView2 runtime setting: {webview.settings.get('WEBVIEW2_RUNTIME_PATH', 'default')}")
     logging.info(f"[startup] webview loop starting (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
     _storage_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'webview2_data')
     os.makedirs(_storage_dir, exist_ok=True)
-    webview.start(http_server=True, debug=True, private_mode=False, storage_path=_storage_dir)
+    webview.start(http_server=True, debug=False, private_mode=False, storage_path=_storage_dir)
 
     # Save session before exit
     try:
