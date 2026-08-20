@@ -191,42 +191,59 @@ def main():
 
     # Single Instance Guard
     import tempfile
+    _INSTANCE_MUTEX = None
+
     def _acquire_instance_lock():
-        lock_path = os.path.join(tempfile.gettempdir(), 'nedotify_instance.lock')
-        if os.path.exists(lock_path):
+        nonlocal _INSTANCE_MUTEX
+        if sys.platform == "win32":
             try:
-                with open(lock_path, 'r') as f:
-                    old_pid = int(f.read().strip())
-                if old_pid != os.getpid():
-                    import ctypes
-                    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-                    STILL_ACTIVE = 259
-                    kernel32 = ctypes.windll.kernel32
-                    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, old_pid)
-                    if handle:
+                import ctypes
+                from ctypes import wintypes
+                kernel32 = ctypes.windll.kernel32
+                kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+                kernel32.CreateMutexW.restype = wintypes.HANDLE
+                ERROR_ALREADY_EXISTS = 183
+
+                _INSTANCE_MUTEX = kernel32.CreateMutexW(None, False, "Local\\NeDotify_App_Single_Instance_Mutex")
+                if _INSTANCE_MUTEX and kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+                    logging.info("[startup] Another instance of NeDotify is already running; exiting cleanly.")
+                    sys.exit(0)
+            except Exception as e:
+                logging.debug(f"[startup] Mutex acquisition note: {e}")
+        else:
+            lock_path = os.path.join(tempfile.gettempdir(), 'nedotify_instance.lock')
+            if os.path.exists(lock_path):
+                try:
+                    with open(lock_path, 'r') as f:
+                        old_pid = int(f.read().strip())
+                    if old_pid != os.getpid():
                         try:
-                            code = ctypes.c_ulong()
-                            if kernel32.GetExitCodeProcess(handle, ctypes.byref(code)) and code.value == STILL_ACTIVE:
-                                logging.info(f"[startup] Another instance is already running (PID {old_pid}); exiting cleanly.")
-                                sys.exit(0)
-                        finally:
-                            kernel32.CloseHandle(handle)
+                            os.kill(old_pid, 0)
+                            logging.info(f"[startup] Another instance is already running (PID {old_pid}); exiting cleanly.")
+                            sys.exit(0)
+                        except OSError:
+                            pass
+                except Exception:
+                    pass
+            try:
+                with open(lock_path, 'w') as f:
+                    f.write(str(os.getpid()))
+            except Exception:
+                pass
+
+    def _release_instance_lock():
+        nonlocal _INSTANCE_MUTEX
+        if sys.platform == "win32" and _INSTANCE_MUTEX:
+            try:
+                import ctypes
+                ctypes.windll.kernel32.CloseHandle(_INSTANCE_MUTEX)
+                _INSTANCE_MUTEX = None
             except Exception:
                 pass
         try:
-            with open(lock_path, 'w') as f:
-                f.write(str(os.getpid()))
-        except Exception:
-            pass
-
-    def _release_instance_lock():
-        try:
             lock_path = os.path.join(tempfile.gettempdir(), 'nedotify_instance.lock')
             if os.path.exists(lock_path):
-                with open(lock_path, 'r') as f:
-                    cur_pid = int(f.read().strip())
-                if cur_pid == os.getpid():
-                    os.remove(lock_path)
+                os.remove(lock_path)
         except Exception:
             pass
 
