@@ -24,6 +24,8 @@ export function escapeHtml(str) {
         .replace(/'/g, '&#039;');
 }
 
+export const DEFAULT_COVER_DATA_URI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%2318181b'/%3E%3Cpath d='M40 60V30l25-5v35' stroke='%2371717a' stroke-width='4' fill='none'/%3E%3Ccircle cx='35' cy='60' r='8' fill='%2371717a'/%3E%3Ccircle cx='60' cy='55' r='8' fill='%2371717a'/%3E%3C/svg%3E";
+
 export function formatTime(seconds) {
     if (!seconds || seconds <= 0) return "0:00";
     const m = Math.floor(seconds / 60);
@@ -457,7 +459,7 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
     menu.innerHTML = `
         <div class="rich-menu-header">
             ${coverUrl ? `<div class="rich-menu-header-bg" style="background-image: url('${escapeHtml(coverUrl)}')"></div>` : ''}
-            <img class="rich-menu-cover" src="${escapeHtml(coverUrl || './assets/default_cover.png')}" onerror="this.onerror=null;this.style.opacity='0.4'">
+            <img class="rich-menu-cover" src="${escapeHtml(coverUrl || DEFAULT_COVER_DATA_URI)}" onerror="this.onerror=null;this.src='${DEFAULT_COVER_DATA_URI}';">
             <div class="rich-menu-title-col">
                 <div class="rich-menu-title-row">
                     <span class="rich-menu-title">${escapeHtml(track.title || 'Неизвестный трек')}</span>
@@ -724,7 +726,7 @@ export function openEditTagsModal(track) {
     if (coverPathInput) coverPathInput.value = '';
 
     const coverUrl = getCoverUrl(track);
-    if (coverImg) coverImg.src = coverUrl || './assets/default_cover.png';
+    if (coverImg) coverImg.src = coverUrl || DEFAULT_COVER_DATA_URI;
 
     modal.style.display = 'flex';
     modal.classList.remove('hidden');
