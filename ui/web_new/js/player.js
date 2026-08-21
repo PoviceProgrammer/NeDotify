@@ -91,7 +91,7 @@ function loadAudioSource(audioEl, src) {
 }
 
 // Flow Autoplay & Prefetch State (Phase 3 & Phase 4)
-let isFlowEnabled = localStorage.getItem('nedotify_player_flow_enabled') !== 'false';
+let isFlowEnabled = (localStorage.getItem('nedotify_player_queue_autopilot') ?? localStorage.getItem('nedotify_player_flow_enabled')) !== 'false';
 let lastFlowFetchTime = 0;
 let flowSessionCount = 0;
 const flowHistoryKeys = new Set();
@@ -109,6 +109,7 @@ export function updateFlowButtons() {
 
 export function toggleFlow() {
     isFlowEnabled = !isFlowEnabled;
+    localStorage.setItem('nedotify_player_queue_autopilot', isFlowEnabled ? 'true' : 'false');
     localStorage.setItem('nedotify_player_flow_enabled', isFlowEnabled ? 'true' : 'false');
     updateFlowButtons();
     window.dispatchEvent(new CustomEvent('nedotify:toast', {
@@ -434,6 +435,14 @@ export function playTrack(track, streamUrl) {
         currentTrackRetries = 0;
     }
 
+    // ReplayGain LUFS volume normalization
+    const trackLufs = track.loudness_lufs !== undefined && track.loudness_lufs !== null ? track.loudness_lufs : track.lufs;
+    if (trackLufs !== undefined && trackLufs !== null && !isNaN(Number(trackLufs))) {
+        currentReplayGain = Math.min(2.0, Math.max(0.1, Math.pow(10, (TARGET_LUFS - Number(trackLufs)) / 20)));
+    } else {
+        currentReplayGain = 1.0;
+    }
+
     const newAudio = activeAudio === audioA ? audioB : audioA;
     const oldAudio = activeAudio;
     
@@ -483,7 +492,7 @@ export function playTrack(track, streamUrl) {
     else if ('webkitPreservesPitch' in newAudio) newAudio.webkitPreservesPitch = currentPreservesPitch;
     else if ('mozPreservesPitch' in newAudio) newAudio.mozPreservesPitch = currentPreservesPitch;
 
-    const targetVol = isMuted ? 0 : (currentVolume / 100) * currentReplayGain;
+    const targetVol = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
     newAudio.volume = targetVol;
     
     const playPromise = newAudio.play();
@@ -824,14 +833,14 @@ export function initPlayer() {
             currentVolume = Math.round(pct * 100);
             setEl('pb-volume-fill', 'width', `${pct * 100}%`);
             updateVolumeIcon(currentVolume);
-            activeAudio.volume = isMuted ? 0 : (currentVolume / 100) * currentReplayGain;
+            activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
             // M-1: throttle RPC while dragging — last value wins
             scheduleVolumeRpc(currentVolume, false);
         },
         onRelease: (pct) => {
             isDraggingVolume = false;
             currentVolume = Math.round(pct * 100);
-            activeAudio.volume = isMuted ? 0 : (currentVolume / 100) * currentReplayGain;
+            activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
             // M-1: flush the final value immediately
             scheduleVolumeRpc(currentVolume, true);
         }
@@ -842,7 +851,7 @@ export function initPlayer() {
         currentVolume = Math.max(0, Math.min(100, currentVolume + delta));
         setEl('pb-volume-fill', 'width', `${currentVolume}%`);
         updateVolumeIcon(currentVolume);
-        if (activeAudio) activeAudio.volume = isMuted ? 0 : (currentVolume / 100) * currentReplayGain;
+        if (activeAudio) activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
         // M-1: discrete event — send immediately
         scheduleVolumeRpc(currentVolume, true);
     };
@@ -851,7 +860,7 @@ export function initPlayer() {
     const volBtn = document.getElementById('pb-volume-btn');
     if (volBtn) volBtn.addEventListener('click', () => {
         isMuted = !isMuted;
-        activeAudio.volume = isMuted ? 0 : (currentVolume / 100) * currentReplayGain;
+        activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
         const vfill = document.getElementById('pb-volume-fill');
         if (vfill) vfill.style.opacity = isMuted ? '0.3' : '1';
         updateVolumeIcon(currentVolume, isMuted);
@@ -994,8 +1003,8 @@ function animateProgress(timestamp) {
         animFrameId = null;
         return;
     }
-    animFrameId = requestAnimationFrame(animateProgress);
     if (document.hidden) return;
+    animFrameId = requestAnimationFrame(animateProgress);
 
     // Throttle progress bar updates to ~15 FPS (66ms) — imperceptible and saves GPU
     if (timestamp - lastProgressFrame < 66) return;
@@ -1120,6 +1129,13 @@ function animateProgress(timestamp) {
     }
 }
 
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && isPlaying && !animFrameId) {
+        lastProgressFrame = performance.now();
+        animFrameId = requestAnimationFrame(animateProgress);
+    }
+});
+
 export async function triggerFlowAutoplayImmediate() {
     if (!isFlowEnabled || flowSessionCount >= 200 || !currentTrack) return;
     if (!window.pywebview?.api?.get_flow_tracks) return;
@@ -1176,6 +1192,13 @@ export function onTrackChanged(track) {
     currentTrack = track;
     currentPosMs = 0;
     targetPosMs = 0;
+
+    const trackLufs = track.loudness_lufs !== undefined && track.loudness_lufs !== null ? track.loudness_lufs : track.lufs;
+    if (trackLufs !== undefined && trackLufs !== null && !isNaN(Number(trackLufs))) {
+        currentReplayGain = Math.min(2.0, Math.max(0.1, Math.pow(10, (TARGET_LUFS - Number(trackLufs)) / 20)));
+    } else {
+        currentReplayGain = 1.0;
+    }
     
     if (track.duration && track.duration > 0) {
         if (track.duration > 50000) {
@@ -1330,9 +1353,11 @@ export function onTrackChanged(track) {
     // Update Player Page ambient background (cover image or fallback to standard ambient background)
     const playerBgGlow = document.getElementById('player-bg-glow');
     if (playerBgGlow) {
+        playerBgGlow.classList.add('player-bg-glow-downscaled');
         if (coverUrl && coverUrl.trim() !== '') {
             const bgImg = new Image();
             bgImg.onload = () => {
+                playerBgGlow.classList.add('player-bg-glow-downscaled');
                 playerBgGlow.style.backgroundImage = `url("${coverUrl}")`;
                 playerBgGlow.style.backgroundSize = 'cover';
                 playerBgGlow.style.backgroundPosition = 'center';
