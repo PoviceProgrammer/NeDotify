@@ -418,8 +418,55 @@ export class ArtistPhotoComponent {
                 ${mockBadge}
             </div>
             <h2 class="artist-name-title">${escapeHtml(this.artistData.name)}</h2>
+            <div class="artist-hero-actions" style="margin-top:12px; display:flex; align-items:center; gap:10px; pointer-events:auto;">
+                <button class="artist-btn-play-all" title="Слушать всё" style="display:inline-flex; align-items:center; gap:6px; padding:7px 16px; border-radius:20px; background:var(--primary); color:#ffffff; font-size:12px; font-weight:700; border:none; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,0.3); transition:transform 0.15s, opacity 0.15s; pointer-events:auto;">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="none"><polygon points="6 4 18 12 6 20 6 4"></polygon></svg>
+                    <span>Слушать</span>
+                </button>
+                <button class="artist-btn-shuffle" title="Перемешать" style="display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:20px; background:rgba(255,255,255,0.15); backdrop-filter:blur(8px); color:#ffffff; font-size:12px; font-weight:600; border:1px solid rgba(255,255,255,0.2); cursor:pointer; transition:transform 0.15s, opacity 0.15s; pointer-events:auto;">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"></path><path d="m18 2 4 4-4 4"></path><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"></path><path d="M22 18h-5.9c-1.3 0-2.5-.7-3.3-1.8l-.5-.8"></path><path d="m18 14 4 4-4 4"></path></svg>
+                    <span>Перемешать</span>
+                </button>
+            </div>
         `;
         container.appendChild(overlay);
+
+        const btnPlayAll = overlay.querySelector('.artist-btn-play-all');
+        if (btnPlayAll) {
+            btnPlayAll.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const tracks = this.artistData.tracks || [];
+                if (tracks.length === 0) {
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'У исполнителя нет доступных треков', type: 'warning' } }));
+                    return;
+                }
+                if (window.pywebview?.api?.play_track) {
+                    window.pywebview.api.play_track(tracks[0], tracks, 0);
+                } else if (window.NeDotify?.playTrack) {
+                    window.NeDotify.playTrack(tracks[0], tracks);
+                }
+            });
+        }
+
+        const btnShuffle = overlay.querySelector('.artist-btn-shuffle');
+        if (btnShuffle) {
+            btnShuffle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                const tracks = this.artistData.tracks || [];
+                if (tracks.length === 0) {
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'У исполнителя нет доступных треков', type: 'warning' } }));
+                    return;
+                }
+                const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+                if (window.pywebview?.api?.play_track) {
+                    window.pywebview.api.play_track(shuffled[0], shuffled, 0);
+                } else if (window.NeDotify?.playTrack) {
+                    window.NeDotify.playTrack(shuffled[0], shuffled);
+                }
+            });
+        }
         
         return container;
     }
