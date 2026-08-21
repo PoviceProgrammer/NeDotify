@@ -685,7 +685,7 @@ export class ArtistTracksComponent {
                     Популярные треки (${this.tracks.length})
                 </h3>
             </div>
-            <div class="artist-tracks-list feed-scroll" id="artist-tracks-list-scroll" style="max-height: 520px; overflow-y: auto;">
+            <div class="artist-tracks-list" id="artist-tracks-list-scroll" style="flex:1; overflow-y:auto;">
                 <!-- Tracks will be appended here -->
             </div>
             ${this.tracks.length > this.loadedCount ? `

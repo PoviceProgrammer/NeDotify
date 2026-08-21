@@ -531,7 +531,7 @@ export async function openAlbumModal(album) {
                     </div>
                 </div>
             </div>
-            <div id="album-modal-tracks" class="feed-scroll" style="flex:1; overflow-y:auto; padding:12px 20px; display:flex; flex-direction:column; gap:4px;">
+            <div id="album-modal-tracks" style="flex:1; overflow-y:auto; padding:12px 20px; display:flex; flex-direction:column; gap:4px;">
                 <div class="empty-state" style="padding:30px;"><div class="spinner"></div><span>Загрузка треков альбома...</span></div>
             </div>
         </div>
@@ -736,7 +736,7 @@ export async function openPlaylistModal(playlist) {
                     </div>
                 </div>
             </div>
-            <div id="playlist-modal-tracks" class="feed-scroll" style="flex:1; overflow-y:auto; padding:12px 20px; display:flex; flex-direction:column; gap:4px;">
+            <div id="playlist-modal-tracks" style="flex:1; overflow-y:auto; padding:12px 20px; display:flex; flex-direction:column; gap:4px;">
                 <div class="empty-state" style="padding:30px;"><div class="spinner"></div><span>Загрузка треков плейлиста...</span></div>
             </div>
         </div>

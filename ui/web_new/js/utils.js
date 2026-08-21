@@ -276,9 +276,15 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
             e.preventDefault();
             track.is_favorite = !track.is_favorite;
             likeBtn.classList.toggle('liked', track.is_favorite);
-            const icon = likeBtn.querySelector('i');
+            const icon = likeBtn.querySelector('i, svg');
             if (icon) {
-                icon.style.fill = track.is_favorite ? 'currentColor' : 'none';
+                if (track.is_favorite) {
+                    icon.style.fill = 'currentColor';
+                    icon.style.color = 'var(--primary, #e11d48)';
+                } else {
+                    icon.style.fill = 'none';
+                    icon.style.color = '';
+                }
             }
 
             // Sync with localStorage (M-2: store IDs only, not full track objects)

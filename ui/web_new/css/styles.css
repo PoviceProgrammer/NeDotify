@@ -2831,10 +2831,12 @@ select option {
 .artist-tracks-list {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding-right: 6px;
     display: flex;
     flex-direction: column;
     gap: 6px;
+    scrollbar-gutter: stable;
 }
 
 .clickable-artist {
@@ -3054,7 +3056,33 @@ select option {
     100% { transform: scale(1) rotate(0deg); }
 }
 
-.like-btn.liked i, .like-btn.liked svg {
+.like-btn.liked,
+.icon-btn.liked,
+.like-btn.active,
+.player-card-btn.active,
+#pb-btn-like.active,
+#pp-btn-like.active,
+#mp-btn-like.active {
+    color: var(--primary, #e11d48) !important;
+}
+
+.like-btn.liked svg,
+.like-btn.liked i,
+.icon-btn.liked svg,
+.icon-btn.liked i,
+.like-btn.active svg,
+.like-btn.active i,
+.player-card-btn.active svg,
+.player-card-btn.active i,
+#pb-btn-like.active svg,
+#pb-btn-like.active i,
+#pp-btn-like.active svg,
+#pp-btn-like.active i,
+#mp-btn-like.active svg,
+#mp-btn-like.active i {
+    color: var(--primary, #e11d48) !important;
+    fill: var(--primary, #e11d48) !important;
+    stroke: var(--primary, #e11d48) !important;
     animation: heartPulse 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 

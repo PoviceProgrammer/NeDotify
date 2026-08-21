@@ -456,12 +456,16 @@ async function init() {
 
         // Settings already fetched early in init()
 
-        // Horizontal wheel scroll for feed containers
+        // Horizontal wheel scroll for feed containers (only when element has horizontal scroll and not vertical)
         document.addEventListener('wheel', (e) => {
-            const target = e.target.closest('.feed-scroll');
+            const target = e.target.closest('.feed-scroll, .artist-albums-carousel, .feed-row, .carousel-track');
             if (target && e.deltaY !== 0) {
-                e.preventDefault();
-                target.scrollLeft += e.deltaY;
+                const hasHorizontalScroll = target.scrollWidth > target.clientWidth;
+                const hasVerticalScroll = target.scrollHeight > target.clientHeight;
+                if (hasHorizontalScroll && !hasVerticalScroll) {
+                    e.preventDefault();
+                    target.scrollLeft += e.deltaY;
+                }
             }
         }, { passive: false });
 
