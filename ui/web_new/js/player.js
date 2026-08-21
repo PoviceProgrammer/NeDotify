@@ -365,9 +365,18 @@ function setupAudioEvents(audio) {
             onStateChanged('paused');
         }
     });
-    audio.addEventListener('ended', () => {
+    audio.addEventListener('ended', async () => {
         if (audio === activeAudio) {
-            api('next_track');
+            let advanced = false;
+            if (window.pywebview?.api?.next_track) {
+                const nextRes = await window.pywebview.api.next_track();
+                if (nextRes) advanced = true;
+            } else {
+                api('next_track');
+            }
+            if (!advanced && isFlowEnabled && currentTrack) {
+                await triggerFlowAutoplayImmediate();
+            }
         }
     });
     audio.addEventListener('error', (e) => {
@@ -1078,6 +1087,54 @@ function animateProgress(timestamp) {
                 }
             }
         }
+    }
+}
+
+export async function triggerFlowAutoplayImmediate() {
+    if (!isFlowEnabled || flowSessionCount >= 200 || !currentTrack) return;
+    if (!window.pywebview?.api?.get_flow_tracks) return;
+    try {
+        isFlowFetching = true;
+        let queueIds = [];
+        if (window.pywebview?.api?.get_queue) {
+            const q = await window.pywebview.api.get_queue();
+            queueIds = ((q && q.tracks) || []).map(t => t.id || t.source_id).filter(Boolean);
+        }
+        const excludeIds = [...queueIds, ...Array.from(flowHistoryKeys)];
+        const newTracks = await window.pywebview.api.get_flow_tracks(currentTrack, 6, excludeIds);
+        if (newTracks && Array.isArray(newTracks) && newTracks.length > 0) {
+            const filtered = newTracks.filter(nt => {
+                const k1 = nt.id || nt.source_id;
+                const k2 = `${(nt.artist || '').toLowerCase()}:${(nt.title || '').toLowerCase()}`;
+                if (k1 && flowHistoryKeys.has(k1)) return false;
+                if (flowHistoryKeys.has(k2)) return false;
+                if (queueIds.includes(k1)) return false;
+                return true;
+            });
+            if (filtered.length > 0) {
+                incrementQueueVersion();
+                for (const nt of filtered) {
+                    const k1 = nt.id || nt.source_id;
+                    const k2 = `${(nt.artist || '').toLowerCase()}:${(nt.title || '').toLowerCase()}`;
+                    if (k1) flowHistoryKeys.add(k1);
+                    flowHistoryKeys.add(k2);
+                    if (window.pywebview?.api?.add_to_queue) {
+                        await window.pywebview.api.add_to_queue(nt);
+                    }
+                }
+                flowSessionCount += filtered.length;
+                window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                    detail: { msg: `📻 «Бесконечная волна»: подобрано ${filtered.length} похожих треков`, type: 'info' }
+                }));
+                if (window.pywebview?.api?.next_track) {
+                    await window.pywebview.api.next_track();
+                }
+            }
+        }
+    } catch (err) {
+        console.debug('Immediate flow autoplay error:', err);
+    } finally {
+        setTimeout(() => { isFlowFetching = false; }, 8000);
     }
 }
 

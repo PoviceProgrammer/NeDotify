@@ -351,6 +351,37 @@ class YouTubeService(BaseMusicService):
         self._executor.submit(_search)
         return None
 
+    def search_sync(self, query: str, limit: int = 20, result_type: str = None, timeout: float = 6.0) -> list:
+        """Synchronous search wrapper over YouTube search with timeout <= 6s.
+        Returns list of track dictionaries, or [] on any error/timeout (never raises).
+        """
+        import threading
+        result = []
+        event = threading.Event()
+
+        def _on_success(tracks):
+            nonlocal result
+            if isinstance(tracks, list):
+                result = tracks
+            event.set()
+
+        def _on_error(err):
+            event.set()
+
+        try:
+            self.search(
+                query=query,
+                max_results=limit,
+                result_type=result_type,
+                callback=_on_success,
+                error_callback=_on_error,
+                prefetch=False
+            )
+            event.wait(timeout=min(timeout, 6.0))
+        except Exception as e:
+            logger.debug(f"YouTube search_sync failed: {e}")
+        return result or []
+
     def get_album_tracks(self, browse_id: str, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
         """Fetch YouTube Music album tracks via ytmusicapi. Runs in background thread."""
         if not HAS_YTDLP or not HAS_YTMUSIC:

@@ -926,9 +926,10 @@ class AppApi:
         pass # Handled by frontend
 
     def next_track(self):
-        """Play next track in queue."""
+        """Play next track in queue. Returns the next track or None at queue end."""
         if hasattr(self._core.engine, 'next_track'):
-            self._core.engine.next_track()
+            return self._core.engine.next_track()
+        return None
 
     def prev_track(self):
         """Play previous track in queue."""
