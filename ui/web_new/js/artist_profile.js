@@ -258,7 +258,7 @@ export async function fetchArtistTracks(artistName) {
                 return;
             }
 
-            timerId = setTimeout(finish, 1400);
+            timerId = setTimeout(finish, 5000);
         });
     }
 
@@ -269,7 +269,94 @@ export async function fetchArtistTracks(artistName) {
     });
 }
 
-// в”Ђв”Ђв”Ђ API Avatar Fetcher (YouTube/SoundCloud logic simulation) в”Ђв”Ђв”Ђ
+// ─── Backend Bridge Artist Profile Fetcher ───
+export async function fetchArtistProfileFromBridge(artistName, timeoutMs = 6000) {
+    if (!window.pywebview?.api?.get_artist_profile) {
+        return null;
+    }
+    return new Promise((resolve) => {
+        let isResolved = false;
+        let timer = null;
+
+        const cleanup = () => {
+            document.removeEventListener('nedotify:artist_profile_ready', onReady);
+            document.removeEventListener('nedotify:artist_profile_error', onError);
+            window.removeEventListener('app:artist_profile_ready', onReady);
+            window.removeEventListener('app:artist_profile_error', onError);
+            if (timer) clearTimeout(timer);
+        };
+
+        const onReady = (e) => {
+            const data = e.detail;
+            if (!data) return;
+            if (data.name && artistName) {
+                const a = data.name.toLowerCase().trim();
+                const b = artistName.toLowerCase().trim();
+                if (!a.includes(b) && !b.includes(a)) return;
+            }
+            if (isResolved) return;
+            isResolved = true;
+            cleanup();
+            resolve(data);
+        };
+
+        const onError = (e) => {
+            const data = e.detail;
+            if (data?.artist && artistName) {
+                const a = data.artist.toLowerCase().trim();
+                const b = artistName.toLowerCase().trim();
+                if (!a.includes(b) && !b.includes(a)) return;
+            }
+            if (isResolved) return;
+            isResolved = true;
+            cleanup();
+            resolve(null);
+        };
+
+        document.addEventListener('nedotify:artist_profile_ready', onReady);
+        document.addEventListener('nedotify:artist_profile_error', onError);
+        window.addEventListener('app:artist_profile_ready', onReady);
+        window.addEventListener('app:artist_profile_error', onError);
+
+        timer = setTimeout(() => {
+            if (isResolved) return;
+            isResolved = true;
+            cleanup();
+            resolve(null);
+        }, timeoutMs);
+
+        try {
+            const res = window.pywebview.api.get_artist_profile(artistName);
+            if (res && typeof res.then === 'function') {
+                res.then(val => {
+                    if (val && val.status !== 'loading' && val.status !== 'error') {
+                        if (isResolved) return;
+                        isResolved = true;
+                        cleanup();
+                        resolve(val);
+                    } else if (val && val.status === 'error') {
+                        if (isResolved) return;
+                        isResolved = true;
+                        cleanup();
+                        resolve(null);
+                    }
+                }).catch(() => {});
+            } else if (res && typeof res === 'object' && res.status !== 'loading' && res.status !== 'error' && (res.name || res.tracks || res.albums)) {
+                isResolved = true;
+                cleanup();
+                resolve(res);
+            }
+        } catch (err) {
+            console.warn('Failed to call get_artist_profile bridge:', err);
+            if (isResolved) return;
+            isResolved = true;
+            cleanup();
+            resolve(null);
+        }
+    });
+}
+
+// ─── API Avatar Fetcher (YouTube/SoundCloud logic simulation) ───
 export async function fetchArtistAvatarFromApi(artistName, source = 'youtube') {
     return new Promise((resolve) => {
         setTimeout(() => {
@@ -287,7 +374,7 @@ export async function fetchArtistAvatarFromApi(artistName, source = 'youtube') {
     });
 }
 
-// в”Ђв”Ђв”Ђ Component 1: Artist Photo (Block 1) with Silhouette Fallback в”Ђв”Ђв”Ђ
+// ─── Component 1: Artist Photo (Block 1) with Silhouette Fallback ───
 export class ArtistPhotoComponent {
     constructor(artistData) {
         this.artistData = artistData;
@@ -350,7 +437,7 @@ export class ArtistPhotoComponent {
     }
 }
 
-// в”Ђв”Ђв”Ђ Component 2: Biography (Block 2) в”Ђв”Ђв”Ђ
+// ─── Component 2: Biography (Block 2) ───
 export class ArtistBioComponent {
     constructor(artistData) {
         this.artistData = artistData;
@@ -389,7 +476,7 @@ export class ArtistBioComponent {
     }
 }
 
-// в”Ђв”Ђв”Ђ Component 3: Albums Carousel (Block 3) with Fallback Gradients в”Ђв”Ђв”Ђ
+// ─── Component 3: Albums Carousel (Block 3) with Fallback Gradients ───
 export class ArtistAlbumsComponent {
     constructor(albums, onPlayAlbum) {
         // Sort albums strictly by year DESC
@@ -411,7 +498,7 @@ export class ArtistAlbumsComponent {
                     const title = album.title || 'Unknown';
                     const gradIndex = Math.abs(hashString(title)) % colors.length;
                     const grad = colors[gradIndex];
-                    const coverSrc = (album.cover && album.cover !== 'null') ? escapeHtml(album.cover) : '';
+                    const coverSrc = (album.cover && album.cover !== 'null') ? escapeHtml(album.cover) : ((album.cover_url && album.cover_url !== 'null') ? escapeHtml(album.cover_url) : '');
                     const imgTag = coverSrc ? `<img src="${coverSrc}" alt="${escapeHtml(album.title)}" onerror="this.onerror=null;this.style.display='none'" loading="lazy">` : '';
                     
                     return `
@@ -476,11 +563,11 @@ export class ArtistAlbumsComponent {
     }
 }
 
-// в”Ђв”Ђв”Ђ Component 4: Dynamic Scroll Track List (Block 4) Sorted strictly by playCount DESC в”Ђв”Ђв”Ђ
+// ─── Component 4: Dynamic Scroll Track List (Block 4) Sorted strictly by playCount DESC ───
 export class ArtistTracksComponent {
     constructor(tracks) {
         // Critical requirement: Sort tracks strictly by playCount DESC (popularity)
-        this.tracks = [...tracks].sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
+        this.tracks = [...tracks].sort((a, b) => (b.playCount || b.views || b.play_count || 0) - (a.playCount || a.views || a.play_count || 0));
         this.loadedCount = 20; // Load 20 tracks initially
     }
 
@@ -540,31 +627,34 @@ export class ArtistTracksComponent {
                 const durationEl = trackEl.querySelector('.track-duration');
                 if (durationEl) {
                     let playCountText = '';
-                    const pc = track.playCount || 0;
+                    const pc = track.playCount || track.views || track.play_count || 0;
                     if (pc >= 1000000) {
                         playCountText = `${(pc / 1000000).toFixed(pc >= 10000000 ? 0 : 1)} млн`;
                     } else if (pc >= 1000) {
                         playCountText = `${(pc / 1000).toFixed(0)} тыс.`;
-                    } else {
+                    } else if (pc > 0) {
                         playCountText = `${pc}`;
                     }
 
-                    const year = new Date(track.release_date).getFullYear();
+                    const year = track.release_date ? new Date(track.release_date).getFullYear() : (track.year || null);
                     
-                    const metaText = document.createElement('span');
-                    metaText.style.fontSize = '11px';
-                    metaText.style.color = 'var(--text-sec)';
-                    metaText.style.marginRight = '16px';
-                    metaText.textContent = `${playCountText} прослушиваний`;
+                    if (playCountText) {
+                        const metaText = document.createElement('span');
+                        metaText.style.fontSize = '11px';
+                        metaText.style.color = 'var(--text-sec)';
+                        metaText.style.marginRight = '16px';
+                        metaText.textContent = `${playCountText} прослушиваний`;
+                        durationEl.parentNode.insertBefore(metaText, durationEl);
+                    }
                     
-                    const yearText = document.createElement('span');
-                    yearText.style.fontSize = '11px';
-                    yearText.style.color = 'var(--text-sec)';
-                    yearText.style.marginRight = '12px';
-                    yearText.textContent = isNaN(year) ? '' : `${year}`;
-                    
-                    durationEl.parentNode.insertBefore(metaText, durationEl);
-                    durationEl.parentNode.insertBefore(yearText, durationEl);
+                    if (year && !isNaN(year)) {
+                        const yearText = document.createElement('span');
+                        yearText.style.fontSize = '11px';
+                        yearText.style.color = 'var(--text-sec)';
+                        yearText.style.marginRight = '12px';
+                        yearText.textContent = `${year}`;
+                        durationEl.parentNode.insertBefore(yearText, durationEl);
+                    }
                 }
                 
                 listContainer.appendChild(trackEl);
@@ -623,7 +713,7 @@ export class ArtistTracksComponent {
     }
 }
 
-// в”Ђв”Ђв”Ђ Primary Loader: Combines Skeletons, API fetch and Components в”Ђв”Ђв”Ђ
+// ─── Primary Loader: Combines Skeletons, Backend Bridge / API fetch and Components ───
 export async function loadArtistProfile(artistName, targetContainer) {
     if (!targetContainer) return;
     const currentGen = ++profileGenerationId;
@@ -651,37 +741,50 @@ export async function loadArtistProfile(artistName, targetContainer) {
     renderIcons();
 
     const queryKey = artistName.toLowerCase().trim();
-    let artistData = MOCK_ARTISTS[queryKey] ? JSON.parse(JSON.stringify(MOCK_ARTISTS[queryKey])) : generateFallbackArtist(artistName);
-    
-    // 2. Fetch avatar and tracks concurrently (API promise model)
+    let artistData = null;
+
     try {
-        const [resolvedAvatar, tracks] = await Promise.all([
-            fetchArtistAvatarFromApi(artistData.name, 'youtube'),
-            fetchArtistTracks(artistData.name)
-        ]);
-        
+        // Step 1: Attempt to fetch real artist profile from backend bridge
+        const bridgeProfile = await fetchArtistProfileFromBridge(artistName);
         if (currentGen !== profileGenerationId) return; // Stale render protection
 
-        artistData.avatarUrl = resolvedAvatar;
-        if (tracks && tracks.length > 0) {
-            artistData.tracks = tracks;
-            
-            // Extract dynamic albums from fetched tracks
-            const albumMap = new Map();
-            for (const t of tracks) {
-                if (t.album && !t.album.includes('Album') && !t.album.includes('Single')) {
-                    if (!albumMap.has(t.album)) {
-                        albumMap.set(t.album, {
-                            title: t.album,
-                            year: t.year || (t.release_date ? t.release_date.split('-')[0] : 2022),
-                            cover: t.cover_url || t.thumbnail || null
-                        });
-                    }
-                }
+        if (bridgeProfile && (bridgeProfile.tracks?.length > 0 || bridgeProfile.albums?.length > 0 || bridgeProfile.bio || bridgeProfile.avatar_url)) {
+            artistData = {
+                name: bridgeProfile.name || artistName,
+                genres: bridgeProfile.genres || (bridgeProfile.subscribers ? `${bridgeProfile.subscribers} подписчиков` : 'Исполнитель'),
+                avatarUrl: bridgeProfile.avatar_url || bridgeProfile.avatarUrl || null,
+                bio: bridgeProfile.bio || `Исполнитель ${bridgeProfile.name || artistName} — музыкальный артист.`,
+                albums: bridgeProfile.albums || [],
+                tracks: bridgeProfile.tracks || [],
+                isMock: false
+            };
+
+            // If backend didn't provide avatar or tracks, fallback gracefully
+            if (!artistData.avatarUrl) {
+                artistData.avatarUrl = await fetchArtistAvatarFromApi(artistData.name, 'youtube');
             }
-            if (albumMap.size > 0) {
-                artistData.albums = Array.from(albumMap.values());
+            if (currentGen !== profileGenerationId) return;
+
+            if (!artistData.tracks || artistData.tracks.length === 0) {
+                artistData.tracks = await fetchArtistTracks(artistData.name);
             }
+            if (currentGen !== profileGenerationId) return;
+        } else {
+            // Step 2: Fallback to mock data or generated artist if bridge call returns empty/fails
+            const fallback = MOCK_ARTISTS[queryKey] ? JSON.parse(JSON.stringify(MOCK_ARTISTS[queryKey])) : generateFallbackArtist(artistName);
+            fallback.isMock = true;
+
+            const [resolvedAvatar, tracks] = await Promise.all([
+                fetchArtistAvatarFromApi(fallback.name, 'youtube'),
+                fetchArtistTracks(fallback.name)
+            ]);
+            if (currentGen !== profileGenerationId) return;
+
+            fallback.avatarUrl = fallback.avatarUrl || resolvedAvatar;
+            if (tracks && tracks.length > 0) {
+                fallback.tracks = tracks;
+            }
+            artistData = fallback;
         }
 
         // 3. Clear skeletons and render real components (with smooth fadeIn transitions)

@@ -42,7 +42,18 @@ export function initEvents() {
                 let posMs = data.position_ms !== undefined ? data.position_ms : (data.pos !== undefined ? Math.round(data.pos * 1000) : 0);
                 let durationMs = data.duration_ms !== undefined ? data.duration_ms : (data.duration !== undefined ? Math.round(data.duration * 1000) : 0);
                 onPositionChanged(posMs, durationMs);
-                document.dispatchEvent(new CustomEvent('nedotify:position_changed', { detail: { pos: posMs / 1000, duration: durationMs / 1000, posMs, durationMs } }));
+                // Unified time units: All time values across events are dispatched in milliseconds (posMs, pos, durationMs, duration).
+                // Seconds are provided under posSeconds / durationSeconds for backwards compatibility.
+                document.dispatchEvent(new CustomEvent('nedotify:position_changed', { 
+                    detail: { 
+                        pos: posMs, 
+                        posMs: posMs, 
+                        posSeconds: posMs / 1000, 
+                        duration: durationMs, 
+                        durationMs: durationMs, 
+                        durationSeconds: durationMs / 1000 
+                    } 
+                }));
                 break;
 
             case 'search_results':
@@ -206,6 +217,16 @@ export function initEvents() {
 
             case 'lyrics_ready':
                 document.dispatchEvent(new CustomEvent('nedotify:lyrics_ready', { detail: data }));
+                break;
+
+            case 'artist_profile_ready':
+                document.dispatchEvent(new CustomEvent('nedotify:artist_profile_ready', { detail: data }));
+                window.dispatchEvent(new CustomEvent('app:artist_profile_ready', { detail: data }));
+                break;
+
+            case 'artist_profile_error':
+                document.dispatchEvent(new CustomEvent('nedotify:artist_profile_error', { detail: data }));
+                window.dispatchEvent(new CustomEvent('app:artist_profile_error', { detail: data }));
                 break;
 
             case 'track_wave_ready':

@@ -2,6 +2,10 @@ import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, 
 
 const feedTimeouts = new Map();
 let trackChangeCount = 0;
+let homeLoadGeneration = 0;
+
+// Helper to stagger bridge calls and prevent backend burst / thread pool congestion
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 function renderSkeletons(containerId, count = 4) {
     const container = document.getElementById(containerId);
@@ -40,8 +44,12 @@ export async function loadHome(isTrackChange = false) {
     await window.awaitBridge();
     if (!window.pywebview?.api) return;
 
+    const currentGen = ++homeLoadGeneration;
+
     try {
+        // Step 1: Core home stats & history
         const data = await window.pywebview.api.get_home_data();
+        if (currentGen !== homeLoadGeneration) return;
 
         setElText('stat-tracks', data.total_tracks || 0);
         setElText('stat-time', formatListeningTime(data.total_listening_ms || 0));
@@ -60,8 +68,16 @@ export async function loadHome(isTrackChange = false) {
             renderTopArtists(data.analytics.top_artists || []);
         }
 
-        // NeDotify Wrapped Analytics
-        loadWrappedStats(currentWrappedPeriod);
+        // Step 2: Playlists (fast local query)
+        if (window.pywebview.api.get_playlists) {
+            try {
+                const playlists = await window.pywebview.api.get_playlists();
+                if (currentGen !== homeLoadGeneration) return;
+                if (playlists && playlists.length > 0) renderHomePlaylists(playlists);
+            } catch (err) {
+                console.warn('Failed to load playlists on home:', err);
+            }
+        }
 
         // Decide whether to refresh recommendations/mixes/etc.
         let shouldLoadFeeds = !isTrackChange;
@@ -73,20 +89,50 @@ export async function loadHome(isTrackChange = false) {
             }
         }
 
+        // Step 3: Staggered external feeds to avoid slamming backend bridge
         if (shouldLoadFeeds) {
             renderSkeletons('home-popular');
             renderSkeletons('home-recommended');
             renderSkeletons('home-releases');
             renderSkeletons('home-mixes');
 
-            if (window.pywebview.api.get_popular_tracks) window.pywebview.api.get_popular_tracks();
-            if (window.pywebview.api.get_feed) window.pywebview.api.get_feed(10);
-            if (window.pywebview.api.get_home_releases) window.pywebview.api.get_home_releases(10);
-            if (window.pywebview.api.get_home_mixes) window.pywebview.api.get_home_mixes(10);
-            if (window.pywebview.api.get_authentic_home_feed) window.pywebview.api.get_authentic_home_feed(5);
+            if (window.pywebview.api.get_popular_tracks) {
+                window.pywebview.api.get_popular_tracks();
+            }
+
+            await delay(75);
+            if (currentGen !== homeLoadGeneration) return;
+
+            if (window.pywebview.api.get_feed) {
+                window.pywebview.api.get_feed(10);
+            }
+
+            await delay(75);
+            if (currentGen !== homeLoadGeneration) return;
+
+            if (window.pywebview.api.get_home_releases) {
+                window.pywebview.api.get_home_releases(10);
+            }
+
+            await delay(75);
+            if (currentGen !== homeLoadGeneration) return;
+
+            if (window.pywebview.api.get_home_mixes) {
+                window.pywebview.api.get_home_mixes(10);
+            }
+
+            await delay(75);
+            if (currentGen !== homeLoadGeneration) return;
+
+            if (window.pywebview.api.get_authentic_home_feed) {
+                window.pywebview.api.get_authentic_home_feed(5);
+            }
         }
 
-        // Artists
+        await delay(100);
+        if (currentGen !== homeLoadGeneration) return;
+
+        // Step 4: Artists feed
         if (window.pywebview.api.get_home_artists) {
             renderSkeletons('home-artists');
             window.pywebview.api.get_home_artists(15);
@@ -98,11 +144,11 @@ export async function loadHome(isTrackChange = false) {
             }, 15000));
         }
 
-        // Playlists
-        if (window.pywebview.api.get_playlists) {
-            const playlists = await window.pywebview.api.get_playlists();
-            if (playlists && playlists.length > 0) renderHomePlaylists(playlists);
-        }
+        await delay(100);
+        if (currentGen !== homeLoadGeneration) return;
+
+        // Step 5: Wrapped Stats
+        loadWrappedStats(currentWrappedPeriod);
     } catch (e) {
         console.error('Error loading home:', e);
     }

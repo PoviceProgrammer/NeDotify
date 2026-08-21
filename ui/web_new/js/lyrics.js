@@ -112,8 +112,12 @@ export function initLyrics() {
     document.addEventListener('nedotify:track_changed', (e) => {
         loadCurrentTrackLyrics();
     });
+    // Time synchronization: nedotify:position_changed provides position in milliseconds (posMs / pos).
+    // Parsed LRC timestamps (parseLrc) are in milliseconds (timeMs).
+    // Standardized here to milliseconds for pixel-perfect lyrics synchronization.
     document.addEventListener('nedotify:position_changed', (e) => {
-        updateLyricsPosition(e.detail?.pos);
+        const posMs = e.detail?.posMs !== undefined ? e.detail.posMs : (typeof e.detail?.pos === 'number' ? e.detail.pos : 0);
+        updateLyricsPosition(posMs);
     });
     document.addEventListener('nedotify:lyrics_ready', (e) => {
         renderLyrics(e.detail);
@@ -332,6 +336,11 @@ function scrollToElement(targetLine, c) {
 
 let lastPosMs = 0;
 
+/**
+ * Update active lyric line based on current playback position in milliseconds.
+ * Unified unit: Milliseconds (ms) to match parsed LRC timeMs and currentOffsetMs.
+ * @param {number} posMs - Playback position in milliseconds.
+ */
 function updateLyricsPosition(posMs) {
     try {
         if (typeof posMs === 'number') {

@@ -496,6 +496,9 @@ export async function openAlbumModal(album) {
         modal = document.createElement('div');
         modal.id = 'album-detail-modal';
         modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:9999; display:flex; align-items:center; justify-content:center; animation:fadeIn 0.25s ease; padding:20px;';
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.style.display = 'none';
+        });
         document.body.appendChild(modal);
     }
     modal.style.display = 'flex';
@@ -529,10 +532,7 @@ export async function openAlbumModal(album) {
 
     document.getElementById('close-album-modal')?.addEventListener('click', () => {
         modal.style.display = 'none';
-    });
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.style.display = 'none';
-    });
+    }, { once: true });
 
     let albumTracks = [];
     if (window.pywebview?.api?.get_album_tracks) {
@@ -562,7 +562,7 @@ export async function openAlbumModal(album) {
             window.pywebview.api.play_track(albumTracks[0], albumTracks, 0);
             modal.style.display = 'none';
         }
-    });
+    }, { once: true });
 }
 
 export function renderPlaylistGrid(playlists, container) {
@@ -699,6 +699,9 @@ export async function openPlaylistModal(playlist) {
         modal = document.createElement('div');
         modal.id = 'playlist-detail-modal';
         modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:9999; display:flex; align-items:center; justify-content:center; animation:fadeIn 0.25s ease; padding:20px;';
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.style.display = 'none';
+        });
         document.body.appendChild(modal);
     }
     modal.style.display = 'flex';
@@ -732,10 +735,7 @@ export async function openPlaylistModal(playlist) {
 
     document.getElementById('close-playlist-modal')?.addEventListener('click', () => {
         modal.style.display = 'none';
-    });
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.style.display = 'none';
-    });
+    }, { once: true });
 
     let playlistTracks = [];
     if (window.pywebview?.api?.get_playlist_tracks) {
@@ -772,7 +772,7 @@ export async function openPlaylistModal(playlist) {
             }
             modal.style.display = 'none';
         }
-    });
+    }, { once: true });
 }
 
 window.renderPlaylistGrid = renderPlaylistGrid;
