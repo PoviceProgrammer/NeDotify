@@ -411,6 +411,7 @@ function getSourceIcon(source) {
     switch (source) {
         case 'youtube': return '<i data-lucide="youtube" style="width:12px;height:12px"></i>';
         case 'soundcloud': return '<i data-lucide="cloud" style="width:12px;height:12px"></i>';
+        case 'spotify': return '<i data-lucide="music" style="width:12px;height:12px"></i>';
         case 'local': return '<i data-lucide="folder" style="width:12px;height:12px"></i>';
         default: return '';
     }

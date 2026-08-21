@@ -180,28 +180,131 @@ class ArtistService(BaseMusicService):
             extra.append(hit)
         return extra
 
-    def _collect_top_tracks(self, artist: dict, artist_name: str) -> List[dict]:
-        """The artist's top songs shelf, shaped like the app's track dicts."""
-        songs = (artist.get("songs") or {}).get("results") or []
-        tracks = []
-        for item in songs:
-            video_id = item.get("videoId")
-            if not video_id:
-                continue
-            album = item.get("album")
-            album_name = album.get("name", "") if isinstance(album, dict) else ""
-            tracks.append({
-                "id": "yt_" + str(video_id),
-                "source": "youtube",
-                "source_id": video_id,
-                "source_url": "https://www.youtube.com/watch?v=" + str(video_id),
-                "title": item.get("title", "Unknown Title"),
-                "artist": self._artists_label(item, artist_name),
-                "album": album_name,
-                "duration": item.get("duration_seconds") or 0,
-                "cover_url": self._best_thumbnail(item),
-            })
+    def _translate_bio(self, bio: str) -> tuple[str, str]:
+        """Translates artist bio into Russian using the lyrics translation mechanism.
+        Returns (bio_ru, bio_original).
+        """
+        if not bio:
+            return ("", "")
+        bio_orig = bio.strip()
+
+        # Check if already in Russian (predominantly Cyrillic)
+        cyrillic_chars = sum(1 for c in bio_orig if '\u0400' <= c <= '\u04FF')
+        latin_chars = sum(1 for c in bio_orig if 'a' <= c.lower() <= 'z')
+        if cyrillic_chars > 0 and cyrillic_chars >= latin_chars:
+            return (bio_orig, bio_orig)
+
+        try:
+            from services.lyrics_service import LyricsService
+            ls = LyricsService()
+            translated = ls.translate_lyrics(bio_orig, target_lang="ru")
+            if translated and translated.strip():
+                return (translated.strip(), bio_orig)
+        except Exception as exc:
+            logger.debug("Bio translation failed for artist: %s", exc)
+
+        return (bio_orig, bio_orig)
+
+    def _collect_tracks(self, yt, channel_id: str, artist: dict, artist_name: str, albums: List[dict] = None) -> List[dict]:
+        """The artist's full tracks catalogue, shaped like the app's track dicts."""
+        tracks: List[dict] = []
+        seen_ids = set()
+        seen_titles = set()
+
+        def _absorb(raw_items, default_album=""):
+            for item in raw_items or []:
+                video_id = item.get("videoId")
+                title = (item.get("title") or "").strip()
+                if not video_id or not title:
+                    continue
+                if video_id in seen_ids:
+                    continue
+                title_key = (title.lower(), self._artists_label(item, artist_name).lower())
+                if title_key in seen_titles:
+                    continue
+
+                album = item.get("album")
+                if isinstance(album, dict):
+                    album_name = album.get("name", "") or default_album
+                elif isinstance(album, str) and album:
+                    album_name = album
+                else:
+                    album_name = default_album
+
+                dur = item.get("duration_seconds")
+                if not dur and item.get("duration"):
+                    try:
+                        parts = [int(p) for p in str(item["duration"]).split(":")]
+                        if len(parts) == 2:
+                            dur = parts[0] * 60 + parts[1]
+                        elif len(parts) == 3:
+                            dur = parts[0] * 3600 + parts[1] * 60 + parts[2]
+                    except Exception:
+                        dur = 0
+
+                cover = self._best_thumbnail(item)
+                seen_ids.add(video_id)
+                seen_titles.add(title_key)
+                tracks.append({
+                    "id": "yt_" + str(video_id),
+                    "source": "youtube",
+                    "source_id": video_id,
+                    "source_url": "https://www.youtube.com/watch?v=" + str(video_id),
+                    "title": title,
+                    "artist": self._artists_label(item, artist_name),
+                    "album": album_name,
+                    "duration": dur or 0,
+                    "cover_url": cover,
+                })
+
+        # 1. Inline top songs shelf
+        songs_shelf = artist.get("songs") or {}
+        _absorb(songs_shelf.get("results"))
+
+        # 2. Complete songs playlist via browseId if provided by YouTube Music
+        browse_id = songs_shelf.get("browseId")
+        if browse_id:
+            try:
+                playlist_data = yt.get_playlist(browse_id, limit=100)
+                if playlist_data and playlist_data.get("tracks"):
+                    _absorb(playlist_data["tracks"])
+            except Exception:
+                logger.debug("Failed to get songs playlist %s for %s", browse_id, artist_name, exc_info=True)
+
+        # 3. Catalogue songs search
+        if len(tracks) < 50:
+            try:
+                search_hits = yt.search(artist_name, filter="songs", limit=50)
+                target = artist_name.strip().lower()
+                filtered_hits = []
+                for hit in search_hits or []:
+                    credited = self._artists_label(hit).lower()
+                    if target in credited or credited in target:
+                        filtered_hits.append(hit)
+                _absorb(filtered_hits)
+            except Exception:
+                logger.debug("Catalogue songs search failed for %s", artist_name, exc_info=True)
+
+        # 4. Top albums tracks fallback
+        if len(tracks) < 30 and albums:
+            for alb in albums[:4]:
+                alb_id = alb.get("source_id")
+                if not alb_id:
+                    continue
+                try:
+                    alb_data = yt.get_album(alb_id)
+                    if alb_data and alb_data.get("tracks"):
+                        _absorb(alb_data["tracks"], default_album=alb.get("title", ""))
+                except Exception:
+                    logger.debug("Failed to get album tracks for %s", alb_id, exc_info=True)
+                if len(tracks) >= 60:
+                    break
+
         return tracks
+
+    def _collect_top_tracks(self, artist: dict, artist_name: str) -> List[dict]:
+        """Backward compatibility alias for _collect_tracks."""
+        return self._collect_tracks(self._ytmusic(), "", artist, artist_name)
 
     def _resolve_channel_id(self, yt, artist_name: str) -> Optional[str]:
         """browseId of the closest matching artist channel."""
@@ -265,21 +368,28 @@ class ArtistService(BaseMusicService):
                     error_callback("Не удалось загрузить профиль: " + type(exc).__name__)
                 return
 
+            albums_list = self._collect_albums(yt, channel_id, artist, name)
+            tracks_list = self._collect_tracks(yt, channel_id, artist, name, albums_list)
+            bio_ru, bio_original = self._translate_bio((artist.get("description") or "").strip())
+
             profile = {
                 "name": artist.get("name") or name,
                 "channel_id": channel_id,
                 "avatar_url": self._best_thumbnail(artist),
-                "bio": (artist.get("description") or "").strip(),
+                "bio": bio_ru or bio_original,
+                "bio_ru": bio_ru,
+                "bio_original": bio_original,
+                "bio_en": bio_original,
                 "subscribers": artist.get("subscribers") or "",
                 "views": artist.get("views") or "",
-                "albums": self._collect_albums(yt, channel_id, artist, name),
-                "tracks": self._collect_top_tracks(artist, name),
+                "albums": albums_list,
+                "tracks": tracks_list,
                 "source": "youtube",
             }
             self._cache_put(name.lower(), profile)
             logger.info(
-                "Artist profile for %r: %d albums, %d top tracks",
-                profile["name"], len(profile["albums"]), len(profile["tracks"]),
+                "Artist profile for %r: %d albums, %d tracks, bio length %d",
+                profile["name"], len(profile["albums"]), len(profile["tracks"]), len(profile["bio"]),
             )
             if callback:
                 callback(profile)

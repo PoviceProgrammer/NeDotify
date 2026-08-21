@@ -10,7 +10,7 @@ import {
 } from './artist_profile.js';
 
 let searchDebounce = null;
-let currentSource = 'youtube'; // Default source is YouTube Music as shown in screenshot 1
+let currentSource = 'all'; // Default source is 'Все площадки'
 let currentType = 'tracks';    // Default filter is 'Треки' as shown in screenshot 1
 let allResults = [];
 let currentSearchQuery = '';   // Track the latest query sent
@@ -19,6 +19,7 @@ let isViewingArtistProfile = false;
 
 // Platform SVGs map for updating button icon dynamically
 const PLATFORM_SVGS = {
+    all: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#a855f7"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`,
     youtube: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="10" fill="#FF0000"/><polygon points="9.5,7.5 16.5,12 9.5,16.5" fill="#FFFFFF"/></svg>`,
     soundcloud: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#FF5500"><path d="M11.56 8.87c-.24 0-.47.02-.7.06A6.17 6.17 0 0 0 5 13.5c0 .17.01.34.03.51A4.24 4.24 0 0 0 1 18.25 4.25 4.25 0 0 0 5.25 22.5h13.5A5.25 5.25 0 0 0 24 17.25a5.24 5.24 0 0 0-4.05-5.11 6.17 6.17 0 0 0-8.39-3.27z"/></svg>`,
     spotify: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#1DB954"><path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.02 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.48-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.3 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.18-1.2-.18-1.38-.72-.18-.6.18-1.2.72-1.38 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>`
@@ -204,7 +205,14 @@ export function onSearchResults(data) {
     if (data.tracks && data.tracks.length > 0) {
         const filteredTracks = filterVisibleTracks(data.tracks);
         if (filteredTracks.length > 0) {
-            allResults = allResults.concat(filteredTracks);
+            const seen = new Set(allResults.map(t => `${(t.title || '').toLowerCase().trim()}_${(t.artist || '').toLowerCase().trim()}`));
+            for (const t of filteredTracks) {
+                const key = `${(t.title || '').toLowerCase().trim()}_${(t.artist || '').toLowerCase().trim()}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    allResults.push(t);
+                }
+            }
             renderResults(allResults);
         }
     } else {
@@ -564,6 +572,8 @@ export async function openAlbumModal(album) {
         }
     }, { once: true });
 }
+
+window.openAlbumModal = openAlbumModal;
 
 export function renderPlaylistGrid(playlists, container) {
     const playlistGrid = document.createElement('div');

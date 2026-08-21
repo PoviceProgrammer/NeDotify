@@ -52,11 +52,10 @@ class YouTubeService(BaseMusicService):
             session = TimeoutSession()
             adapter = HTTPAdapter(pool_connections=30, pool_maxsize=30, max_retries=2)
             session.mount("https://", adapter)
-            session.mount("http://", adapter)
             proxy = self.settings.get("auth", "proxy_url", "") if self.settings else ""
             if proxy:
                 session.proxies = {"http": proxy, "https": proxy}
-            self._ytmusic = YTMusic(requests_session=session)
+            self._ytmusic = YTMusic(language="ru", location="RU", requests_session=session)
 
         self._ydl = None
         self._ydl_fallback = None
@@ -113,10 +112,9 @@ class YouTubeService(BaseMusicService):
 
 
 
-                session.mount("http://", adapter)
                 if proxy:
                     session.proxies = {"http": proxy, "https": proxy}
-                self._ytmusic = YTMusic(requests_session=session)
+                self._ytmusic = YTMusic(language="ru", location="RU", requests_session=session)
 
     def _get_ydl(self, quality="high", fallback=False):
         quality_map = {

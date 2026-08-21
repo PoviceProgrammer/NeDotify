@@ -441,22 +441,66 @@ export class ArtistPhotoComponent {
 export class ArtistBioComponent {
     constructor(artistData) {
         this.artistData = artistData;
+        this.currentLang = 'ru';
     }
 
     render() {
         const container = document.createElement('div');
         container.className = 'artist-bio-card';
-        
+
+        const artistKey = (this.artistData.name || '').toLowerCase().trim();
+        const cachedBioRu = localStorage.getItem(`artist_bio_${artistKey}_ru`);
+        const bioRu = cachedBioRu || this.artistData.bio_ru || this.artistData.bio || '';
+        const bioEn = this.artistData.bio_original || this.artistData.bio_en || this.artistData.bio || '';
+
+        if (this.artistData.bio_ru && !cachedBioRu) {
+            try {
+                localStorage.setItem(`artist_bio_${artistKey}_ru`, this.artistData.bio_ru);
+            } catch (e) {}
+        }
+
+        const hasDifferentLang = Boolean(bioRu && bioEn && bioRu.trim() !== bioEn.trim());
+
         container.innerHTML = `
-            <h3 class="artist-card-title">
-                <i data-lucide="info" style="width:16px;height:16px;color:var(--primary)"></i>
-                Биография
-            </h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3 class="artist-card-title" style="margin-bottom:0;">
+                    <i data-lucide="info" style="width:16px;height:16px;color:var(--primary)"></i>
+                    Биография
+                </h3>
+                ${hasDifferentLang ? `
+                <div class="bio-lang-toggle" style="display:flex; background:rgba(255,255,255,0.06); border-radius:12px; padding:2px; font-size:11px; font-weight:700;">
+                    <button class="bio-lang-btn active" data-lang="ru" style="padding:3px 8px; border:none; border-radius:10px; background:var(--primary); color:#fff; cursor:pointer;">RU</button>
+                    <button class="bio-lang-btn" data-lang="en" style="padding:3px 8px; border:none; border-radius:10px; background:transparent; color:var(--text-sec); cursor:pointer;">EN</button>
+                </div>` : ''}
+            </div>
             <div class="artist-bio-content">
-                <p>${escapeHtml(this.artistData.bio)}</p>
+                <p id="artist-bio-text">${escapeHtml(this.currentLang === 'ru' ? bioRu : bioEn)}</p>
             </div>
         `;
-        
+
+        if (hasDifferentLang) {
+            container.querySelectorAll('.bio-lang-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const lang = btn.dataset.lang;
+                    if (lang === this.currentLang) return;
+                    this.currentLang = lang;
+
+                    container.querySelectorAll('.bio-lang-btn').forEach(b => {
+                        const isActive = b.dataset.lang === lang;
+                        b.classList.toggle('active', isActive);
+                        b.style.background = isActive ? 'var(--primary)' : 'transparent';
+                        b.style.color = isActive ? '#fff' : 'var(--text-sec)';
+                    });
+
+                    const textEl = container.querySelector('#artist-bio-text');
+                    if (textEl) {
+                        textEl.textContent = lang === 'ru' ? bioRu : bioEn;
+                    }
+                });
+            });
+        }
+
         return container;
     }
 
@@ -478,10 +522,17 @@ export class ArtistBioComponent {
 
 // ─── Component 3: Albums Carousel (Block 3) with Fallback Gradients ───
 export class ArtistAlbumsComponent {
-    constructor(albums, onPlayAlbum) {
+    constructor(albums, onPlayAlbum, onOpenAlbum) {
         // Sort albums strictly by year DESC
         this.albums = [...albums].sort((a, b) => b.year - a.year);
         this.onPlayAlbum = onPlayAlbum;
+        this.onOpenAlbum = onOpenAlbum || ((album) => {
+            if (typeof window.openAlbumModal === 'function') {
+                window.openAlbumModal(album);
+            } else if (this.onPlayAlbum) {
+                this.onPlayAlbum(album);
+            }
+        });
     }
 
     render() {
@@ -531,7 +582,13 @@ export class ArtistAlbumsComponent {
             }
             card.addEventListener('click', () => {
                 const idx = card.dataset.albumIndex;
-                if (this.onPlayAlbum) this.onPlayAlbum(this.albums[idx]);
+                if (this.onOpenAlbum) {
+                    this.onOpenAlbum(this.albums[idx]);
+                } else if (window.openAlbumModal) {
+                    window.openAlbumModal(this.albums[idx]);
+                } else if (this.onPlayAlbum) {
+                    this.onPlayAlbum(this.albums[idx]);
+                }
             });
         });
         
@@ -563,10 +620,9 @@ export class ArtistAlbumsComponent {
     }
 }
 
-// ─── Component 4: Dynamic Scroll Track List (Block 4) Sorted strictly by playCount DESC ───
+// ─── Component 4: Dynamic Scroll Track List (Block 4) ───
 export class ArtistTracksComponent {
     constructor(tracks) {
-        // Critical requirement: Sort tracks strictly by playCount DESC (popularity)
         this.tracks = [...tracks].sort((a, b) => (b.playCount || b.views || b.play_count || 0) - (a.playCount || a.views || a.play_count || 0));
         this.loadedCount = 20; // Load 20 tracks initially
     }
@@ -576,15 +632,21 @@ export class ArtistTracksComponent {
         container.className = 'artist-tracks-card';
         
         container.innerHTML = `
-            <div class="artist-tracks-header">
+            <div class="artist-tracks-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <h3 class="artist-card-title" style="margin-bottom:0">
                     <i data-lucide="sparkles" style="width:16px;height:16px;color:var(--primary)"></i>
-                    Популярные треки (сортировка по прослушиваниям)
+                    Популярные треки (${this.tracks.length})
                 </h3>
             </div>
-            <div class="artist-tracks-list" id="artist-tracks-list-scroll">
+            <div class="artist-tracks-list feed-scroll" id="artist-tracks-list-scroll" style="max-height: 520px; overflow-y: auto;">
                 <!-- Tracks will be appended here -->
             </div>
+            ${this.tracks.length > this.loadedCount ? `
+            <div id="artist-tracks-more-wrap" style="padding: 12px 0; text-align: center;">
+                <button id="artist-tracks-show-more-btn" style="padding: 8px 24px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: var(--text-main); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;">
+                    Показать ещё
+                </button>
+            </div>` : ''}
         `;
 
         const listContainer = container.querySelector('#artist-tracks-list-scroll');
@@ -623,7 +685,7 @@ export class ArtistTracksComponent {
                     }
                 }
 
-                // Add formatted playCount (e.g. "129.0 млн прослушиваний") and release year
+                // Add formatted playCount and release year
                 const durationEl = trackEl.querySelector('.track-duration');
                 if (durationEl) {
                     let playCountText = '';
@@ -666,19 +728,30 @@ export class ArtistTracksComponent {
         // Render initial portion (20 tracks)
         renderBatch(0, this.loadedCount);
 
+        const showMoreBtn = container.querySelector('#artist-tracks-show-more-btn');
+        const loadMore = () => {
+            if (this.loadedCount < this.tracks.length) {
+                const nextBatchSize = 20;
+                renderBatch(this.loadedCount, nextBatchSize);
+                this.loadedCount += nextBatchSize;
+                if (this.loadedCount >= this.tracks.length && showMoreBtn) {
+                    showMoreBtn.parentElement?.remove();
+                }
+            }
+        };
+
+        if (showMoreBtn) {
+            showMoreBtn.addEventListener('click', loadMore);
+        }
+
         // Infinite Scroll Event Listener
         listContainer.addEventListener('scroll', () => {
             const scrollTop = listContainer.scrollTop;
             const clientHeight = listContainer.clientHeight;
             const scrollHeight = listContainer.scrollHeight;
 
-            // Load more if scrolled within 20px of the bottom
             if (scrollTop + clientHeight >= scrollHeight - 20) {
-                if (this.loadedCount < this.tracks.length) {
-                    const nextBatchSize = 20;
-                    renderBatch(this.loadedCount, nextBatchSize);
-                    this.loadedCount += nextBatchSize;
-                }
+                loadMore();
             }
         });
         
@@ -754,6 +827,8 @@ export async function loadArtistProfile(artistName, targetContainer) {
                 genres: bridgeProfile.genres || (bridgeProfile.subscribers ? `${bridgeProfile.subscribers} подписчиков` : 'Исполнитель'),
                 avatarUrl: bridgeProfile.avatar_url || bridgeProfile.avatarUrl || null,
                 bio: bridgeProfile.bio || `Исполнитель ${bridgeProfile.name || artistName} — музыкальный артист.`,
+                bio_ru: bridgeProfile.bio_ru || bridgeProfile.bio || null,
+                bio_original: bridgeProfile.bio_original || bridgeProfile.bio_en || null,
                 albums: bridgeProfile.albums || [],
                 tracks: bridgeProfile.tracks || [],
                 isMock: false
@@ -836,7 +911,17 @@ export async function loadArtistProfile(artistName, targetContainer) {
         };
         
         if (artistData.albums && artistData.albums.length > 0) {
-            const albumsComp = new ArtistAlbumsComponent(artistData.albums, onPlayAlbum);
+            const albumsComp = new ArtistAlbumsComponent(
+                artistData.albums, 
+                onPlayAlbum,
+                (album) => {
+                    if (window.openAlbumModal) {
+                        window.openAlbumModal(album);
+                    } else {
+                        onPlayAlbum(album);
+                    }
+                }
+            );
             rightCol.appendChild(albumsComp.render());
         }
         
