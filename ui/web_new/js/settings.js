@@ -99,7 +99,7 @@ export function initSettings() {
     setupToggle('toggle-particles', 'particles_enabled', 'ui');
     setupToggle('toggle-visualizer', 'cover_visualizer', 'ui');
 
-    setupSlider('slider-crossfade-sec', 'crossfade_sec', 'audio', (v) => {
+    setupSlider('slider-crossfade-sec', 'crossfade_duration_sec', 'audio', (v) => {
         setElText('label-crossfade-sec', `${v} сек`);
     });
 
@@ -333,6 +333,27 @@ export function initSettings() {
     if (selectRegion) {
         selectRegion.addEventListener('change', (e) => {
             saveSetting('region', e.target.value, 'general');
+        });
+    }
+
+    // YouTube Music OAuth 2.0 stub safeguard (in development)
+    const inputOauthClientId = document.getElementById('input-oauth-client-id');
+    if (inputOauthClientId) {
+        inputOauthClientId.disabled = true;
+        inputOauthClientId.title = 'В разработке';
+    }
+    const inputOauthClientSecret = document.getElementById('input-oauth-client-secret');
+    if (inputOauthClientSecret) {
+        inputOauthClientSecret.disabled = true;
+        inputOauthClientSecret.title = 'В разработке';
+    }
+    const btnYtmusicOauth = document.getElementById('btn-ytmusic-oauth');
+    if (btnYtmusicOauth) {
+        btnYtmusicOauth.disabled = true;
+        btnYtmusicOauth.title = 'В разработке (YouTube Music OAuth пока недоступен)';
+        btnYtmusicOauth.addEventListener('click', (e) => {
+            e.preventDefault();
+            showToast('YouTube Music OAuth находится в разработке', 'info');
         });
     }
 
@@ -692,6 +713,16 @@ export function applySettingsFromBackend(settings) {
     if (settings.audio) {
         const toggleCF = document.getElementById('toggle-crossfade');
         if (toggleCF) toggleCF.classList.toggle('on', !!settings.audio.crossfade_enabled);
+        const cfSec = settings.audio.crossfade_duration_sec ?? settings.audio.crossfade_sec ?? settings.audio.crossfade_duration;
+        if (cfSec !== undefined) {
+            const sliderCF = document.getElementById('slider-crossfade-sec');
+            if (sliderCF) {
+                sliderCF.value = cfSec;
+                const pct = (sliderCF.value - sliderCF.min) / (sliderCF.max - sliderCF.min) * 100;
+                sliderCF.style.setProperty('--value-percent', `${pct}%`);
+            }
+            setElText('label-crossfade-sec', `${cfSec} сек`);
+        }
         const toggleGL = document.getElementById('toggle-gapless');
         if (toggleGL) toggleGL.classList.toggle('on', settings.audio.gapless_playback !== false);
         const toggleAP = document.getElementById('toggle-autoplay');
@@ -726,6 +757,11 @@ export function applySettingsFromBackend(settings) {
         if (settings.player.mp_cover_shape) applyMpCoverShape(settings.player.mp_cover_shape);
         if (settings.player.mp_shape) applyMpShape(settings.player.mp_shape);
         if (settings.player.mp_pos) applyMpPos(settings.player.mp_pos);
+        if (settings.player.queue_autopilot !== undefined || settings.player.flow_enabled !== undefined) {
+            const autoVal = settings.player.queue_autopilot !== undefined ? settings.player.queue_autopilot : settings.player.flow_enabled;
+            const toggleAP = document.getElementById('toggle-queue-autopilot');
+            if (toggleAP) toggleAP.classList.toggle('on', !!autoVal);
+        }
     }
 
     if (settings.auth) {
@@ -747,20 +783,30 @@ export function applySettingsFromBackend(settings) {
         }
         
         const inputOauthClientId = document.getElementById('input-oauth-client-id');
-        if (inputOauthClientId && settings.auth.oauth_client_id !== undefined) {
-            inputOauthClientId.value = settings.auth.oauth_client_id;
+        if (inputOauthClientId) {
+            inputOauthClientId.disabled = true;
+            inputOauthClientId.title = 'В разработке';
+            if (settings.auth.oauth_client_id !== undefined) {
+                inputOauthClientId.value = settings.auth.oauth_client_id;
+            }
         }
         
         // SECURITY WARNING: OAuth client secret must not be stored or transmitted in frontend.
         // Use PKCE flow or backend token exchange.
         const inputOauthClientSecret = document.getElementById('input-oauth-client-secret');
-        if (inputOauthClientSecret && settings.auth.oauth_client_secret !== undefined) {
-            inputOauthClientSecret.value = settings.auth.oauth_client_secret;
+        if (inputOauthClientSecret) {
+            inputOauthClientSecret.disabled = true;
+            inputOauthClientSecret.title = 'В разработке';
+            if (settings.auth.oauth_client_secret !== undefined) {
+                inputOauthClientSecret.value = settings.auth.oauth_client_secret;
+            }
         }
         
-        if (settings.auth.oauth_completed) {
-            const btnYtmusicOauth = document.getElementById('btn-ytmusic-oauth');
-            if (btnYtmusicOauth) {
+        const btnYtmusicOauth = document.getElementById('btn-ytmusic-oauth');
+        if (btnYtmusicOauth) {
+            btnYtmusicOauth.disabled = true;
+            btnYtmusicOauth.title = 'В разработке';
+            if (settings.auth.oauth_completed) {
                 btnYtmusicOauth.textContent = '✅ Привязано';
                 btnYtmusicOauth.style.background = 'var(--success, #10b981)';
             }
@@ -1890,7 +1936,7 @@ export function applySliderType(type) {
     const root = document.documentElement;
     root.classList.remove('slider-type-default', 'slider-type-thin', 'slider-type-ios', 'slider-type-wave');
     root.classList.add(`slider-type-${type}`);
-    window.dispatchEvent(new CustomEvent('nedotify:slider_type_changed', { detail: { type } }));
+    document.dispatchEvent(new CustomEvent('nedotify:slider_type_changed', { detail: { type } }));
 }
 
 export function applyShowQueue(enabled) {
@@ -2018,7 +2064,7 @@ function setupPlayerSettingsPanel() {
         queuePos: getLocalSetting('nedotify_player_queue_pos', 'bottom'),
         compactQueue: getLocalSetting('nedotify_player_compact_queue_btn', true),
         nextPreview: getLocalSetting('nedotify_player_next_track_preview', true),
-        autopilot: getLocalSetting('nedotify_player_queue_autopilot', true),
+        autopilot: getLocalSetting('nedotify_player_queue_autopilot', getLocalSetting('nedotify_player_flow_enabled', true)),
         prefetch: getLocalSetting('nedotify_player_player_prefetch', true),
         auraOrbs: getLocalSetting('nedotify_player_aura_orbs_enabled', true),
         queueView: getLocalSetting('nedotify_player_queue_view', 'normal'),
@@ -2484,13 +2530,19 @@ export function setupWorkshopPanel() {
             const isLiked = getLikedState(it.id);
             const displayLikes = isLiked ? it.likes + 1 : it.likes;
 
+            const safeId = escapeHtml(String(it.id ?? ''));
+            const safePreview = escapeHtml(String(it.preview ?? ''));
+            const safeTitle = escapeHtml(String(it.title ?? ''));
+            const safeAuthor = escapeHtml(String(it.author ?? ''));
+            const safeBadge = it.badge ? escapeHtml(String(it.badge)) : '';
+
             return `
-                <div class="workshop-card ${isApplied ? 'applied' : ''}" data-id="${it.id}">
+                <div class="workshop-card ${isApplied ? 'applied' : ''}" data-id="${safeId}">
                     <div class="workshop-card-preview">
-                        <img src="${it.preview}" class="workshop-card-media" alt="${it.title}" loading="lazy">
-                        ${it.badge ? `<div class="workshop-card-badge">${it.badge}</div>` : ''}
+                        <img src="${safePreview}" class="workshop-card-media" alt="${safeTitle}" loading="lazy">
+                        ${safeBadge ? `<div class="workshop-card-badge">${safeBadge}</div>` : ''}
                         <div class="workshop-card-overlay">
-                            <button class="workshop-btn-apply" data-id="${it.id}">
+                            <button class="workshop-btn-apply" data-id="${safeId}">
                                 <i data-lucide="${isApplied ? 'check' : 'image'}" style="width:16px;height:16px"></i>
                                 <span>${isApplied ? 'Установлено' : 'Применить'}</span>
                             </button>
@@ -2498,11 +2550,11 @@ export function setupWorkshopPanel() {
                     </div>
                     <div class="workshop-card-info">
                         <div>
-                            <div class="workshop-card-title" title="${it.title}">${it.title}</div>
-                            <div class="workshop-card-author">by ${it.author}</div>
+                            <div class="workshop-card-title" title="${safeTitle}">${safeTitle}</div>
+                            <div class="workshop-card-author">by ${safeAuthor}</div>
                         </div>
                         <div class="workshop-card-stats">
-                            <div class="workshop-stat-item ${isLiked ? 'liked' : ''}" data-like-id="${it.id}">
+                            <div class="workshop-stat-item ${isLiked ? 'liked' : ''}" data-like-id="${safeId}">
                                 <i data-lucide="heart" style="width:14px;height:14px;${isLiked ? 'fill:#ef4444' : ''}"></i>
                                 <span>${displayLikes}</span>
                             </div>
