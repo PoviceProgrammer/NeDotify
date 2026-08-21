@@ -1035,7 +1035,7 @@ input, textarea {
     padding: 8px 12px;
     border-radius: 10px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
     border: 1px solid transparent;
     animation: fadeIn 0.3s ease forwards;
 }
@@ -1426,6 +1426,12 @@ input, textarea {
     pointer-events: none;
     z-index: 0;
     opacity: 0.6;
+}
+
+.player-bg-glow-downscaled {
+    will-change: transform, opacity;
+    transform: translate3d(0, 0, 0) scale(1.1);
+    contain: strict;
 }
 
 .player-glass-card {
@@ -4585,7 +4591,12 @@ button:active, .icon-btn:active, .play-btn:active {
    EFFICIENCY MODE (UNFOCUSED / BACKGROUND OPTIMIZATION)
    ========================================================= */
 
-body.unfocused-blur-disabled * {
+body.unfocused-blur-disabled .sidebar,
+body.unfocused-blur-disabled .player-bar,
+body.unfocused-blur-disabled .glass-modal,
+body.unfocused-blur-disabled #queue-drawer,
+body.unfocused-blur-disabled .context-menu,
+body.unfocused-blur-disabled .settings-modal-card {
     /* Smooth transition for backdrop-filter to prevent micro-stutters when focusing */
     transition: backdrop-filter 0.2s ease, background-color 0.2s ease !important;
 }
