@@ -1431,6 +1431,8 @@ class AppApi:
                 except Exception:
                     logger.exception("Failed to clean up incomplete imported playlist")
             logger.error("Playlist import failed: %s", exc)
+            return {"success": False, "error": str(exc) or "Не удалось импортировать плейлист"}
+
     def export_playlist(self, playlist_id: int, format: str = "m3u8", target_path: str = None) -> dict:
         """Export playlist tracks to standard M3U8 playlist file or specified format."""
         try:
