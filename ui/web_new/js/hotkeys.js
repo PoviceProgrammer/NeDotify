@@ -172,14 +172,18 @@ export function executeHotkeysAction(actionId) {
             }
             break;
         case 'search':
-            if (window.NeDotify?.showPage) window.NeDotify.showPage('home');
-            setTimeout(() => {
+            if (window.NeDotify?.showPage) {
+                window.NeDotify.showPage('search');
+            } else if (window.showPage) {
+                window.showPage('search');
+            }
+            requestAnimationFrame(() => {
                 const searchInput = document.getElementById('search-input') || document.getElementById('global-search-input');
                 if (searchInput) {
                     searchInput.focus();
                     if (searchInput.select) searchInput.select();
                 }
-            }, 50);
+            });
             break;
     }
 }

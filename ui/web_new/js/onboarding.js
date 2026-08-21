@@ -43,29 +43,74 @@ export async function initOnboarding() {
     wizard.style.display = 'flex';
     wizard.classList.remove('hidden');
 
+    let currentStep = 1;
+    const steps = wizard.querySelectorAll('.ob-step, .onboarding-step');
+    const totalSteps = steps.length || 4;
+
+    const btnNext = document.getElementById('ob-btn-next');
+    const btnBack = document.getElementById('ob-btn-back');
+    const btnFinish = document.getElementById('ob-btn-finish');
+    const btnSkip = document.getElementById('ob-btn-skip');
+    const btnClose = document.getElementById('ob-btn-close');
+
     function showStep(stepNum) {
-        const steps = wizard.querySelectorAll('.ob-step, .onboarding-step');
+        currentStep = Math.max(1, Math.min(stepNum, totalSteps));
         steps.forEach(st => {
             const num = st.id ? parseInt(st.id.replace('ob-step-', '')) : parseInt(st.dataset.step);
-            if (num === stepNum) {
+            if (num === currentStep) {
                 st.style.display = 'block';
                 st.classList.add('active');
+                st.classList.remove('hidden');
             } else {
                 st.style.display = 'none';
                 st.classList.remove('active');
+                st.classList.add('hidden');
+            }
+        });
+
+        if (btnBack) {
+            if (currentStep > 1) {
+                btnBack.classList.remove('hidden');
+                btnBack.style.display = '';
+            } else {
+                btnBack.classList.add('hidden');
+                btnBack.style.display = 'none';
+            }
+        }
+
+        if (btnNext && btnFinish) {
+            if (currentStep >= totalSteps) {
+                btnNext.classList.add('hidden');
+                btnNext.style.display = 'none';
+                btnFinish.classList.remove('hidden');
+                btnFinish.style.display = '';
+            } else {
+                btnNext.classList.remove('hidden');
+                btnNext.style.display = '';
+                btnFinish.classList.add('hidden');
+                btnFinish.style.display = 'none';
+            }
+        }
+    }
+
+    // Initialize step 1 and button states
+    showStep(1);
+
+    if (btnNext) {
+        btnNext.addEventListener('click', () => {
+            if (currentStep < totalSteps) {
+                showStep(currentStep + 1);
             }
         });
     }
 
-    const btnNext1 = document.getElementById('ob-btn-next-1');
-    const btnNext2 = document.getElementById('ob-btn-next-2');
-    const btnPrev2 = document.getElementById('ob-btn-prev-2');
-    const btnPrev3 = document.getElementById('ob-btn-prev-3');
-
-    if (btnNext1) btnNext1.addEventListener('click', () => showStep(2));
-    if (btnNext2) btnNext2.addEventListener('click', () => showStep(3));
-    if (btnPrev2) btnPrev2.addEventListener('click', () => showStep(1));
-    if (btnPrev3) btnPrev3.addEventListener('click', () => showStep(2));
+    if (btnBack) {
+        btnBack.addEventListener('click', () => {
+            if (currentStep > 1) {
+                showStep(currentStep - 1);
+            }
+        });
+    }
 
     const presetCards = wizard.querySelectorAll('.preset-card');
     let selectedPreset = 'beauty';
@@ -154,9 +199,6 @@ export async function initOnboarding() {
         wizard.classList.add('hidden');
     }
 
-    const btnFinish = document.getElementById('ob-btn-finish');
-    const btnSkip = document.getElementById('ob-btn-skip');
-    const btnClose = document.getElementById('ob-btn-close');
     if (btnFinish) btnFinish.addEventListener('click', () => finishOnboarding(false));
     if (btnSkip) btnSkip.addEventListener('click', () => finishOnboarding(true));
     if (btnClose) btnClose.addEventListener('click', () => finishOnboarding(true));
