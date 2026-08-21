@@ -7,6 +7,8 @@ let currentDuration = 0;
 let isDraggingProgress = false;
 let isDraggingVolume = false;
 let lastSeekTime = 0;
+let isSeeking = false;
+let seekTimeoutId = null;
 let currentPosMs = 0;
 let targetPosMs = 0;
 let lastAnimTimestamp = 0;
@@ -303,8 +305,22 @@ function setupAudioEvents(audio) {
     });
     audio.addEventListener('canplay', () => disarmStallFallback(audio));
     audio.addEventListener('progress', () => disarmStallFallback(audio));
+    audio.addEventListener('seeking', () => {
+        if (audio === activeAudio) {
+            isSeeking = true;
+        }
+    });
+    audio.addEventListener('seeked', () => {
+        if (audio === activeAudio) {
+            isSeeking = false;
+            if (seekTimeoutId) {
+                clearTimeout(seekTimeoutId);
+                seekTimeoutId = null;
+            }
+        }
+    });
     audio.addEventListener('timeupdate', () => {
-        if (audio === activeAudio && !isDraggingProgress) {
+        if (audio === activeAudio && !isDraggingProgress && !isSeeking) {
             // Prefer HTML5 duration if backend didn't provide one
             if (audio.duration && audio.duration !== Infinity) {
                 const audioDurMs = Math.round(audio.duration * 1000);
@@ -355,6 +371,11 @@ function setupAudioEvents(audio) {
         }
     });
     audio.addEventListener('error', (e) => {
+        isSeeking = false;
+        if (seekTimeoutId) {
+            clearTimeout(seekTimeoutId);
+            seekTimeoutId = null;
+        }
         // Ignore synthetic or background cleanup errors
         if (audio !== activeAudio || !audio.src || audio.src === '' || audio.src === 'about:blank' || audio.src === window.location.href) {
             return;
@@ -470,6 +491,14 @@ export function seekTo(posMs) {
     currentPosMs = posMs;
     targetPosMs = posMs;
     lastSeekTime = performance.now();
+    isSeeking = true;
+    if (seekTimeoutId) {
+        clearTimeout(seekTimeoutId);
+    }
+    seekTimeoutId = setTimeout(() => {
+        isSeeking = false;
+        seekTimeoutId = null;
+    }, 600);
     
     if (currentDuration > 0) {
         const pct = Math.max(0, Math.min(100, (posMs / currentDuration) * 100));
@@ -487,6 +516,7 @@ export function seekTo(posMs) {
             activeAudio.currentTime = posMs / 1000;
         } catch (e) {
             console.error("Error seeking audio:", e);
+            isSeeking = false;
         }
     }
     // M-1: single RPC with the final value (set_position is a no-op on the backend)
@@ -932,7 +962,7 @@ function animateProgress(timestamp) {
     if (timestamp - lastProgressFrame < 66) return;
     lastProgressFrame = timestamp;
 
-    if (!isDraggingProgress && activeAudio) {
+    if (!isDraggingProgress && !isSeeking && activeAudio) {
         if (activeAudio.duration && !isNaN(activeAudio.duration) && activeAudio.duration > 0) {
             currentDuration = Math.round(activeAudio.duration * 1000);
         }
@@ -1308,7 +1338,7 @@ export function onStateChanged(state) {
 
 export function onPositionChanged(posMs, durationMs) {
     try {
-        if (performance.now() - lastSeekTime < 1500) return;
+        if (isSeeking || isDraggingProgress || performance.now() - lastSeekTime < 600) return;
         
         // If audio is actively playing in HTML5 Audio, let animateProgress handle smooth frame updates
         if (isPlaying && activeAudio && !activeAudio.paused) {
