@@ -258,6 +258,41 @@ export function initLibrary() {
             }
         });
     }
+
+    const plExportBtn = document.getElementById('pl-btn-export');
+    if (plExportBtn) {
+        plExportBtn.addEventListener('click', async () => {
+            if (!currentSelectedPlaylistData || !currentSelectedPlaylistData.id) {
+                window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                    detail: { msg: 'Выберите плейлист для экспорта', type: 'warning' }
+                }));
+                return;
+            }
+            if (window.pywebview?.api?.export_playlist) {
+                try {
+                    plExportBtn.disabled = true;
+                    plExportBtn.style.opacity = '0.6';
+                    const res = await window.pywebview.api.export_playlist(currentSelectedPlaylistData.id, 'm3u8');
+                    if (res && res.success) {
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                            detail: { msg: `✅ Плейлист экспортирован (${res.exported_count} треков) в: ${res.file_path}`, type: 'success' }
+                        }));
+                    } else {
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                            detail: { msg: res?.error || 'Ошибка экспорта плейлиста', type: 'warning' }
+                        }));
+                    }
+                } catch (e) {
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                        detail: { msg: 'Сбой при вызове экспорта', type: 'error' }
+                    }));
+                } finally {
+                    plExportBtn.disabled = false;
+                    plExportBtn.style.opacity = '1';
+                }
+            }
+        });
+    }
 }
 
 export async function loadLibrary() {

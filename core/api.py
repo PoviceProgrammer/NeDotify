@@ -1431,7 +1431,72 @@ class AppApi:
                 except Exception:
                     logger.exception("Failed to clean up incomplete imported playlist")
             logger.error("Playlist import failed: %s", exc)
-            return {"success": False, "error": str(exc) or "Не удалось импортировать плейлист"}
+    def export_playlist(self, playlist_id: int, format: str = "m3u8", target_path: str = None) -> dict:
+        """Export playlist tracks to standard M3U8 playlist file or specified format."""
+        try:
+            pid = int(playlist_id)
+            playlists = self._core.db.get_playlists() or []
+            pl_info = next((p for p in playlists if p.get("id") == pid or p.get("ID") == pid), None)
+            pl_name = pl_info.get("name", f"playlist_{pid}") if pl_info else f"playlist_{pid}"
+            safe_name = "".join(c for c in pl_name if c.isalnum() or c in (' ', '_', '-')).strip() or f"playlist_{pid}"
+
+            tracks = self._core.db.get_playlist_tracks(pid) or []
+            if not tracks:
+                return {"success": False, "error": "В плейлисте нет треков для экспорта"}
+
+            music_dir = os.path.expanduser("~/Music")
+            if not os.path.exists(music_dir):
+                music_dir = os.path.expanduser("~/Downloads")
+            if not os.path.exists(music_dir):
+                music_dir = os.path.expanduser("~")
+
+            out_file = target_path or os.path.join(music_dir, f"{safe_name}.m3u8")
+
+            m3u_lines = ["#EXTM3U", f"#PLAYLIST:{pl_name}"]
+            exported_count = 0
+            skipped_count = 0
+
+            for t in tracks:
+                title = t.get("title") or "Unknown"
+                artist = t.get("artist") or "Unknown"
+                duration = int(t.get("duration") or 0)
+                file_path = t.get("file_path")
+                source_url = t.get("source_url") or t.get("stream_url")
+
+                target_uri = None
+                if file_path and os.path.exists(file_path):
+                    target_uri = os.path.abspath(file_path)
+                elif source_url and source_url.startswith(("http://", "https://")):
+                    target_uri = source_url
+                elif t.get("source") == "youtube" and t.get("source_id"):
+                    target_uri = f"https://www.youtube.com/watch?v={t.get('source_id')}"
+                elif t.get("source") == "soundcloud" and t.get("source_id"):
+                    target_uri = f"https://soundcloud.com/{t.get('source_id')}"
+
+                if target_uri:
+                    m3u_lines.append(f"#EXTINF:{duration},{artist} - {title}")
+                    m3u_lines.append(target_uri)
+                    exported_count += 1
+                else:
+                    skipped_count += 1
+
+            if exported_count == 0:
+                return {"success": False, "error": "Не удалось сформировать пути к аудиофайлам для треков"}
+
+            with open(out_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(m3u_lines) + "\n")
+
+            logger.info("Exported playlist '%s' to '%s' (%d tracks)", pl_name, out_file, exported_count)
+            return {
+                "success": True,
+                "file_path": out_file,
+                "exported_count": exported_count,
+                "skipped_count": skipped_count,
+                "playlist_name": pl_name
+            }
+        except Exception as e:
+            logger.error("export_playlist error: %s", e)
+            return {"success": False, "error": str(e)}
 
     def create_playlist(self, name: str, description: str = ""):
         """Create new user playlist."""
