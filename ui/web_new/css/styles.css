@@ -2840,13 +2840,15 @@ select option {
 }
 
 .clickable-artist {
-    cursor: pointer;
-    transition: color 0.15s ease;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    transition: color 0.15s ease, text-decoration 0.15s ease;
+    display: inline;
 }
 
 .clickable-artist:hover {
     color: var(--primary) !important;
-    text-decoration: underline;
+    text-decoration: underline !important;
 }
 
 /* Shimmer/Skeleton Styles */

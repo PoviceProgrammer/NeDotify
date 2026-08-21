@@ -156,6 +156,15 @@ export function getCoverUrl(track) {
     return url;
 }
 
+export function formatArtistNames(artistStr) {
+    if (!artistStr || artistStr === 'Unknown') return 'Unknown';
+    const parts = artistStr.split(/,\s*|\s*&\s*|\s*feat\.?\s*|\s*ft\.?\s*/i).map(s => s.trim()).filter(Boolean);
+    if (parts.length <= 1) {
+        return `<span class="clickable-artist" data-artist="${escapeHtml(artistStr.trim())}">${escapeHtml(artistStr.trim())}</span>`;
+    }
+    return parts.map(p => `<span class="clickable-artist" data-artist="${escapeHtml(p)}">${escapeHtml(p)}</span>`).join(', ');
+}
+
 export function createTrackElement(track, index, tracksArray, currentTrack) {
     const item = document.createElement('div');
     const isCurrentlyPlaying = currentTrack && ((currentTrack.id && track.id && currentTrack.id === track.id) || currentTrack.source_id === track.source_id);
@@ -196,7 +205,7 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
         </div>
         <div class="track-info">
             <div class="track-title">${escapeHtml(track.title || 'Unknown')}</div>
-            <div class="track-artist clickable-artist">${escapeHtml(track.artist || 'Unknown')}</div>
+            <div class="track-artist">${formatArtistNames(track.artist || 'Unknown')}</div>
         </div>
         <div class="track-actions">
             <button class="icon-btn download-btn ${track.is_downloaded || track.source === 'local' ? 'downloaded' : ''}" title="${track.is_downloaded || track.source === 'local' ? 'Скачан' : 'Скачать'}">
@@ -257,16 +266,23 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
     }
 
     // Artist click navigation handler: ONLY fires on artist text
-    const artistEl = item.querySelector('.track-artist');
-    if (artistEl && track.artist && track.artist !== 'Unknown') {
+    item.querySelectorAll('.clickable-artist').forEach(artistEl => {
         artistEl.addEventListener('click', (e) => {
             e.stopPropagation();
             e.preventDefault();
-            if (window.searchArtistProfile) {
-                window.searchArtistProfile(track.artist);
+            const artistName = (artistEl.dataset.artist || artistEl.textContent || '').trim();
+            if (artistName && artistName !== 'Unknown') {
+                document.querySelectorAll('.modal-overlay, #album-modal-container, #playlist-modal-container').forEach(m => {
+                    m.style.display = 'none';
+                });
+                if (window.searchArtistProfile) {
+                    window.searchArtistProfile(artistName);
+                } else if (window.NeDotify?.searchArtistProfile) {
+                    window.NeDotify.searchArtistProfile(artistName);
+                }
             }
         });
-    }
+    });
 
     // Like handler: Instant UI toggle + localStorage persistence + pywebview API
     const likeBtn = item.querySelector('.like-btn');

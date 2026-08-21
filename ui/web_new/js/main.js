@@ -1,7 +1,7 @@
 // NeDotify - Main Entry Point
 import { initPlayer, applySettings, playTrack } from './player.js';
 import { initPages, showPage } from './pages.js';
-import { initSearch } from './search.js';
+import { initSearch, searchArtistProfile } from './search.js';
 import { loadHome } from './home.js';
 import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlaylist } from './library.js';
 import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js';
@@ -36,6 +36,7 @@ window.awaitBridge = function awaitBridge() {
 
 // Global NeDotify namespace for cross-module communication
 window.loadProfile = loadProfile;
+window.searchArtistProfile = searchArtistProfile;
 window.NeDotify = {
     openPlaylistMenu: openPlaylistMenu,
     createPlaylist: createPlaylist,
@@ -46,6 +47,7 @@ window.NeDotify = {
     handleImageError: handleImageError,
     showTrackContextMenu: showTrackContextMenu,
     showPage: showPage,
+    searchArtistProfile: searchArtistProfile,
     playTrack: playTrack,
     playNext: (track) => {
         if (window.pywebview?.api?.play_next) {

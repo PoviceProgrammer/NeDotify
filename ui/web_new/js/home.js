@@ -453,9 +453,24 @@ function createFeedCard(track, trackList = null, trackIndex = 0) {
             </div>
         </div>
         <div class="feed-card-title">${escapeHtml(track.title || 'Unknown')}</div>
-        <div class="feed-card-sub">${escapeHtml(track.artist || '')}</div>
+        <div class="feed-card-sub clickable-artist">${escapeHtml(track.artist || '')}</div>
     `;
-    card.addEventListener('click', () => {
+    
+    const subEl = card.querySelector('.feed-card-sub');
+    if (subEl && track.artist && track.artist !== 'Unknown' && track.artist !== 'Микс') {
+        subEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (window.searchArtistProfile) {
+                window.searchArtistProfile(track.artist);
+            } else if (window.NeDotify?.searchArtistProfile) {
+                window.NeDotify.searchArtistProfile(track.artist);
+            }
+        });
+    }
+
+    card.addEventListener('click', (e) => {
+        if (e.target.closest('.clickable-artist') || e.target.closest('.feed-card-sub')) return;
         if (window.pywebview?.api) {
             const trackObj = { ...track };
             if (trackObj.track_id) trackObj.id = trackObj.track_id;

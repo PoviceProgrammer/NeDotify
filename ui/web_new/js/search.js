@@ -168,6 +168,13 @@ export function initSearch() {
 
 // Global accessor to navigate to an artist profile
 export function searchArtistProfile(artistName) {
+    if (!artistName || artistName === 'Unknown') return;
+
+    // Dismiss any open modal overlay immediately so search/profile is visible
+    document.querySelectorAll('.modal-overlay, #album-modal-container, #playlist-modal-container').forEach(m => {
+        m.style.display = 'none';
+    });
+
     isViewingArtistProfile = true;
     const input = document.getElementById('search-input');
     const clearBtn = document.getElementById('search-clear');
@@ -187,6 +194,8 @@ export function searchArtistProfile(artistName) {
     // Switch to search page
     if (window.showPage) {
         window.showPage('search');
+    } else if (window.NeDotify?.showPage) {
+        window.NeDotify.showPage('search');
     }
 
     showLoadingArtist(artistName);

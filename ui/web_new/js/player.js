@@ -937,6 +937,36 @@ export function initPlayer() {
         });
     }
 
+    const pbArtist = document.getElementById('pb-artist');
+    if (pbArtist) {
+        pbArtist.classList.add('clickable-artist');
+        pbArtist.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Выберите трек') {
+                if (window.searchArtistProfile) {
+                    window.searchArtistProfile(currentTrack.artist);
+                } else if (window.NeDotify?.searchArtistProfile) {
+                    window.NeDotify.searchArtistProfile(currentTrack.artist);
+                }
+            }
+        });
+    }
+
+    const ppArtist = document.getElementById('pp-artist');
+    if (ppArtist) {
+        ppArtist.classList.add('clickable-artist');
+        ppArtist.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Выберите трек') {
+                if (window.searchArtistProfile) {
+                    window.searchArtistProfile(currentTrack.artist);
+                } else if (window.NeDotify?.searchArtistProfile) {
+                    window.NeDotify.searchArtistProfile(currentTrack.artist);
+                }
+            }
+        });
+    }
+
     // Start smooth progress animation if playing
     if (isPlaying && !animFrameId) {
         animFrameId = requestAnimationFrame(animateProgress);
