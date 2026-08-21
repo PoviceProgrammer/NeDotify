@@ -3,17 +3,19 @@ AURA Music - Lyrics Service
 Fetches synced and plain lyrics using 6 databases with a race condition weight system.
 """
 
+import atexit
+import concurrent.futures
+import html
+import json
 import logging
+import re
+import ssl
+import sys
+import threading
+import time
 import urllib.parse
 import urllib.request
-import json
-import time
-import re
-import html
-import ssl
-import concurrent.futures
-
-from services.base_service import BaseMusicService
+from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +26,78 @@ ssl_ctx = ssl.create_default_context()
 # Every outbound lyrics request gets this ceiling so a hung host cannot pin a worker.
 HTTP_TIMEOUT = 6.0
 
+
+class _LyricsSharedExecutor:
+    """Lazy, bounded, shutdown-safe ThreadPoolExecutor for lyrics fetching."""
+
+    def __init__(self, max_workers: int = 4, thread_name_prefix: str = "LyricsPool"):
+        self._max_workers = max_workers
+        self._thread_name_prefix = thread_name_prefix
+        self._lock = threading.Lock()
+        self._pool: Optional[concurrent.futures.ThreadPoolExecutor] = None
+        self._shutdown = False
+
+    def submit(self, fn: Callable, *args, **kwargs) -> Optional[concurrent.futures.Future]:
+        """Schedule `fn`; return its Future, or None when scheduling is impossible."""
+        if self._shutdown or sys.is_finalizing():
+            logger.debug(
+                "Lyrics executor unavailable (shutdown=%s); dropping task %r",
+                self._shutdown,
+                getattr(fn, "__name__", fn),
+            )
+            return None
+        pool = self._pool
+        if pool is None:
+            with self._lock:
+                if self._shutdown:
+                    logger.debug(
+                        "Lyrics executor shut down while acquiring lock; dropping task %r",
+                        getattr(fn, "__name__", fn),
+                    )
+                    return None
+                if self._pool is None:
+                    self._pool = concurrent.futures.ThreadPoolExecutor(
+                        max_workers=self._max_workers,
+                        thread_name_prefix=self._thread_name_prefix,
+                    )
+                pool = self._pool
+        try:
+            return pool.submit(fn, *args, **kwargs)
+        except RuntimeError as e:
+            self._shutdown = True
+            logger.debug("Lyrics executor refused task %r: %s", getattr(fn, "__name__", fn), e)
+            return None
+
+    def shutdown(self, wait: bool = False, cancel_futures: bool = True) -> None:
+        """Stop accepting work and tear the pool down without blocking."""
+        with self._lock:
+            self._shutdown = True
+            pool, self._pool = self._pool, None
+        if pool is None:
+            return
+        try:
+            pool.shutdown(wait=wait, cancel_futures=cancel_futures)
+        except Exception as e:
+            logger.debug("Lyrics executor shutdown error: %s", e, exc_info=True)
+
+
+_lyrics_pool = _LyricsSharedExecutor(max_workers=4, thread_name_prefix="LyricsPool")
+atexit.register(_lyrics_pool.shutdown, wait=False, cancel_futures=True)
+
+
 class LyricsService:
     def __init__(self, settings=None):
         self.settings = settings
+
+    @classmethod
+    def submit(cls, fn: Callable, *args, **kwargs) -> Optional[concurrent.futures.Future]:
+        """Submit a task to the shared bounded lyrics thread pool."""
+        return _lyrics_pool.submit(fn, *args, **kwargs)
+
+    @classmethod
+    def shutdown_executor(cls, wait: bool = False, cancel_futures: bool = True) -> None:
+        """Shut down the shared bounded lyrics thread pool."""
+        _lyrics_pool.shutdown(wait=wait, cancel_futures=cancel_futures)
 
     def _open_url(self, req_or_url, headers=None, timeout=3.5):
         if isinstance(req_or_url, str):
@@ -41,8 +112,8 @@ class LyricsService:
         try:
             url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_lang}&dt=t&q={urllib.parse.quote(lyrics)}"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-                data = json.loads(resp.read().decode('utf-8'))
+            with self._open_url(req, timeout=HTTP_TIMEOUT) as resp:
+                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
                 return "".join([x[0] for x in data[0] if x[0]])
         except Exception as e:
             logger.debug(f"Translation error: {e}")
@@ -55,22 +126,21 @@ class LyricsService:
         track = track_name.strip()
         artist = artist_name.strip() if artist_name else ""
 
-        # Define 6 fetcher methods to run concurrently
+        # Define 6 fetcher methods to run concurrently in the shared bounded pool
         fetchers = [
             self._fetch_lrclib,
             self._fetch_netease,
             self._fetch_qqmusic,
             self._fetch_megalobiz,
             self._fetch_genius,
-            self._fetch_duckduckgo
+            self._fetch_duckduckgo,
         ]
 
-        # Reuse the shared pool instead of building (and leaking) one per lookup.
         futures = {}
         for f in fetchers:
-            future = BaseMusicService.submit(f, track, artist)
+            future = _lyrics_pool.submit(f, track, artist)
             if future is not None:
-                futures[future] = f.__name__
+                futures[future] = getattr(f, '__name__', str(f))
         if not futures:
             logger.debug('Lyrics lookup skipped: shared executor unavailable')
             return {"syncedLyrics": None, "plainLyrics": None, "instrumental": False, "weight": 3}
@@ -87,23 +157,30 @@ class LyricsService:
                 break
 
             # Fast exit: If plain lyrics found (weight 2) and 0.6s passed with no synced lyrics, return immediately
-            if best_weight_2 and (time.time() - weight2_found_time) >= 0.6:
-                return best_weight_2
+            if best_weight_2 and weight2_found_time:
+                fast_exit_remaining = 0.6 - (time.time() - weight2_found_time)
+                if fast_exit_remaining <= 0:
+                    return best_weight_2
+                time_left = min(0.2, timeout - elapsed, max(0.01, fast_exit_remaining))
+            else:
+                time_left = min(0.2, timeout - elapsed)
 
-            time_left = min(0.2, timeout - elapsed)
+            if time_left <= 0:
+                break
+
             done, not_done = concurrent.futures.wait(
                 not_done,
                 timeout=time_left,
-                return_when=concurrent.futures.FIRST_COMPLETED
+                return_when=concurrent.futures.FIRST_COMPLETED,
             )
 
             for fut in done:
                 try:
                     res = fut.result()
-                    if res:
+                    if res and isinstance(res, dict):
                         w = res.get('weight', 3)
                         if w == 1:
-                            return res # Immediate WIN
+                            return res  # Immediate WIN
                         elif w == 2 and not best_weight_2:
                             best_weight_2 = res
                             weight2_found_time = time.time()
@@ -133,12 +210,12 @@ class LyricsService:
     def _fetch_lrclib(self, track, artist):
         c_track = self._clean_str(track)
         c_artist = artist.split(',')[0].split('&')[0].strip() if artist else ""
-        
+
         # 1. Try exact /api/get
         try:
             url = f"https://lrclib.net/api/get?artist_name={urllib.parse.quote(c_artist)}&track_name={urllib.parse.quote(c_track)}"
             req = urllib.request.Request(url, headers={'User-Agent': 'AURA-Music/1.0'})
-            with urllib.request.urlopen(req, timeout=3.5) as resp:
+            with self._open_url(req, timeout=3.5) as resp:
                 data = json.loads(resp.read().decode('utf-8', errors='ignore'))
                 res = self._make_result(data.get("syncedLyrics"), data.get("plainLyrics"))
                 if res:
@@ -151,7 +228,7 @@ class LyricsService:
             q = f"{c_artist} {c_track}".strip()
             url = f"https://lrclib.net/api/search?q={urllib.parse.quote(q)}"
             req = urllib.request.Request(url, headers={'User-Agent': 'AURA-Music/1.0'})
-            with urllib.request.urlopen(req, timeout=3.5) as resp:
+            with self._open_url(req, timeout=3.5) as resp:
                 results = json.loads(resp.read().decode('utf-8', errors='ignore'))
                 if isinstance(results, list) and results:
                     for item in results:
@@ -167,92 +244,116 @@ class LyricsService:
         return None
 
     def _fetch_netease(self, track, artist):
-        query = f"{artist} {track}".strip()
-        url = f"http://music.163.com/api/search/pc?type=1&offset=0&limit=1&s={urllib.parse.quote(query)}"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=3.5) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            songs = data.get('result', {}).get('songs', [])
-            if not songs: return None
-            sid = songs[0]['id']
-            
-        l_url = f"http://music.163.com/api/song/lyric?id={sid}&lv=1&kv=1&tv=-1"
-        l_req = urllib.request.Request(l_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(l_req, timeout=3.5) as l_resp:
-            l_data = json.loads(l_resp.read().decode('utf-8'))
-            lrc = l_data.get('lrc', {}).get('lyric')
-            return self._make_result(lrc, lrc)
+        try:
+            query = f"{artist} {track}".strip()
+            url = f"http://music.163.com/api/search/pc?type=1&offset=0&limit=1&s={urllib.parse.quote(query)}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with self._open_url(req, timeout=3.5) as resp:
+                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
+                songs = data.get('result', {}).get('songs', [])
+                if not songs:
+                    return None
+                sid = songs[0]['id']
+
+            l_url = f"http://music.163.com/api/song/lyric?id={sid}&lv=1&kv=1&tv=-1"
+            l_req = urllib.request.Request(l_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with self._open_url(l_req, timeout=3.5) as l_resp:
+                l_data = json.loads(l_resp.read().decode('utf-8', errors='ignore'))
+                lrc = l_data.get('lrc', {}).get('lyric')
+                return self._make_result(lrc, lrc)
+        except Exception as e:
+            logger.debug(f"netease lookup failed for '{artist} {track}': {e}", exc_info=True)
+            return None
 
     def _fetch_qqmusic(self, track, artist):
-        query = f"{artist} {track}".strip()
-        url = f"https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w={urllib.parse.quote(query)}&format=json&n=1"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=3.5) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            songs = data.get('data', {}).get('song', {}).get('list', [])
-            if not songs: return None
-            songmid = songs[0]['songmid']
-            
-        l_url = f"https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid={songmid}&format=json&nobase64=1"
-        l_req = urllib.request.Request(l_url, headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://y.qq.com/'})
-        with urllib.request.urlopen(l_req, timeout=3.5) as l_resp:
-            l_data = json.loads(l_resp.read().decode('utf-8'))
-            lrc = l_data.get('lyric')
-            lrc = html.unescape(lrc) if lrc else None
-            return self._make_result(lrc, lrc)
+        try:
+            query = f"{artist} {track}".strip()
+            url = f"https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w={urllib.parse.quote(query)}&format=json&n=1"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with self._open_url(req, timeout=3.5) as resp:
+                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
+                songs = data.get('data', {}).get('song', {}).get('list', [])
+                if not songs:
+                    return None
+                songmid = songs[0]['songmid']
+
+            l_url = f"https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid={songmid}&format=json&nobase64=1"
+            l_req = urllib.request.Request(l_url, headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://y.qq.com/'})
+            with self._open_url(l_req, timeout=3.5) as l_resp:
+                l_data = json.loads(l_resp.read().decode('utf-8', errors='ignore'))
+                lrc = l_data.get('lyric')
+                lrc = html.unescape(lrc) if lrc else None
+                return self._make_result(lrc, lrc)
+        except Exception as e:
+            logger.debug(f"qqmusic lookup failed for '{artist} {track}': {e}", exc_info=True)
+            return None
 
     def _fetch_genius(self, track, artist):
-        query = f"{artist} {track}".strip()
-        url = f"https://genius.com/api/search/multi?per_page=1&q={urllib.parse.quote(query)}"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=3.5) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            hits = data.get('response', {}).get('sections', [{}])[0].get('hits', [])
-            if not hits: return None
-            s_url = hits[0]['result']['url']
-            
-        s_req = urllib.request.Request(s_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(s_req, timeout=3.5) as s_resp:
-            html_content = s_resp.read().decode('utf-8')
-            lyrics_parts = re.findall(r'<div data-lyrics-container="true"[^>]*>(.*?)</div>', html_content)
-            if lyrics_parts:
-                txt = "\n".join(lyrics_parts)
-                txt = re.sub(r'<br/?>', '\n', txt)
-                txt = re.sub(r'<[^>]+>', '', txt)
-                txt = html.unescape(txt)
-                return self._make_result(None, txt)
+        try:
+            query = f"{artist} {track}".strip()
+            url = f"https://genius.com/api/search/multi?per_page=1&q={urllib.parse.quote(query)}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with self._open_url(req, timeout=3.5) as resp:
+                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
+                hits = data.get('response', {}).get('sections', [{}])[0].get('hits', [])
+                if not hits:
+                    return None
+                s_url = hits[0]['result']['url']
+
+            s_req = urllib.request.Request(s_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with self._open_url(s_req, timeout=3.5) as s_resp:
+                html_content = s_resp.read().decode('utf-8', errors='ignore')
+                lyrics_parts = re.findall(r'<div data-lyrics-container="true"[^>]*>(.*?)</div>', html_content)
+                if lyrics_parts:
+                    txt = "\n".join(lyrics_parts)
+                    txt = re.sub(r'<br/?>', '\n', txt)
+                    txt = re.sub(r'<[^>]+>', '', txt)
+                    txt = html.unescape(txt)
+                    return self._make_result(None, txt)
+        except Exception as e:
+            logger.debug(f"genius lookup failed for '{artist} {track}': {e}", exc_info=True)
+            return None
         return None
 
     def _fetch_megalobiz(self, track, artist):
-        query = f"{artist} {track}".strip()
-        url = f"https://www.megalobiz.com/search/all?qry={urllib.parse.quote(query)}&searchButton.x=0&searchButton.y=0"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=3.5) as resp:
-            html_content = resp.read().decode('utf-8')
-            link = re.search(r'href="(/lrc/maker/[^"]+)"', html_content)
-            if not link: return None
-            
-        l_url = "https://www.megalobiz.com" + link.group(1)
-        l_req = urllib.request.Request(l_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(l_req, timeout=3.5) as l_resp:
-            l_html = l_resp.read().decode('utf-8')
-            lrc_match = re.search(r'<div id="lrc_[^"]*"[^>]*>(.*?)</div>', l_html, re.S)
-            if not lrc_match:
-                lrc_match = re.search(r'<span id="lrc_[^"]*"[^>]*>(.*?)</span>', l_html, re.S)
-            if lrc_match:
-                txt = lrc_match.group(1).replace('<br>', '\n').strip()
-                return self._make_result(txt, txt)
+        try:
+            query = f"{artist} {track}".strip()
+            url = f"https://www.megalobiz.com/search/all?qry={urllib.parse.quote(query)}&searchButton.x=0&searchButton.y=0"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with self._open_url(req, timeout=3.5) as resp:
+                html_content = resp.read().decode('utf-8', errors='ignore')
+                link = re.search(r'href="(/lrc/maker/[^"]+)"', html_content)
+                if not link:
+                    return None
+
+            l_url = "https://www.megalobiz.com" + link.group(1)
+            l_req = urllib.request.Request(l_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with self._open_url(l_req, timeout=3.5) as l_resp:
+                l_html = l_resp.read().decode('utf-8', errors='ignore')
+                lrc_match = re.search(r'<div id="lrc_[^"]*"[^>]*>(.*?)</div>', l_html, re.S)
+                if not lrc_match:
+                    lrc_match = re.search(r'<span id="lrc_[^"]*"[^>]*>(.*?)</span>', l_html, re.S)
+                if lrc_match:
+                    txt = lrc_match.group(1).replace('<br>', '\n').strip()
+                    return self._make_result(txt, txt)
+        except Exception as e:
+            logger.debug(f"megalobiz lookup failed for '{artist} {track}': {e}", exc_info=True)
+            return None
         return None
 
     def _fetch_duckduckgo(self, track, artist):
-        query = f"{artist} {track} lyrics".strip()
-        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-        with urllib.request.urlopen(req, timeout=3.5) as resp:
-            html_content = resp.read().decode('utf-8')
-            snippets = re.findall(r'<a class="result__snippet[^>]*>(.*?)</a>', html_content, re.S)
-            if snippets:
-                txt = "\n".join(snippets).replace('<b>', '').replace('</b>', '').strip()
-                txt = html.unescape(txt)
-                return self._make_result(None, txt)
+        try:
+            query = f"{artist} {track} lyrics".strip()
+            url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            with self._open_url(req, timeout=3.5) as resp:
+                html_content = resp.read().decode('utf-8', errors='ignore')
+                snippets = re.findall(r'<a class="result__snippet[^>]*>(.*?)</a>', html_content, re.S)
+                if snippets:
+                    txt = "\n".join(snippets).replace('<b>', '').replace('</b>', '').strip()
+                    txt = html.unescape(txt)
+                    return self._make_result(None, txt)
+        except Exception as e:
+            logger.debug(f"duckduckgo lookup failed for '{artist} {track}': {e}", exc_info=True)
+            return None
         return None
