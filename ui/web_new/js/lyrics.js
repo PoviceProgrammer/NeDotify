@@ -134,6 +134,10 @@ function getContainers() {
 function resetLyricsScroll() {
     currentLineIndex = -1;
     getContainers().forEach(c => {
+        if (c._lastActiveLyric) {
+            c._lastActiveLyric.classList.remove('active');
+            c._lastActiveLyric = null;
+        }
         const scrollParent = c.closest('.player-lyrics-container') || c.closest('.lyrics-scroll-container') || c.parentElement;
         if (scrollParent) {
             scrollParent.scrollTop = 0;
@@ -361,19 +365,20 @@ function updateLyricsPosition(posMs) {
 
         if (newIndex !== currentLineIndex && newIndex !== -1) {
             getContainers().forEach(c => {
-                const lines = c.querySelectorAll('.lyric-line');
-                let targetLine = null;
-                lines.forEach((line, idx) => {
-                    if (idx === newIndex) {
-                        line.classList.add('active');
-                        targetLine = line;
-                    } else {
-                        line.classList.remove('active');
-                    }
-                });
+                if (c._lastActiveLyric) {
+                    c._lastActiveLyric.classList.remove('active');
+                } else {
+                    const prev = c.querySelector('.lyric-line.active');
+                    if (prev) prev.classList.remove('active');
+                }
 
+                const targetLine = c.querySelector(`.lyric-line[data-index="${newIndex}"]`) || c.children[newIndex];
                 if (targetLine) {
+                    targetLine.classList.add('active');
+                    c._lastActiveLyric = targetLine;
                     scrollToElement(targetLine, c);
+                } else {
+                    c._lastActiveLyric = null;
                 }
             });
             currentLineIndex = newIndex;

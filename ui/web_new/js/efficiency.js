@@ -4,17 +4,6 @@ export function initBlurObserver() {
     if (document.documentElement.classList.contains('perf-low')) return;
 
     const selector = '.card, .glass-panel, .player-glass-card, .settings-modal-card';
-    let scanScheduled = false;
-
-    const scan = () => {
-        scanScheduled = false;
-        document.querySelectorAll(selector).forEach(el => {
-            if (!el._blurObserved) {
-                el._blurObserved = true;
-                io.observe(el);
-            }
-        });
-    };
 
     const io = new IntersectionObserver((entries) => {
         for (const entry of entries) {
@@ -22,13 +11,44 @@ export function initBlurObserver() {
         }
     }, { rootMargin: '150px 0px', threshold: 0 });
 
-    // Debounced re-scan for dynamically rendered content (feeds, views, modals)
-    const observer = new MutationObserver(() => {
-        if (scanScheduled) return;
-        scanScheduled = true;
-        requestAnimationFrame(scan);
+    const observeEl = (el) => {
+        if (el && el.nodeType === 1 && !el._blurObserved) {
+            el._blurObserved = true;
+            io.observe(el);
+        }
+    };
+
+    const scanElement = (root) => {
+        if (!root || root.nodeType !== 1) return;
+        if (root.matches && root.matches(selector)) {
+            observeEl(root);
+        }
+        if (root.querySelectorAll) {
+            root.querySelectorAll(selector).forEach(observeEl);
+        }
+    };
+
+    const scan = () => {
+        const container = document.getElementById('views-container') || document.body;
+        scanElement(container);
+    };
+
+    // Process mutations checking addedNodes instead of unconditional querySelectorAll over document.body
+    const observer = new MutationObserver((mutationsList) => {
+        for (const mutation of mutationsList) {
+            if (mutation.addedNodes && mutation.addedNodes.length > 0) {
+                for (let i = 0; i < mutation.addedNodes.length; i++) {
+                    const node = mutation.addedNodes[i];
+                    if (node.nodeType === 1) {
+                        scanElement(node);
+                    }
+                }
+            }
+        }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+
+    const targetContainer = document.getElementById('views-container') || document.body;
+    observer.observe(targetContainer, { childList: true, subtree: true });
 
     scan();
     window.addEventListener('nedotify:app_ready', scan);

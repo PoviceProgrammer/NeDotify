@@ -161,7 +161,7 @@ function renderHistory(tracks) {
     tracks.slice(0, 10).forEach((track, idx) => {
         container.appendChild(createFeedCard(track, tracks, idx));
     });
-    renderIcons();
+    renderIcons(container);
 }
 
 export function renderPopular(tracks) {
@@ -192,7 +192,14 @@ export function renderAuthenticHome(sections) {
     
     container.innerHTML = '';
     
-    sections.forEach((section, index) => {
+    const sectionList = Array.isArray(sections) 
+        ? sections 
+        : (sections && Array.isArray(sections.sections) ? sections.sections : []);
+        
+    if (!sectionList || sectionList.length === 0) return;
+    
+    sectionList.forEach((section, index) => {
+        if (!section) return;
         const sectionId = `auth-section-${index}`;
         
         // Create section wrapper
@@ -210,7 +217,9 @@ export function renderAuthenticHome(sections) {
         scrollEl.className = 'feed-scroll';
         scrollEl.id = sectionId;
         
-        section.items.forEach(item => {
+        const items = Array.isArray(section.items) ? section.items : [];
+        items.forEach(item => {
+            if (!item) return;
             if (item.type === 'track') {
                 const trackData = {
                     title: item.title,
@@ -236,8 +245,8 @@ export function renderAuthenticHome(sections) {
                 `;
                 
                 card.onclick = () => {
-                    const allTracks = section.items
-                        .filter(i => i.type === 'track')
+                    const allTracks = items
+                        .filter(i => i && i.type === 'track')
                         .map(i => ({
                             title: i.title,
                             artist: i.artist,
@@ -309,10 +318,11 @@ export function renderAuthenticHome(sections) {
         
         sectionEl.appendChild(scrollEl);
         container.appendChild(sectionEl);
+        renderIcons(sectionEl);
     });
-    
-    renderIcons();
 }
+
+export const renderAuthenticHomeFeed = renderAuthenticHome;
 
 export function renderHomePlaylists(playlists) {
     const container = document.getElementById('home-playlists');
@@ -343,7 +353,7 @@ export function renderHomePlaylists(playlists) {
         });
         container.appendChild(card);
     });
-    renderIcons();
+    renderIcons(container);
 }
 
 export function renderArtists(artists) {
@@ -384,7 +394,7 @@ export function renderArtists(artists) {
         });
         container.appendChild(card);
     });
-    renderIcons();
+    renderIcons(container);
 }
 
 function renderFeedSection(containerId, tracks) {
@@ -400,7 +410,7 @@ function renderFeedSection(containerId, tracks) {
     tracks.forEach((track, idx) => {
         container.appendChild(createFeedCard(track, tracks, idx));
     });
-    renderIcons();
+    renderIcons(container);
 }
 
 function createFeedCard(track, trackList = null, trackIndex = 0) {
@@ -533,7 +543,7 @@ export function renderTopTracks(tracks) {
         };
         container.appendChild(card);
     });
-    renderIcons();
+    renderIcons(container);
 }
 
 export function renderTopArtists(artists) {
@@ -573,7 +583,7 @@ export function renderTopArtists(artists) {
         };
         container.appendChild(card);
     });
-    renderIcons();
+    renderIcons(container);
 }
 
 let currentWrappedPeriod = 'week';

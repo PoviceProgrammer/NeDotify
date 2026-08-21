@@ -14,6 +14,7 @@ let currentSource = 'all'; // Default source is 'Все площадки'
 let currentType = 'tracks';    // Default filter is 'Треки' as shown in screenshot 1
 let allResults = [];
 let currentSearchQuery = '';   // Track the latest query sent
+let searchBatchRafId = null;
 
 let isViewingArtistProfile = false;
 
@@ -233,6 +234,11 @@ export function onSearchResults(data) {
 }
 
 function renderResults(tracks) {
+    if (searchBatchRafId) {
+        cancelAnimationFrame(searchBatchRafId);
+        searchBatchRafId = null;
+    }
+
     const container = document.getElementById('search-results');
     if (!container) return;
 
@@ -378,13 +384,45 @@ function renderResults(tracks) {
         container.appendChild(artistSuggest);
     }
 
+    renderSearchResultsBatch(container, displayTracks);
+}
+
+const SEARCH_BATCH_SIZE = 30;
+
+function renderSearchResultsBatch(container, displayTracks) {
+    if (searchBatchRafId) {
+        cancelAnimationFrame(searchBatchRafId);
+        searchBatchRafId = null;
+    }
+
     const list = document.createElement('div');
     list.className = 'track-list';
-    displayTracks.forEach((track, i) => {
-        list.appendChild(createTrackElement(track, i, displayTracks, getCurrentTrack()));
-    });
     container.appendChild(list);
-    renderIcons();
+
+    let renderedCount = 0;
+    const currentTrack = getCurrentTrack();
+
+    function renderNextBatch() {
+        const start = renderedCount;
+        const end = Math.min(displayTracks.length, start + SEARCH_BATCH_SIZE);
+        const fragment = document.createDocumentFragment();
+
+        for (let i = start; i < end; i++) {
+            fragment.appendChild(createTrackElement(displayTracks[i], i, displayTracks, currentTrack));
+        }
+
+        list.appendChild(fragment);
+        renderIcons(list);
+        renderedCount = end;
+
+        if (renderedCount < displayTracks.length) {
+            searchBatchRafId = requestAnimationFrame(renderNextBatch);
+        } else {
+            searchBatchRafId = null;
+        }
+    }
+
+    renderNextBatch();
 }
 
 function renderAlbumGrid(albums, container) {
@@ -799,6 +837,10 @@ window.playPlaylist = playPlaylist;
 window.openPlaylistModal = openPlaylistModal;
 
 function showLoading() {
+    if (searchBatchRafId) {
+        cancelAnimationFrame(searchBatchRafId);
+        searchBatchRafId = null;
+    }
     const container = document.getElementById('search-results');
     if (container) {
         container.innerHTML = '<div class="empty-state"><div class="spinner"></div><span>Поиск...</span></div>';
@@ -806,6 +848,10 @@ function showLoading() {
 }
 
 function showLoadingArtist(query) {
+    if (searchBatchRafId) {
+        cancelAnimationFrame(searchBatchRafId);
+        searchBatchRafId = null;
+    }
     const container = document.getElementById('search-results');
     if (!container) return;
 
@@ -827,14 +873,18 @@ function showLoadingArtist(query) {
     leftCol.appendChild(ArtistBioComponent.renderSkeleton());
     rightCol.appendChild(ArtistAlbumsComponent.renderSkeleton());
     rightCol.appendChild(ArtistTracksComponent.renderSkeleton());
-    renderIcons();
+    renderIcons(wrapper);
 }
 
 function showPlaceholder() {
+    if (searchBatchRafId) {
+        cancelAnimationFrame(searchBatchRafId);
+        searchBatchRafId = null;
+    }
     const container = document.getElementById('search-results');
     if (container) {
         container.innerHTML = '<div class="empty-state"><i data-lucide="search" style="width:40px;height:40px;opacity:0.3"></i><span>Введите запрос для поиска музыки</span></div>';
-        renderIcons();
+        renderIcons(container);
     }
 }
 

@@ -414,18 +414,17 @@ export function compressBackgroundImage(dataUrl, callback) {
 
 export function renderIcons(targetEl) {
     if (window.lucide) {
-        if (targetEl && (targetEl.nodeType === 1 || targetEl.nodeType === 9)) {
+        const root = (targetEl && targetEl.nodeType) ? targetEl : document.body;
+        try {
+            window.lucide.createIcons({
+                nameAttr: 'data-lucide',
+                attrs: {},
+                root: root
+            });
+        } catch(e) {
             try {
-                window.lucide.createIcons({
-                    nameAttr: 'data-lucide',
-                    attrs: {},
-                    root: targetEl
-                });
-            } catch(e) {
                 window.lucide.createIcons();
-            }
-        } else {
-            window.lucide.createIcons();
+            } catch (_) {}
         }
     }
 }
