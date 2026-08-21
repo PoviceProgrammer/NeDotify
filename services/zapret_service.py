@@ -57,7 +57,7 @@ PRESET_STRATEGIES = {
 # Security: winws arguments reach an ELEVATED process, so every token is validated
 # against this grammar before it is ever passed to ShellExecuteW. Anything outside
 # it (quotes, semicolons, ampersands, backticks, pipes, redirects) is rejected.
-_ALLOWED_ARG_RE = re.compile(r'^--[A-Za-z0-9][A-Za-z0-9\-]*(=[A-Za-z0-9,.:_/\-]*)?$')
+_ALLOWED_ARG_RE = re.compile(r'^--[A-Za-z0-9][A-Za-z0-9\-]*(=[A-Za-z0-9,.:_/\-\\ ]*)?$')
 
 # Only these executable names may ever be launched, elevated or not.
 _ALLOWED_BINARY_NAMES = frozenset({"winws.exe", "zapret.exe", "winws"})
@@ -285,8 +285,76 @@ class ZapretService:
                 pass
             return self._pid_alive(pid)
 
+    def _get_process_exe_path(self, pid: int | None) -> Optional[str]:
+        """Get the full filesystem path of the executable for a PID."""
+        if not pid or pid <= 0:
+            return None
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import wintypes
+                PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+                kernel32 = ctypes.windll.kernel32
+                handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+                if handle:
+                    try:
+                        buf = ctypes.create_unicode_buffer(1024)
+                        size = wintypes.DWORD(1024)
+                        if hasattr(kernel32, "QueryFullProcessImageNameW") and kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
+                            return buf.value
+                    finally:
+                        kernel32.CloseHandle(handle)
+            except Exception:
+                logger.debug("_get_process_exe_path failed for PID %s", pid, exc_info=True)
+        else:
+            try:
+                exe_link = f"/proc/{pid}/exe"
+                if os.path.exists(exe_link):
+                    return os.path.realpath(exe_link)
+            except Exception:
+                pass
+        return None
+
+    def _is_our_winws_process(self, pid: int | None, signature: str = "") -> bool:
+        """Verify that the process with the given PID is winws.exe AND belongs to this application.
+        Prevents adopting or terminating foreign winws.exe processes (AUDIT #04).
+        """
+        if not pid or pid <= 0 or not self._pid_alive(pid):
+            return False
+        if not self._is_winws_process(pid):
+            return False
+
+        # 1. Verify executable path matches our app directory or binary path
+        exe_path = self._get_process_exe_path(pid)
+        if exe_path:
+            norm_exe = os.path.normcase(os.path.abspath(exe_path))
+            our_bin = self.find_binary()
+            if our_bin and norm_exe == os.path.normcase(os.path.abspath(our_bin)):
+                return True
+            app_dir_norm = os.path.normcase(os.path.abspath(self.app_dir))
+            if norm_exe.startswith(app_dir_norm):
+                return True
+            cwd_norm = os.path.normcase(os.path.abspath(os.getcwd()))
+            if norm_exe.startswith(cwd_norm):
+                return True
+            # Executable path is known and does NOT belong to our app
+            return False
+
+        # 2. Check launch command line signature if available
+        if signature:
+            matching = self._scan_pids_with(signature)
+            if pid in matching:
+                return True
+
+        # 3. Fallback: check if it matches our own saved PID from pidfile
+        saved_pid = self._read_pidfile()
+        if saved_pid and saved_pid == pid:
+            return True
+
+        return False
+
     def _scan_all_winws_pids(self) -> List[int]:
-        """Return PIDs of all running winws processes verified by image name."""
+        """Return PIDs of running winws processes verified to belong to this application."""
         if sys.platform != "win32":
             return []
         pids: List[int] = []
@@ -306,7 +374,7 @@ class ZapretService:
                         if img_name in _ALLOWED_BINARY_NAMES:
                             try:
                                 pid = int(row[1].strip())
-                                if pid > 0 and self._pid_alive(pid) and self._is_winws_process(pid):
+                                if pid > 0 and self._pid_alive(pid) and self._is_our_winws_process(pid):
                                     if pid not in pids:
                                         pids.append(pid)
                             except ValueError:
@@ -325,7 +393,7 @@ class ZapretService:
                     line = line.strip()
                     if line.isdigit():
                         pid = int(line)
-                        if self._pid_alive(pid) and self._is_winws_process(pid):
+                        if self._pid_alive(pid) and self._is_our_winws_process(pid):
                             if pid not in pids:
                                 pids.append(pid)
             except Exception as e:
@@ -339,7 +407,7 @@ class ZapretService:
         Verifies process image name for every returned PID.
         """
         if not args_signature:
-            return self._scan_all_winws_pids()
+            return []
         pids: List[int] = []
         if sys.platform != "win32":
             return pids
@@ -407,8 +475,8 @@ class ZapretService:
         return pids
 
     def _kill_pid(self, pid: int) -> bool:
-        """Kill exactly one PID via taskkill /PID (graceful first, /F fallback).
-        MUST verify process image name is an approved winws executable before terminating.
+        """Kill exactly one PID via taskkill with IMAGENAME filter (graceful first, /F fallback).
+        MUST verify process image name is an approved winws executable before terminating (AUDIT #03).
         """
         if not pid or pid <= 0:
             return False
@@ -424,7 +492,7 @@ class ZapretService:
         try:
             if sys.platform == "win32":
                 subprocess.run(
-                    f"taskkill /PID {pid}",
+                    f'taskkill /FI "IMAGENAME eq winws*" /PID {pid}',
                     shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3.0
                 )
                 deadline = time.time() + 1.5
@@ -434,7 +502,7 @@ class ZapretService:
                     time.sleep(0.15)
 
                 subprocess.run(
-                    f"taskkill /PID {pid} /F",
+                    f'taskkill /F /FI "IMAGENAME eq winws*" /PID {pid}',
                     shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3.0
                 )
                 time.sleep(0.2)
@@ -445,7 +513,7 @@ class ZapretService:
                 try:
                     import ctypes
                     ret = ctypes.windll.shell32.ShellExecuteW(
-                        None, "runas", "taskkill.exe", f"/PID {pid} /F", None, 0
+                        None, "runas", "taskkill.exe", f'/F /FI "IMAGENAME eq winws*" /PID {pid}', None, 0
                     )
                     if ret > 32:
                         elev_deadline = time.time() + 2.0
@@ -502,20 +570,22 @@ class ZapretService:
             if self.process and self.process.poll() is None:
                 return True
         pid = self._read_pidfile()
-        if pid and self._pid_alive(pid) and self._is_winws_process(pid):
+        if pid and self._pid_alive(pid) and self._is_our_winws_process(pid):
             return True
         signature = self._last_args or self._read_cmd_file()
         if signature:
             pids = self._scan_pids_with(signature)
-            if pids:
-                self._write_pidfile(pids[0])
-                return True
-        # Fallback across integrity boundary: if CommandLine is empty in WMI,
-        # check if any running winws process exists and adopt it if we initiated a session
+            for p in pids:
+                if self._is_our_winws_process(p, signature):
+                    self._write_pidfile(p)
+                    return True
+        # Fallback: only check winws processes verified to belong to our application (AUDIT #04)
         all_winws = self._scan_all_winws_pids()
         if all_winws and (self._read_cmd_file() or self._last_args):
-            self._write_pidfile(all_winws[0])
-            return True
+            for p in all_winws:
+                if self._is_our_winws_process(p, signature):
+                    self._write_pidfile(p)
+                    return True
         return False
 
     # ─── stderr log & crash analysis (Z-3) ───
@@ -854,7 +924,8 @@ class ZapretService:
 
     def _launch_elevated(self, exe: str, raw_args: str) -> Tuple[bool, str]:
         """Elevation required (WinError 740 / missing rights) — use ShellExecuteW 'runas'.
-        Launches winws.exe with elevation and writes its PID directly to run.pid."""
+        Launches winws.exe with elevation, redirecting stdout/stderr to zapret.log (AUDIT #05),
+        and writes its PID directly to run.pid."""
         import ctypes
         logger.info("Elevating Zapret via ShellExecuteW 'runas'...")
 
@@ -868,13 +939,13 @@ class ZapretService:
             logger.error("Refusing elevated launch with unsafe arguments: %s", exc)
             return False, str(exc)
 
-        # The executable is elevated DIRECTLY. An intermediate PowerShell -Command
-        # string was previously used to capture the PID, but interpolating arguments
-        # into it allowed arbitrary code execution as Administrator. The PID is now
-        # recovered from the pidfile or the cmdline signature scan below instead.
+        self._close_log_handle()
         params = subprocess.list2cmdline(tokens)
+        comspec = os.environ.get("COMSPEC", "cmd.exe")
+        cmd_params = f'/c ""{exe}" {params} > "{self.log_file}" 2>&1"'
+
         ret = ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", exe, params, os.path.dirname(exe), 0  # SW_HIDE
+            None, "runas", comspec, cmd_params, os.path.dirname(exe), 0  # SW_HIDE
         )
         if ret == 5:
             msg = "Запуск отменён: требуются права Администратора для драйвера WinDivert (UAC отклонён)."
@@ -890,20 +961,26 @@ class ZapretService:
         deadline = time.time() + 5.0
         while time.time() < deadline:
             file_pid = self._read_pidfile()
-            if file_pid and self._pid_alive(file_pid) and self._is_winws_process(file_pid):
+            if file_pid and self._pid_alive(file_pid) and self._is_our_winws_process(file_pid):
                 pid = file_pid
                 break
             pids = self._scan_pids_with(raw_args)
-            if pids:
-                pid = pids[0]
-                self._write_pidfile(pid)
+            for p in pids:
+                if self._is_our_winws_process(p, raw_args):
+                    pid = p
+                    self._write_pidfile(pid)
+                    break
+            if pid:
                 break
             # Fallback across integrity boundary: if CommandLine is empty in WMI/CIM,
-            # discover running winws.exe via process image check
+            # discover running winws.exe belonging to our app (AUDIT #04)
             all_winws = self._scan_all_winws_pids()
-            if all_winws:
-                pid = all_winws[0]
-                self._write_pidfile(pid)
+            for p in all_winws:
+                if self._is_our_winws_process(p, raw_args):
+                    pid = p
+                    self._write_pidfile(pid)
+                    break
+            if pid:
                 break
             time.sleep(0.3)
 
@@ -913,7 +990,7 @@ class ZapretService:
 
         # Check if an existing valid PID is still running — NEVER clear if alive
         existing_pid = self._read_pidfile()
-        if existing_pid and self._pid_alive(existing_pid) and self._is_winws_process(existing_pid):
+        if existing_pid and self._pid_alive(existing_pid) and self._is_our_winws_process(existing_pid):
             return True, "Zapret активен (ранее запущен)"
 
         tail = self._read_log_tail()
@@ -922,7 +999,7 @@ class ZapretService:
 
     def stop(self) -> Tuple[bool, str]:
         """Stop only the Zapret process started by this app (Z-2).
-        Never uses taskkill /IM — external winws processes are left untouched.
+        Never uses taskkill /IM — external winws processes are left untouched (AUDIT #03, #04).
         If termination fails, pidfile is preserved to prevent orphaned WinDivert driver lock.
         """
         with self._lock:
@@ -937,14 +1014,14 @@ class ZapretService:
         try:
             pid = self._read_pidfile()
             target_pids = set()
-            if pid and self._pid_alive(pid) and self._is_winws_process(pid):
+            if pid and self._pid_alive(pid) and self._is_our_winws_process(pid):
                 target_pids.add(pid)
 
             # Fallback: kill only processes matching our cmdline signature (elevated case)
             signature = self._last_args or self._read_cmd_file()
             if signature:
                 for p in self._scan_pids_with(signature):
-                    if self._pid_alive(p) and self._is_winws_process(p):
+                    if self._pid_alive(p) and self._is_our_winws_process(p, signature):
                         target_pids.add(p)
 
             # If no active target PIDs found:
@@ -981,7 +1058,7 @@ class ZapretService:
         except Exception as e:
             logger.error("Zapret stop error: %s", e, exc_info=True)
             pid = self._read_pidfile()
-            if pid and self._pid_alive(pid) and self._is_winws_process(pid):
+            if pid and self._pid_alive(pid) and self._is_our_winws_process(pid):
                 return False, f"Ошибка при остановке Zapret: {e}"
             self._clear_pidfile()
             self._clear_cmd_file()

@@ -124,6 +124,7 @@ class AppApi:
         except Exception as te:
             logger.debug(f"Tray initialization ignored: {te}")
             self._tray = None
+        self._core.tray = self._tray
 
         self._install_bridge_error_logging()
 
@@ -428,11 +429,23 @@ class AppApi:
             self._window = main_window
 
     def close(self):
-        """Close window and shutdown application asynchronously to prevent deadlock on Windows WebView2."""
-        if self._window:
-            closer = threading.Timer(0.1, self._window.destroy)
-            closer.daemon = True
-            closer.start()
+        """Close window or minimize to tray depending on general.minimize_to_tray setting."""
+        if not self._window:
+            return {"success": True, "message": "No active window"}
+
+        minimize_to_tray = bool(self._core.settings.get("general", "minimize_to_tray", True))
+        tray_available = bool(getattr(self, "_tray", None) or getattr(self._core, "tray", None))
+
+        if minimize_to_tray and tray_available:
+            try:
+                self._window.hide()
+                return {"success": True, "message": "Minimized to tray"}
+            except Exception as e:
+                logger.warning(f"Failed to hide window to tray: {e}")
+
+        closer = threading.Timer(0.1, self._window.destroy)
+        closer.daemon = True
+        closer.start()
         return {"success": True, "message": "Window closing..."}
 
     def shutdown(self):
@@ -603,12 +616,47 @@ class AppApi:
         except Exception as e:
             logger.debug(f"Failed to evaluate JS event {event_name}: {e}")
 
+    def _enrich_track_lufs(self, track_dict: dict) -> dict:
+        """Ensure loudness_lufs and lufs fields are populated from DB if available."""
+        if not isinstance(track_dict, dict):
+            return track_dict
+
+        lufs = track_dict.get("loudness_lufs") if track_dict.get("loudness_lufs") is not None else track_dict.get("lufs")
+        if lufs is not None:
+            track_dict["loudness_lufs"] = lufs
+            track_dict["lufs"] = lufs
+            return track_dict
+
+        try:
+            db_track = None
+            t_id = track_dict.get("id") or track_dict.get("track_id")
+            if t_id:
+                try:
+                    db_track = self._core.db.get_track(int(t_id))
+                except (ValueError, TypeError):
+                    pass
+            if not db_track and track_dict.get("file_path"):
+                db_track = self._core.db.get_track_by_path(track_dict["file_path"])
+            if not db_track and track_dict.get("source") and track_dict.get("source_id"):
+                db_track = self._core.db.get_track_by_source_id(track_dict["source"], str(track_dict["source_id"]))
+
+            if db_track:
+                val = db_track.get("loudness_lufs") if db_track.get("loudness_lufs") is not None else db_track.get("lufs")
+                if val is not None:
+                    track_dict["loudness_lufs"] = val
+                    track_dict["lufs"] = val
+        except Exception:
+            logger.debug("_enrich_track_lufs lookup failed", exc_info=True)
+
+        return track_dict
+
     def _on_track_changed(self, track):
         """Callback invoked whenever active track changes."""
         if not track:
             return
 
         track_copy = dict(track)
+        self._enrich_track_lufs(track_copy)
         # Proxy cloud stream URL if the track already has a resolvable stream/file.
         # Tracks whose stream is still being resolved keep an empty stream_url so the
         # frontend can show a loading state instead of hanging on the proxy.
@@ -688,12 +736,16 @@ class AppApi:
     def play_track(self, track: dict, track_list: list = None, index: int = 0):
         """Play given track data object."""
         logger.info(f"api.py -> play_track called! track={track.get('title') if isinstance(track, dict) else track}, has_track_list={bool(track_list)}, index={index}")
-        if isinstance(track, dict) and track.get("track_id"):
-            track["id"] = track["track_id"]
+        if isinstance(track, dict):
+            if track.get("track_id"):
+                track["id"] = track["track_id"]
+            self._enrich_track_lufs(track)
         if track_list and isinstance(track_list, list):
             for t in track_list:
-                if isinstance(t, dict) and t.get("track_id"):
-                    t["id"] = t["track_id"]
+                if isinstance(t, dict):
+                    if t.get("track_id"):
+                        t["id"] = t["track_id"]
+                    self._enrich_track_lufs(t)
 
         if isinstance(track, dict) and track.get("id"):
             try:
@@ -1534,6 +1586,19 @@ class AppApi:
         self._emit("playlist_changed", {"playlist_id": playlist_id})
         return res
 
+    def get_track_info(self, track_id: int):
+        """Get track metadata including LUFS ReplayGain loudness from database."""
+        if not track_id:
+            return None
+        try:
+            track = self._core.db.get_track(int(track_id))
+            if track:
+                self._enrich_track_lufs(track)
+            return track
+        except Exception as e:
+            logger.error(f"get_track_info error for id {track_id}: {e}")
+            return None
+
     def get_playlist_tracks(self, playlist_id, source: str = "local", limit: int = 50):
         """Get tracks for a playlist by source (local / youtube / soundcloud / spotify). Synchronous."""
         source = (source or "local").lower()
@@ -1550,6 +1615,7 @@ class AppApi:
                         item["cover_url"] = cov
                         item["source"] = t.get("source") or "local"
                         item["source_id"] = str(t.get("source_id") or t.get("id") or "")
+                        self._enrich_track_lufs(item)
                         formatted.append(item)
                 return {"success": True, "tracks": formatted}
             except Exception as e:
@@ -1576,6 +1642,7 @@ class AppApi:
                     item = t.copy()
                     item["cover"] = cov
                     item["cover_url"] = cov
+                    self._enrich_track_lufs(item)
                     formatted.append(item)
             result["tracks"] = formatted
             done.set()
@@ -1645,6 +1712,11 @@ class AppApi:
                 target = mapping.get(k)
                 if target:
                     self._core.settings.set(target[0], target[1], v)
+            if "autostart" in settings_data:
+                try:
+                    self.update_autostart(bool(settings_data["autostart"]))
+                except Exception as e:
+                    logger.warning(f"Failed to sync autostart in complete_onboarding: {e}")
         return True
 
     def update_autostart(self, enabled: bool):
@@ -1655,7 +1727,7 @@ class AppApi:
             import winreg
             key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
-            app_name = "NeDotify"
+            app_name = "AURA Music"
             if enabled:
                 if getattr(sys, 'frozen', False):
                     exe_path = f'"{sys.executable}"'
@@ -1664,17 +1736,19 @@ class AppApi:
                     exe_path = f'"{sys.executable}" "{main_py}"'
                 winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, exe_path)
             else:
-                try:
-                    winreg.DeleteValue(key, app_name)
-                except FileNotFoundError:
-                    pass
+                for name in (app_name, "NeDotify"):
+                    try:
+                        winreg.DeleteValue(key, name)
+                    except (FileNotFoundError, OSError):
+                        pass
             try:
                 winreg.CloseKey(key)
             except OSError:
                 logger.debug("Registry key close failed", exc_info=True)
+            self._core.settings.set("general", "autostart", enabled)
             self._core.settings.set("app", "autostart", enabled)
             return True
-        except Exception as e:
+        except (OSError, Exception) as e:
             logger.error(f"Failed to update autostart: {e}")
             return False
 
@@ -1727,6 +1801,11 @@ class AppApi:
     def save_setting(self, key: str, value, category: str = "app"):
         """Save a setting value."""
         self._core.settings.set(category, key, value)
+        if key == "autostart" or key == "general.autostart" or (category == "general" and key == "autostart"):
+            try:
+                self.update_autostart(bool(value))
+            except Exception as e:
+                logger.warning(f"Failed to sync autostart in save_setting: {e}")
         self._emit("setting_changed", {"category": category, "key": key, "value": value})
         return True
 
@@ -1956,8 +2035,34 @@ class AppApi:
             else:
                 history = self._core.db.get_history(limit=limit)
 
+            def _format_section_items(items):
+                formatted = []
+                for it in (items or []):
+                    if isinstance(it, dict):
+                        item_copy = dict(it)
+                        if "type" not in item_copy:
+                            item_copy["type"] = "track"
+                        self._enrich_track_lufs(item_copy)
+                        formatted.append(item_copy)
+                return formatted
+
             def _on_feed(feed_data):
-                sections = feed_data.get("sections", []) if isinstance(feed_data, dict) else (feed_data or [])
+                if isinstance(feed_data, list):
+                    sections = [{"title": "Рекомендации", "items": _format_section_items(feed_data)}]
+                elif isinstance(feed_data, dict):
+                    if "sections" in feed_data and isinstance(feed_data["sections"], list):
+                        sections = []
+                        for sec in feed_data["sections"]:
+                            if isinstance(sec, dict):
+                                sec_copy = dict(sec)
+                                sec_copy["items"] = _format_section_items(sec_copy.get("items", []))
+                                sections.append(sec_copy)
+                    elif "items" in feed_data and isinstance(feed_data["items"], list):
+                        sections = [{"title": "Рекомендации", "items": _format_section_items(feed_data["items"])}]
+                    else:
+                        sections = []
+                else:
+                    sections = []
                 self._emit("authentic_home_ready", {"sections": sections})
 
             def _on_err(err):

@@ -174,7 +174,7 @@ class AppCore:
             else:
                 auto_start = bool(val)
 
-            if auto_start:
+            if auto_start and getattr(self, "zapret", None):
                 mode = self.settings.get("zapret", "mode", "youtube_discord")
                 custom_args = self.settings.get("zapret", "custom_args", "")
                 bin_path = self.settings.get("zapret", "binary_path", "")
@@ -366,7 +366,7 @@ class AppCore:
             _step("discord_rpc.stop", self.discord_rpc.stop)
         if getattr(self, "proxy", None):
             _step("proxy.stop", self.proxy.stop)
-        if getattr(self, "zapret", None):
+        if getattr(self, "zapret", None) and hasattr(self.zapret, "stop"):
             _step("zapret.stop", self.zapret.stop)
         if getattr(self, "_cache_cleanup_stop", None) is not None:
             _step("cache_cleanup.stop", self._cache_cleanup_stop.set)

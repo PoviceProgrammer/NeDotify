@@ -62,10 +62,13 @@ DEFAULT_SETTINGS = {
     },
     "audio": {
         "autoplay": False,
+        "queue_autopilot": True,
+        "flow_enabled": True,
         "quality": "high",
         "gapless_playback": False,
         "crossfade_enabled": False,
         "crossfade_duration": 3,
+        "crossfade_duration_sec": 3,
         "volume_normalization": False,
         "target_loudness": -14.0,
         "output_device": "default",
@@ -299,6 +302,26 @@ class SettingsManager:
                 val = self._cache[category][key]
             elif category in DEFAULT_SETTINGS and key in DEFAULT_SETTINGS[category]:
                 val = DEFAULT_SETTINGS[category][key]
+            elif key == "queue_autopilot":
+                if category in self._cache and "flow_enabled" in self._cache[category]:
+                    val = self._cache[category]["flow_enabled"]
+                elif category in DEFAULT_SETTINGS and "flow_enabled" in DEFAULT_SETTINGS[category]:
+                    val = DEFAULT_SETTINGS[category]["flow_enabled"]
+            elif key == "flow_enabled":
+                if category in self._cache and "queue_autopilot" in self._cache[category]:
+                    val = self._cache[category]["queue_autopilot"]
+                elif category in DEFAULT_SETTINGS and "queue_autopilot" in DEFAULT_SETTINGS[category]:
+                    val = DEFAULT_SETTINGS[category]["queue_autopilot"]
+            elif key == "crossfade_duration_sec":
+                if category in self._cache and "crossfade_duration" in self._cache[category]:
+                    val = self._cache[category]["crossfade_duration"]
+                elif category in DEFAULT_SETTINGS and "crossfade_duration" in DEFAULT_SETTINGS[category]:
+                    val = DEFAULT_SETTINGS[category]["crossfade_duration"]
+            elif key == "crossfade_duration":
+                if category in self._cache and "crossfade_duration_sec" in self._cache[category]:
+                    val = self._cache[category]["crossfade_duration_sec"]
+                elif category in DEFAULT_SETTINGS and "crossfade_duration_sec" in DEFAULT_SETTINGS[category]:
+                    val = DEFAULT_SETTINGS[category]["crossfade_duration_sec"]
 
         if isinstance(val, str):
             if val.lower() == "true":
