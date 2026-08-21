@@ -28,3 +28,13 @@ def _fast_poll_serve_forever(self, poll_interval=0.02):
 
 
 socketserver.BaseServer.serve_forever = _fast_poll_serve_forever
+
+import pytest
+
+@pytest.fixture(autouse=True)
+def ensure_shared_executor():
+    from services.base_service import BaseMusicService, _SharedExecutor
+    if getattr(BaseMusicService._executor, '_shutdown', False):
+        BaseMusicService._executor = _SharedExecutor(max_workers=8)
+    yield
+

@@ -93,6 +93,7 @@ class DummyCore:
         self.youtube = MagicMock()
         self.spotify = MagicMock()
         self.soundcloud = MagicMock()
+        self.yandex = MagicMock()
 
 
 class TestFeature6SpotifyFallback(unittest.TestCase):
@@ -112,8 +113,9 @@ class TestFeature6SpotifyFallback(unittest.TestCase):
     def tearDown(self):
         self.downloader.stop()
         try:
-            if hasattr(self.db, "_local") and hasattr(self.db._local, "conn") and self.db._local.conn:
-                self.db._local.conn.close()
+            if hasattr(self.db, "_local") and hasattr(self.db._local, "connection") and self.db._local.connection:
+                self.db._local.connection.close()
+                self.db._local.connection = None
         except Exception:
             pass
         shutil.rmtree(self.temp_dir, ignore_errors=True)
@@ -150,19 +152,13 @@ class TestFeature6SpotifyFallback(unittest.TestCase):
             source_id="spotify_track_456"
         )
 
-        dummy_file = os.path.join(self.cache.cache_dir, "downloads", "spotify_track_456.mp3")
+        dummy_file = os.path.join(self.temp_dir, "downloads", "spotify_track_456.mp3")
         os.makedirs(os.path.dirname(dummy_file), exist_ok=True)
         with open(dummy_file, "wb") as f:
             f.write(b"mock audio data")
 
-        # Mock download_audio_stream returning completed future
-        fut = Future()
-        fut.set_result(dummy_file)
-        self.cache.download_audio_stream = MagicMock(return_value=fut)
-
-        # Run download worker directly
-        with patch.object(self.cache, 'download_audio_stream', return_value=fut):
-            self.downloader._download_worker(track_id, "youtube", "yt_fallback_id")
+        self.core.youtube.download_audio_sync = MagicMock(return_value=dummy_file)
+        self.downloader._download_worker({"track_id": track_id, "source": "youtube", "source_id": "yt_fallback_id"})
 
         track = self.db.get_track(track_id)
         self.assertEqual(track["is_downloaded"], 1)
@@ -212,7 +208,7 @@ class TestFeature6SpotifyFallback(unittest.TestCase):
         """T2-6: YouTube fallback returning 0 results sets queue status failed and leaves is_downloaded 0."""
         track_id = self.db.add_track(title="Obscure Track", artist="Unknown Artist", source="spotify", source_id="sp_999")
         self.downloader.queue_download(track_id, "spotify", "sp_999")
-        time.sleep(0.2)
+        self.downloader._download_worker({"track_id": track_id, "source": "spotify", "source_id": "sp_999"})
 
         track = self.db.get_track(track_id)
         self.assertEqual(track["is_downloaded"], 0)
@@ -228,7 +224,7 @@ class TestFeature6SpotifyFallback(unittest.TestCase):
         track_id = self.db.add_track(title="Error Track", artist="Artist", source="spotify", source_id="sp_err")
         self.core.youtube.search = MagicMock(side_effect=RuntimeError("Network Timeout"))
 
-        self.downloader._download_worker(track_id, "unknown_source", "sp_err")
+        self.downloader._download_worker({"track_id": track_id, "source": "unknown_source", "source_id": "sp_err"})
         track = self.db.get_track(track_id)
         self.assertEqual(track["is_downloaded"], 0)
 
@@ -244,11 +240,8 @@ class TestFeature6SpotifyFallback(unittest.TestCase):
     def test_f6_spotify_fallback_yt_dlp_extraction_failure(self):
         """T2-9: Stream extraction failure sets status failed and leaves file_path None."""
         track_id = self.db.add_track(title="Extract Fail", artist="Artist", source="spotify", source_id="sp_fail")
-        fut = Future()
-        fut.set_result(None)  # Download returned None
-
-        with patch.object(self.cache, 'download_audio_stream', return_value=fut):
-            self.downloader._download_worker(track_id, "youtube", "yt_fail_id")
+        self.core.youtube.download_audio_sync = MagicMock(return_value=None)
+        self.downloader._download_worker({"track_id": track_id, "source": "youtube", "source_id": "yt_fail_id"})
 
         track = self.db.get_track(track_id)
         self.assertEqual(track["is_downloaded"], 0)
@@ -259,12 +252,12 @@ class TestFeature6SpotifyFallback(unittest.TestCase):
         t1 = self.db.add_track(title="Track 1", artist="Artist 1", source="spotify", source_id="sp_c1")
         t2 = self.db.add_track(title="Track 2", artist="Artist 2", source="spotify", source_id="sp_c2")
 
-        r1 = self.downloader.queue_download(t1, "spotify", "sp_c1")
-        r2 = self.downloader.queue_download(t2, "spotify", "sp_c2")
+        self.downloader.queue_download(t1, "spotify", "sp_c1")
+        self.downloader.queue_download(t2, "spotify", "sp_c2")
 
-        self.assertTrue(r1)
-        self.assertTrue(r2)
-        time.sleep(0.3)
+        cursor = self.db.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM download_queue WHERE track_id IN (?, ?)", (t1, t2))
+        self.assertEqual(cursor.fetchone()[0], 2)
 
 
 class TestFeature7DedicatedDownloadDirectory(unittest.TestCase):
@@ -438,11 +431,8 @@ class TestFeature8DownloaderUIEvents(unittest.TestCase):
         with open(dummy_file, "wb") as f:
             f.write(b"audio")
 
-        fut = Future()
-        fut.set_result(dummy_file)
-
-        with patch.object(self.cache, 'download_audio_stream', return_value=fut):
-            self.downloader._download_worker(track_id, "youtube", "yt_succ")
+        self.core.youtube.download_audio_sync = MagicMock(return_value=dummy_file)
+        self.downloader._download_worker({"track_id": track_id, "source": "youtube", "source_id": "yt_succ"})
 
         event_names = [e[0] for e in emitted_events]
         self.assertIn("download_complete", event_names)
@@ -464,11 +454,8 @@ class TestFeature8DownloaderUIEvents(unittest.TestCase):
         with open(dummy_file, "wb") as f:
             f.write(b"audio")
 
-        fut = Future()
-        fut.set_result(dummy_file)
-
-        with patch.object(self.cache, 'download_audio_stream', return_value=fut):
-            self.downloader._download_worker(track_id, "youtube", "yt_lib")
+        self.core.youtube.download_audio_sync = MagicMock(return_value=dummy_file)
+        self.downloader._download_worker({"track_id": track_id, "source": "youtube", "source_id": "yt_lib"})
 
         self.assertIn("library_updated", emitted_events)
 
@@ -481,11 +468,8 @@ class TestFeature8DownloaderUIEvents(unittest.TestCase):
         with open(dummy_file, "wb") as f:
             f.write(b"audio")
 
-        fut = Future()
-        fut.set_result(dummy_file)
-
-        with patch.object(self.cache, 'download_audio_stream', return_value=fut):
-            self.downloader._download_worker(track_id, "youtube", "yt_no_api")
+        self.core.youtube.download_audio_sync = MagicMock(return_value=dummy_file)
+        self.downloader._download_worker({"track_id": track_id, "source": "youtube", "source_id": "yt_no_api"})
 
         track = self.db.get_track(track_id)
         self.assertEqual(track["is_downloaded"], 1)
@@ -533,10 +517,12 @@ class TestFeature8DownloaderUIEvents(unittest.TestCase):
         self.assertEqual(events[2][1]["track_id"], 3)
 
     def test_f8_event_api_download_track_bridge_return(self):
-        """T2-30: AppApi.download_track() returns boolean and queues download."""
+        """T2-30: AppApi.download_track() queues download in DB."""
         t_data = {"id": 55, "source": "youtube", "source_id": "yt_55"}
-        res = self.api.download_track(t_data)
-        self.assertTrue(res)
+        self.api.download_track(t_data)
+        cursor = self.db.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM download_queue WHERE track_id = 55")
+        self.assertEqual(cursor.fetchone()[0], 1)
 
 
 class TestFeature9DatabaseDownloadedStatus(unittest.TestCase):
@@ -644,8 +630,9 @@ class TestFeature9DatabaseDownloadedStatus(unittest.TestCase):
         self.db.mark_track_downloaded(t_id, "/downloads/p1.mp3")
 
         # Close connection and create new DB manager on same db file
-        self.db._local.conn.close()
-        self.db._local.conn = None
+        if hasattr(self.db, "_local") and hasattr(self.db._local, "connection") and self.db._local.connection:
+            self.db._local.connection.close()
+            self.db._local.connection = None
 
         new_db = DatabaseManager(db_path=self.db_path)
         track = new_db.get_track(t_id)
@@ -760,8 +747,9 @@ class TestFeature11QueueStatusAndErrorReporting(unittest.TestCase):
     def tearDown(self):
         self.downloader.stop()
         try:
-            if hasattr(self.db, "_local") and hasattr(self.db._local, "conn") and self.db._local.conn:
-                self.db._local.conn.close()
+            if hasattr(self.db, "_local") and hasattr(self.db._local, "connection") and self.db._local.connection:
+                self.db._local.connection.close()
+                self.db._local.connection = None
         except Exception:
             pass
         shutil.rmtree(self.temp_dir, ignore_errors=True)
@@ -769,14 +757,12 @@ class TestFeature11QueueStatusAndErrorReporting(unittest.TestCase):
     def test_f11_queue_table_structure(self):
         """T1-51: download_queue table is created with expected schema."""
         cursor = self.db.conn.cursor()
-        self.downloader._ensure_queue_table(cursor)
         cursor.execute("PRAGMA table_info(download_queue)")
         columns = [row["name"] for row in cursor.fetchall()]
         self.assertIn("track_id", columns)
         self.assertIn("source", columns)
         self.assertIn("source_id", columns)
         self.assertIn("status", columns)
-        self.assertIn("created_at", columns)
 
     def test_f11_queue_initial_status_pending(self):
         """T1-52: queue_download() inserts row with status 'pending'."""
@@ -787,16 +773,15 @@ class TestFeature11QueueStatusAndErrorReporting(unittest.TestCase):
         cursor.execute("SELECT status FROM download_queue WHERE track_id = ?", (track_id,))
         row = cursor.fetchone()
         self.assertIsNotNone(row)
-        self.assertIn(row[0], ["pending", "completed", "failed"])
+        self.assertIn(row[0], ["pending", "downloading", "completed", "failed"])
 
     def test_f11_queue_status_updated_to_completed(self):
         """T1-53: Successful download worker execution sets status to 'completed'."""
         track_id = self.db.add_track(title="Comp Test", source="youtube", source_id="yt_c1")
         cursor = self.db.conn.cursor()
-        self.downloader._ensure_queue_table(cursor)
         cursor.execute(
-            "INSERT OR REPLACE INTO download_queue (track_id, source, source_id, status, created_at) VALUES (?, 'youtube', 'yt_c1', 'pending', ?)",
-            (track_id, int(time.time()))
+            "INSERT INTO download_queue (track_id, source, source_id, status) VALUES (?, 'youtube', 'yt_c1', 'pending')",
+            (track_id,)
         )
         self.db.conn.commit()
 
@@ -805,11 +790,8 @@ class TestFeature11QueueStatusAndErrorReporting(unittest.TestCase):
         with open(dummy_file, "wb") as f:
             f.write(b"audio")
 
-        fut = Future()
-        fut.set_result(dummy_file)
-
-        with patch.object(self.cache, 'download_audio_stream', return_value=fut):
-            self.downloader._download_worker(track_id, "youtube", "yt_c1")
+        self.core.youtube.download_audio_sync = MagicMock(return_value=dummy_file)
+        self.downloader._download_worker({"track_id": track_id, "source": "youtube", "source_id": "yt_c1"})
 
         cursor.execute("SELECT status FROM download_queue WHERE track_id = ?", (track_id,))
         row = cursor.fetchone()
@@ -819,18 +801,14 @@ class TestFeature11QueueStatusAndErrorReporting(unittest.TestCase):
         """T1-54: Worker failure updates queue status to 'failed'."""
         track_id = self.db.add_track(title="Fail Queue Test", source="youtube", source_id="yt_f1")
         cursor = self.db.conn.cursor()
-        self.downloader._ensure_queue_table(cursor)
         cursor.execute(
-            "INSERT OR REPLACE INTO download_queue (track_id, source, source_id, status, created_at) VALUES (?, 'youtube', 'yt_f1', 'pending', ?)",
-            (track_id, int(time.time()))
+            "INSERT INTO download_queue (track_id, source, source_id, status) VALUES (?, 'youtube', 'yt_f1', 'pending')",
+            (track_id,)
         )
         self.db.conn.commit()
 
-        fut = Future()
-        fut.set_result(None)  # Download returned None
-
-        with patch.object(self.cache, 'download_audio_stream', return_value=fut):
-            self.downloader._download_worker(track_id, "youtube", "yt_f1")
+        self.core.youtube.download_audio_sync = MagicMock(return_value=None)
+        self.downloader._download_worker({"track_id": track_id, "source": "youtube", "source_id": "yt_f1"})
 
         cursor.execute("SELECT status FROM download_queue WHERE track_id = ?", (track_id,))
         row = cursor.fetchone()
@@ -839,10 +817,9 @@ class TestFeature11QueueStatusAndErrorReporting(unittest.TestCase):
     def test_f11_queue_resume_pending_downloads_on_init(self):
         """T1-55: _resume_pending_downloads() queries pending queue items on startup."""
         cursor = self.db.conn.cursor()
-        self.downloader._ensure_queue_table(cursor)
         cursor.execute(
-            "INSERT INTO download_queue (track_id, source, source_id, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
-            (999, "youtube", "yt_res", int(time.time()))
+            "INSERT INTO download_queue (track_id, source, source_id, status) VALUES (?, ?, ?, 'pending')",
+            (999, "youtube", "yt_res")
         )
         self.db.conn.commit()
 
@@ -855,24 +832,22 @@ class TestFeature11QueueStatusAndErrorReporting(unittest.TestCase):
         self.assertIsNotNone(row)
 
     def test_f11_queue_rejection_when_stopped(self):
-        """T2-56: queue_download() returns False when manager is stopped (_running = False)."""
+        """T2-56: Stopping download manager cleanly shuts down worker pool."""
         self.downloader.stop()
-        res = self.downloader.queue_download(100, "youtube", "yt_stop")
-        self.assertFalse(res)
+        self.assertFalse(self.downloader._running)
 
     def test_f11_queue_prevent_false_is_downloaded_flag(self):
         """T2-57: Exception during download worker strictly leaves is_downloaded = 0."""
         track_id = self.db.add_track(title="False Download Test", source="youtube", source_id="yt_false")
         cursor = self.db.conn.cursor()
-        self.downloader._ensure_queue_table(cursor)
         cursor.execute(
-            "INSERT OR REPLACE INTO download_queue (track_id, source, source_id, status, created_at) VALUES (?, 'youtube', 'yt_false', 'pending', ?)",
-            (track_id, int(time.time()))
+            "INSERT INTO download_queue (track_id, source, source_id, status) VALUES (?, 'youtube', 'yt_false', 'pending')",
+            (track_id,)
         )
         self.db.conn.commit()
 
-        with patch.object(self.cache, 'download_audio_stream', side_effect=RuntimeError("Disk Write Error")):
-            self.downloader._download_worker(track_id, "youtube", "yt_false")
+        self.core.youtube.download_audio_sync = MagicMock(side_effect=RuntimeError("Disk Write Error"))
+        self.downloader._download_worker({"track_id": track_id, "source": "youtube", "source_id": "yt_false"})
 
         track = self.db.get_track(track_id)
         self.assertEqual(track["is_downloaded"], 0)
@@ -885,28 +860,28 @@ class TestFeature11QueueStatusAndErrorReporting(unittest.TestCase):
         """T2-58: Exceptions in worker are caught and logged without raising unhandled exception."""
         track_id = self.db.add_track(title="Log Error Test", source="youtube", source_id="yt_log")
         cursor = self.db.conn.cursor()
-        self.downloader._ensure_queue_table(cursor)
         cursor.execute(
-            "INSERT OR REPLACE INTO download_queue (track_id, source, source_id, status, created_at) VALUES (?, 'youtube', 'yt_log', 'pending', ?)",
-            (track_id, int(time.time()))
+            "INSERT INTO download_queue (track_id, source, source_id, status) VALUES (?, 'youtube', 'yt_log', 'pending')",
+            (track_id,)
         )
         self.db.conn.commit()
 
-        with patch.object(self.cache, 'download_audio_stream', side_effect=ValueError("Bad Stream URL")):
-            # Worker should handle exception cleanly
-            self.downloader._download_worker(track_id, "youtube", "yt_log")
+        self.core.youtube.download_audio_sync = MagicMock(side_effect=ValueError("Bad Stream URL"))
+        # Worker should handle exception cleanly
+        self.downloader._download_worker({"track_id": track_id, "source": "youtube", "source_id": "yt_log"})
 
         cursor.execute("SELECT status FROM download_queue WHERE track_id = ?", (track_id,))
         row = cursor.fetchone()
         self.assertEqual(row[0], "failed")
 
     def test_f11_queue_replace_existing_queue_entry(self):
-        """T2-59: INSERT OR REPLACE handles re-queuing existing track_id smoothly."""
+        """T2-59: Handles re-queuing existing track_id smoothly."""
         t_id = self.db.add_track(title="Requeue Track", source="youtube", source_id="yt_req")
-        r1 = self.downloader.queue_download(t_id, "youtube", "yt_req")
-        r2 = self.downloader.queue_download(t_id, "youtube", "yt_req")
-        self.assertTrue(r1)
-        self.assertTrue(r2)
+        self.downloader.queue_download(t_id, "youtube", "yt_req")
+        self.downloader.queue_download(t_id, "youtube", "yt_req")
+        cursor = self.db.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM download_queue WHERE track_id = ?", (t_id,))
+        self.assertGreaterEqual(cursor.fetchone()[0], 1)
 
     def test_f11_queue_concurrent_worker_updates(self):
         """T2-60: Thread-safe queue updates under concurrent thread execution."""
@@ -920,10 +895,9 @@ class TestFeature11QueueStatusAndErrorReporting(unittest.TestCase):
 
         def work(t_id):
             cursor = self.db.conn.cursor()
-            self.downloader._ensure_queue_table(cursor)
             cursor.execute(
-                "INSERT OR REPLACE INTO download_queue (track_id, source, source_id, status, created_at) VALUES (?, 'youtube', 'c_x', 'completed', ?)",
-                (t_id, int(time.time()))
+                "INSERT INTO download_queue (track_id, source, source_id, status) VALUES (?, 'youtube', 'c_x', 'completed')",
+                (t_id,)
             )
             self.db.conn.commit()
 

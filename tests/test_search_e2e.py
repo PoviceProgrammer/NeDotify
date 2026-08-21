@@ -198,9 +198,18 @@ class TestFeature12YandexSearchProvider(unittest.TestCase):
         mock_info = MagicMock()
         mock_info.direct_link = "https://yandex.stream/direct_link.mp3"
         mock_info.bitrate_in_kbps = 320
+        mock_info.codec = "mp3"
+
+        mock_track = MagicMock()
+        mock_track.id = 999
+        mock_track.title = "Test Track"
+        mock_track.artists = []
+        mock_track.cover_uri = None
+        mock_track.duration_ms = 180000
+        mock_track.get_download_info.return_value = [mock_info]
 
         mock_client = MagicMock()
-        mock_client.tracks_download_info.return_value = [mock_info]
+        mock_client.tracks.return_value = [mock_track]
 
         with patch.object(service, "_get_client", return_value=mock_client):
             resolved_url = []
@@ -216,7 +225,8 @@ class TestFeature12YandexSearchProvider(unittest.TestCase):
 
             self.assertEqual(len(resolved_url), 1)
             self.assertEqual(resolved_url[0], "https://yandex.stream/direct_link.mp3")
-            self.assertEqual(service.get_from_cache("999"), "https://yandex.stream/direct_link.mp3")
+            cached = service.get_from_cache("999")
+            self.assertEqual(cached.get("stream_url") if isinstance(cached, dict) else cached, "https://yandex.stream/direct_link.mp3")
 
     def test_f12_yandex_reset_client_cache_clearing(self):
         """Tier 1: Verify reset_client clears Yandex specific entries from stream and search cache."""
@@ -293,9 +303,18 @@ class TestFeature12YandexSearchProvider(unittest.TestCase):
         mock_info = MagicMock()
         mock_info.direct_link = "https://stream.yandex.ru/audio.mp3"
         mock_info.bitrate_in_kbps = 192
+        mock_info.codec = "mp3"
+
+        mock_track = MagicMock()
+        mock_track.id = 887766
+        mock_track.title = "Test Track 2"
+        mock_track.artists = []
+        mock_track.cover_uri = None
+        mock_track.duration_ms = 180000
+        mock_track.get_download_info.return_value = [mock_info]
 
         mock_client = MagicMock()
-        mock_client.tracks_download_info.return_value = [mock_info]
+        mock_client.tracks.return_value = [mock_track]
 
         with patch.object(service, "_get_client", return_value=mock_client):
             done_event = threading.Event()
@@ -310,7 +329,7 @@ class TestFeature12YandexSearchProvider(unittest.TestCase):
                 done_event.wait(timeout=2.0)
 
             self.assertEqual(len(resolved), 1)
-            mock_client.tracks_download_info.assert_called_with("887766", get_direct_links=True)
+            mock_client.tracks.assert_called_with(["887766"])
 
     def test_f12_yandex_network_exception_handling(self):
         """Tier 2: Test Yandex search network failure triggers error_callback gracefully."""
@@ -386,13 +405,14 @@ class TestFeature13AsyncDBSearch(unittest.TestCase):
         mock_core.db = self.db
 
         api = AppApi(mock_core)
-        emitted_payloads = []
-        api._emit = lambda evt, data: emitted_payloads.append(data)
+        emitted_events = []
+        api._emit = lambda evt, data: emitted_events.append((evt, data))
 
         api.search("Numb", source="local")
 
-        self.assertEqual(len(emitted_payloads), 1)
-        payload = emitted_payloads[0]
+        results_events = [data for evt, data in emitted_events if evt == "search_results"]
+        self.assertEqual(len(results_events), 1)
+        payload = results_events[0]
         self.assertEqual(payload["source"], "local")
         self.assertEqual(len(payload["tracks"]), 1)
         self.assertEqual(payload["tracks"][0]["title"], "Numb")
@@ -543,7 +563,12 @@ class TestFeature14TimeoutsAndSilentFailures(unittest.TestCase):
 
         api.search("Test Query", source="all")
 
-        self.assertTrue(any(e["source"] == "youtube" for e in emitted))
+        for _ in range(20):
+            if any(e.get("source") == "youtube" for e in emitted):
+                break
+            time.sleep(0.05)
+
+        self.assertTrue(any(e.get("source") == "youtube" for e in emitted))
 
     def test_f14_soundcloud_drm_silent_failure(self):
         """Tier 1: Verify SoundCloud DRM protected / un-resolvable track fails silently via error callback."""
@@ -553,9 +578,8 @@ class TestFeature14TimeoutsAndSilentFailures(unittest.TestCase):
         def error_cb(err):
             errors.append(err)
 
-        with patch.object(sc_service, "_get_ydl_opts") as mock_opts:
-            with patch("services.soundcloud_service.HAS_YTDLP", False):
-                sc_service.get_stream_url("drm_protected_track_123", error_callback=error_cb)
+        with patch("services.soundcloud_service.HAS_YTDLP", False):
+            sc_service.get_stream_url("drm_protected_track_123", error_callback=error_cb)
 
         time.sleep(0.2)
         self.assertTrue(len(errors) > 0 or True)
@@ -598,6 +622,11 @@ class TestFeature14TimeoutsAndSilentFailures(unittest.TestCase):
         api._emit = lambda evt, data: emitted.append(data)
 
         api.search("Test Query", source="all")
+
+        for _ in range(20):
+            if any(e.get("source") == "soundcloud" for e in emitted):
+                break
+            time.sleep(0.05)
 
         self.assertTrue(any(e.get("source") == "soundcloud" for e in emitted))
 

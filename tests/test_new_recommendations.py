@@ -111,9 +111,9 @@ class TestNewRecommendations(unittest.TestCase):
     """Test suite for validating recommendation service implementation and UI compliance."""
 
     def setUp(self):
-        from services.base_service import BaseMusicService
+        from services.base_service import BaseMusicService, _SharedExecutor
         if getattr(BaseMusicService._executor, '_shutdown', False):
-            BaseMusicService._executor = ThreadPoolExecutor(max_workers=15)
+            BaseMusicService._executor = _SharedExecutor(max_workers=15)
         self.mock_db = create_mock_db()
         self.service = RecommendationService(db=self.mock_db)
 

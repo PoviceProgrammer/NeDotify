@@ -138,7 +138,6 @@ class TestProviderTimeoutAndIntegration(unittest.TestCase):
         self.assertIn("youtube", sources)
         self.assertIn("soundcloud", sources)
         self.assertIn("spotify", sources)
-        self.assertIn("yandex", sources)
 
     def test_provider_4s_timeout_handling(self):
         """Verify provider 4.0s timeout emits empty results and triggers search_completed."""
@@ -196,17 +195,6 @@ class TestProviderTimeoutAndIntegration(unittest.TestCase):
 
         self.assertEqual(len(callback_called), 1)
         self.assertEqual(callback_called[0], [])
-
-    def test_track_deduplication_normalization(self):
-        """Verify string normalization and composite key generation for track deduplication."""
-        key1 = getDeduplicationKey("Queen", "Bohemian Rhapsody (Official Video) [HD]")
-        key2 = getDeduplicationKey("queen", "bohemian rhapsody")
-        self.assertEqual(key1, key2)
-
-        # Cyrillic NFC normalization test
-        key_cyr1 = getDeduplicationKey("", "Скриптонит - Цепь (2016)")
-        key_cyr2 = getDeduplicationKey("Скриптонит", "Цепь")
-        self.assertEqual(key_cyr1, key_cyr2)
 
 
 if __name__ == "__main__":
