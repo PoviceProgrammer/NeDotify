@@ -1,4 +1,4 @@
-﻿"""
+"""
 NeDotify - VK Music Service
 Basic VK Music integration with manual link support.
 """
@@ -47,7 +47,7 @@ class VKService:
 
         threading.Thread(target=_search, daemon=True).start()
 
-    def get_stream_url(self, vk_url: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None):
+    def get_stream_url(self, vk_url: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, quality: str = "high", **kwargs):
         """Extract audio from a VK Music URL."""
         if not HAS_YTDLP:
             if error_callback:

@@ -375,7 +375,7 @@ class SoundCloudService(BaseMusicService):
 
         self._executor.submit(_fetch)
 
-    def get_stream_url(self, track_url: str, callback: Callable = None, error_callback: Callable = None):
+    def get_stream_url(self, track_url: str, callback: Callable = None, error_callback: Callable = None, quality: str = "high", **kwargs):
         """Extract direct audio stream URL from a SoundCloud track."""
         info = self.get_from_cache(track_url)
         if info:
