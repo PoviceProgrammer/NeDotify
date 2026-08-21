@@ -102,15 +102,16 @@ class DatabaseManager:
         if not hasattr(self._local, "connection") or self._local.connection is None:
             conn = sqlite3.connect(self.db_path, timeout=20.0)
             conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA synchronous=NORMAL")
-            conn.execute("PRAGMA temp_store=MEMORY")
-            # 8 MB page cache per connection: one connection is opened per
-            # thread and the stream proxy is thread-per-request, so this value
-            # is multiplied by the number of live threads.
-            conn.execute("PRAGMA cache_size=-8000")
-            conn.execute("PRAGMA busy_timeout=10000")
-            conn.execute("PRAGMA foreign_keys=ON")
+            try:
+                if self.db_path != ":memory:":
+                    conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA synchronous=NORMAL")
+                conn.execute("PRAGMA temp_store=MEMORY")
+                conn.execute("PRAGMA cache_size=-8000")
+                conn.execute("PRAGMA busy_timeout=10000")
+                conn.execute("PRAGMA foreign_keys=ON")
+            except Exception:
+                pass
             self._local.connection = conn
         return self._local.connection
 
