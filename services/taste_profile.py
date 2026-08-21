@@ -7,11 +7,21 @@ Merges with Last.fm scrobbles if username configured.
 
 import sqlite3
 import logging
+import threading
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+#: Hard cap on how much listening history is ever pulled into memory (privacy + cost).
+HISTORY_LIMIT = 500
+#: Recomputing the same profile several times per second is pure waste; reuse it briefly.
+PROFILE_CACHE_TTL = 60.0
+
+_profile_cache: Dict[int, Any] = {}
+_profile_cache_lock = threading.Lock()
 
 
 class UserTasteProfile:
@@ -44,6 +54,13 @@ class UserTasteProfile:
 
     def build_from_db(self, db: Any) -> 'UserTasteProfile':
         import traceback as _tb
+
+        cache_key = self._cache_key(db)
+        cached_state = self._cache_get(cache_key, db)
+        if cached_state is not None:
+            self._restore_state(cached_state)
+            logger.debug('[PROFILE] Reusing profile computed less than %.0fs ago', PROFILE_CACHE_TTL)
+            return self
 
         try:
             conn = self._get_conn(db)
@@ -108,7 +125,7 @@ class UserTasteProfile:
                     FROM history h
                     JOIN tracks t ON h.track_id = t.id
                     ORDER BY h.played_at DESC
-                    LIMIT 200
+                    LIMIT {HISTORY_LIMIT}
                 """
                 )
                 history_rows = cursor.fetchall()
@@ -124,6 +141,7 @@ class UserTasteProfile:
                     FROM tracks
                     WHERE is_favorite = 1
                     {('ORDER BY added_at DESC' if has_added_at else '')}
+                    LIMIT {HISTORY_LIMIT}
                 """
                 )
                 self.favorite_tracks = [self._row_to_dict(r) for r in cursor.fetchall()]
@@ -142,6 +160,7 @@ class UserTasteProfile:
                         FROM tracks
                         WHERE {dl_where}
                         {('ORDER BY added_at DESC' if has_added_at else '')}
+                        LIMIT {HISTORY_LIMIT}
                     """
                     )
                     self.downloaded_tracks = [self._row_to_dict(r) for r in cursor.fetchall()]
@@ -156,6 +175,7 @@ class UserTasteProfile:
                             FROM tracks
                             WHERE source = 'local'
                             {('ORDER BY added_at DESC' if has_added_at else '')}
+                            LIMIT {HISTORY_LIMIT}
                         """
                     )
                     self.downloaded_tracks = [self._row_to_dict(r) for r in cursor.fetchall()]
@@ -172,6 +192,7 @@ class UserTasteProfile:
                         SELECT {_track_cols('t')}
                         FROM playlist_tracks pt
                         JOIN tracks t ON pt.track_id = t.id
+                        LIMIT {HISTORY_LIMIT}
                     """
                     )
                     self.playlist_tracks = [self._row_to_dict(r) for r in cursor.fetchall()]
@@ -264,7 +285,11 @@ class UserTasteProfile:
                 self.top_tracks = []
 
             try:
-                cursor.execute('SELECT played_at FROM history WHERE played_at IS NOT NULL')
+                cursor.execute(
+                    'SELECT played_at FROM history WHERE played_at IS NOT NULL '
+                    'ORDER BY played_at DESC LIMIT ?',
+                    (HISTORY_LIMIT,),
+                )
                 habits = {'morning': 0, 'afternoon': 0, 'evening': 0, 'night': 0}
                 for row in cursor.fetchall():
                     slot = self._parse_time_slot(row[0])
@@ -275,6 +300,7 @@ class UserTasteProfile:
                 logger.warning(f'[PROFILE] Time habits error: {e}')
 
             self._log_profile_summary()
+            self._cache_put(cache_key, db)
 
         except Exception as e:
             err_msg = f'[PROFILE_ERROR] Fatal error in build_from_db: {e}\n{_tb.format_exc()}'
@@ -282,6 +308,55 @@ class UserTasteProfile:
             print(err_msg, flush=True)
 
         return self
+
+    # ─── 60s profile memoisation (identical profiles were recomputed per section) ───
+
+    _CACHE_MAX_ENTRIES = 4
+
+    _STATE_FIELDS = (
+        'top_artists', 'top_tracks', 'recent_history', 'genre_distribution',
+        'favorite_tracks', 'downloaded_tracks', 'playlist_tracks',
+        'time_of_day_habits', '_artist_scores', '_genre_scores',
+    )
+
+    @staticmethod
+    def _cache_key(db: Any) -> Any:
+        """Identity of the data source. Paths are stable; live objects are keyed by
+        identity and pinned in the cache entry so an id can never be recycled."""
+        if isinstance(db, str):
+            return f'path:{db}'
+        return id(db)
+
+    @classmethod
+    def _cache_get(cls, cache_key: Any, db: Any) -> Optional[Dict[str, Any]]:
+        now = time.time()
+        with _profile_cache_lock:
+            for key, entry in list(_profile_cache.items()):
+                if now - entry['ts'] > PROFILE_CACHE_TTL:
+                    _profile_cache.pop(key, None)
+            entry = _profile_cache.get(cache_key)
+            if entry is None:
+                return None
+            if not isinstance(cache_key, str) and entry['db'] is not db:
+                return None
+            return entry['state']
+
+    def _cache_put(self, cache_key: Any, db: Any) -> None:
+        state = {f: getattr(self, f) for f in self._STATE_FIELDS}
+        with _profile_cache_lock:
+            _profile_cache[cache_key] = {'ts': time.time(), 'db': db, 'state': state}
+            while len(_profile_cache) > self._CACHE_MAX_ENTRIES:
+                _profile_cache.pop(next(iter(_profile_cache)), None)
+
+    def _restore_state(self, state: Dict[str, Any]) -> None:
+        for field in self._STATE_FIELDS:
+            value = state.get(field)
+            if isinstance(value, list):
+                setattr(self, field, list(value))
+            elif isinstance(value, dict):
+                setattr(self, field, dict(value))
+            else:
+                setattr(self, field, value)
 
     def _detect_schema(self, cursor) -> dict:
         schema = {'_tables': set()}
@@ -294,7 +369,8 @@ class UserTasteProfile:
                     cursor.execute(f'PRAGMA table_info({table})')
                     cols = {r[1] for r in cursor.fetchall()}
                     schema[table] = cols
-                except Exception:
+                except Exception as e:
+                    logger.debug(f'[PROFILE] Could not read columns of {table}: {e}', exc_info=True)
                     schema[table] = set()
         except Exception as e:
             logger.warning(f'[PROFILE] Schema detection error: {e}')
@@ -304,30 +380,21 @@ class UserTasteProfile:
         top10_artists = [a['name'] for a in self.top_artists[:10]]
         top5_genres = list(self.genre_distribution.keys())[:5]
 
+        # Artist/genre names are the user's listening history: DEBUG only, never INFO,
+        # so they do not end up in the shipped log file.
         if top10_artists:
-            try:
-                msg = f'[PROFILE] Top artists: {", ".join(top10_artists)}'
-            except Exception:
-                msg = f'[PROFILE] Top artists: {len(top10_artists)} artists found'
-            logger.info(msg)
-            print(msg, flush=True)
+            logger.debug('[PROFILE] Top artists: %s', ', '.join(str(a) for a in top10_artists))
         else:
-            msg = '[PROFILE] No artists found — profile is empty'
-            logger.info(msg)
-            print(msg, flush=True)
+            logger.debug('[PROFILE] No artists found — profile is empty')
 
         if top5_genres:
-            try:
-                gmsg = f'[PROFILE] Top genres: {", ".join(top5_genres)}'
-            except Exception:
-                gmsg = f'[PROFILE] Top genres: {len(top5_genres)} genres found'
-            logger.info(gmsg)
-            print(gmsg, flush=True)
+            logger.debug('[PROFILE] Top genres: %s', ', '.join(str(g) for g in top5_genres))
 
+        # Counts only — safe to surface for terminal visibility.
         smsg = (
             f'[PROFILE] Signals — history:{len(self.recent_history)}, favorites:{len(self.favorite_tracks)}, downloads:{len(self.downloaded_tracks)}, playlist_tracks:{len(self.playlist_tracks)}'
         )
-        logger.info(smsg)
+        logger.debug(smsg)
         print(smsg, flush=True)
 
     def is_empty(self) -> bool:
@@ -469,8 +536,8 @@ class UserTasteProfile:
                 try:
                     dt = datetime.strptime(ts_val.split('.')[0], '%Y-%m-%d %H:%M:%S')
                     hour = dt.hour
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f'[PROFILE] Unparseable played_at timestamp {ts_val!r}: {e}')
         if hour is None:
             return 'afternoon'
         if 5 <= hour < 12:

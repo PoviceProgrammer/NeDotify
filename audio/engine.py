@@ -225,7 +225,7 @@ class AudioEngine:
                             track_artist = o_data['author_name']
                             track['artist'] = track_artist
                 except Exception:
-                    pass
+                    logger.debug("err_cb: suppressed exception", exc_info=True)
             
             import re
             def _build_queries(artist_str, title_str):
@@ -309,7 +309,7 @@ class AudioEngine:
                             try:
                                 self.app_core.db.cache_stream(source, source_id, url)
                             except Exception:
-                                pass
+                                logger.debug("_sc_done: suppressed exception", exc_info=True)
                         return url
 
             # Tier 2 Fallback: YouTube Search Alternative

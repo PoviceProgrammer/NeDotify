@@ -30,6 +30,12 @@ LICENSE_VALIDATION_ENABLED = False
 # timer below and the test suite all read this constant.
 PROVIDER_SEARCH_TIMEOUT = 4.0
 
+# Total wall-clock budget for a bridge method that must answer synchronously.
+# pywebview serves the call on a bridge thread and the JS caller is awaiting it, so
+# a long block is felt as a frozen UI. Multi-stage lookups share this one budget
+# instead of each stage getting its own timeout.
+BRIDGE_SYNC_BUDGET = 6.0
+
 # Window geometry: main window, compact mini player, and expanded mini player.
 MAIN_WINDOW_SIZE = (1100, 800)
 MINI_WINDOW_SIZE = (380, 110)
@@ -65,7 +71,7 @@ def _is_ssrf_safe_url(url: str) -> bool:
             if direct_ip.is_loopback or direct_ip.is_private or direct_ip.is_link_local or direct_ip.is_reserved or direct_ip.is_multicast or direct_ip.is_unspecified:
                 return False
         except Exception:
-            pass
+            logger.debug("_is_ssrf_safe_url: suppressed exception", exc_info=True)
 
         # Resolve all DNS records (IPv4 & IPv6)
         try:
@@ -175,12 +181,12 @@ class AppApi:
             if getattr(self, "_tray", None):
                 self._tray.stop()
         except Exception:
-            pass
+            logger.debug("cleanup: suppressed exception", exc_info=True)
         try:
             if getattr(self, "_search_executor", None) is not None:
                 self._search_executor.shutdown(wait=False, cancel_futures=True)
         except Exception:
-            pass
+            logger.debug("cleanup: suppressed exception", exc_info=True)
 
     def set_window(self, window):
         """Set main webview window reference."""
@@ -211,7 +217,7 @@ class AppApi:
                     logger.warning(f"Could not set native window icon: {ex}")
             threading.Thread(target=_set_icon, daemon=True).start()
         except Exception:
-            pass
+            logger.debug("_set_icon: suppressed exception", exc_info=True)
 
     def _on_minimized(self):
         pass
@@ -236,7 +242,7 @@ class AppApi:
                 from System.Drawing import Size
                 form.MinimumSize = Size(0, 0)
             except Exception:
-                pass
+                logger.debug("_set_window_pos_native: suppressed exception", exc_info=True)
                 
             user32 = ctypes.windll.user32
             if user32.IsZoomed(hwnd_ptr) or user32.IsIconic(hwnd_ptr):
@@ -332,7 +338,7 @@ class AppApi:
                     if hasattr(target_win, 'move'):
                         target_win.move((screen_w - w) // 2, (screen_h - h) // 2)
                 except Exception:
-                    pass
+                    logger.debug("_exit_mini_mode: suppressed exception", exc_info=True)
         except Exception as err:
             logger.debug(f"Failed restoring main size: {err}")
 
@@ -457,7 +463,7 @@ class AppApi:
             try:
                 return int(self._window.gui_window.Handle)
             except Exception:
-                pass
+                logger.debug("_get_hwnd: suppressed exception", exc_info=True)
         if sys.platform == "win32":
             try:
                 import ctypes
@@ -466,7 +472,7 @@ class AppApi:
                 if hwnd:
                     return hwnd
             except Exception:
-                pass
+                logger.debug("_get_hwnd: suppressed exception", exc_info=True)
         return None
 
     def restore(self):
@@ -483,13 +489,13 @@ class AppApi:
                         import ctypes
                         ctypes.windll.user32.SetWindowPos(hwnd, 0, int(x), int(y), int(w), int(h), 0x0004 | 0x0040)
                     except Exception:
-                        pass
+                        logger.debug("restore: suppressed exception", exc_info=True)
                 if hasattr(self._window, "move") and hasattr(self._window, "resize"):
                     try:
                         self._window.move(int(x), int(y))
                         self._window.resize(int(w), int(h))
                     except Exception:
-                        pass
+                        logger.debug("restore: suppressed exception", exc_info=True)
             else:
                 if hasattr(self._window, "resize"):
                     self._window.resize(1100, 800)
@@ -532,7 +538,7 @@ class AppApi:
                                 self._window.move(rect.left, rect.top)
                                 self._window.resize(w, h)
                             except Exception:
-                                pass
+                                logger.debug("maximize: suppressed exception", exc_info=True)
 
                         self._is_maximized = True
                         logger.info("[WINDOW] Maximized window to Work Area (Taskbar visible)")
@@ -551,7 +557,7 @@ class AppApi:
                     self._window.move(rect.left, rect.top)
                     self._window.resize(w, h)
                 except Exception:
-                    pass
+                    logger.debug("maximize: suppressed exception", exc_info=True)
                 self._is_maximized = True
         except Exception as e:
             logger.error(f"Maximize window error: {e}")
@@ -665,7 +671,7 @@ class AppApi:
                 elif state == "stopped":
                     self._core.discord_rpc.clear_presence()
         except Exception:
-            pass
+            logger.debug("report_state: suppressed exception", exc_info=True)
 
     def report_position(self, pos_ms: int, dur_ms: int = 0, duration_ms: int = 0):
         """Report position update."""
@@ -693,7 +699,7 @@ class AppApi:
             try:
                 self._core.db.add_to_history(track["id"])
             except Exception:
-                pass
+                logger.debug("play_track: suppressed exception", exc_info=True)
 
         if track_list:
             if index is None or index == 0:
@@ -1284,6 +1290,12 @@ class AppApi:
         album_title = album_data.get("title") or album_data.get("album") or ""
         artist_name = album_data.get("artist") or ""
 
+        deadline = time.monotonic() + BRIDGE_SYNC_BUDGET
+
+        def _remaining():
+            """Seconds left in the shared budget, never negative."""
+            return max(0.0, deadline - time.monotonic())
+
         # 1. Local DB tracks
         if source == "local" or not source_id:
             tracks = self._core.db.get_album_tracks(album_title, artist_name)
@@ -1302,7 +1314,7 @@ class AppApi:
             def _err(e):
                 done_event.set()
             self._core.spotify.get_album_tracks(coll_id, callback=_cb, error_callback=_err)
-            done_event.wait(timeout=4.0)
+            done_event.wait(timeout=_remaining())
             if res:
                 return res
 
@@ -1319,7 +1331,7 @@ class AppApi:
                 def _err(e):
                     done_event.set()
                 self._core.youtube.get_album_tracks(browse_id, callback=_cb, error_callback=_err)
-                done_event.wait(timeout=4.0)
+                done_event.wait(timeout=_remaining())
                 if res:
                     return res
 
@@ -1335,7 +1347,7 @@ class AppApi:
             def _err(e):
                 done_event.set()
             self._core.youtube.search(search_q, max_results=15, callback=_cb, error_callback=_err)
-            done_event.wait(timeout=4.0)
+            done_event.wait(timeout=_remaining())
             if res:
                 return res
 
@@ -1510,7 +1522,7 @@ class AppApi:
             logger.error(f"get_playlist_tracks {source} error: {e}")
             return {"success": False, "error": str(e)}
 
-        if not done.wait(timeout=20.0):
+        if not done.wait(timeout=BRIDGE_SYNC_BUDGET):
             return {"success": False, "error": "Таймаут получения треков плейлиста"}
         if "error" in result:
             return {"success": False, "error": result["error"]}
@@ -1599,12 +1611,27 @@ class AppApi:
             return False
 
     def validate_subscription_key(self, key: str):
-        """Stub: license system removed for open source."""
-        return {"valid": True, "is_valid": True, "success": True, "expire": "never", "valid_until": 0}
+        """Report licence status for `key`.
+
+        Licensing is not enforced in this build (LICENSE_VALIDATION_ENABLED is False),
+        so every key is reported as valid. The flag is honoured here rather than the
+        result being hardcoded, so enabling it cannot be forgotten: with validation on
+        and no remote service wired up, access is denied instead of silently granted.
+        """
+        if not LICENSE_VALIDATION_ENABLED:
+            return {"valid": True, "is_valid": True, "success": True, "expire": "never", "valid_until": 0}
+        logger.warning("Licence validation is enabled but no validation service is configured")
+        return {"valid": False, "is_valid": False, "success": False,
+                "error": "Сервис проверки лицензий недоступен", "valid_until": 0}
 
     def get_subscription_info(self):
-        """Stub: license system removed for open source."""
-        return {"valid": True, "is_valid": True, "success": True, "expire": "never", "valid_until": 0, "key": "OPEN-SOURCE"}
+        """Return current licence information. See validate_subscription_key."""
+        if not LICENSE_VALIDATION_ENABLED:
+            return {"valid": True, "is_valid": True, "success": True, "expire": "never",
+                    "valid_until": 0, "key": "OPEN-SOURCE"}
+        logger.warning("Licence validation is enabled but no validation service is configured")
+        return {"valid": False, "is_valid": False, "success": False,
+                "error": "Сервис проверки лицензий недоступен", "valid_until": 0, "key": ""}
 
     def get_settings(self, category: str = None):
         """Get settings dict."""
@@ -1653,10 +1680,18 @@ class AppApi:
                 self._core.settings.set("personalization", k, v)
         return True
 
+    #: get_storage_info walks the whole cache tree, which is far too slow to redo on
+    #: every settings-screen render. Result is reused for this many seconds.
+    _STORAGE_INFO_TTL = 30.0
+
     def get_storage_info(self):
-        """Get cache, covers & downloaded storage size info."""
+        """Get cache, covers & downloaded storage size info (cached for 30s)."""
+        cached = getattr(self, "_storage_info_cache", None)
+        if cached and (time.monotonic() - cached[0]) < self._STORAGE_INFO_TTL:
+            self._emit("storage_info", cached[1])
+            return cached[1]
         try:
-            cache_dir = getattr(self._core.cache, "cache_dir", os.path.expanduser("~/.nedotify/cache"))
+            cache_dir = self._core.cache.cache_dir
             covers_dir = getattr(self._core.scanner, "_covers_dir", os.path.expanduser("~/.nedotify/covers"))
 
             cache_bytes = 0
@@ -1666,7 +1701,7 @@ class AppApi:
                         try:
                             cache_bytes += os.path.getsize(os.path.join(root, f))
                         except Exception:
-                            pass
+                            logger.debug("get_storage_info: suppressed exception", exc_info=True)
 
             covers_bytes = 0
             covers_count = 0
@@ -1677,7 +1712,7 @@ class AppApi:
                         try:
                             covers_bytes += os.path.getsize(os.path.join(root, f))
                         except Exception:
-                            pass
+                            logger.debug("get_storage_info: suppressed exception", exc_info=True)
 
             downloaded_tracks = self._core.db.get_downloaded_tracks() or []
             track_bytes = 0
@@ -1688,7 +1723,7 @@ class AppApi:
                     try:
                         track_bytes += os.path.getsize(fp)
                     except Exception:
-                        pass
+                        logger.debug("get_storage_info: suppressed exception", exc_info=True)
 
             total_bytes = cache_bytes + covers_bytes + track_bytes
             total_mb = round(total_bytes / (1024 * 1024), 2)
@@ -1702,6 +1737,7 @@ class AppApi:
                 "covers": {"count": covers_count, "size": f"{cover_mb} MB"},
                 "cache_dir": cache_dir
             }
+            self._storage_info_cache = (time.monotonic(), res)
             self._emit("storage_info", res)
             return res
         except Exception as e:
@@ -1769,14 +1805,25 @@ class AppApi:
             cascade_no = self._lyrics_cascade_count
         logger.info(f"[lyrics] cascade call #{cascade_no} for {artist_name} - {track_name}")
 
+        def _is_latest():
+            with self._lyrics_lock:
+                return cascade_no == self._lyrics_cascade_count
+
         def run():
             try:
                 data = self._core.lyrics.get_lyrics(track_name, artist_name, duration_ms=duration_ms, file_path=file_path)
-                self._emit("lyrics_ready", data)
             except Exception as e:
-                self._emit("lyrics_ready", {"synced": False, "lyrics": f"Could not fetch lyrics: {e}"})
+                logger.warning("lyrics cascade #%d failed: %s", cascade_no, e, exc_info=True)
+                data = {"synced": False, "lyrics": f"Could not fetch lyrics: {e}"}
+            # Skipping publication of a superseded cascade: without this, switching
+            # tracks quickly let a slow earlier lookup overwrite the current track's
+            # lyrics, because whichever request finished last won.
+            if _is_latest():
+                self._emit("lyrics_ready", data)
+            else:
+                logger.debug("Discarding superseded lyrics cascade #%d", cascade_no)
 
-        threading.Thread(target=run, daemon=True).start()
+        threading.Thread(target=run, daemon=True, name=f"Lyrics-{cascade_no}").start()
         return {"status": "loading", "cascade": cascade_no}
 
     def get_lyrics_translation(self, lyrics_text: str, target_lang: str = "ru"):
@@ -1923,6 +1970,33 @@ class AppApi:
             logger.error(f"Error opening local file: {e}")
         return False
 
+    def get_artist_profile(self, artist_name: str):
+        """Request a full artist profile: avatar, bio, subscribers, discography, top tracks.
+
+        Resolution needs two or three YouTube Music round trips, so it is delivered
+        through the artist_profile_ready / artist_profile_error events rather than
+        blocking the bridge thread.
+        """
+        name = (artist_name or "").strip()
+        if not name:
+            self._emit("artist_profile_error", {"artist": "", "error": "Имя исполнителя не указано"})
+            return {"status": "error", "error": "Имя исполнителя не указано"}
+
+        svc = getattr(self._core, "artists", None)
+        if svc is None:
+            self._emit("artist_profile_error", {"artist": name, "error": "Сервис исполнителей недоступен"})
+            return {"status": "error", "error": "Сервис исполнителей недоступен"}
+
+        def _ok(profile):
+            self._emit("artist_profile_ready", profile)
+
+        def _err(message):
+            logger.info("Artist profile for %r unavailable: %s", name, message)
+            self._emit("artist_profile_error", {"artist": name, "error": str(message)})
+
+        svc.get_profile(name, callback=_ok, error_callback=_err)
+        return {"status": "loading", "artist": name}
+
     def get_recommendations(self, track_data: dict, max_results: int = 10):
         """Get recommended tracks for seed track synchronously with timeout."""
         res = []
@@ -2005,7 +2079,7 @@ class AppApi:
                         os.remove(path)
                         total_size -= size
                     except Exception:
-                        pass
+                        logger.debug("_clean_stream_cache: suppressed exception", exc_info=True)
         except Exception as e:
             logger.debug(f"Stream cache cleanup ignored: {e}")
 
@@ -2015,7 +2089,12 @@ class AppApi:
             return False
         def _prefetch_task():
             try:
-                self._clean_stream_cache()
+                # Cache pruning is throttled: it used to run a full scandir of the
+                # streams directory on every single track change.
+                now = time.monotonic()
+                if now - getattr(self, "_last_stream_clean", 0.0) > 600.0:
+                    self._last_stream_clean = now
+                    self._clean_stream_cache()
                 source = track_data.get("source")
                 source_id = track_data.get("source_id")
                 source_url = track_data.get("source_url") or source_id

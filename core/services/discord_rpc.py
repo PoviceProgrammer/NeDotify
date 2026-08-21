@@ -39,10 +39,16 @@ class DiscordRPCService:
             return bool(self.settings.get("app", "discord_rpc_enabled", True))
         return True
 
+    #: start() is called on every track change, so the unavailable-module notice is
+    #: emitted once per process instead of once per event.
+    _warned_missing_module = False
+
     def start(self):
         """Asynchronously connect to local Discord IPC socket."""
         if not HAS_PYPRESENCE:
-            logger.info("pypresence module not installed, Discord RPC disabled.")
+            if not DiscordRPCService._warned_missing_module:
+                DiscordRPCService._warned_missing_module = True
+                logger.info("pypresence module not installed, Discord RPC disabled.")
             return
 
         if not self.is_enabled():

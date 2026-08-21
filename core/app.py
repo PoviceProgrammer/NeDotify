@@ -30,6 +30,7 @@ from services.watchdog_service import WatchdogService
 from services.yandex_service import YandexService
 from services.youtube_service import YouTubeService
 from services.zapret_service import ZapretService
+from services.artist_service import ArtistService
 from services.audio_fingerprint_service import AudioFingerprintService
 from core.services.discord_rpc import DiscordRPCService
 from utils.cache_manager import CacheManager
@@ -110,6 +111,7 @@ class AppCore:
         self.spotify = SpotifyService(self.settings)
         self.lyrics = LyricsService(self.settings)
         self.recommendations = RecommendationService(settings=self.settings, db=self.db, soundcloud_service=self.soundcloud, youtube_service=self.youtube)
+        self.artists = ArtistService(youtube_service=self.youtube, settings=self.settings)
 
         # Proxy, Downloader & Plugins
         self.proxy = LocalProxyManager(self)
@@ -222,7 +224,7 @@ class AppCore:
                         try:
                             self.db.cache_stream(source, source_id, stream_url)
                         except Exception:
-                            pass
+                            logger.debug("_on_resolved: suppressed exception", exc_info=True)
 
                     if self.settings and self.settings.get("storage", "auto_cache_streams", False):
                         def delayed_download():
@@ -232,7 +234,7 @@ class AppCore:
                                     if curr.get("source_id") == source_id:
                                         self.cache.download_audio_stream(source, source_id, url)
                             except Exception:
-                                pass
+                                logger.debug("delayed_download: suppressed exception", exc_info=True)
                         _t = threading.Timer(5.0, delayed_download)
                         _t.daemon = True
                         _t.start()
@@ -254,7 +256,7 @@ class AppCore:
                                     t_art = db_track.get('artist', '')
                                     t_title = db_track.get('title', '')
                             except Exception:
-                                pass
+                                logger.debug("_on_err: suppressed exception", exc_info=True)
 
                         if not t_title or t_title == source_id or (len(t_title) == 11 and " " not in t_title):
                             try:
@@ -268,7 +270,7 @@ class AppCore:
                                     if o_data.get('author_name') and not t_art:
                                         t_art = o_data['author_name']
                             except Exception:
-                                pass
+                                logger.debug("_on_err: suppressed exception", exc_info=True)
 
                         def clean_noise(text):
                             if not text: return ""

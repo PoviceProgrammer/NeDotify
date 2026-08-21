@@ -129,11 +129,14 @@ class MockAudioFile:
 
 mock_mutagen = MagicMock()
 mock_mutagen.File.side_effect = lambda filepath, easy=False: MockAudioFile()
+# utils/tag_parser.py imports every one of these in a single try block, so a
+# missing entry makes the whole import fail and silently sets HAS_MUTAGEN=False.
 sys.modules['mutagen'] = mock_mutagen
 sys.modules['mutagen.id3'] = mock_mutagen
 sys.modules['mutagen.mp3'] = mock_mutagen
 sys.modules['mutagen.flac'] = mock_mutagen
 sys.modules['mutagen.oggvorbis'] = mock_mutagen
+sys.modules['mutagen.mp4'] = mock_mutagen
 
 
 # Import application core modules after environment mocks

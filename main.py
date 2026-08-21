@@ -146,7 +146,7 @@ def _enable_doh_fallback():
                 try:
                     return _orig_getaddrinfo(_dns_cache[host], port, family, type, proto, flags)
                 except Exception:
-                    pass
+                    logging.debug("_doh_getaddrinfo: suppressed exception", exc_info=True)
             for doh_url in [
                 f"https://1.1.1.1/dns-query?name={host}&type=A",
                 f"https://dns.google/resolve?name={host}&type=A",
@@ -266,12 +266,12 @@ def main():
                         except OSError:
                             pass
                 except Exception:
-                    pass
+                    logging.debug("_acquire_instance_lock: suppressed exception", exc_info=True)
             try:
                 with open(lock_path, 'w') as f:
                     f.write(str(os.getpid()))
             except Exception:
-                pass
+                logging.debug("_acquire_instance_lock: suppressed exception", exc_info=True)
 
     def _release_instance_lock():
         nonlocal _INSTANCE_MUTEX
@@ -281,13 +281,13 @@ def main():
                 ctypes.windll.kernel32.CloseHandle(_INSTANCE_MUTEX)
                 _INSTANCE_MUTEX = None
             except Exception:
-                pass
+                logging.debug("_release_instance_lock: suppressed exception", exc_info=True)
         try:
             lock_path = os.path.join(tempfile.gettempdir(), 'nedotify_instance.lock')
             if os.path.exists(lock_path):
                 os.remove(lock_path)
         except Exception:
-            pass
+            logging.debug("_release_instance_lock: suppressed exception", exc_info=True)
 
     _acquire_instance_lock()
 
@@ -329,7 +329,7 @@ def main():
                 try:
                     window.destroy()
                 except Exception:
-                    pass
+                    logging.debug("_close_handler: suppressed exception", exc_info=True)
                 return 'ok'
 
             def _assets_fallback(filepath=''):
@@ -359,7 +359,7 @@ def main():
                         _bottle.response.content_type = 'image/png'
                         return _FALLBACK_PNG
                 except Exception:
-                    pass
+                    logging.debug("_image_404_handler: suppressed exception", exc_info=True)
                 return error.body
 
             # Properly recompile Bottle Router so custom dynamic routes match before pywebview catch-all
@@ -409,7 +409,7 @@ def main():
             try:
                 app_core.cleanup()
             except Exception:
-                pass
+                logging.debug("_startup_watchdog: suppressed exception", exc_info=True)
             os._exit(3)
         except Exception as e:
             logging.error(f"[startup] watchdog real restart failed: {e}")
@@ -446,7 +446,7 @@ def main():
     try:
         api.cleanup()
     except Exception:
-        pass
+        logging.debug("_startup_watchdog: suppressed exception", exc_info=True)
     sys.exit(0)
 
 if __name__ == "__main__":

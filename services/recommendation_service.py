@@ -271,8 +271,8 @@ class RecommendationService(BaseMusicService):
                     local_trks = UserTasteProfile().build_from_db(self.db).recent_history
                     for lt in local_trks[:max_results]:
                         resolved_tracks.append(self._format_ui_track(lt))
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.logger.warning(f'Local history fallback failed: {e}')
 
         if not resolved_tracks:
             for idx, seed_a in enumerate(self.DEFAULT_FALLBACK_ARTISTS[:max_results]):
@@ -338,7 +338,8 @@ class RecommendationService(BaseMusicService):
                     try:
                         db_tracks = self.db.get_most_played_tracks(limit=max_results)
                         tracks = [self._format_ui_track(t) for t in db_tracks] if db_tracks else []
-                    except Exception:
+                    except Exception as e:
+                        self.logger.warning(f'get_most_played_tracks fallback failed: {e}')
                         tracks = []
                 elif self.db:
                     try:
@@ -346,7 +347,8 @@ class RecommendationService(BaseMusicService):
                         cursor.execute("SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path FROM tracks LIMIT ?", (max_results,))
                         rows = cursor.fetchall()
                         tracks = [self._format_ui_track(r) for r in rows] if rows else []
-                    except Exception:
+                    except Exception as e:
+                        self.logger.warning(f'Local tracks fallback query failed: {e}')
                         tracks = []
                 if not tracks:
                     tracks = CURATED_WELCOME_TRACKS[:max_results]
@@ -410,7 +412,8 @@ class RecommendationService(BaseMusicService):
                     try:
                         db_tracks = self.db.get_user_history_tracks(limit=max_results)
                         resolved_list = [self._format_ui_track(t) for t in db_tracks] if db_tracks else []
-                    except Exception:
+                    except Exception as e:
+                        self.logger.warning(f'get_user_history_tracks fallback failed: {e}')
                         resolved_list = []
                 elif self.db:
                     try:
@@ -418,7 +421,8 @@ class RecommendationService(BaseMusicService):
                         cursor.execute("SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path FROM tracks LIMIT ?", (max_results,))
                         rows = cursor.fetchall()
                         resolved_list = [self._format_ui_track(r) for r in rows] if rows else []
-                    except Exception:
+                    except Exception as e:
+                        self.logger.warning(f'Local feed fallback query failed: {e}')
                         resolved_list = []
                 if not resolved_list:
                     resolved_list = CURATED_WELCOME_TRACKS[:max_results]
@@ -460,8 +464,8 @@ class RecommendationService(BaseMusicService):
                         chart_arts = self.lastfm.chart.getTopArtists(limit=max_results)
                         for ca in chart_arts:
                             add_artist(ca.get('name'), ca.get('image'))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        self.logger.warning(f'Last.fm chart.getTopArtists failed: {e}')
 
                 if callback:
                     callback(artists[:max_results])
@@ -508,7 +512,8 @@ class RecommendationService(BaseMusicService):
                     try:
                         db_tracks = self.db.get_recently_added_tracks(limit=max_results)
                         tracks = [self._format_ui_track(t) for t in db_tracks] if db_tracks else []
-                    except Exception:
+                    except Exception as e:
+                        self.logger.warning(f'get_recently_added_tracks fallback failed: {e}')
                         tracks = []
                 elif self.db:
                     try:
@@ -516,7 +521,8 @@ class RecommendationService(BaseMusicService):
                         cursor.execute("SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path FROM tracks LIMIT ?", (max_results,))
                         rows = cursor.fetchall()
                         tracks = [self._format_ui_track(r) for r in rows] if rows else []
-                    except Exception:
+                    except Exception as e:
+                        self.logger.warning(f'Local releases fallback query failed: {e}')
                         tracks = []
                 if not tracks:
                     tracks = CURATED_WELCOME_TRACKS[:max_results]
@@ -750,6 +756,7 @@ class RecommendationService(BaseMusicService):
 
                 for artist in rel_artists:
                     top_trks = self.lastfm.artist.getTopTracks(artist, limit=4)
+                    self._prefetch_resolutions([(tt.get('name', ''), tt.get('artist', artist)) for tt in top_trks], 8)
                     for tt in top_trks:
                         res = _resolve_deduped(tt.get('name', ''), tt.get('artist', artist))
                         if not res:
@@ -760,6 +767,7 @@ class RecommendationService(BaseMusicService):
 
                 chart_raw = self.lastfm.chart.getTopTracks(limit=15)
                 chart_tracks = []
+                self._prefetch_resolutions([(item.get('name', ''), item.get('artist', '')) for item in chart_raw], 15)
                 for item in chart_raw:
                     res = _resolve_deduped(item.get('name', ''), item.get('artist', ''))
                     if res:
@@ -795,6 +803,7 @@ class RecommendationService(BaseMusicService):
             try:
                 chart_raw = self.lastfm.chart.getTopTracks(limit=limit)
                 tracks = []
+                self._prefetch_resolutions([(item.get('name', ''), item.get('artist', '')) for item in chart_raw], limit)
                 for item in chart_raw:
                     res = self.resolver.resolve_track(item.get('name', ''), item.get('artist', ''))
                     if not res:
@@ -860,6 +869,10 @@ class RecommendationService(BaseMusicService):
                 if len(results) < limit and seed_artist and seed_title and seed_artist != 'Unknown Artist':
                     try:
                         sim_tracks = self.lastfm.track.getSimilar(seed_artist, seed_title, limit=limit)
+                        self._prefetch_resolutions(
+                            [(st.get('name') or '', st.get('artist') or seed_artist) for st in sim_tracks],
+                            limit,
+                        )
                         for st in sim_tracks:
                             c_title = st.get('name') or ''
                             c_artist = st.get('artist') or seed_artist
@@ -887,6 +900,10 @@ class RecommendationService(BaseMusicService):
                             if not sa_name:
                                 continue
                             top_trks = self.lastfm.artist.getTopTracks(sa_name, limit=3)
+                            self._prefetch_resolutions(
+                                [(tt.get('name') or '', tt.get('artist') or sa_name) for tt in top_trks],
+                                8,
+                            )
                             for tt in top_trks:
                                 c_title = tt.get('name') or ''
                                 c_artist = tt.get('artist') or sa_name
@@ -919,8 +936,8 @@ class RecommendationService(BaseMusicService):
                                 results.append(self._format_ui_track(hist))
                                 if len(results) >= limit:
                                     break
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        self.logger.warning(f'Taste-profile wave fallback failed: {e}')
 
                 if callback:
                     callback(results[:limit])

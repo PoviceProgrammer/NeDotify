@@ -1,0 +1,10 @@
+# AURA Music - Cursor / Antigravity AI Rules
+
+You are working on AURA Music, a desktop music streaming & player app built with Python + pywebview + HTML5 Audio + SQLite.
+
+## Key Technical Constraints:
+1. Python backend runs on Windows. Always handle `WinError 10053`, `BrokenPipeError`, and connection resets in HTTP audio proxy (`core/proxy.py`).
+2. Dual HTML5 Audio in `player.js`: always tear down and reset `oldAudio.src = ""` on track transition/pause to avoid socket leakage in pywebview.
+3. Thread safety: Multi-provider search runs concurrently via `ThreadPoolExecutor(max_workers=5)` with strict 4.0s timeout per provider. Search cache must use `Lock()`.
+4. Downloader: Save tracks to `.cache/downloads/` with path sanitization (`utils/path_utils.py`), update `tracks` table (`is_downloaded = 1`, `file_path`), emit `track_downloaded`/`download_failed` events.
+5. Packaging: Ensure asset paths support both source mode and PyInstaller frozen mode (`sys._MEIPASS`).

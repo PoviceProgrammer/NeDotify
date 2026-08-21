@@ -116,6 +116,25 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
     HTTP Request Handler to proxy cloud streams and handle credentials and re-resolution.
     """
 
+    def finish(self):
+        """Release this request thread's SQLite connection before the thread dies.
+
+        The server is thread-per-request and DatabaseManager caches one connection
+        per thread, each holding an 8MB page cache. Without an explicit release the
+        connections were only reclaimed whenever the GC happened to collect the dead
+        thread's locals.
+        """
+        try:
+            super().finish()
+        finally:
+            try:
+                db = getattr(self.server.app_core, 'db', None)
+                closer = getattr(db, 'close_thread_connection', None)
+                if callable(closer):
+                    closer()
+            except Exception:
+                logger.debug('Per-request DB connection release failed', exc_info=True)
+
     def log_message(self, format, *args):
         logger.debug(format % args)
 
@@ -188,7 +207,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 try:
                     self.send_error(500, 'Range processing error')
                 except Exception:
-                    pass
+                    logger.debug("serve_local_file: suppressed exception", exc_info=True)
         else:
             self.send_response(200)
             self.send_header('Content-Type', content_type)
@@ -281,7 +300,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 try:
                     self.send_error(404, 'Stream not found')
                 except Exception:
-                    pass
+                    logger.debug("do_GET: suppressed exception", exc_info=True)
                 return None
 
             # Same SSRF gate as the ?url= branch: a resolver or a poisoned DB cache
@@ -291,7 +310,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 try:
                     self.send_error(400, 'Resolved stream URL blocked by SSRF validation')
                 except Exception:
-                    pass
+                    logger.debug("do_GET: suppressed exception", exc_info=True)
                 return None
 
             final_path = os.path.join(streams_dir, f"{cache_name}.m4a")
@@ -400,7 +419,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                             if resolver is not None:
                                 resolver.invalidate(source, source_id)
                         except Exception:
-                            pass
+                            logger.debug("_inject_ydl_cookies: suppressed exception", exc_info=True)
                         try:
                             import threading
                             resolve_event = threading.Event()
@@ -532,7 +551,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                         try:
                             self.wfile.flush()
                         except Exception:
-                            pass
+                            logger.debug("_on_resolved: suppressed exception", exc_info=True)
                         tmp.write(chunk)
 
                 if bytes_written > 0 and (expected_len is None or bytes_written == expected_len):
@@ -552,21 +571,21 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     try:
                         self.wfile.flush()
                     except Exception:
-                        pass
+                        logger.debug("_on_resolved: suppressed exception", exc_info=True)
         except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as ce:
             logger.debug(f'Stream client disconnected: {ce}')
             if is_cachable_request and os.path.exists(temp_path):
                 try:
                     os.remove(temp_path)
                 except Exception:
-                    pass
+                    logger.debug("_on_resolved: suppressed exception", exc_info=True)
         except Exception as e:
             logger.error(f'Error proxying stream: {e}')
             if is_cachable_request and os.path.exists(temp_path):
                 try:
                     os.remove(temp_path)
                 except Exception:
-                    pass
+                    logger.debug("_on_resolved: suppressed exception", exc_info=True)
         finally:
             resp.close()
 
@@ -620,11 +639,11 @@ class LocalProxyManager:
             try:
                 self.server.shutdown()
             except Exception:
-                pass
+                logger.debug("stop: suppressed exception", exc_info=True)
             try:
                 self.server.server_close()
             except Exception:
-                pass
+                logger.debug("stop: suppressed exception", exc_info=True)
             self.server = None
         self.thread = None
         self.port = 0

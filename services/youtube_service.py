@@ -6,6 +6,7 @@ Search and stream audio from YouTube/YouTube Music via yt-dlp.
 import time
 
 from typing import Callable, Optional
+import re
 import threading
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -157,14 +158,19 @@ class YouTubeService(BaseMusicService):
         return self._ydl
 
     def _prefetch_top_tracks(self, tracks: list):
-        """Background daemon thread to pre-resolve stream URLs for top search results."""
+        """Pre-resolve stream URLs for the top search results.
+
+        Opt-in only (see `search(..., prefetch=True)`): running it on every search
+        fired a full yt-dlp extraction per keystroke of a debounced search box.
+        """
         for trk in tracks[:2]:
             try:
                 sid = trk.get("source_id")
                 surl = trk.get("source_url") or sid
                 if surl and not self.get_from_cache(surl):
                     self.get_stream_url(surl, quality="high")
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Prefetch skipped for {trk.get('source_id')}: {e}", exc_info=True)
                 continue
 
     def _get_ydl_opts(self, format_str, fallback=False):
@@ -220,8 +226,12 @@ class YouTubeService(BaseMusicService):
     def available(self) -> bool:
         return HAS_YTDLP
 
-    def search(self, query: str, max_results: int = 20, result_type: str = None, callback: Callable = None, error_callback: Callable = None):
-        """Search YouTube for tracks or albums. Runs in background thread."""
+    def search(self, query: str, max_results: int = 20, result_type: str = None, callback: Callable = None, error_callback: Callable = None, prefetch: bool = False):
+        """Search YouTube for tracks or albums. Runs in background thread.
+
+        `prefetch` is off by default: turning it on pre-resolves stream URLs for the
+        top hits, which costs a full yt-dlp extraction per result.
+        """
         if not HAS_YTDLP or not HAS_YTMUSIC:
             if error_callback:
                 error_callback("yt-dlp или ytmusicapi не установлены")
@@ -332,7 +342,7 @@ class YouTubeService(BaseMusicService):
                 if callback:
                     callback(tracks)
 
-                if not is_album_search and not is_playlist_search:
+                if prefetch and not is_album_search and not is_playlist_search:
                     self._executor.submit(self._prefetch_top_tracks, tracks)
 
             except Exception as e:

@@ -156,14 +156,14 @@ class ZapretService:
             if os.path.exists(self.pid_file):
                 os.remove(self.pid_file)
         except Exception:
-            pass
+            logger.debug("_clear_pidfile: suppressed exception", exc_info=True)
 
     def _write_cmd_file(self, raw_args):
         try:
             with open(self.cmd_file, "w", encoding="utf-8") as f:
                 f.write(raw_args or "")
         except Exception:
-            pass
+            logger.debug("_write_cmd_file: suppressed exception", exc_info=True)
 
     def _read_cmd_file(self) -> str:
         try:
@@ -193,7 +193,7 @@ class ZapretService:
                 finally:
                     kernel32.CloseHandle(handle)
             except Exception:
-                pass
+                logger.debug("_pid_alive: suppressed exception", exc_info=True)
         try:
             os.kill(pid, 0)
             return True
@@ -316,7 +316,7 @@ class ZapretService:
             if self._log_handle:
                 self._log_handle.close()
         except Exception:
-            pass
+            logger.debug("_close_log_handle: suppressed exception", exc_info=True)
         self._log_handle = None
 
     def _read_log_tail(self, max_lines: int = 12) -> List[str]:
@@ -414,7 +414,7 @@ class ZapretService:
                     data = json.load(f)
                     return data.get("version", ZAPRET_VERSION)
         except Exception:
-            pass
+            logger.debug("get_local_version: suppressed exception", exc_info=True)
         return ZAPRET_VERSION
 
     def get_latest_release_info(self) -> Tuple[str | None, str | None]:
@@ -510,7 +510,7 @@ class ZapretService:
                         with open(version_file, "r", encoding="utf-8") as f:
                             last_check = json.load(f).get("last_check", 0)
                     except Exception:
-                        pass
+                        logger.debug("_bg: suppressed exception", exc_info=True)
 
                 # Check at most once every 24 hours
                 if time.time() - last_check <= 86400:
@@ -702,7 +702,7 @@ class ZapretService:
                 try:
                     self.process.terminate()
                 except Exception:
-                    pass
+                    logger.debug("stop: suppressed exception", exc_info=True)
                 self.process = None
             self._close_log_handle()
 

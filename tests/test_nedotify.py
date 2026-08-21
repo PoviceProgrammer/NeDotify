@@ -41,6 +41,8 @@ class SynchronousExecutor:
         except Exception as e:
             future.set_exception(e)
         return future
+    def shutdown(self, wait=True, cancel_futures=False):
+        return None
 
 _REAL_THREAD_CLASS = threading.Thread
 
@@ -63,8 +65,64 @@ except ImportError:
     pass
 
 import concurrent.futures
-concurrent.futures.ThreadPoolExecutor = SynchronousExecutor
-threading.Thread = SynchronousThread
+
+_REAL_THREAD_POOL = concurrent.futures.ThreadPoolExecutor
+
+
+def _install_inline_concurrency():
+    """Run every background job inline, and return an undo callable.
+
+    These substitutions are process-wide, so they are installed per test and
+    removed in tearDown.  Leaving them installed at import time deadlocked every
+    other test module in the session: DownloadManager's queue loop is started via
+    threading.Thread, and an inline start() runs its `while True` body inside the
+    constructor.
+    """
+    undo = []
+
+    def _swap(obj, name, value):
+        undo.append((obj, name, getattr(obj, name)))
+        setattr(obj, name, value)
+
+    _swap(concurrent.futures, 'ThreadPoolExecutor', SynchronousExecutor)
+    _swap(threading, 'Thread', SynchronousThread)
+
+    # App modules bind `ThreadPoolExecutor` at import time; rebind the ones that
+    # still point at the real pool.  Mixing a real executor with the inline-thread
+    # shim deadlocks - the executor's worker spawn runs inline and then blocks
+    # forever on queue.get().
+    for mod_name, mod in list(sys.modules.items()):
+        if mod is None or mod_name.split('.')[0] not in ('core', 'services', 'audio', 'utils'):
+            continue
+        pool = getattr(mod, 'ThreadPoolExecutor', None)
+        if pool is _REAL_THREAD_POOL:
+            _swap(mod, 'ThreadPoolExecutor', SynchronousExecutor)
+
+    # BaseMusicService._executor is a class attribute holding a real pool that a
+    # previous AppCore.cleanup() may already have shut down; a later submit() on it
+    # raises RuntimeError.  The shim has no shutdown(), so cleanup() is a no-op.
+    import services.base_service as _base_mod
+    _swap(_base_mod.BaseMusicService, '_executor', SynchronousExecutor())
+
+    # Fail fast on `requests`-based network calls. Services (SoundCloud client_id
+    # scrape, Yandex client init, Last.fm, Spotify) all catch these and degrade
+    # gracefully; without this, retries hang for minutes.
+    try:
+        import requests as _requests
+
+        def _no_network(self, method, url, *args, **kwargs):
+            raise _requests.exceptions.ConnectionError("network disabled in test sandbox")
+
+        _swap(_requests.sessions.Session, 'request', _no_network)
+    except Exception:
+        pass
+
+    def _undo():
+        for obj, name, old in reversed(undo):
+            setattr(obj, name, old)
+
+    return _undo
+
 
 # ==========================================
 # 2. GLOBAL ENVIRONMENT MOCKS
@@ -211,16 +269,20 @@ mock_mutagen.id3 = mock_mutagen
 mock_mutagen.flac = mock_mutagen
 mock_mutagen.oggvorbis = mock_mutagen
 mock_mutagen.mp3 = mock_mutagen
+mock_mutagen.mp4 = mock_mutagen
 
 mock_mutagen.ID3 = MockID3
 mock_mutagen.FLAC = MockFLAC
 mock_mutagen.OggVorbis = MockOggVorbis
 
+# utils/tag_parser.py imports every one of these in a single try block, so a
+# missing entry makes the whole import fail and silently sets HAS_MUTAGEN=False.
 sys.modules['mutagen'] = mock_mutagen
 sys.modules['mutagen.id3'] = mock_mutagen
 sys.modules['mutagen.mp3'] = mock_mutagen
 sys.modules['mutagen.flac'] = mock_mutagen
 sys.modules['mutagen.oggvorbis'] = mock_mutagen
+sys.modules['mutagen.mp4'] = mock_mutagen
 
 # Mock yt_dlp
 class MockYoutubeDL:
@@ -340,17 +402,6 @@ mock_ytmusic = MagicMock()
 mock_ytmusic.YTMusic = MockYTMusic
 sys.modules['ytmusicapi'] = mock_ytmusic
 
-# Fail fast on any real `requests`-based network calls (offline/CI-safe test sandbox).
-# Services (SoundCloud client_id scrape, Yandex client init, Last.fm, Spotify) all
-# catch these exceptions and degrade gracefully; otherwise retries can hang for minutes.
-try:
-    import requests as _requests
-    def _no_network(self, method, url, *args, **kwargs):
-        raise _requests.exceptions.ConnectionError("network disabled in test sandbox")
-    _requests.sessions.Session.request = _no_network
-except Exception:
-    pass
-
 # When this module is collected AFTER other test files (pytest.py imports every
 # module before running any test), core/service modules may already hold
 # references to the REAL yt_dlp / mutagen / vlc / ytmusicapi (imported through
@@ -395,43 +446,31 @@ from core.api import AppApi
 from core.database import DatabaseManager
 from utils.tag_parser import parse_tags
 
-# If other test modules imported the app before this file (pytest.py imports
-# every module before running any test), the service modules may already have
-# bound the REAL ThreadPoolExecutor. Mixing a real executor with the
-# SynchronousThread shim deadlocks: the executor's worker spawn runs inline and
-# blocks forever on queue.get(). Re-bind app-module executors to the shim so
-# behavior is identical regardless of import order.
-for _mod_name, _mod in list(sys.modules.items()):
-    if _mod_name.split('.')[0] in ('core', 'services', 'audio', 'utils'):
-        _tpe = getattr(_mod, 'ThreadPoolExecutor', None)
-        if _tpe is not None and getattr(_tpe, '__module__', '') == 'concurrent.futures.thread':
-            _mod.ThreadPoolExecutor = SynchronousExecutor
-
-# The class-level BaseMusicService._executor may already be a REAL pool that an
-# earlier AppCore.cleanup() shut down; any later submit would raise
-# RuntimeError. Swap it for a fresh synchronous shim (which has no shutdown(),
-# so cleanup()'s guarded calls are no-ops).
-import services.base_service as _base_mod
-_base_mod.BaseMusicService._executor = SynchronousExecutor()
-
 class BaseNeDotifyTestCase(unittest.TestCase):
     def setUp(self):
+        # Inline every background job, but only for the duration of this test.
+        self.addCleanup(_install_inline_concurrency())
+
         # Create temp folder inside workspace directory to avoid AppData system Temp quota limits
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.test_dir = os.path.join(project_root, ".test_runs", str(uuid.uuid4()))
         os.makedirs(self.test_dir, exist_ok=True)
+        self.addCleanup(shutil.rmtree, self.test_dir, ignore_errors=True)
 
         # Patch expanduser to return our temp folder
         self.expanduser_patcher = patch('os.path.expanduser', return_value=self.test_dir)
         self.expanduser_patcher.start()
+        self.addCleanup(self.expanduser_patcher.stop)
 
         # Patch subprocess.run to prevent pip update
         self.subprocess_patcher = patch('subprocess.run')
         self.subprocess_patcher.start()
+        self.addCleanup(self.subprocess_patcher.stop)
 
         # Mock urllib.request.urlopen for cache cover art downloads
         self.urlopen_patcher = patch('urllib.request.urlopen', side_effect=self._mock_urlopen)
         self.urlopen_patcher.start()
+        self.addCleanup(self.urlopen_patcher.stop)
 
         # Create isolated core and api instances.
         # AppCore() spawns background daemon threads (downloader queue loop, cache
@@ -444,15 +483,15 @@ class BaseNeDotifyTestCase(unittest.TestCase):
             self.core = AppCore()
         finally:
             threading.Thread = SynchronousThread
-        
-        # Stop polling thread and crossfade thread from blocking test thread
-        self.core.engine._start_polling = MagicMock()
-        self.core.engine._do_crossfade_actual = MagicMock()
-        
+        self.addCleanup(self._teardown_core)
+
         self.api = AppApi(self.core)
 
-    def tearDown(self):
-        self.core.cleanup()
+    def _teardown_core(self):
+        try:
+            self.core.cleanup()
+        except Exception:
+            pass
         # Close the DB connection so the class-level threading.local() connection
         # does not leak into the next test (DatabaseManager instances in the same
         # thread would otherwise share one connection and one DB file).
@@ -460,10 +499,6 @@ class BaseNeDotifyTestCase(unittest.TestCase):
             self.core.db.close()
         except Exception:
             pass
-        self.urlopen_patcher.stop()
-        self.subprocess_patcher.stop()
-        self.expanduser_patcher.stop()
-        shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def _mock_urlopen(self, req, timeout=10):
         class MockResponse:
