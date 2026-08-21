@@ -5,6 +5,7 @@ and advanced customization. (PyWebView Edition)
 """
 
 import logging
+import multiprocessing
 import os
 import sys
 import threading
@@ -450,4 +451,5 @@ def main():
     sys.exit(0)
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()

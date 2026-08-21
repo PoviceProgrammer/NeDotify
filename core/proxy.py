@@ -548,10 +548,6 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                             break
                         bytes_written += len(chunk)
                         self.wfile.write(chunk)
-                        try:
-                            self.wfile.flush()
-                        except Exception:
-                            logger.debug("_on_resolved: suppressed exception", exc_info=True)
                         tmp.write(chunk)
 
                 if bytes_written > 0 and (expected_len is None or bytes_written == expected_len):
@@ -568,10 +564,6 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     if not chunk:
                         break
                     self.wfile.write(chunk)
-                    try:
-                        self.wfile.flush()
-                    except Exception:
-                        logger.debug("_on_resolved: suppressed exception", exc_info=True)
         except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as ce:
             logger.debug(f'Stream client disconnected: {ce}')
             if is_cachable_request and os.path.exists(temp_path):

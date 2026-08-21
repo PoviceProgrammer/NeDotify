@@ -102,16 +102,21 @@ class DatabaseManager:
         if not hasattr(self._local, "connection") or self._local.connection is None:
             conn = sqlite3.connect(self.db_path, timeout=20.0)
             conn.row_factory = sqlite3.Row
-            try:
-                if self.db_path != ":memory:":
-                    conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("PRAGMA synchronous=NORMAL")
-                conn.execute("PRAGMA temp_store=MEMORY")
-                conn.execute("PRAGMA cache_size=-8000")
-                conn.execute("PRAGMA busy_timeout=10000")
-                conn.execute("PRAGMA foreign_keys=ON")
-            except Exception:
-                pass
+            pragmas = []
+            if self.db_path != ":memory:":
+                pragmas.append("PRAGMA journal_mode=WAL")
+            pragmas.extend([
+                "PRAGMA synchronous=NORMAL",
+                "PRAGMA temp_store=MEMORY",
+                "PRAGMA cache_size=-8000",
+                "PRAGMA busy_timeout=10000",
+                "PRAGMA foreign_keys=ON",
+            ])
+            for pragma_name in pragmas:
+                try:
+                    conn.execute(pragma_name)
+                except Exception as e:
+                    logger.warning("Database PRAGMA %s failed: %s", pragma_name, e)
             self._local.connection = conn
         return self._local.connection
 
