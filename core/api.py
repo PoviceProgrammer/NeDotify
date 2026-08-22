@@ -434,7 +434,8 @@ class AppApi:
             return {"success": True, "message": "No active window"}
 
         minimize_to_tray = bool(self._core.settings.get("general", "minimize_to_tray", True))
-        tray_available = bool(getattr(self, "_tray", None) or getattr(self._core, "tray", None))
+        tray_mgr = getattr(self, "_tray", None) or getattr(self._core, "tray", None)
+        tray_available = bool(tray_mgr and hasattr(tray_mgr, "icon") and tray_mgr.icon)
 
         if minimize_to_tray and tray_available:
             try:
