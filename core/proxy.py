@@ -116,6 +116,12 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
     HTTP Request Handler to proxy cloud streams and handle credentials and re-resolution.
     """
 
+    def send_error(self, code, message=None, explain=None):
+        try:
+            super().send_error(code, message, explain)
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
+            pass
+
     def finish(self):
         """Release this request thread's SQLite connection before the thread dies.
 
