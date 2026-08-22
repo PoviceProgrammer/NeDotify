@@ -73,7 +73,7 @@ def sanitize_zapret_args(raw_args: str) -> List[str]:
     if not raw_args:
         return []
     try:
-        tokens = shlex.split(raw_args)
+        tokens = shlex.split(raw_args, posix=(sys.platform != "win32"))
     except ValueError as exc:
         raise ValueError(f"Не удалось разобрать аргументы: {exc}") from exc
     for tok in tokens:
