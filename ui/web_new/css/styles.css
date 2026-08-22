@@ -436,7 +436,7 @@ html.has-custom-bg #player-bar {
 #sidebar {
     width: 200px;
     min-width: 200px;
-    margin: 12px 0 108px 12px;
+    margin: 12px 0 calc(var(--player-bar-height, 84px) + 24px) 12px;
     border-radius: 24px;
     background: color-mix(in srgb, var(--bg-main) calc(var(--app-bg-opacity) * 55%), transparent);
     backdrop-filter: blur(var(--blur-md));
@@ -517,7 +517,7 @@ html.has-custom-bg #player-bar {
     flex: 1;
     display: flex;
     flex-direction: column;
-    margin: 12px 12px 108px 12px;
+    margin: 12px 12px calc(var(--player-bar-height, 84px) + 24px) 12px;
     background: color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent);
     border-radius: 24px;
     overflow: hidden;
@@ -2493,7 +2493,7 @@ select option {
         width: 70px;
         min-width: 70px;
         padding: 30px 0 20px 0;
-        margin: 12px 0 108px 12px;
+        margin: 12px 0 calc(var(--player-bar-height, 84px) + 24px) 12px;
     }
     .sidebar-logo span, .nav-section-label, .nav-item span {
         display: none;
@@ -4064,11 +4064,7 @@ html.player-style-vinyl .player-cover {
     to { transform: rotate(360deg); }
 }
 
-html.player-style-expanded #player-bar {
-    height: 105px !important;
-    padding: 16px 32px !important;
-    background: rgba(18, 18, 24, 0.95) !important;
-}
+
 
 /* 3. Slider Type */
 html.slider-type-thin .progress-track,
@@ -4834,7 +4830,7 @@ html.limit-state-focus.unfocused-minimized #home-visualizer-canvas {
 .aura-orb {
     position: absolute;
     border-radius: 50%;
-    mix-blend-mode: screen;
+    mix-blend-mode: normal;
     opacity: 0.45;
     contain: strict;
     will-change: transform;
@@ -4877,9 +4873,9 @@ html.limit-state-focus.unfocused-minimized #home-visualizer-canvas {
 }
 
 @keyframes auraFloat {
-    0% { transform: translate(0px, 0px) scale(1); }
-    50% { transform: translate(70px, -50px) scale(1.18); }
-    100% { transform: translate(-50px, 60px) scale(0.92); }
+    0% { transform: translate(0px, 0px); }
+    50% { transform: translate(70px, -50px); }
+    100% { transform: translate(-50px, 60px); }
 }
 
 /* =============================================

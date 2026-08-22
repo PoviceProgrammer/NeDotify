@@ -1916,7 +1916,7 @@ export function applyTitleAlignment(align) {
 
 export function applyPlayerStyle(style) {
     const root = document.documentElement;
-    root.classList.remove('player-style-default', 'player-style-vinyl', 'player-style-expanded');
+    root.classList.remove('player-style-default', 'player-style-vinyl');
     root.classList.add(`player-style-${style}`);
 }
 

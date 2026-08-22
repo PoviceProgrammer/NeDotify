@@ -130,10 +130,10 @@ export async function initOnboarding() {
             const bg = document.getElementById('particles-bg');
             if (selectedPreset === 'beauty') {
                 if (bg) bg.style.display = 'block';
-                document.body.classList.remove('perf-low');
+                document.documentElement.classList.remove('perf-low');
             } else {
                 if (bg) bg.style.display = 'none';
-                document.body.classList.add('perf-low');
+                document.documentElement.classList.add('perf-low');
             }
         });
     });
