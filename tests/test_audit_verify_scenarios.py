@@ -28,34 +28,50 @@ class ScenarioVerificationTests(unittest.TestCase):
         self.assertFalse(is_our, "Non-winws process must never be recognized as our winws process")
 
     def test_scenario_3_queue_thread_safety_concurrency(self):
-        """Scenario 3: Verify PlaybackQueue under high concurrent multithreading."""
+        """Scenario 3: Verify PlaybackQueue under high concurrent multithreading (20 threads, 5000 ops)."""
         queue = PlaybackQueue()
         errors = []
+        num_threads = 20
+        ops_per_thread = 250
 
         def worker(worker_id):
             try:
-                for i in range(100):
-                    track = {"id": worker_id * 1000 + i, "title": f"Track {i}", "artist": "Artist"}
+                for i in range(ops_per_thread):
+                    track_id = worker_id * 10000 + i
+                    track = {"id": track_id, "title": f"Track {track_id}", "artist": "Artist"}
                     queue.add_track(track)
-                    if i % 10 == 0:
-                        queue.shuffle = not queue.shuffle
+                    
+                    if i % 3 == 0:
+                        _ = queue.next_track()
                     if i % 5 == 0:
-                        queue.next_track()
+                        queue.shuffle = (i % 2 == 0)
                     if i % 7 == 0:
-                        queue.previous_track()
-                    _ = queue.current_track
-                    _ = queue.to_serializable()
-            except Exception as e:
-                errors.append(e)
+                        _ = queue.previous_track()
+                    if i % 11 == 0 and queue.count > 5:
+                        queue.move_track(0, queue.count - 1)
+                    if i % 13 == 0 and queue.count > 3:
+                        _ = queue.jump_to(queue.count // 2)
+                    if i % 17 == 0:
+                        _ = queue.to_serializable()
+                    if i % 19 == 0:
+                        _ = queue.get_upcoming(5)
 
-        threads = [threading.Thread(target=worker, args=(t,)) for t in range(8)]
+                    # Artificial micro-yield to force thread preemption / context switches
+                    if i % 25 == 0:
+                        time.sleep(0.0001)
+            except Exception as e:
+                errors.append((worker_id, e))
+
+        threads = [threading.Thread(target=worker, args=(t,)) for t in range(num_threads)]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
 
-        self.assertEqual(len(errors), 0, f"Thread safety errors occurred: {errors}")
+        self.assertEqual(len(errors), 0, f"Thread safety errors occurred under high concurrency: {errors}")
         self.assertGreater(queue.count, 0)
+        state = queue.to_serializable()
+        self.assertIsInstance(state, dict)
 
     def test_scenario_4_lufs_replaygain_formula(self):
         """Scenario 4: Verify ReplayGain calculation formula."""

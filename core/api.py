@@ -2047,6 +2047,7 @@ class AppApi:
                 return formatted
 
             def _on_feed(feed_data):
+                sections = []
                 if isinstance(feed_data, list):
                     sections = [{"title": "Рекомендации", "items": _format_section_items(feed_data)}]
                 elif isinstance(feed_data, dict):
@@ -2059,10 +2060,6 @@ class AppApi:
                                 sections.append(sec_copy)
                     elif "items" in feed_data and isinstance(feed_data["items"], list):
                         sections = [{"title": "Рекомендации", "items": _format_section_items(feed_data["items"])}]
-                    else:
-                        sections = []
-                else:
-                    sections = []
                 self._emit("authentic_home_ready", {"sections": sections})
 
             def _on_err(err):
