@@ -419,8 +419,19 @@ class DatabaseManager:
             logger.warning(f"FTS Migration error (LIKE fallback will be used): {e}")
 
         try:
+            cursor.execute("ALTER TABLE tracks ADD COLUMN loudness_lufs REAL DEFAULT NULL")
+        except sqlite3.OperationalError:
+            pass
+
+        try:
             cursor.execute("ALTER TABLE tracks ADD COLUMN lufs REAL DEFAULT NULL")
         except sqlite3.OperationalError:
+            pass
+
+        try:
+            cursor.execute("UPDATE tracks SET loudness_lufs = lufs WHERE loudness_lufs IS NULL AND lufs IS NOT NULL")
+            cursor.execute("UPDATE tracks SET lufs = loudness_lufs WHERE lufs IS NULL AND loudness_lufs IS NOT NULL")
+        except Exception:
             pass
 
         try:

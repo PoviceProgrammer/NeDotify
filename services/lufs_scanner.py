@@ -97,8 +97,10 @@ class LufsScannerService:
 
     def _update_db(self, track_id, lufs, peak):
         try:
-            self._core.db.conn.execute('UPDATE tracks SET lufs = ?, peak_volume = ? WHERE id = ?',
-                                       (lufs, peak, track_id))
+            self._core.db.conn.execute(
+                'UPDATE tracks SET lufs = ?, loudness_lufs = ?, peak_volume = ? WHERE id = ?',
+                (lufs, lufs, peak, track_id)
+            )
             self._core.db.conn.commit()
             logger.debug(f'Saved LUFS {lufs:.2f} for track {track_id}')
         except Exception as e:

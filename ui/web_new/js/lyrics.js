@@ -372,7 +372,7 @@ function updateLyricsPosition(posMs) {
                     if (prev) prev.classList.remove('active');
                 }
 
-                const targetLine = c.querySelector(`.lyric-line[data-index="${newIndex}"]`) || c.children[newIndex];
+                const targetLine = c.querySelector(`.lyric-line[data-index="${newIndex}"]`);
                 if (targetLine) {
                     targetLine.classList.add('active');
                     c._lastActiveLyric = targetLine;
