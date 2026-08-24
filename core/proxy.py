@@ -221,9 +221,12 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             self.send_header('Content-Length', str(file_size))
             self._send_cors_headers()
             self.end_headers()
-            with open(file_path, 'rb') as f:
-                import shutil
-                shutil.copyfileobj(f, self.wfile)
+            try:
+                with open(file_path, 'rb') as f:
+                    import shutil
+                    shutil.copyfileobj(f, self.wfile)
+            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as ce:
+                logger.debug("serve_local_file disconnect: %s", ce)
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -239,6 +242,21 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         if not self._authorized(query_params):
             logger.warning('Rejected unauthenticated proxy request: %s', parsed_path.path)
             self._reject_unauthorized()
+            return None
+
+        if parsed_path.path == '/api/cover':
+            path_param = query_params.get('path', [None])[0]
+            if not path_param:
+                self.send_error(400, 'Missing path parameter')
+                return None
+            unquoted = urllib.parse.unquote(path_param)
+            if unquoted.startswith('file:///'):
+                unquoted = unquoted[8:]
+            unquoted = os.path.normpath(unquoted)
+            if os.path.isfile(unquoted) and os.path.exists(unquoted):
+                self.serve_local_file(unquoted)
+                return None
+            self.send_error(404, 'Cover file not found')
             return None
 
         if parsed_path.path == '/api/stream':
@@ -585,24 +603,18 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 except Exception:
                     logger.debug("_on_resolved: suppressed exception", exc_info=True)
         finally:
-            resp.close()
+            if resp is not None and hasattr(resp, "close"):
+                try:
+                    resp.close()
+                except Exception:
+                    pass
 
         return None
 
 
 def get_real_thread_class():
-    import sys
-    import importlib
     import threading
-    if threading.Thread.__name__ != 'Thread':
-        patched_threading = sys.modules.pop('threading', None)
-        try:
-            real_threading = importlib.import_module('threading')
-            return real_threading.Thread
-        finally:
-            if patched_threading is not None:
-                sys.modules['threading'] = patched_threading
-    return threading.Thread
+    return getattr(threading, '_original_Thread', threading.Thread)
 
 
 class LocalProxyManager:

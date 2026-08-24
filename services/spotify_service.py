@@ -99,6 +99,10 @@ class SpotifyService(BaseMusicService):
         self.settings = settings
         self._executor = ThreadPoolExecutor(max_workers=5)
         self.logger = logging.getLogger(__name__)
+        if self.settings:
+            proxy = self.settings.get("auth", "proxy_url", "")
+            if proxy:
+                _session.proxies = {"http": proxy, "https": proxy}
 
     def search(self, query: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, limit: int = 20, result_type: str = None):
         def _search_thread():

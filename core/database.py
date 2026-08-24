@@ -81,6 +81,7 @@ class DatabaseManager:
         # a shared store makes every DatabaseManager instance hand back the first
         # connection the calling thread ever opened, i.e. the wrong database file.
         self._local = threading.local()
+        self._write_lock = threading.RLock()
         if db_path is None:
             app_data = os.path.join(os.path.expanduser("~"), ".nedotify")
             os.makedirs(app_data, exist_ok=True)
@@ -100,7 +101,7 @@ class DatabaseManager:
 
     def _get_connection(self) -> sqlite3.Connection:
         if not hasattr(self._local, "connection") or self._local.connection is None:
-            conn = sqlite3.connect(self.db_path, timeout=20.0)
+            conn = sqlite3.connect(self.db_path, timeout=30.0)
             conn.row_factory = sqlite3.Row
             pragmas = []
             if self.db_path != ":memory:":
@@ -109,7 +110,7 @@ class DatabaseManager:
                 "PRAGMA synchronous=NORMAL",
                 "PRAGMA temp_store=MEMORY",
                 "PRAGMA cache_size=-8000",
-                "PRAGMA busy_timeout=10000",
+                "PRAGMA busy_timeout=30000",
                 "PRAGMA foreign_keys=ON",
             ])
             for pragma_name in pragmas:
@@ -459,87 +460,87 @@ class DatabaseManager:
         year: Optional[int] = None,
         **kwargs: Any,
     ) -> int:
-        cursor = self.conn.cursor()
+        with self._write_lock:
+            conn = self.conn
+            with conn:
+                cursor = conn.cursor()
 
-        if source != "local" and source_id:
-            cursor.execute(
-                "SELECT id, cover_url, file_path FROM tracks WHERE source = ? AND source_id = ?",
-                (source, source_id),
-            )
-            row = cursor.fetchone()
-            if row:
-                t_id = row["id"]
-                if cover_url and not row["cover_url"]:
-                    cursor.execute("UPDATE tracks SET cover_url = ? WHERE id = ?", (cover_url, t_id))
-                if file_path and not row["file_path"]:
+                if source != "local" and source_id:
                     cursor.execute(
-                        "UPDATE tracks SET file_path = ?, is_downloaded = 1 WHERE id = ?",
-                        (file_path, t_id),
+                        "SELECT id, cover_url, file_path FROM tracks WHERE source = ? AND source_id = ?",
+                        (source, source_id),
                     )
-                self.conn.commit()
-                return t_id
+                    row = cursor.fetchone()
+                    if row:
+                        t_id = row["id"]
+                        if cover_url and not row["cover_url"]:
+                            cursor.execute("UPDATE tracks SET cover_url = ? WHERE id = ?", (cover_url, t_id))
+                        if file_path and not row["file_path"]:
+                            cursor.execute(
+                                "UPDATE tracks SET file_path = ?, is_downloaded = 1 WHERE id = ?",
+                                (file_path, t_id),
+                            )
+                        return t_id
 
-        if file_path:
-            cursor.execute("SELECT id FROM tracks WHERE file_path = ?", (file_path,))
-            row = cursor.fetchone()
-            if row:
-                return row["id"]
+                if file_path:
+                    cursor.execute("SELECT id FROM tracks WHERE file_path = ?", (file_path,))
+                    row = cursor.fetchone()
+                    if row:
+                        return row["id"]
 
-        if title and title != "Unknown":
-            cursor.execute(
-                "SELECT id, cover_url, file_path FROM tracks WHERE LOWER(title) = LOWER(?) AND LOWER(artist) = LOWER(?)",
-                (title, artist),
-            )
-            row = cursor.fetchone()
-            if row:
-                t_id = row["id"]
-                if cover_url and not row["cover_url"]:
-                    cursor.execute("UPDATE tracks SET cover_url = ? WHERE id = ?", (cover_url, t_id))
-                if file_path and not row["file_path"]:
+                if title and title != "Unknown":
                     cursor.execute(
-                        "UPDATE tracks SET file_path = ?, is_downloaded = 1 WHERE id = ?",
-                        (file_path, t_id),
+                        "SELECT id, cover_url, file_path FROM tracks WHERE LOWER(title) = LOWER(?) AND LOWER(artist) = LOWER(?)",
+                        (title, artist),
                     )
-                self.conn.commit()
-                return t_id
+                    row = cursor.fetchone()
+                    if row:
+                        t_id = row["id"]
+                        if cover_url and not row["cover_url"]:
+                            cursor.execute("UPDATE tracks SET cover_url = ? WHERE id = ?", (cover_url, t_id))
+                        if file_path and not row["file_path"]:
+                            cursor.execute(
+                                "UPDATE tracks SET file_path = ?, is_downloaded = 1 WHERE id = ?",
+                                (file_path, t_id),
+                            )
+                        return t_id
 
-        is_downloaded = int(kwargs.pop("is_downloaded", 0))
-        is_favorite = int(kwargs.pop("is_favorite", 0))
-        is_cached = int(kwargs.pop("is_cached", 0))
+                is_downloaded = int(kwargs.pop("is_downloaded", 0))
+                is_favorite = int(kwargs.pop("is_favorite", 0))
+                is_cached = int(kwargs.pop("is_cached", 0))
 
-        metadata_json = json.dumps(kwargs) if kwargs else None
-        fp_to_save = file_path or None
+                metadata_json = json.dumps(kwargs) if kwargs else None
+                fp_to_save = file_path or None
 
-        cursor.execute(
-            """
-            INSERT INTO tracks (title, artist, album, duration, file_path,
-                source, source_id, source_url, cover_path, cover_url,
-                bitrate, format, genre, year, is_downloaded, is_favorite, is_cached, metadata_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                title,
-                artist,
-                album,
-                duration,
-                fp_to_save,
-                source,
-                source_id,
-                source_url,
-                cover_path,
-                cover_url,
-                bitrate,
-                format_,
-                genre,
-                year,
-                is_downloaded,
-                is_favorite,
-                is_cached,
-                metadata_json,
-            ),
-        )
-        self.conn.commit()
-        return cursor.lastrowid
+                cursor.execute(
+                    """
+                    INSERT INTO tracks (title, artist, album, duration, file_path,
+                        source, source_id, source_url, cover_path, cover_url,
+                        bitrate, format, genre, year, is_downloaded, is_favorite, is_cached, metadata_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                    (
+                        title,
+                        artist,
+                        album,
+                        duration,
+                        fp_to_save,
+                        source,
+                        source_id,
+                        source_url,
+                        cover_path,
+                        cover_url,
+                        bitrate,
+                        format_,
+                        genre,
+                        year,
+                        is_downloaded,
+                        is_favorite,
+                        is_cached,
+                        metadata_json,
+                    ),
+                )
+                return cursor.lastrowid
 
     def get_track(self, track_id: int) -> Optional[Dict[str, Any]]:
         cursor = self.conn.cursor()
@@ -867,20 +868,6 @@ class DatabaseManager:
                 (title, artist, album, genre, year, cover_path, track_id)
             )
 
-            # Explicit FTS index row rebuild (delete old + insert new)
-            if getattr(self, "_fts_available", False):
-                try:
-                    cursor.execute(
-                        "INSERT INTO tracks_fts(tracks_fts, rowid, title, artist, album, genre) VALUES('delete', ?, ?, ?, ?, ?)",
-                        (track_id, old.get("title"), old.get("artist"), old.get("album"), old.get("genre"))
-                    )
-                    cursor.execute(
-                        "INSERT INTO tracks_fts(rowid, title, artist, album, genre) VALUES(?, ?, ?, ?, ?)",
-                        (track_id, title, artist, album or old.get("album"), genre or old.get("genre"))
-                    )
-                except Exception as fts_err:
-                    logger.debug(f"FTS resync warning during metadata update: {fts_err}")
-
             self.conn.commit()
             return True
         except Exception as e:
@@ -945,7 +932,7 @@ class DatabaseManager:
         """Calculate wrapped listening analytics for the specified period ('week', 'month', 'all')."""
         cursor = self.conn.cursor()
         
-        where_clause = ""
+        where_clause = "WHERE 1=1"
         if period == "week":
             where_clause = "WHERE h.played_at >= datetime('now', '-7 days')"
         elif period == "month":
@@ -1128,23 +1115,55 @@ class DatabaseManager:
         return cursor.fetchone()[0]
 
     def add_to_playlist(self, playlist_id: int, track_id: int) -> bool:
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "SELECT COALESCE(MAX(position), 0) + 1 FROM playlist_tracks WHERE playlist_id = ?",
-            (playlist_id,),
-        )
-        next_pos = cursor.fetchone()[0]
-        try:
-            cursor.execute(
-                "INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)",
-                (playlist_id, track_id, next_pos),
-            )
-            cursor.execute("UPDATE playlists SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (playlist_id,))
-            self.conn.commit()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to add to playlist: {e}")
-            return False
+        with self._write_lock:
+            conn = self.conn
+            try:
+                with conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT COALESCE(MAX(position), 0) + 1 FROM playlist_tracks WHERE playlist_id = ?",
+                        (playlist_id,),
+                    )
+                    row = cursor.fetchone()
+                    next_pos = row[0] if row else 1
+                    cursor.execute(
+                        "INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)",
+                        (playlist_id, track_id, next_pos),
+                    )
+                    cursor.execute("UPDATE playlists SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (playlist_id,))
+                return True
+            except Exception as e:
+                logger.error(f"Failed to add to playlist: {e}")
+                return False
+
+    def add_tracks_to_playlist(self, playlist_id: int, track_ids: List[int]) -> int:
+        """Batch add tracks to a playlist in a single atomic transaction."""
+        if not track_ids:
+            return 0
+        with self._write_lock:
+            conn = self.conn
+            try:
+                with conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT COALESCE(MAX(position), 0) FROM playlist_tracks WHERE playlist_id = ?",
+                        (playlist_id,),
+                    )
+                    row = cursor.fetchone()
+                    current_pos = row[0] if row else 0
+                    rows = []
+                    for t_id in track_ids:
+                        current_pos += 1
+                        rows.append((playlist_id, t_id, current_pos))
+                    cursor.executemany(
+                        "INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (?, ?, ?)",
+                        rows,
+                    )
+                    cursor.execute("UPDATE playlists SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (playlist_id,))
+                return len(rows)
+            except Exception as e:
+                logger.error(f"Failed to batch add to playlist: {e}")
+                return 0
 
     def get_smart_playlist_tracks(self, playlist_id: int) -> List[Dict[str, Any]]:
         return self.get_playlist_tracks(playlist_id)
@@ -1165,11 +1184,13 @@ class DatabaseManager:
 
     def delete_playlist(self, playlist_id: int) -> bool:
         pid = int(playlist_id)
-        cursor = self.conn.cursor()
-        cursor.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?", (pid,))
-        cursor.execute("DELETE FROM playlists WHERE id = ?", (pid,))
-        self.conn.commit()
-        return cursor.rowcount > 0
+        with self._write_lock:
+            conn = self.conn
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?", (pid,))
+                cursor.execute("DELETE FROM playlists WHERE id = ?", (pid,))
+                return cursor.rowcount > 0
 
     @staticmethod
     def _serialize_setting(value: Any) -> str:
@@ -1180,12 +1201,17 @@ class DatabaseManager:
         return str(value)
 
     def set_setting(self, key: str, value: Any, category: str = "general") -> None:
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "INSERT OR REPLACE INTO settings (key, value, category, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
-            (key, self._serialize_setting(value), category),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            conn = self.conn
+            try:
+                with conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT OR REPLACE INTO settings (key, value, category, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                        (key, self._serialize_setting(value), category),
+                    )
+            except Exception as e:
+                logger.error(f"set_setting failed for {key}: {e}")
 
     def set_settings_batch(self, items: Any) -> int:
         """Persist many settings inside a single transaction.
@@ -1200,14 +1226,19 @@ class DatabaseManager:
         ]
         if not rows:
             return 0
-        conn = self.conn
-        with conn:
-            conn.executemany(
-                "INSERT OR REPLACE INTO settings (key, value, category, updated_at) "
-                "VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
-                rows,
-            )
-        return len(rows)
+        with self._write_lock:
+            conn = self.conn
+            try:
+                with conn:
+                    conn.executemany(
+                        "INSERT OR REPLACE INTO settings (key, value, category, updated_at) "
+                        "VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                        rows,
+                    )
+                return len(rows)
+            except Exception as e:
+                logger.error(f"set_settings_batch failed: {e}")
+                return 0
 
     def get_setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
         cursor = self.conn.cursor()
@@ -1261,13 +1292,18 @@ class DatabaseManager:
 
     def set_cached_file(self, source: str, source_id: str, file_path: str) -> None:
         # O-3: downloaded files are long-lived — never auto-purged by expires_at
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "UPDATE stream_cache SET cached_file_path = ?, expires_at = NULL, cached_at = CURRENT_TIMESTAMP "
-            "WHERE source = ? AND source_id = ?",
-            (file_path, source, source_id),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            conn = self.conn
+            try:
+                with conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "UPDATE stream_cache SET cached_file_path = ?, expires_at = NULL, cached_at = CURRENT_TIMESTAMP "
+                        "WHERE source = ? AND source_id = ?",
+                        (file_path, source, source_id),
+                    )
+            except Exception as e:
+                logger.debug(f"set_cached_file suppressed: {e}")
 
     def get_cached_stream(self, source: str, source_id: str, max_age_seconds: int = 14400) -> Optional[Dict[str, Any]]:
         cursor = self.conn.cursor()
@@ -1293,65 +1329,87 @@ class DatabaseManager:
         duration: float = 0,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        cursor = self.conn.cursor()
         meta_json = json.dumps(metadata) if metadata else None
-        # ON CONFLICT DO UPDATE (not INSERT OR REPLACE) preserves cached_file_path
-        cursor.execute(
-            """
-            INSERT INTO stream_cache 
-            (source, source_id, stream_url, title, artist, cover_url, duration, metadata_json, cached_at, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, datetime('now', '+24 hours'))
-            ON CONFLICT(source, source_id) DO UPDATE SET
-                stream_url = excluded.stream_url,
-                title = excluded.title,
-                artist = excluded.artist,
-                cover_url = excluded.cover_url,
-                duration = excluded.duration,
-                metadata_json = excluded.metadata_json,
-                cached_at = CURRENT_TIMESTAMP,
-                expires_at = datetime('now', '+24 hours')
-        """,
-            (source, source_id, stream_url, title, artist, cover_url, duration, meta_json),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            conn = self.conn
+            try:
+                with conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        """
+                        INSERT INTO stream_cache 
+                        (source, source_id, stream_url, title, artist, cover_url, duration, metadata_json, cached_at, expires_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, datetime('now', '+24 hours'))
+                        ON CONFLICT(source, source_id) DO UPDATE SET
+                            stream_url = excluded.stream_url,
+                            title = excluded.title,
+                            artist = excluded.artist,
+                            cover_url = excluded.cover_url,
+                            duration = excluded.duration,
+                            metadata_json = excluded.metadata_json,
+                            cached_at = CURRENT_TIMESTAMP,
+                            expires_at = datetime('now', '+24 hours')
+                    """,
+                        (source, source_id, stream_url, title, artist, cover_url, duration, meta_json),
+                    )
+            except Exception as e:
+                logger.error(f"cache_stream failed: {e}")
 
     def update_cached_stream_url(self, source: str, source_id: str, stream_url: str) -> None:
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "UPDATE stream_cache SET stream_url = ?, cached_at = CURRENT_TIMESTAMP, "
-            "expires_at = datetime('now', '+24 hours') WHERE source = ? AND source_id = ?",
-            (stream_url, source, source_id),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            conn = self.conn
+            try:
+                with conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "UPDATE stream_cache SET stream_url = ?, cached_at = CURRENT_TIMESTAMP, "
+                        "expires_at = datetime('now', '+24 hours') WHERE source = ? AND source_id = ?",
+                        (stream_url, source, source_id),
+                    )
+            except Exception as e:
+                logger.error(f"update_cached_stream_url failed: {e}")
 
     def invalidate_cached_stream(self, source: str, source_id: str) -> None:
         """Clear a dead stream URL but keep the row (downloaded-file rows survive)."""
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "UPDATE stream_cache SET stream_url = NULL WHERE source = ? AND source_id = ?",
-            (source, source_id),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            conn = self.conn
+            try:
+                with conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "UPDATE stream_cache SET stream_url = NULL WHERE source = ? AND source_id = ?",
+                        (source, source_id),
+                    )
+            except Exception as e:
+                logger.error(f"invalidate_cached_stream failed: {e}")
 
     def cleanup_expired_cache(self) -> int:
         """O-3: purge stream_cache rows past expires_at (skips downloaded-file rows)."""
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "DELETE FROM stream_cache WHERE expires_at IS NOT NULL "
-            "AND datetime(expires_at) < datetime('now') "
-            "AND (cached_file_path IS NULL OR cached_file_path = '')"
-        )
-        self.conn.commit()
-        return cursor.rowcount
+        with self._write_lock:
+            conn = self.conn
+            try:
+                with conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "DELETE FROM stream_cache WHERE expires_at IS NOT NULL "
+                        "AND datetime(expires_at) < datetime('now') "
+                        "AND (cached_file_path IS NULL OR cached_file_path = '')"
+                    )
+                    return cursor.rowcount
+            except Exception as e:
+                logger.error(f"cleanup_expired_cache failed: {e}")
+                return 0
 
     def add_scan_folder(self, folder_path: str) -> bool:
-        cursor = self.conn.cursor()
-        try:
-            cursor.execute("INSERT INTO scan_folders (folder_path) VALUES (?)", (folder_path,))
-            self.conn.commit()
-            return True
-        except Exception:
-            return False
+        with self._write_lock:
+            conn = self.conn
+            try:
+                with conn:
+                    cursor = conn.cursor()
+                    cursor.execute("INSERT INTO scan_folders (folder_path) VALUES (?)", (folder_path,))
+                return True
+            except Exception:
+                return False
 
     def get_scan_folders(self) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
@@ -1359,12 +1417,17 @@ class DatabaseManager:
         return [dict(row) for row in cursor.fetchall()]
 
     def update_scan_time(self, folder_path: str) -> None:
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "UPDATE scan_folders SET last_scanned = CURRENT_TIMESTAMP WHERE folder_path = ?",
-            (folder_path,),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            conn = self.conn
+            try:
+                with conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "UPDATE scan_folders SET last_scanned = CURRENT_TIMESTAMP WHERE folder_path = ?",
+                        (folder_path,),
+                    )
+            except Exception as e:
+                logger.error(f"update_scan_time failed: {e}")
 
     def add_listening_time(self, duration_ms: int) -> None:
         cursor = self.conn.cursor()

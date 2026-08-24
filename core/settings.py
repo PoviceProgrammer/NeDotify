@@ -141,6 +141,17 @@ DEFAULT_SETTINGS = {
         "preferred_moods": [],
         "onboarding_completed": False,
     },
+    "theme": {
+        "theme": "dark",
+        "name": "Dark",
+        "mode": "dark",
+        "accent_color": "#a855f7",
+        "transparency_enabled": False,
+        "transparency_level": 0.8,
+        "glass_blur": 15,
+        "glass_color_intensity": 0.5,
+        "custom_themes": [],
+    },
     "interface": {
         "border_radius": 12,
         "fullscreen_scale": 1.0,

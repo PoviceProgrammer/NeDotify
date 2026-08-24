@@ -74,14 +74,20 @@ class PlaybackQueue:
                 else:
                     self._tracks = remaining
             elif not enabled and self._shuffle:
-                # Restore original order
+                # Restore original order without losing newly added tracks
                 current = self.current_track
-                self._tracks = self._original_order.copy()
+                restored = [t for t in self._original_order if t in self._tracks]
+                for t in self._tracks:
+                    if t not in restored:
+                        restored.append(t)
+                self._tracks = restored
                 if current:
                     try:
                         self._current_index = self._tracks.index(current)
                     except ValueError:
-                        self._current_index = 0
+                        self._current_index = 0 if self._tracks else -1
+                else:
+                    self._current_index = 0 if self._tracks else -1
             self._shuffle = enabled
 
     @property
@@ -115,15 +121,33 @@ class PlaybackQueue:
         with self._lock:
             if play_next and self._current_index >= 0:
                 self._tracks.insert(self._current_index + 1, track)
+                if self._original_order:
+                    orig_curr = self.current_track
+                    if orig_curr and orig_curr in self._original_order:
+                        orig_idx = self._original_order.index(orig_curr)
+                        self._original_order.insert(orig_idx + 1, track)
+                    else:
+                        self._original_order.append(track)
             else:
                 self._tracks.append(track)
+                if self._original_order:
+                    self._original_order.append(track)
+            if self._current_index < 0 and len(self._tracks) == 1:
+                self._current_index = 0
 
     def remove_track(self, index: int):
         """Remove a track from the queue by index."""
         with self._lock:
             if 0 <= index < len(self._tracks):
-                self._tracks.pop(index)
-                if index < self._current_index:
+                track = self._tracks.pop(index)
+                if self._original_order and track in self._original_order:
+                    try:
+                        self._original_order.remove(track)
+                    except ValueError:
+                        pass
+                if len(self._tracks) == 0:
+                    self._current_index = -1
+                elif index < self._current_index:
                     self._current_index -= 1
                 elif index == self._current_index:
                     self._current_index = min(self._current_index, len(self._tracks) - 1)

@@ -193,7 +193,7 @@ def build_real_engine(db, personalization: dict) -> RecommendationEngine:
     import time
     catalog = db.get_all_tracks(limit=200) or []
     history_records = db.get_history(limit=100) or []
-    history = [str(r.get("id", "")) for r in history_records if r.get("id")]
+    history = [str(r.get("track_id", "")) for r in history_records if r.get("track_id")]
     favorites_records = db.get_favorite_tracks() or []
     favorites = [str(r.get("id", "")) for r in favorites_records if r.get("id")]
     most_played = db.get_most_played(limit=50) or []

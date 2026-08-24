@@ -244,12 +244,29 @@ class PlaylistImportService:
                         "file_path": path_or_url,
                     })
                 elif path_or_url.startswith("http"):
+                    source = "youtube" if ("youtube" in path_or_url or "youtu.be" in path_or_url) else ("soundcloud" if "soundcloud" in path_or_url else "local")
+                    source_id = None
+                    if "youtube.com/watch" in path_or_url:
+                        m = re.search(r"[?&]v=([a-zA-Z0-9_-]{11})", path_or_url)
+                        if m:
+                            source_id = m.group(1)
+                    elif "youtu.be/" in path_or_url:
+                        m = re.search(r"youtu\.be/([a-zA-Z0-9_-]{11})", path_or_url)
+                        if m:
+                            source_id = m.group(1)
+                    elif "soundcloud.com" in path_or_url:
+                        source_id = path_or_url.strip()
+
+                    if not source_id:
+                        source_id = f"{current_artist} {current_title}".strip() if current_title != "Unknown Title" else path_or_url.strip()
+
                     tracks.append({
                         "title": current_title,
                         "artist": current_artist,
                         "album": "Unknown Album",
                         "duration": current_dur,
-                        "source": "youtube" if "youtube" in path_or_url else "soundcloud" if "soundcloud" in path_or_url else "local",
+                        "source": source,
+                        "source_id": str(source_id),
                         "source_url": path_or_url,
                     })
                 elif " - " in path_or_url:

@@ -59,36 +59,19 @@ class YouTubeService(BaseMusicService):
 
         self._ydl = None
         self._ydl_fallback = None
+        self._ydl_lock = threading.Lock()
 
         if HAS_YTDLP:
             self._executor.submit(self._get_ydl, "high")
 
-
     def reset_ydl(self):
-        self._ydl = None
-        self._ydl_fallback = None
-
-
-
-
-
-
-
-
-
-
+        with self._ydl_lock:
+            self._ydl = None
+            self._ydl_fallback = None
 
         if HAS_YTMUSIC:
             if self.settings:
                 proxy = self.settings.get("auth", "proxy_url", "")
-
-
-
-
-
-
-
-
 
                 import requests
                 from requests.adapters import HTTPAdapter
@@ -100,18 +83,7 @@ class YouTubeService(BaseMusicService):
 
                 session = TimeoutSession()
                 adapter = HTTPAdapter(pool_connections=30, pool_maxsize=30, max_retries=2)
-
-
-
-
-
-
                 session.mount("https://", adapter)
-
-
-
-
-
                 if proxy:
                     session.proxies = {"http": proxy, "https": proxy}
                 self._ytmusic = YTMusic(language="ru", location="RU", requests_session=session)
@@ -124,36 +96,17 @@ class YouTubeService(BaseMusicService):
             "lossless": "bestaudio/best",
         }
 
-        if fallback:
-            if not self._ydl_fallback:
-                opts = self._get_ydl_opts("bestaudio/best", fallback=True)
-                self._ydl_fallback = yt_dlp.YoutubeDL(opts)
-            return self._ydl_fallback
+        with self._ydl_lock:
+            if fallback:
+                if not self._ydl_fallback:
+                    opts = self._get_ydl_opts("bestaudio/best", fallback=True)
+                    self._ydl_fallback = yt_dlp.YoutubeDL(opts)
+                return self._ydl_fallback
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        if not self._ydl:
-            opts = self._get_ydl_opts(quality_map.get(quality, "bestaudio/best"))
-            self._ydl = yt_dlp.YoutubeDL(opts)
-        return self._ydl
+            if not self._ydl:
+                opts = self._get_ydl_opts(quality_map.get(quality, "bestaudio/best"))
+                self._ydl = yt_dlp.YoutubeDL(opts)
+            return self._ydl
 
     def _prefetch_top_tracks(self, tracks: list):
         """Pre-resolve stream URLs for the top search results.

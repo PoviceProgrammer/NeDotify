@@ -63,13 +63,16 @@ class CacheManager:
                 return self._cached_size_bytes
 
             total = 0
-            for dirpath, _, filenames in os.walk(self._base_dir):
-                for f in filenames:
-                    fp = os.path.join(dirpath, f)
-                    try:
-                        total += os.path.getsize(fp)
-                    except OSError:
-                        pass
+            cache_dirs = [self._covers_dir, self._streams_dir, self._temp_dir]
+            for c_dir in cache_dirs:
+                if os.path.exists(c_dir):
+                    for dirpath, _, filenames in os.walk(c_dir):
+                        for f in filenames:
+                            fp = os.path.join(dirpath, f)
+                            try:
+                                total += os.path.getsize(fp)
+                            except OSError:
+                                pass
 
             self._cached_size_bytes = total
             self._last_size_scan = now

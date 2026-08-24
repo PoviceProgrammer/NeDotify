@@ -10,6 +10,9 @@ import os
 import sys
 import threading
 
+if sys.platform == "win32":
+    multiprocessing.freeze_support()
+
 import webview
 
 # Pin WebView2 runtime to a known-good version: Evergreen 151.0.4129.93 hangs
@@ -212,7 +215,8 @@ def main():
     else:
         base_dir = os.path.dirname(os.path.abspath(__file__))
     
-    html_path = os.path.join(base_dir, "ui", "web_new", "index.html")
+    ui_dir_name = "web_new_v2" if ("--v2" in sys.argv or "--ui-v2" in sys.argv) else os.environ.get("NEDOTIFY_UI_DIR", "web_new")
+    html_path = os.path.join(base_dir, "ui", ui_dir_name, "index.html")
 
     # Transparency flag (opaque fallback)
     is_transparent = app_core.settings.get("theme", "transparency_enabled", False)
@@ -334,16 +338,16 @@ def main():
                 return 'ok'
 
             def _assets_fallback(filepath=''):
-                static_file = os.path.join(base_dir, "ui", "web_new", "assets", filepath)
+                static_file = os.path.join(base_dir, "ui", ui_dir_name, "assets", filepath)
                 if os.path.exists(static_file):
-                    return _bottle.static_file(filepath, root=os.path.join(base_dir, "ui", "web_new", "assets"))
+                    return _bottle.static_file(filepath, root=os.path.join(base_dir, "ui", ui_dir_name, "assets"))
                 _bottle.response.content_type = 'image/png'
                 return _FALLBACK_PNG
 
             def _covers_fallback(filepath=''):
-                static_file = os.path.join(base_dir, "ui", "web_new", "covers", filepath)
+                static_file = os.path.join(base_dir, "ui", ui_dir_name, "covers", filepath)
                 if os.path.exists(static_file):
-                    return _bottle.static_file(filepath, root=os.path.join(base_dir, "ui", "web_new", "covers"))
+                    return _bottle.static_file(filepath, root=os.path.join(base_dir, "ui", ui_dir_name, "covers"))
                 _bottle.response.content_type = 'image/png'
                 return _FALLBACK_PNG
 

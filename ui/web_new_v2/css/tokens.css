@@ -1,0 +1,160 @@
+/* ==========================================================================
+   NeDotify v2 — Design Tokens (Cyber Blossom System)
+   Isolated Design System Foundation for ui/web_new_v2/
+   ========================================================================== */
+
+:root {
+    /* ----------------------------------------------------------------------
+       1. Core Color Palette: «Cyber Blossom»
+       ---------------------------------------------------------------------- */
+    --color-bg-base: #0e0711;                 /* Velvet Obsidian */
+    --color-surface: rgba(255, 255, 255, 0.035); /* Smoky Glass Surface */
+    --color-surface-hover: rgba(244, 63, 94, 0.08); /* Rose Mist Glass Hover */
+    --color-surface-active: rgba(244, 63, 94, 0.14);
+    
+    --color-primary: #f43f5e;                /* Neon Blossom Accent */
+    --color-primary-rgb: 244, 63, 94;
+    --color-primary-fg: #ffffff;
+    --color-primary-glow: rgba(244, 63, 94, 0.35);
+    
+    --color-accent-amber: #fb923c;           /* Sunset Amber / Vinyl Accent */
+    --color-accent-amber-rgb: 251, 146, 60;
+    --color-accent-cyan: #06b6d4;            /* Neon Flow / Secondary */
+    
+    --color-text-main: #fff5f7;              /* Warm Pearl */
+    --color-text-muted: rgba(255, 245, 247, 0.65); /* Berry Slate */
+    --color-text-dim: rgba(255, 245, 247, 0.40);
+    
+    --color-border: rgba(244, 63, 94, 0.12);
+    --color-border-hover: rgba(244, 63, 94, 0.30);
+    --color-border-glow: rgba(244, 63, 94, 0.45);
+    
+    --color-success: #10b981;
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;                 /* Crimson Alert */
+    --color-shadow: rgba(0, 0, 0, 0.65);
+
+    /* ----------------------------------------------------------------------
+       2. Border Radius Scale
+       ---------------------------------------------------------------------- */
+    --radius-xs: 4px;                        /* Badges, micro tags, indicators */
+    --radius-sm: 8px;                        /* Buttons, inputs, track items, menus */
+    --radius-md: 12px;                       /* Feed cards, covers, action buttons */
+    --radius-lg: 16px;                       /* Player bar, modals, dashboards, sidebar */
+    --radius-full: 9999px;                   /* Circular play buttons, pills, avatars */
+
+    /* ----------------------------------------------------------------------
+       3. Spacing Scale
+       ---------------------------------------------------------------------- */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    --space-2xl: 48px;
+
+    /* ----------------------------------------------------------------------
+       4. Glassmorphism & Blur Tokens
+       ---------------------------------------------------------------------- */
+    --glass-blur: 8px;
+    --blur-sm: calc(var(--glass-blur) * 0.75);
+    --blur-md: var(--glass-blur);
+    --blur-lg: calc(var(--glass-blur) * 1.5);
+    --blur-xl: calc(var(--glass-blur) * 2);
+    --player-glow-blur: 40px;
+    --player-glow-opacity: 0.55;
+    --ambient-blur: 50px;
+    --app-bg-opacity: 1;
+
+    /* ----------------------------------------------------------------------
+       5. Typography Scale & Fonts: «Sora + DM Sans»
+       ---------------------------------------------------------------------- */
+    --font-display: 'Sora', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-body: 'DM Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --font-family: var(--font-body);
+    --font-mono: 'Consolas', 'Courier New', monospace;
+    
+    --font-size-xs: 11px;
+    --font-size-sm: 13px;
+    --font-size-base: 14px;
+    --font-size-md: 16px;
+    --font-size-lg: 20px;
+    --font-size-xl: 26px;
+    --font-size-2xl: 34px;
+
+    /* ----------------------------------------------------------------------
+       6. Backward Compatibility Bridge Aliases
+       ---------------------------------------------------------------------- */
+    --bg-main: var(--color-bg-base);
+    --background: var(--color-bg-base);
+    --bg-surface: #170c16;
+    --surface: #170c16;
+    --bg-card: var(--color-surface);
+    --bg-panel: var(--color-surface);
+    --bg-hover: var(--color-surface-hover);
+    --bg-active: var(--color-surface-active);
+
+    --primary: var(--color-primary);
+    --accent: var(--color-primary);
+    --primary-rgb: var(--color-primary-rgb);
+    --primary-fg: var(--color-primary-fg);
+    --accent-glow: var(--color-primary-glow);
+    --border-glow: var(--color-border-glow);
+    --ambient-glow: rgba(var(--color-primary-rgb), 0.20);
+
+    --text-main: var(--color-text-main);
+    --text-sec: var(--color-text-muted);
+    --text-dim: var(--color-text-dim);
+    --border: var(--color-border);
+    --shadow-color: var(--color-shadow);
+}
+
+/* --------------------------------------------------------------------------
+   Unified Utility Classes
+   -------------------------------------------------------------------------- */
+.font-display {
+    font-family: var(--font-display) !important;
+}
+
+.font-body {
+    font-family: var(--font-body) !important;
+}
+
+.radius-xs { border-radius: var(--radius-xs) !important; }
+.radius-sm { border-radius: var(--radius-sm) !important; }
+.radius-md { border-radius: var(--radius-md) !important; }
+.radius-lg { border-radius: var(--radius-lg) !important; }
+.radius-full { border-radius: var(--radius-full) !important; }
+
+.text-main { color: var(--color-text-main) !important; }
+.text-muted { color: var(--color-text-muted) !important; }
+.text-primary { color: var(--color-primary) !important; }
+.text-amber { color: var(--color-accent-amber) !important; }
+
+/* Unified Shimmer Keyframe */
+@keyframes ui-shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+}
+
+.ui-shimmer {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.03) 100%);
+    background-size: 800px 100%;
+    animation: ui-shimmer 1.8s infinite linear;
+}
+
+/* Unified Dropdown Animation */
+@keyframes ui-dropdown-enter {
+    from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.ui-dropdown-enter {
+    animation: ui-dropdown-enter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

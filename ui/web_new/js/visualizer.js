@@ -54,6 +54,13 @@ document.addEventListener('nedotify:state_changed', (e) => {
     notifyPlaybackState(e.detail === 'playing');
 });
 
+window.addEventListener('nedotify:page_changed', () => {
+    if (isEnabled && documentVisible && !animFrameId) {
+        hasDrawnIdle = false;
+        animFrameId = requestAnimationFrame(draw);
+    }
+});
+
 export function initVisualizer() {
     targets.forEach(t => {
         t.canvas = document.getElementById(t.id);

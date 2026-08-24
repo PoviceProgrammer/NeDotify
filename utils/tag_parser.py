@@ -168,12 +168,15 @@ def _extract_cover(filepath: str) -> tuple:
         audio = MutagenFile(filepath)
         if audio and hasattr(audio, 'tags') and audio.tags:
             # M4A/AAC
-            if hasattr(audio.tags, '_DictProxy__dict'):
-                for key in ('covr', 'APIC:'):
-                    if key in audio.tags:
-                        cover = audio.tags[key]
-                        if isinstance(cover, list) and cover:
-                            return bytes(cover[0]), 'image/jpeg'
+            for key in ('covr', 'APIC:', 'APIC'):
+                if key in audio.tags:
+                    cover = audio.tags[key]
+                    if isinstance(cover, list) and cover:
+                        c_item = cover[0]
+                        mime = 'image/png' if getattr(c_item, 'imageformat', None) == 14 else 'image/jpeg'
+                        return bytes(c_item), mime
+                    elif hasattr(cover, 'data'):
+                        return bytes(cover.data), getattr(cover, 'mime', 'image/jpeg')
 
     except Exception:
         pass

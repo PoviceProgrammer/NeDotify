@@ -71,6 +71,7 @@ class SoundCloudService(BaseMusicService):
         self.logger = logging.getLogger(__name__)
         self._ydl = None
         self._ydl_search = None
+        self._ydl_lock = threading.Lock()
         self._client_id = None
         self._client_id_lock = threading.Lock()
         self._related_cache = _TTLCache(max_entries=100, ttl_seconds=600)
@@ -83,7 +84,10 @@ class SoundCloudService(BaseMusicService):
         self._session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
-        
+        if self.settings:
+            proxy = self.settings.get('auth', 'proxy_url', '')
+            if proxy:
+                self._session.proxies = {'http': proxy, 'https': proxy}
         
         self._executor.submit(self._get_client_id)
         if HAS_YTDLP:
@@ -135,54 +139,58 @@ class SoundCloudService(BaseMusicService):
         return None
 
     def reset_ydl(self):
-        self._ydl = None
-        self._ydl_search = None
-        self._client_id = None
+        with self._ydl_lock:
+            self._ydl = None
+            self._ydl_search = None
+            self._client_id = None
 
     def _get_ydl(self):
-        if not self._ydl:
-            ydl_opts = {
-                'quiet': True,
-                'no_warnings': True,
-                'format': 'bestaudio[protocol^=http]/bestaudio/best',
-                'nocheckcertificate': True,
-                'legacy_server_connect': True,
-                'socket_timeout': 10,
-                'retries': 1,
-                'extractor_retries': 1,
-                'source_address': '0.0.0.0',
-                'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'},
-            }
-            if self.settings:
-                proxy = self.settings.get('auth', 'proxy_url', '')
-                if proxy:
-                    ydl_opts['proxy'] = proxy
-                import os
-                cookies_file_path = self.settings.get('auth', 'cookies_file_path', '')
-                if cookies_file_path and os.path.exists(cookies_file_path):
-                    ydl_opts['cookiefile'] = cookies_file_path
-            self._ydl = yt_dlp.YoutubeDL(ydl_opts)
-        return self._ydl
+        with self._ydl_lock:
+            if not self._ydl:
+                ydl_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'format': 'bestaudio[protocol^=http]/bestaudio/best',
+                    'nocheckcertificate': True,
+                    'legacy_server_connect': True,
+                    'socket_timeout': 10,
+                    'retries': 1,
+                    'extractor_retries': 1,
+                    'source_address': '0.0.0.0',
+                    'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'},
+                }
+                if self.settings:
+                    proxy = self.settings.get('auth', 'proxy_url', '')
+                    if proxy:
+                        ydl_opts['proxy'] = proxy
+                    import os
+                    cookies_file_path = self.settings.get('auth', 'cookies_file_path', '')
+                    if cookies_file_path and os.path.exists(cookies_file_path):
+                        ydl_opts['cookiefile'] = cookies_file_path
+                self._ydl = yt_dlp.YoutubeDL(ydl_opts)
+            return self._ydl
 
     def _get_ydl_search(self):
-        if not self._ydl_search:
-            ydl_opts = {
-                'quiet': True,
-                'no_warnings': True,
-                'extract_flat': True,
-                'nocheckcertificate': True,
-                'legacy_server_connect': True,
-                'socket_timeout': 10,
-                'retries': 1,
-                'extractor_retries': 1,
-                'source_address': '0.0.0.0',
-                'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'},
-            }
-            proxy = self.settings.get('auth', 'proxy_url', '') if self.settings else ''
-            if proxy:
-                ydl_opts['proxy'] = proxy
-            self._ydl_search = yt_dlp.YoutubeDL(ydl_opts)
-        return self._ydl_search
+        with self._ydl_lock:
+            if not self._ydl_search:
+                ydl_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extract_flat': True,
+                    'nocheckcertificate': True,
+                    'legacy_server_connect': True,
+                    'socket_timeout': 10,
+                    'retries': 1,
+                    'extractor_retries': 1,
+                    'source_address': '0.0.0.0',
+                    'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'},
+                }
+                if self.settings:
+                    proxy = self.settings.get('auth', 'proxy_url', '')
+                    if proxy:
+                        ydl_opts['proxy'] = proxy
+                self._ydl_search = yt_dlp.YoutubeDL(ydl_opts)
+            return self._ydl_search
 
     @property
     def available(self) -> bool:

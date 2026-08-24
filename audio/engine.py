@@ -268,8 +268,11 @@ class AudioEngine:
                         out.append(qn)
                 return out
 
-            candidates = _build_queries(track_artist, track_title)
+            cascade_deadline = time.monotonic() + 10.0
+            candidates = _build_queries(track_artist, track_title)[:3]
             for sc_query in candidates:
+                if time.monotonic() >= cascade_deadline:
+                    break
                 logger.info(f"YouTube resolution failed; trying SoundCloud fallback search for: {sc_query}")
                 sc_event = threading.Event()
                 sc_results = []
@@ -286,7 +289,8 @@ class AudioEngine:
                     logger.debug(f"SoundCloud fallback search error: {ex}")
                     sc_event.set()
 
-                sc_event.wait(timeout=3.0)
+                remaining = max(0.5, cascade_deadline - time.monotonic())
+                sc_event.wait(timeout=min(2.5, remaining))
 
                 if sc_results:
                     target_sc = sc_results[0].get("source_url") or sc_results[0].get("source_id")
@@ -302,7 +306,8 @@ class AudioEngine:
                     except Exception:
                         sc_stream_event.set()
 
-                    sc_stream_event.wait(timeout=3.5)
+                    remaining_stream = max(0.5, cascade_deadline - time.monotonic())
+                    sc_stream_event.wait(timeout=min(3.0, remaining_stream))
                     if url:
                         logger.info(f"SoundCloud fallback stream resolved successfully: {url[:50]}...")
                         if track.get("id"):

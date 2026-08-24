@@ -18,22 +18,22 @@ class DownloadManager:
         self._running = True
         self._queue = []
         self._queue_lock = threading.Lock()
+        self._queue_event = threading.Event()
         self._lock = threading.Lock()  # guards batch counters (_batch_active/_batch_completed/_batch_total)
-
-
-        self._processor_thread = threading.Thread(target=self._process_queue, daemon=True)
-        self._processor_thread.start()
 
         self._batch_total = 0
         self._batch_completed = 0
         self._batch_active = False
+
+        self._processor_thread = threading.Thread(target=self._process_queue, daemon=True)
+        self._processor_thread.start()
 
         self._init_db_table()
         self._resume_pending_downloads()
 
     def start_batch(self, total: int):
         """Initialize batch download tracking."""
-        with self._queue_lock:
+        with self._lock:
             self._batch_total = total
             self._batch_completed = 0
             self._batch_active = total > 0
@@ -42,6 +42,7 @@ class DownloadManager:
         """Cancel ongoing batch download and clear queue."""
         with self._queue_lock:
             self._queue.clear()
+        with self._lock:
             self._batch_active = False
             self._batch_total = 0
             self._batch_completed = 0
@@ -93,13 +94,13 @@ class DownloadManager:
                 logger.error(f'Failed to insert download queue record: {e}')
 
         with self._queue_lock:
-
             if not any(item['track_id'] == track_id for item in self._queue):
                 self._queue.append({
                     'track_id': track_id,
                     'source': source,
                     'source_id': source_id,
                 })
+                self._queue_event.set()
         logger.info(f'Queued download for track {track_id} from {source}:{source_id}')
 
     def _process_queue(self):
@@ -109,12 +110,13 @@ class DownloadManager:
             with self._queue_lock:
                 if self._queue:
                     item = self._queue.pop(0)
+                else:
+                    self._queue_event.clear()
 
             if item:
-
                 self._pool.submit(self._download_worker, item)
-
-            time.sleep(1)
+            else:
+                self._queue_event.wait(timeout=1.0)
 
     def _download_worker(self, item):
         """Actual download execution."""
@@ -123,9 +125,15 @@ class DownloadManager:
         source_id = item['source_id']
 
         try:
+            cursor = self._core.db.conn.cursor()
+            cursor.execute("SELECT status FROM download_queue WHERE track_id = ?", (track_id,))
+            row = cursor.fetchone()
+            if row and (row['status'] if isinstance(row, dict) or hasattr(row, 'keys') else row[0]) == 'completed':
+                return
             self._core.db.conn.execute("UPDATE download_queue SET status = 'downloading' WHERE track_id = ?", (track_id,))
             self._core.db.conn.commit()
-        except: pass
+        except Exception:
+            pass
 
         logger.info(f'Starting download for track {track_id}...')
 
@@ -187,4 +195,5 @@ class DownloadManager:
 
     def stop(self):
         self._running = False
+        self._queue_event.set()
         self._pool.shutdown(wait=False)

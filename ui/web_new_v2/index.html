@@ -1,0 +1,2233 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- The pywebview bridge exposes the whole backend API to this document, so an
+         injected script would be remote code execution. 'unsafe-inline' is required
+         for style attributes used throughout the UI, but script-src stays locked to
+         same-origin files, so no inline or remote script can execute. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: http://127.0.0.1:*; media-src 'self' blob: http://127.0.0.1:* https:; connect-src 'self' http://127.0.0.1:* https:; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>NeDotify</title>
+    <!-- Fonts: Sora (Headings) + DM Sans (Body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Sora:wght@600;700&display=swap">
+    <script src="js/lucide.min.js"></script>
+    <script src="js/hls.min.js"></script>
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="stylesheet" href="css/tokens.css?v=20260823">
+    <link rel="stylesheet" href="css/themes.css?v=20260823">
+    <link rel="stylesheet" href="css/styles.css?v=20260823">
+</head>
+<body>
+
+<!-- Skeleton splash (removed by main.js once the UI is ready) -->
+<div id="app-splash" class="app-splash">
+    <div class="app-splash-inner">
+        <div class="app-splash-logo">
+            <img src="logo.png" alt="">
+        </div>
+        <div class="app-splash-shimmer"></div>
+    </div>
+</div>
+
+<!-- Custom Background & Dimming Layers -->
+<div id="custom-bg-layer"></div>
+<div id="custom-bg-dim-layer"></div>
+
+<!-- Particles Background -->
+<div id="particles-bg"></div>
+
+<!-- Vision Pro Glass Aura Orbs -->
+<div id="aura-orbs-container" class="aura-orbs-container">
+    <div class="aura-orb orb-1"></div>
+    <div class="aura-orb orb-2"></div>
+    <div class="aura-orb orb-3"></div>
+</div>
+
+<!-- Title Bar (Frameless window) -->
+<div id="title-bar">
+    <div class="pywebview-drag-region" style="position:absolute; top:0; left:0; bottom:0; right:150px; z-index:1;"></div>
+    <span class="title-text" id="title-text" style="z-index:2; position:relative; pointer-events:none; display:flex; align-items:center; gap:8px;">
+        <img src="logo.png" style="width:18px;height:18px;border-radius:4px;object-fit:cover;">
+        NeDotify
+    </span>
+    <div class="window-controls" style="z-index:2; position:relative;">
+        <button id="btn-mini-player" title="Компактный мини-плеер" aria-label="Компактный мини-плеер"><i data-lucide="picture-in-picture-2" style="width:14px;height:14px"></i></button>
+        <button id="btn-minimize" title="Свернуть" aria-label="Свернуть"><i data-lucide="minus" style="width:14px;height:14px"></i></button>
+        <button id="btn-maximize" title="Развернуть" aria-label="Развернуть"><i data-lucide="square" style="width:12px;height:12px"></i></button>
+        <button id="btn-close" class="btn-close" title="Закрыть"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<!-- Network Banner -->
+<div id="network-banner" class="network-banner hidden">
+    <i data-lucide="wifi-off" id="network-banner-icon" style="width:16px;height:16px;margin-right:8px;"></i>
+    <span id="network-banner-text">Нет подключения к сети</span>
+</div>
+
+<!-- ───── COMPACT MINI PLAYER OVERLAY (Direct child of body) ───── -->
+<div id="mini-player-overlay" class="mini-player-card">
+    <div class="mp-compact-row">
+        <!-- Cover Art -->
+        <div class="mp-cover-wrap">
+            <svg id="mp-cover-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;opacity:0.6;position:absolute;top:calc(50% - 10px);left:calc(50% - 10px);"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+            <img id="mp-cover" src="" alt="Cover" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:8px;" onload="this.style.display='block'" onerror="this.onerror=null;this.style.display='none'">
+        </div>
+
+        <!-- Track Info (Drag handle region) -->
+        <div class="mp-info pywebview-drag-region">
+            <div id="mp-title" class="mp-title" title="Трек не выбран">Трек не выбран</div>
+            <div id="mp-artist" class="mp-artist">Выберите трек</div>
+        </div>
+
+        <!-- Controls: Prev, Play/Pause, Next, Like, Minimize, Expand, Close -->
+        <div class="mp-controls-row">
+            <button id="mp-btn-prev" class="btn-ctrl" title="Предыдущий">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+            </button>
+            <button id="mp-btn-play" class="btn-ctrl btn-play-mini" title="Воспроизведение / Пауза">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            </button>
+            <button id="mp-btn-next" class="btn-ctrl" title="Следующий" aria-label="Next">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+            </button>
+            <button id="mp-btn-like" class="icon-btn" title="В избранное">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>
+            </button>
+            <button id="mp-btn-minimize" class="icon-btn" title="Свернуть в панель задач">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+            <button id="mp-btn-expand" class="icon-btn" title="Развернуть окно плеера">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+            </button>
+            <button id="mp-btn-close" class="icon-btn btn-close" title="Закрыть приложение">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Duration Progress Bar -->
+    <div class="mp-progress-row">
+        <span id="mp-time-current" class="mp-time">0:00</span>
+        <div class="progress-track" id="mp-progress-track">
+            <div class="progress-fill" id="mp-progress-fill" style="transform: translateX(-100%)"></div>
+        </div>
+        <span id="mp-time-total" class="mp-time">0:00</span>
+    </div>
+</div>
+
+<!-- App Container -->
+<div id="app-container">
+    
+    <!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђ Sidebar в•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
+    <aside id="sidebar">
+        <div class="sidebar-logo" style="display:flex; align-items:center; gap:10px;">
+            <img src="logo.png" style="width:28px;height:28px;border-radius:8px;object-fit:cover;">
+            NeDotify
+        </div>
+
+        <span class="nav-section-label">Меню</span>
+        <div class="nav-item active" data-page="home">
+            <span class="nav-indicator"></span>
+            <i data-lucide="home" style="width:18px;height:18px"></i>
+            Главная
+        </div>
+        <div class="nav-item" data-page="search">
+            <span class="nav-indicator"></span>
+            <i data-lucide="search" style="width:18px;height:18px"></i>
+            Поиск
+        </div>
+        <div class="nav-item" data-page="library">
+            <span class="nav-indicator"></span>
+            <i data-lucide="library" style="width:18px;height:18px"></i>
+            Библиотека
+        </div>
+        <div class="nav-item" data-page="player">
+            <span class="nav-indicator"></span>
+            <i data-lucide="disc-3" style="width:18px;height:18px"></i>
+            Плеер
+        </div>
+
+        <span class="nav-section-label">Аккаунт & Опции</span>
+        <div class="nav-item" data-page="settings">
+            <span class="nav-indicator"></span>
+            <i data-lucide="settings" style="width:18px;height:18px"></i>
+            Настройки
+        </div>
+        <div class="nav-item" data-page="profile">
+            <span class="nav-indicator"></span>
+            <i data-lucide="user" style="width:18px;height:18px"></i>
+            Профиль
+        </div>
+
+        <div class="sidebar-spacer"></div>
+    </aside>
+
+    <!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђ Main Content в•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
+    <div id="main-content">
+
+        <!-- в”Ђв”Ђв”Ђв”Ђв”Ђ HOME PAGE в”Ђв”Ђв”Ђв”Ђв”Ђ -->
+        <div id="view-home" class="view-page active" style="position: relative;">
+            <canvas id="home-visualizer-canvas" style="position:absolute; top:0; left:0; width:100%; height:300px; z-index:0; pointer-events:none; opacity:0.3;"></canvas>
+            <div style="position:relative; z-index:1;">
+                <h1 class="page-title" id="home-greeting">Добро пожаловать в NeDotify</h1>
+
+                <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-tracks">0</div>
+                    <div class="stat-label">Треков прослушано</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-time">0 мин</div>
+                    <div class="stat-label">Время прослушивания</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-playlists">0</div>
+                    <div class="stat-label">Плейлистов</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-favorites">0</div>
+                    <div class="stat-label">Избранных</div>
+                </div>
+            </div>
+
+            <!-- History -->
+            <div class="feed-section">
+                <div class="feed-title">Недавно прослушано</div>
+                <div class="feed-scroll" id="home-history">
+                    <div class="empty-state text-sm" style="padding:20px">Пока нет истории</div>
+                </div>
+            </div>
+
+            <!-- Analytics (Local Last.fm) -->
+            <div class="feed-section">
+                <div class="feed-title">Топ треков (Local Last.fm)</div>
+                <div class="feed-scroll" id="home-top-tracks">
+                    <div class="empty-state text-sm" style="padding:20px">Недостаточно данных</div>
+                </div>
+            </div>
+
+            <div class="feed-section">
+                <div class="feed-title">Топ исполнителей</div>
+                <div class="feed-scroll" id="home-top-artists">
+                    <div class="empty-state text-sm" style="padding:20px">Недостаточно данных</div>
+                </div>
+            </div>
+
+            <!-- NeDotify Wrapped Section -->
+            <div class="feed-section wrapped-section" id="section-nedotify-wrapped">
+                <div class="feed-title wrapped-header">
+                    <div class="wrapped-header-left">
+                        <span>📊 NeDotify Wrapped</span>
+                        <span class="wrapped-subtitle">Персональная статистика прослушивания</span>
+                    </div>
+                    <div id="wrapped-period-btns" class="wrapped-period-selector">
+                        <button class="wrapped-period-btn active" data-period="week">Неделя</button>
+                        <button class="wrapped-period-btn" data-period="month">Месяц</button>
+                        <button class="wrapped-period-btn" data-period="all">Всё время</button>
+                    </div>
+                </div>
+
+                <div class="wrapped-card-dashboard">
+                    <!-- Activity Canvas Chart -->
+                    <div class="wrapped-card">
+                        <div class="wrapped-card-header">
+                            <span class="wrapped-card-title">График активности (минуты)</span>
+                            <span id="wrapped-total-time-badge" class="wrapped-time-badge">0 минут</span>
+                        </div>
+                        <div class="wrapped-chart-wrap">
+                            <canvas id="wrapped-activity-canvas" height="140"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Top 5 Tracks & Artists -->
+                    <div class="wrapped-card">
+                        <div class="wrapped-card-title">🏆 Топ-5 за период</div>
+                        <div id="wrapped-top-list" class="wrapped-top-list">
+                            <div class="empty-state text-sm" style="padding:12px">Загрузка статистики...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Authentic Feed (Dynamic) -->
+            <div id="home-authentic-feed" style="display:none; width:100%; flex-direction:column; gap:24px;"></div>
+
+            <!-- Popular -->
+            <div class="feed-section" id="section-home-popular">
+                <div class="feed-title">Популярные треки</div>
+                <div class="feed-scroll" id="home-popular">
+                    <div class="empty-state"><div class="spinner"></div></div>
+                </div>
+            </div>
+
+            <!-- Recommendations -->
+            <div class="feed-section" id="home-recommended-section" style="display:none;">
+                <div class="feed-title">Рекомендации для вас</div>
+                <div class="feed-scroll" id="home-recommended"></div>
+            </div>
+
+            <!-- Releases -->
+            <div class="feed-section" id="section-home-releases">
+                <div class="feed-title">Новые релизы</div>
+                <div class="feed-scroll" id="home-releases">
+                    <div class="empty-state text-sm" style="padding:20px">Загрузка...</div>
+                </div>
+            </div>
+
+            <!-- Mood Playlists -->
+            <div class="feed-section" id="section-home-mood" style="display:none;">
+                <div class="feed-title">Под настроение <span id="home-mood-name" style="font-size: 14px; opacity: 0.7; font-weight: normal; margin-left: 8px;"></span></div>
+                <div class="feed-scroll" id="home-mood">
+                    <!-- Cards -->
+                </div>
+            </div>
+
+            <!-- Mixes -->
+            <div class="feed-section" id="section-home-mixes">
+                <div class="feed-title">Миксы</div>
+                <div class="feed-scroll" id="home-mixes">
+                    <div class="empty-state text-sm" style="padding:20px">Загрузка...</div>
+                </div>
+            </div>
+
+            <!-- Artists -->
+            <div class="feed-section">
+                <div class="feed-title">Популярные исполнители</div>
+                <div class="feed-scroll" id="home-artists">
+                    <div class="empty-state text-sm" style="padding:20px">Загрузка...</div>
+                </div>
+            </div>
+
+            <!-- Playlists -->
+            <div class="feed-section">
+                <div class="feed-title">Ваши плейлисты</div>
+                <div class="feed-scroll" id="home-playlists">
+                    <div class="empty-state text-sm" style="padding:20px">Нет плейлистов</div>
+                </div>
+            </div>
+            </div> <!-- End of relative wrapper -->
+        </div>
+
+        <!-- в”Ђв”Ђв”Ђв”Ђв”Ђ SEARCH PAGE в”Ђв”Ђв”Ђв”Ђв”Ђ -->
+        <div id="view-search" class="view-page">
+            <div class="search-header-container">
+                <!-- Search capsule bar -->
+                <div class="search-capsule">
+                    <i data-lucide="search" class="search-capsule-icon"></i>
+                    <input type="text" class="search-input" id="search-input" placeholder="Поиск..." autocomplete="off">
+                    <button class="search-clear" id="search-clear" title="Очистить"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+
+                    <!-- Platform Selector Dropdown -->
+                    <div class="search-platform-wrapper">
+                        <button id="search-platform-btn" class="search-platform-btn" title="Источник поиска: Все площадки">
+                            <span id="search-platform-active-icon">
+                                <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#a855f7">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                                </svg>
+                            </span>
+                        </button>
+
+                        <div id="search-platform-dropdown" class="search-platform-dropdown hidden">
+                            <button class="platform-item active" data-source="all" title="Все площадки">
+                                <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#a855f7">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                                </svg>
+                            </button>
+                            <button class="platform-item" data-source="youtube" title="YouTube Music">
+                                <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20">
+                                    <circle cx="12" cy="12" r="10" fill="#FF0000"/>
+                                    <polygon points="9.5,7.5 16.5,12 9.5,16.5" fill="#FFFFFF"/>
+                                </svg>
+                            </button>
+                            <button class="platform-item" data-source="soundcloud" title="SoundCloud">
+                                <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#FF5500">
+                                    <path d="M11.56 8.87c-.24 0-.47.02-.7.06A6.17 6.17 0 0 0 5 13.5c0 .17.01.34.03.51A4.24 4.24 0 0 0 1 18.25 4.25 4.25 0 0 0 5.25 22.5h13.5A5.25 5.25 0 0 0 24 17.25a5.24 5.24 0 0 0-4.05-5.11 6.17 6.17 0 0 0-8.39-3.27z"/>
+                                </svg>
+                            </button>
+                            <button class="platform-item" data-source="spotify" title="Spotify">
+                                <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#1DB954">
+                                    <path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.02 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.48-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.3 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.18-1.2-.18-1.38-.72-.18-.6.18-1.2.72-1.38 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sub-filters below search bar: Все, Треки, Плейлисты, Альбомы, Артисты -->
+                <div class="search-type-filters">
+                    <button class="type-filter-btn" data-type="all">
+                        <i data-lucide="search" style="width:14px;height:14px"></i>
+                        <span>Все</span>
+                    </button>
+                    <button class="type-filter-btn active" data-type="tracks">
+                        <i data-lucide="music" style="width:14px;height:14px"></i>
+                        <span>Треки</span>
+                    </button>
+                    <button class="type-filter-btn" data-type="playlists">
+                        <i data-lucide="list-music" style="width:14px;height:14px"></i>
+                        <span>Плейлисты</span>
+                    </button>
+                    <button class="type-filter-btn" data-type="albums">
+                        <i data-lucide="disc" style="width:14px;height:14px"></i>
+                        <span>Альбомы</span>
+                    </button>
+                    <button class="type-filter-btn" data-type="artists">
+                        <i data-lucide="user" style="width:14px;height:14px"></i>
+                        <span>Артисты</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="search-results">
+                <div class="empty-state">
+                    <i data-lucide="search" style="width:40px;height:40px;opacity:0.3"></i>
+                    <span>Введите запрос для поиска музыки</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- в”Ђв”Ђв”Ђв”Ђв”Ђ LIBRARY PAGE в”Ђв”Ђв”Ђв”Ђв”Ђ -->
+        <div id="view-library" class="view-page">
+            <!-- Top Cards Row -->
+            <div class="lib-top-cards">
+                <div class="lib-top-card lib-fav-card" id="lib-card-favorites">
+                    <div class="lib-top-card-header">
+                        <div class="lib-top-card-title">Любимые</div>
+                        <i data-lucide="heart" class="lib-top-card-icon fav-icon"></i>
+                    </div>
+                    <div class="lib-top-card-sub" id="lib-fav-count">Нет треков</div>
+                </div>
+
+                <div class="lib-top-card lib-offline-card" id="lib-card-offline">
+                    <div class="lib-top-card-header">
+                        <div class="lib-top-card-title">Оффлайн треки</div>
+                        <i data-lucide="cloud-download" class="lib-top-card-icon offline-icon"></i>
+                    </div>
+                    <div class="lib-top-card-sub" id="lib-offline-count">Нет треков</div>
+                </div>
+            </div>
+
+            <!-- Main Two-Column Layout -->
+            <div class="lib-main-layout">
+                <!-- Left Sidebar: Playlist Management -->
+                <div class="lib-left-sidebar">
+                    <div class="lib-add-playlist-row">
+                        <button class="lib-add-btn" id="lib-btn-add-playlist" title=" ">
+                            <i data-lucide="plus" style="width:20px;height:20px"></i>
+                        </button>
+                    </div>
+
+                    <div class="lib-input-group">
+                        <input type="text" id="lib-quick-pl-input" class="lib-sidebar-input" placeholder="Название плейлиста..." autocomplete="off">
+                    </div>
+
+                    <div class="lib-sidebar-actions">
+                        <button class="lib-action-btn" id="lib-btn-import">
+                            <i data-lucide="folder-open" style="width:16px;height:16px"></i>
+                            <span>Импорт</span>
+                        </button>
+                        <button class="lib-action-btn" id="lib-btn-convert">
+                            <i data-lucide="shuffle" style="width:16px;height:16px"></i>
+                            <span>Конвертировать плейлист</span>
+                        </button>
+                    </div>
+
+                    <div class="lib-playlists-section">
+                        <div class="lib-playlists-title">Плейлисты</div>
+                        <div class="lib-playlists-list" id="lib-sidebar-playlists">
+                            <div class="empty-state text-sm" style="padding:12px;font-size:12px">Нет плейлистов</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Main View (Tracks / Details / Empty Selection State) -->
+                <div class="lib-right-content" id="lib-right-content">
+                    <!-- Default Empty Selection State -->
+                    <div class="lib-empty-selection" id="lib-empty-selection">
+                        <i data-lucide="music-2" style="width:54px;height:54px;opacity:0.3;margin-bottom:14px;color:var(--text-dim)"></i>
+                        <div class="lib-empty-title">Вы ничего еще не выбрали</div>
+                        <div class="lib-empty-sub">Вы ничего еще не выбрали</div>
+                    </div>
+
+                    <!-- Active Tracks View Container -->
+                    <div class="lib-active-view" id="lib-active-view" style="display:none; flex-direction:column; flex:1;">
+                        <div class="lib-active-header">
+                            <div class="lib-active-info">
+                                <h2 class="lib-active-title" id="lib-active-title">Название</h2>
+                                <span class="lib-active-sub" id="lib-active-sub">0 треков</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <div id="lib-batch-progress-box" class="lib-batch-progress-box" style="display:none; align-items:center; gap:10px; padding:6px 12px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); min-width:220px;">
+                                    <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                                        <div style="display:flex; justify-content:space-between; font-size:11px; font-weight:600; color:#fff;">
+                                            <span>Скачивание...</span>
+                                            <span id="lib-batch-progress-count">0 / 0</span>
+                                        </div>
+                                        <div style="width:100%; height:4px; border-radius:2px; background:rgba(255,255,255,0.15); overflow:hidden;">
+                                            <div id="lib-batch-progress-bar" style="width:0%; height:100%; background:var(--primary); transition:width 0.2s ease;"></div>
+                                        </div>
+                                    </div>
+                                    <button id="lib-btn-batch-cancel" title="Отменить загрузку" class="icon-btn" style="width:24px;height:24px;color:#ef4444;background:transparent;border:none;cursor:pointer;"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+                                </div>
+                                <button class="btn-ctrl" id="lib-btn-download-all" title="Скачать всё любимое для оффлайн прослушивания" style="display:none; padding:8px 14px; border-radius:10px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); font-size:12px; font-weight:600; color:#fff; gap:6px; align-items:center; cursor:pointer;">
+                                    <i data-lucide="download-cloud" style="width:16px;height:16px"></i>
+                                    <span>Скачать всё</span>
+                                </button>
+                                <button class="btn-play-large" id="lib-btn-play-all" title="Воспроизвести все" style="width:44px;height:44px">
+                                    <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="lib-active-tracks" class="track-list" style="flex:1; overflow-y:auto;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- в”Ђв”Ђв”Ђв”Ђв”Ђ PLAYLIST DETAILS PAGE в”Ђв”Ђв”Ђв”Ђв”Ђ -->
+        <div id="view-playlist-details" class="view-page">
+            <div style="display:flex; align-items:flex-end; gap:24px; margin-bottom: 24px;">
+                <button id="btn-back-library" class="icon-btn" style="position:absolute; top:24px; left:24px;"><i data-lucide="arrow-left" style="width:20px;height:20px"></i></button>
+                <div style="width:160px; height:160px; border-radius:12px; background:var(--accent); display:flex; align-items:center; justify-content:center; box-shadow:0 8px 24px rgba(0,0,0,0.3)">
+                    <i data-lucide="list-music" style="width:64px;height:64px;color:var(--text-sec)"></i>
+                </div>
+                <div>
+                    <div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-sec); margin-bottom:4px">Плейлист</div>
+                    <h1 class="page-title" id="pl-details-title" style="margin-bottom:8px; font-size:36px">Название</h1>
+                    <div style="font-size:13px; color:var(--text-sec)" id="pl-details-count">0 треков</div>
+                    <div style="margin-top:16px; display:flex; align-items:center; gap:12px;">
+                        <button class="btn-play-large" id="pl-btn-play" style="width:48px;height:48px" title="Воспроизвести"><i data-lucide="play" style="width:24px;height:24px;fill:currentColor"></i></button>
+                        <button class="filter-btn" id="pl-btn-export" style="padding:10px 18px; border-radius:24px; display:flex; align-items:center; gap:8px; cursor:pointer;" title="Экспорт в M3U8">
+                            <i data-lucide="share" style="width:16px;height:16px"></i>
+                            <span>Экспорт</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div id="pl-details-tracks" class="track-list">
+                <div class="empty-state"><div class="spinner"></div></div>
+            </div>
+        </div>
+
+        <!-- в”Ђв”Ђв”Ђв”Ђв”Ђ PLAYER PAGE в”Ђв”Ђв”Ђв”Ђв”Ђ -->
+        <div id="view-player" class="view-page">
+            <div class="player-2col-layout">
+                <!-- Ambient Background Glow -->
+                <div class="player-bg-glow" id="player-bg-glow"></div>
+
+                <!-- Left Column: Cover & Controls Glass Panel -->
+                <div class="player-glass-card player-left-col">
+                    <div class="player-header-title" id="pp-header-title"><span id="pp-title">Трек не выбран</span> — <span id="pp-artist">Выберите трек</span></div>
+                    
+                    <div class="player-cover-section">
+                        <div class="player-cover-wrapper" id="pp-cover-wrapper">
+                            <img id="pp-cover" class="player-cover-img" src="" alt="Cover">
+                            <canvas id="visualizer-canvas"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Progress Slider -->
+                    <div class="pb-progress player-card-progress">
+                        <span class="pb-time" id="pp-time-current">0:00</span>
+                        <div class="progress-track" id="pp-progress-track" style="position: relative;">
+                            <canvas id="pp-waveform-canvas" class="waveform-canvas hidden"></canvas>
+                            <div class="progress-fill" id="pp-progress-fill" style="transform: translateX(-100%)"></div>
+                        </div>
+                        <span class="pb-time" id="pp-time-total">0:00</span>
+                    </div>
+
+                    <!-- Mini Controls -->
+                    <div class="player-full-controls player-card-controls">
+                        <button class="btn-ctrl" id="pp-btn-like" title="Лайк" aria-label="Like">
+                            <i data-lucide="heart" style="width:20px;height:20px"></i>
+                        </button>
+                        <button class="btn-ctrl" id="pp-btn-shuffle" title="Перемешать" aria-label="Shuffle">
+                            <i data-lucide="shuffle" style="width:20px;height:20px"></i>
+                        </button>
+                        <button class="btn-ctrl" id="pp-btn-repeat" title="Повтор" aria-label="Repeat">
+                            <i data-lucide="repeat" style="width:20px;height:20px"></i>
+                        </button>
+                        <button class="btn-ctrl active" id="pp-btn-flow" title="Бесконечная волна (Flow)" aria-label="Flow">
+                            <i data-lucide="radio" style="width:20px;height:20px"></i>
+                        </button>
+                        <button class="btn-ctrl" id="pp-btn-prev" title="Предыдущий">
+                            <i data-lucide="skip-back" style="width:20px;height:20px"></i>
+                        </button>
+                        <button class="btn-play-large" id="pp-btn-play" title="Воспроизведение" style="width:48px;height:48px;font-size:20px;">
+                            <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
+                        </button>
+                        <button class="btn-ctrl" id="pp-btn-next" title="Следующий">
+                            <i data-lucide="skip-forward" style="width:20px;height:20px"></i>
+                        </button>
+                        <button class="btn-ctrl" id="pp-btn-lyrics" title="Текст песни" aria-label="Lyrics">
+                            <i data-lucide="mic" style="width:20px;height:20px"></i>
+                        </button>
+                        <button class="btn-ctrl" id="pp-btn-queue" title="Очередь" aria-label="Queue">
+                            <i data-lucide="list-music" style="width:20px;height:20px"></i>
+                        </button>
+                    </div>
+
+                </div>
+
+                <!-- Right Column: Lyrics Glass Panel -->
+                <div class="player-glass-card player-right-col">
+                    <div class="player-lyrics-header">
+                        <span class="player-lyrics-title">Текст песни</span>
+                        <div class="lyrics-offset-controls">
+                            <button id="btn-toggle-lyrics-translation-page" class="lyrics-btn-pill" title="Включить двуязычный режим (Перевод)">🌐 Перевод</button>
+                            <button id="btn-lyrics-offset-minus-page" class="lyrics-offset-btn" title="Задержать текст на 0.5s">-0.5s</button>
+                            <button id="btn-lyrics-offset-plus-page" class="lyrics-offset-btn" title="Ускорить текст на 0.5s">+0.5s</button>
+                        </div>
+                    </div>
+                    <div class="player-lyrics-container" id="player-lyrics-scroll">
+                        <div class="player-lyrics-content" id="lyrics-content">
+                            <div class="empty-state">Загрузка текста...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- в”Ђв”Ђв”Ђв”Ђв”Ђ LYRICS OVERLAY в”Ђв”Ђв”Ђв”Ђв”Ђ -->
+        <div id="lyrics-overlay" class="lyrics-overlay">
+            <div class="lyrics-header">
+                <button id="btn-close-lyrics" class="icon-btn"><i data-lucide="chevron-down" style="width:24px;height:24px"></i></button>
+                <div class="lyrics-title" id="lyrics-title">Текст песни</div>
+                <div class="lyrics-offset-controls" style="display:flex;align-items:center;gap:6px;margin-left:auto;margin-right:16px;">
+                    <button id="btn-toggle-lyrics-translation" class="btn-sm text-xs" style="padding:4px 10px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Включить двуязычный режим (Перевод)">🌐 Перевод</button>
+                    <button id="btn-lyrics-offset-minus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Задержать текст на 0.5s">-0.5s</button>
+                    <button id="btn-lyrics-offset-plus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Ускорить текст на 0.5s">+0.5s</button>
+                </div>
+            </div>
+            <div class="lyrics-scroll-container" id="lyrics-container">
+                <div class="lyrics-content" id="overlay-lyrics-content">
+                    <div class="empty-state">Загрузка текста...</div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- PROFILE PAGE -->
+        <div id="view-profile" class="view-page">
+            <div class="profile-header">
+                <div class="profile-avatar" id="btn-change-avatar" style="cursor: pointer; position: relative; overflow: hidden;" title="Изменить аватарку">
+                    <img id="profile-avatar-img" src="" style="display:none; width:100%; height:100%; object-fit:cover;" />
+                    <i data-lucide="user" id="profile-avatar-icon" style="width:36px;height:36px"></i>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="text" id="profile-name-input" class="profile-name" value="Пользователь NeDotify" style="background: transparent; border: none; color: white; font-family: inherit; font-size: inherit; font-weight: inherit; outline: none; border-bottom: 1px dashed rgba(255,255,255,0.3); width: 200px;" title="Нажмите, чтобы изменить имя" />
+                        <button id="btn-save-nickname" class="btn-ctrl" style="display:none;" title="Сохранить имя">
+                            <i data-lucide="check" style="width:16px;height:16px;color:var(--primary)"></i>
+                        </button>
+                    </div>
+                    <div class="profile-subtitle" id="profile-date-joined">Музыкальный профиль</div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <button id="btn-create-local-playlist" class="btn-primary" style="display: flex; align-items: center; gap: 8px; padding: 10px 16px;">
+                    <i data-lucide="folder-plus" style="width:16px;height:16px"></i>
+                    Создать плейлист из локальных треков
+                </button>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="profile-stat-tracks">0</div>
+                    <div class="stat-label">Прослушано</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="profile-stat-time">0 ч</div>
+                    <div class="stat-label">Общее время</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="profile-stat-favorites">0</div>
+                    <div class="stat-label">Избранных</div>
+                </div>
+            </div>
+
+            <div class="feed-section" id="profile-pinned-section" style="display:none">
+                <div class="feed-title">📌 Закрепленный трек</div>
+                <div class="track-list" id="profile-pinned-track"></div>
+            </div>
+
+            <div class="feed-section">
+                <div class="feed-title">Топ треков</div>
+                <div class="track-list" id="profile-top-tracks">
+                    <div class="empty-state text-sm">Нет данных</div>
+                </div>
+            </div>
+
+            <div class="feed-section">
+                <div class="feed-title">Недавно прослушано</div>
+                <div class="track-list" id="profile-recent">
+                    <div class="empty-state text-sm">Нет данных</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-settings" class="view-page settings-overlay">
+            <div class="settings-modal-card">
+                <div class="settings-header-bar">
+                    <h1 class="page-title" style="margin-bottom:0">Настройки</h1>
+                </div>
+
+                <div class="settings-layout">
+                    <!-- Settings Nav -->
+                    <div class="settings-nav">
+                    <div class="settings-nav-section-label">ОФОРМЛЕНИЕ</div>
+                    <button class="settings-nav-btn active" data-panel="appearance">
+                        <i data-lucide="palette" style="width:16px;height:16px"></i>
+                        Оформление
+                    </button>
+                    <button class="settings-nav-btn" data-panel="player">
+                        <i data-lucide="play-circle" style="width:16px;height:16px"></i>
+                        Плеер
+                    </button>
+                    <button class="settings-nav-btn" data-panel="background">
+                        <i data-lucide="image" style="width:16px;height:16px"></i>
+                        Фон
+                    </button>
+                    <button class="settings-nav-btn" data-panel="workshop">
+                        <i data-lucide="layout-grid" style="width:16px;height:16px"></i>
+                        Мастерская
+                    </button>
+                    <button class="settings-nav-btn" data-panel="icons">
+                        <i data-lucide="sparkles" style="width:16px;height:16px"></i>
+                        Иконки
+                    </button>
+                    <button class="settings-nav-btn" data-panel="particles">
+                        <i data-lucide="sparkles" style="width:16px;height:16px"></i>
+                        Частицы
+                    </button>
+
+                    <div class="settings-nav-section-label" style="margin-top: 10px;">ВОСПРОИЗВЕДЕНИЕ</div>
+                    <button class="settings-nav-btn" data-panel="audio">
+                        <i data-lucide="volume-2" style="width:16px;height:16px"></i>
+                        Аудио
+                    </button>
+                    <button class="settings-nav-btn" data-panel="optimization">
+                        <i data-lucide="zap" style="width:16px;height:16px"></i>
+                        Эффективность
+                    </button>
+                    <button class="settings-nav-btn" data-panel="keybinds">
+                        <i data-lucide="keyboard" style="width:16px;height:16px"></i>
+                        Горячие клавиши
+                    </button>
+                    <button class="settings-nav-btn" data-panel="storage">
+                        <i data-lucide="hard-drive" style="width:16px;height:16px"></i>
+                        Хранилище
+                    </button>
+                    <button class="settings-nav-btn" data-panel="import">
+                        <i data-lucide="download-cloud" style="width:16px;height:16px"></i>
+                        Импорт плейлистов
+                    </button>
+
+                    <div class="settings-nav-section-label" style="margin-top: 10px;">БЕЗОПАСНОСТЬ И СЕТЬ</div>
+                    <button class="settings-nav-btn" data-panel="zapret">
+                        <i data-lucide="shield-alert" style="width:16px;height:16px"></i>
+                        Zapret (Обход DPI)
+                    </button>
+                    <button class="settings-nav-btn" data-panel="auth">
+                        <i data-lucide="shield" style="width:16px;height:16px"></i>
+                        Авторизация
+                    </button>
+                </div>
+
+                <!-- Settings Panels -->
+                <div class="settings-panels">
+                    <!-- Appearance -->
+                    <div id="settings-appearance" class="settings-panel active">
+                        <!-- THEMA SECTION -->
+                        <div class="settings-section">
+                            <div class="settings-section-title">ТЕМА</div>
+                            
+                            <!-- Mode Switcher -->
+                            <div class="theme-mode-switcher">
+                                <button class="theme-mode-btn active" data-mode="dark">
+                                    <i data-lucide="moon" style="width:14px;height:14px"></i> Dark
+                                </button>
+                                <button class="theme-mode-btn" data-mode="light">
+                                    <i data-lucide="sun" style="width:14px;height:14px"></i> Light
+                                </button>
+                                <button class="theme-mode-btn" data-mode="system">
+                                    <i data-lucide="monitor" style="width:14px;height:14px"></i> System
+                                </button>
+                            </div>
+
+                            <!-- Presets Grid -->
+                            <div id="theme-presets-grid" class="theme-presets-grid"></div>
+
+                            <!-- Custom Theme Creator -->
+                            <div class="custom-theme-box">
+                                <div class="custom-theme-header">
+                                    <input type="text" id="input-custom-theme-name" class="text-input" placeholder="Моя тема" style="max-width:260px">
+                                    <div style="display:flex; gap:8px">
+                                        <button class="icon-btn" id="btn-random-theme" title="  " style="width:36px;height:36px"><i data-lucide="sparkles" style="width:16px;height:16px"></i></button>
+                                        <button class="icon-btn" id="btn-save-custom-theme" title=" " style="width:36px;height:36px"><i data-lucide="save" style="width:16px;height:16px"></i></button>
+                                    </div>
+                                </div>
+
+                                <div class="custom-theme-colors-grid">
+                                    <div class="custom-color-row">
+                                        <span class="custom-color-label">Основной</span>
+                                        <input type="color" id="picker-color-primary" value="#3b82f6" class="color-picker-dot">
+                                    </div>
+                                    <div class="custom-color-row">
+                                        <span class="custom-color-label">Акцентный</span>
+                                        <input type="color" id="picker-color-accent" value="#8b5cf6" class="color-picker-dot">
+                                    </div>
+                                    <div class="custom-color-row">
+                                        <span class="custom-color-label">Фон</span>
+                                        <input type="color" id="picker-color-bg" value="#0f172a" class="color-picker-dot">
+                                    </div>
+                                    <div class="custom-color-row">
+                                        <span class="custom-color-label">Текст</span>
+                                        <input type="color" id="picker-color-text" value="#ffffff" class="color-picker-dot">
+                                    </div>
+                                    <div class="custom-color-row">
+                                        <span class="custom-color-label">Карточка</span>
+                                        <input type="color" id="picker-color-card" value="#1e293b" class="color-picker-dot">
+                                    </div>
+                                    <div class="custom-color-row">
+                                        <span class="custom-color-label">Граница</span>
+                                        <input type="color" id="picker-color-border" value="#334155" class="color-picker-dot">
+                                    </div>
+                                    <div class="custom-color-row">
+                                        <span class="custom-color-label">Приглушенный</span>
+                                        <input type="color" id="picker-color-dim" value="#64748b" class="color-picker-dot">
+                                    </div>
+                                    <div class="custom-color-row">
+                                        <span class="custom-color-label">Фокус</span>
+                                        <input type="color" id="picker-color-focus" value="#f59e0b" class="color-picker-dot">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FONT SECTION -->
+                        <div class="settings-section" style="margin-top:32px;">
+                            <div class="settings-section-title">ШРИФТ</div>
+
+                            <!-- Font Categories -->
+                            <div class="font-categories-row">
+                                <button class="font-cat-btn active" data-cat="system">System</button>
+                                <button class="font-cat-btn" data-cat="modern">Modern</button>
+                                <button class="font-cat-btn" data-cat="serif">Serif</button>
+                                <button class="font-cat-btn" data-cat="mono">Mono</button>
+                                <button class="font-cat-btn" data-cat="hand">Hand</button>
+                                <button class="font-cat-btn" data-cat="deco">Deco</button>
+                                <button class="font-cat-btn" data-cat="game">Game</button>
+                                <button class="icon-btn" id="btn-export-font" title="Экспорт" style="margin-left:auto;width:32px;height:32px"><i data-lucide="share" style="width:14px;height:14px"></i></button>
+                            </div>
+
+                            <!-- Font Cards Grid -->
+                            <div id="font-cards-grid" class="font-cards-grid"></div>
+
+                            <!-- Font Size Slider -->
+                            <div class="font-size-box" style="margin-top:20px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                    <span class="setting-label">Размер шрифта</span>
+                                    <span id="label-font-size" style="font-size:12px; color:var(--text-sec)">16px</span>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:12px;">
+                                    <span style="font-size:11px; color:var(--text-sec)">A</span>
+                                    <input type="range" id="slider-font-size" class="slider-input" min="12" max="22" value="16" style="flex:1">
+                                    <span style="font-size:16px; font-weight:700; color:var(--text-sec)">A</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-section" style="display: none;">
+                            <div class="settings-section-title">Полупрозрачность окна</div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Включить полупрозрачность</div>
+                                    <div class="setting-sublabel">Делает фон приложения слегка прозрачным</div>
+                                </div>
+                                <button class="toggle-switch" id="toggle-transparency"><div class="toggle-dot"></div></button>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Уровень прозрачности: <span id="label-transparency-level">80%</span></div>
+                                    <div class="setting-sublabel">Прозрачность фона (от 10% до 100%)</div>
+                                </div>
+                                <input type="range" class="slider-input" id="slider-transparency-level" min="10" max="100" value="80" style="width:140px">
+                            </div>
+                        </div>
+
+                        <div class="settings-section">
+                            <div class="settings-section-title">Эффект стекла (Glassmorphism)</div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Размытие (Blur): <span id="label-glass-blur">20px</span></div>
+                                    <div class="setting-sublabel">Сила матового размытия заднего плана</div>
+                                </div>
+                                <input type="range" class="slider-input" id="slider-glass-blur" min="0" max="40" value="20" style="width:140px">
+                            </div>
+                        </div>
+
+                        <div class="settings-section">
+                            <div class="settings-section-title">ИНТЕГРАЦИИ И СТАТУС</div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Discord Rich Presence (Игровой статус)</div>
+                                    <div class="setting-sublabel">Отображать в вашем профиле Discord играющий трек, исполнителя и прогресс</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-discord-rpc"><div class="toggle-dot"></div></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Player Settings -->
+                    <div id="settings-player" class="settings-panel">
+                        <div class="settings-section">
+                            <div class="settings-section-title">НАСТРОЙКИ ПЛЕЕРА</div>
+
+                            <!-- 1. Выравнивание заголовка -->
+                            <div class="setting-card-group" id="opt-title-align">
+                                <div class="setting-label">Выравнивание заголовка</div>
+                                <div class="setting-sublabel">Выберите выравнивание названия трека</div>
+                                <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
+                                    <div class="opt-card active" data-val="left" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px;">
+                                        <i data-lucide="align-left" style="width:20px;height:20px"></i>
+                                        <span>Слева</span>
+                                    </div>
+                                    <div class="opt-card" data-val="center" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px;">
+                                        <i data-lucide="align-center" style="width:20px;height:20px"></i>
+                                        <span>По центру</span>
+                                    </div>
+                                    <div class="opt-card" data-val="right" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px;">
+                                        <i data-lucide="align-right" style="width:20px;height:20px"></i>
+                                        <span>Справа</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 2. Стиль плеера -->
+                            <div class="setting-card-group" id="opt-player-style" style="margin-top: 20px;">
+                                <div class="setting-label">Стиль плеера</div>
+                                <div class="setting-sublabel">Выберите визуальный стиль плеера</div>
+                                <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
+                                    <div class="opt-card active" data-val="default" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px;">
+                                        <i data-lucide="layout-grid" style="width:20px;height:20px"></i>
+                                        <span>Обычный</span>
+                                    </div>
+                                    <div class="opt-card" data-val="vinyl" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px;">
+                                        <i data-lucide="disc" style="width:20px;height:20px"></i>
+                                        <span>Пластинка</span>
+                                    </div>
+                                    </div>
+                            </div>
+
+                            <!-- 3. Тип слайдера -->
+                            <div class="setting-card-group" id="opt-slider-type" style="margin-top: 20px;">
+                                <div class="setting-label">Тип слайдера</div>
+                                <div class="setting-sublabel">Выберите стиль слайдера прогресса</div>
+                                <div class="select-grid" style="grid-template-columns: repeat(4, 1fr); margin-top: 10px;">
+                                    <div class="opt-card active" data-val="default" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 10px;">
+                                        <i data-lucide="circle" style="width:18px;height:18px"></i>
+                                        <span>Обычный</span>
+                                    </div>
+                                    <div class="opt-card" data-val="thin" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 10px;">
+                                        <i data-lucide="minus" style="width:18px;height:18px"></i>
+                                        <span>Тонкий</span>
+                                    </div>
+                                    <div class="opt-card" data-val="ios" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 10px;">
+                                        <i data-lucide="toggle-right" style="width:18px;height:18px"></i>
+                                        <span>iOS</span>
+                                    </div>
+                                    <div class="opt-card" data-val="wave" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 10px;">
+                                        <i data-lucide="activity" style="width:18px;height:18px"></i>
+                                        <span>Волновой</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 4. Показывать очередь -->
+                            <div class="setting-row" style="margin-top: 24px;">
+                                <div>
+                                    <div class="setting-label">Показывать очередь</div>
+                                    <div class="setting-sublabel">Отображать панель очереди</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-show-queue"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <!-- 5. Положение очереди -->
+                            <div class="setting-card-group" id="opt-queue-pos" style="margin-top: 20px;">
+                                <div class="setting-label">Положение очереди</div>
+                                <div class="setting-sublabel">Выберите где отображать очередь воспроизведения</div>
+                                <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
+                                    <div class="opt-card active" data-val="bottom" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
+                                        <i data-lucide="panel-bottom" style="width:20px;height:20px"></i>
+                                        <span>Снизу</span>
+                                    </div>
+                                    <div class="opt-card" data-val="left" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
+                                        <i data-lucide="panel-left" style="width:20px;height:20px"></i>
+                                        <span>Слева</span>
+                                    </div>
+                                    <div class="opt-card" data-val="right" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
+                                        <i data-lucide="panel-right" style="width:20px;height:20px"></i>
+                                        <span>Справа</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 6. Компактная кнопка очереди -->
+                            <div class="setting-row" style="margin-top: 20px;">
+                                <div>
+                                    <div class="setting-label">Компактная кнопка очереди</div>
+                                    <div class="setting-sublabel">Использовать компактный стиль кнопки очереди</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-compact-queue-btn"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <!-- Автопилот очереди -->
+                            <div class="setting-row" style="margin-top: 20px;">
+                                <div>
+                                    <div class="setting-label">Бесконечный автопилот очереди</div>
+                                    <div class="setting-sublabel">Автоматически подбирать похожие треки и продолжать воспроизведение, когда очередь заканчивается</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-queue-autopilot"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <!-- Предзагрузка следующего трека -->
+                            <div class="setting-row" style="margin-top: 20px;">
+                                <div>
+                                    <div class="setting-label">Предзагрузка следующего трека (Prefetch)</div>
+                                    <div class="setting-sublabel">Разрешать аудиопоток следующего трека заранее для мгновенного переключения без пауз</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-player-prefetch"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <!-- Атмосферный свет обложки -->
+                            <div class="setting-row" style="margin-top: 20px;">
+                                <div>
+                                    <div class="setting-label">Атмосферный свет обложки (Aura Orbs)</div>
+                                    <div class="setting-sublabel">Мягкие дрейфующие световые сферы Vision Pro, окрашивающиеся под играющий трек</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-aura-orbs"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <!-- 7. Предпросмотр следующего трека -->
+                            <div class="setting-row" style="margin-top: 20px;">
+                                <div>
+                                    <div class="setting-label">Предпросмотр следующего трека</div>
+                                    <div class="setting-sublabel">Показывать информацию о следующем треке</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-next-track-preview"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <!-- 8. Вид очереди -->
+                            <div class="setting-card-group" id="opt-queue-view" style="margin-top: 20px;">
+                                <div class="setting-label">Вид очереди</div>
+                                <div class="setting-sublabel">Выберите режим отображения треков в списке очереди</div>
+                                <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
+                                    <div class="opt-card active" data-val="normal" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
+                                        <i data-lucide="list" style="width:20px;height:20px"></i>
+                                        <span>Обычный</span>
+                                    </div>
+                                    </div>
+                            </div>
+
+                            <!-- 9. Прогресс мини-плеера -->
+                            <div class="setting-card-group" id="opt-mp-progress" style="margin-top: 24px;">
+                                <div class="setting-label">Прогресс мини-плеера</div>
+                                <div class="setting-sublabel">Выберите, как отображать прогресс трека</div>
+                                <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
+                                    <div class="opt-card active" data-val="line" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
+                                        <i data-lucide="minus" style="width:20px;height:20px"></i>
+                                        <span>Линия</span>
+                                    </div>
+                                    <div class="opt-card" data-val="bg" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
+                                        <i data-lucide="layout" style="width:20px;height:20px"></i>
+                                        <span>Фоном</span>
+                                    </div>
+                                    <div class="opt-card" data-val="cover" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
+                                        <i data-lucide="circle" style="width:20px;height:20px"></i>
+                                        <span>Вокруг обложки</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 10. Обложка мини-плеера -->
+                            <div class="setting-card-group" id="opt-mp-cover-shape" style="margin-top: 20px;">
+                                <div class="setting-label">Обложка мини-плеера</div>
+                                <div class="setting-sublabel">Выберите форму обложки в мини-плеере</div>
+                                <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
+                                    <div class="opt-card active" data-val="default" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
+                                        <i data-lucide="grid" style="width:20px;height:20px"></i>
+                                        <span>По умолчанию</span>
+                                    </div>
+                                    <div class="opt-card" data-val="circle" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
+                                        <i data-lucide="circle" style="width:20px;height:20px"></i>
+                                        <span>Круглая</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 11. Форма границ -->
+                            <div class="setting-card-group" id="opt-mp-shape" style="margin-top: 20px;">
+                                <div class="setting-label">Форма границ</div>
+                                <div class="setting-sublabel">Выберите форму мини-плеера</div>
+                                <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
+                                    <div class="opt-card active" data-val="default" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
+                                        <i data-lucide="grid" style="width:20px;height:20px"></i>
+                                        <span>По умолчанию</span>
+                                    </div>
+                                    <div class="opt-card" data-val="capsule" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
+                                        <i data-lucide="circle" style="width:20px;height:20px"></i>
+                                        <span>Капсула</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 12. Позиция мини-плеера -->
+                            <div class="setting-card-group" id="opt-mp-pos" style="margin-top: 20px;">
+                                <div class="setting-label">Позиция мини-плеера</div>
+                                <div class="setting-sublabel" style="margin-bottom:12px;">Выберите, в какой части экрана будет располагаться мини-плеер</div>
+                                <div style="display:flex; flex-wrap:wrap; gap:10px; width:100%;" id="mp-pos-btn-group">
+                                    <button class="opt-card-btn" data-pos="top-left" title="Вверху слева" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <i data-lucide="arrow-up-left" style="width:18px;height:18px"></i>
+                                        <span style="font-size:12px; font-weight:500;">Вверху слева</span>
+                                    </button>
+                                    <button class="opt-card-btn" data-pos="top-center" title="Вверху по центру" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <i data-lucide="arrow-up" style="width:18px;height:18px"></i>
+                                        <span style="font-size:12px; font-weight:500;">Вверху по центру</span>
+                                    </button>
+                                    <button class="opt-card-btn" data-pos="top-right" title="Вверху справа" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <i data-lucide="arrow-up-right" style="width:18px;height:18px"></i>
+                                        <span style="font-size:12px; font-weight:500;">Вверху справа</span>
+                                    </button>
+                                    <button class="opt-card-btn" data-pos="bottom-left" title="Внизу слева" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <i data-lucide="arrow-down-left" style="width:18px;height:18px"></i>
+                                        <span style="font-size:12px; font-weight:500;">Внизу слева</span>
+                                    </button>
+                                    <button class="opt-card-btn active" data-pos="bottom-right" title="Внизу справа" style="padding:10px 14px; border-radius:12px; border:1px solid var(--primary); background:var(--primary); color:#fff; display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <i data-lucide="arrow-down-right" style="width:18px;height:18px"></i>
+                                        <span style="font-size:12px; font-weight:500;">Внизу справа</span>
+                                    </button>
+                                    <button class="opt-card-btn" data-pos="center" title="По центру" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <i data-lucide="maximize-2" style="width:18px;height:18px"></i>
+                                        <span style="font-size:12px; font-weight:500;">По центру</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <!-- Background -->
+                    <div id="settings-background" class="settings-panel">
+                        <div class="settings-section">
+                            <div class="settings-section-title">ФОНОВОЕ ЗОБРАЖЕНЕ</div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Загрузить фон с ПК</div>
+                                    <div class="setting-sublabel">Выберите изображение (PNG, JPG, WEBP) для установки в качестве фона приложения</div>
+                                </div>
+                                <button class="btn-sm" id="btn-upload-bg-image" style="padding: 8px 16px; border-radius: 8px; background: var(--primary); color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+                                    <i data-lucide="upload" style="width:14px;height:14px"></i>
+                                    Выбрать файл
+                                </button>
+                                <input type="file" id="input-bg-file" accept="image/*" style="display:none">
+                            </div>
+                            <div class="setting-row" id="row-custom-bg-preview" style="display:none; flex-direction:column; align-items:flex-start; gap:12px;">
+                                <div class="setting-label">Предпросмотр фона:</div>
+                                <div style="display:flex; align-items:center; gap:16px; width:100%;">
+                                    <div id="bg-image-preview" style="width:180px; height:100px; border-radius:12px; background-size:cover; background-position:center; border:1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 16px rgba(0,0,0,0.4);"></div>
+                                    <button class="btn-sm text-xs" id="btn-remove-bg-image" style="background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.4); padding:8px 14px; border-radius:8px; cursor:pointer; font-weight:600;">🗑 Удалить фоновое изображение</button>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Размытие фона (Blur): <span id="label-bg-blur">0px</span></div>
+                                    <div class="setting-sublabel">Регулировка мягкости размытия фонового изображения</div>
+                                </div>
+                                <input type="range" class="slider-input" id="slider-bg-blur" min="0" max="40" value="0" style="width:140px">
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Затемнение фона: <span id="label-bg-dim">30%</span></div>
+                                    <div class="setting-sublabel">Прозрачность темной подложки поверх фона</div>
+                                </div>
+                                <input type="range" class="slider-input" id="slider-bg-dim" min="0" max="90" value="30" style="width:140px">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Workshop (Мастерская) -->
+                    <div id="settings-workshop" class="settings-panel">
+                        <div class="settings-section">
+                            <div style="margin-bottom:16px;">
+                                <div class="settings-section-title" style="margin-bottom:2px;">Мастерская фонов</div>
+                                <div class="setting-sublabel">Каталог живых обоев и анимированных фонов сообщества</div>
+                            </div>
+
+                            <!-- Filter & Sort Bar -->
+                              <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:18px;">
+                                  <div style="width: 100%;">
+                                      <input type="text" id="workshop-search-input" class="settings-input" placeholder="Поиск по мастерской..." autocomplete="off">
+                                  </div>
+                                  <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; width: 100%;">
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;" id="workshop-tags-container">
+                                    <button class="tag-btn active" data-tag="all">Все</button>
+                                    <button class="tag-btn" data-tag="anime">Аниме</button>
+                                    <button class="tag-btn" data-tag="atmosphere">Атмосфера</button>
+                                    <button class="tag-btn" data-tag="retro">Ретро</button>
+                                    <button class="tag-btn" data-tag="games">Игры</button>
+                                    <button class="tag-btn" data-tag="minimal">Минимализм</button>
+                                </div>
+                                <select id="workshop-sort-select" class="settings-select" style="height:38px; padding:0 14px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); font-size:12px; color:#fff; min-width:160px;">
+                                    <option value="newest">✨ Сначала новые</option>
+                                    <option value="popular">🔥 По популярности</option>
+                                    <option value="downloads">📥 По скачиваниям</option>
+                                </select>
+                                  </div>
+                              </div>
+
+                            <!-- Workshop Cards Grid -->
+                            <div class="workshop-grid" id="workshop-cards-grid">
+                                <!-- Generated by setupWorkshopPanel in settings.js -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Icons -->
+                    <div id="settings-icons" class="settings-panel">
+                        <div class="settings-section">
+                            <div class="settings-section-title">СТИЛЬ ИКОНОК И ЛОГОТИПА</div>
+                            <div class="setting-sublabel" style="margin-bottom:18px;">Выберите один из 10 эксклюзивных стилей логотипа и иконок приложения:</div>
+                            
+                            <div class="select-grid" id="icon-packs-grid" style="grid-template-columns: repeat(2, 1fr); gap: 14px;">
+                                <div class="opt-card active" data-id="aura_neon" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                    <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
+                                        <i data-lucide="music" style="width:22px; height:22px; color:#ff2d55;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight:700; font-size:14px; margin-bottom:2px; color:#ffffff;">AURA Neon</div>
+                                        <div style="font-size:11px; color:rgba(255,255,255,0.7); line-height:1.3;">Классическая нота NeDotify в неоновом свечении</div>
+                                    </div>
+                                </div>
+
+                                <div class="opt-card" data-id="cyber_disc" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                    <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
+                                        <i data-lucide="disc" style="width:22px; height:22px; color:#a855f7;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight:700; font-size:14px; margin-bottom:2px; color:#ffffff;">Cyber Disc</div>
+                                        <div style="font-size:11px; color:rgba(255,255,255,0.7); line-height:1.3;">Киберпанк винил с неоновой подсветкой</div>
+                                    </div>
+                                </div>
+
+                                <div class="opt-card" data-id="flame_beats" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                    <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
+                                        <i data-lucide="flame" style="width:22px; height:22px; color:#f97316;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight:700; font-size:14px; margin-bottom:2px; color:#ffffff;">Flame Beats</div>
+                                        <div style="font-size:11px; color:rgba(255,255,255,0.7); line-height:1.3;">Огненный ритм для чартов и хит-парадов</div>
+                                    </div>
+                                </div>
+
+                                <div class="opt-card" data-id="cosmic_star" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                    <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
+                                        <i data-lucide="sparkles" style="width:22px; height:22px; color:#38bdf8;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight:700; font-size:14px; margin-bottom:2px; color:#ffffff;">Cosmic Sound</div>
+                                        <div style="font-size:11px; color:rgba(255,255,255,0.7); line-height:1.3;">Космический саундскейп и звездный блеск</div>
+                                    </div>
+                                </div>
+
+                                <div class="opt-card" data-id="deep_subwoofer" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                    <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
+                                        <i data-lucide="speaker" style="width:22px; height:22px; color:#10b981;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight:700; font-size:14px; margin-bottom:2px; color:#ffffff;">Deep Subwoofer</div>
+                                        <div style="font-size:11px; color:rgba(255,255,255,0.7); line-height:1.3;">Мощный бас и глубокий акустический звук</div>
+                                    </div>
+                                </div>
+
+                                <div class="opt-card" data-id="vintage_mic" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                    <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
+                                        <i data-lucide="mic" style="width:22px; height:22px; color:#eab308;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight:700; font-size:14px; margin-bottom:2px; color:#ffffff;">Studio Vintage</div>
+                                        <div style="font-size:11px; color:rgba(255,255,255,0.7); line-height:1.3;">Винтажная микрофонная студийная эстетика</div>
+                                    </div>
+                                </div>
+
+
+                                <div class="opt-card" data-id="wave_radio" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                    <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
+                                        <i data-lucide="radio" style="width:22px; height:22px; color:#ec4899;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight:700; font-size:14px; margin-bottom:2px; color:#ffffff;">Wave Radio</div>
+                                        <div style="font-size:11px; color:rgba(255,255,255,0.7); line-height:1.3;">Атмосферная радиоволна и лофай</div>
+                                    </div>
+                                </div>
+
+                                <div class="opt-card" data-id="electric_heart" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                    <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
+                                        <i data-lucide="heart" style="width:22px; height:22px; color:#ef4444;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight:700; font-size:14px; margin-bottom:2px; color:#ffffff;">Electric Heart</div>
+                                        <div style="font-size:11px; color:rgba(255,255,255,0.7); line-height:1.3;">Музыкальный пульс прямо в сердце</div>
+                                    </div>
+                                </div>
+
+                                <div class="opt-card" data-id="infinity_stream" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                    <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
+                                        <i data-lucide="infinity" style="width:22px; height:22px; color:#6366f1;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight:700; font-size:14px; margin-bottom:2px; color:#ffffff;">Infinity Stream</div>
+                                        <div style="font-size:11px; color:rgba(255,255,255,0.7); line-height:1.3;">Бесконечный гибридный поток треков</div>
+                                    </div>
+                                </div>
+
+                                <div class="opt-card" data-id="crown_gold" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                    <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
+                                        <i data-lucide="crown" style="width:22px; height:22px; color:#f59e0b;"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight:700; font-size:14px; margin-bottom:2px; color:#ffffff;">Crown Gold</div>
+                                        <div style="font-size:11px; color:rgba(255,255,255,0.7); line-height:1.3;">Премиальный золотой VIP стиль</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Audio -->
+                    <div id="settings-audio" class="settings-panel">
+                        <div class="settings-section">
+                            <div class="settings-section-title">Воспроизведение</div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Кроссфейд</div>
+                                    <div class="setting-sublabel">Плавный переход между треками</div>
+                                </div>
+                                <button class="toggle-switch" id="toggle-crossfade"><div class="toggle-dot"></div></button>
+                            </div>
+                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                                <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+                                    <div class="setting-label">Длительность кроссфейда</div>
+                                    <span id="label-crossfade-sec" style="font-size:12px; color:var(--text-sec)">3 сек</span>
+                                </div>
+                                <input type="range" id="slider-crossfade-sec" class="slider-input" min="1" max="12" value="3" style="width:100%">
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Gapless playback</div>
+                                    <div class="setting-sublabel">Воспроизведение без пауз и задержек</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-gapless"><div class="toggle-dot"></div></button>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Нормализация громкости (EBU R128)</div>
+                                    <div class="setting-sublabel">Выравнивание громкости и защитное ограничение пиков</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-normalization"><div class="toggle-dot"></div></button>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Автовоспроизведение</div>
+                                    <div class="setting-sublabel">Продолжить после закрытия</div>
+                                </div>
+                                <button class="toggle-switch" id="toggle-autoplay"><div class="toggle-dot"></div></button>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <div class="settings-section-title"></div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label"> </div>
+                                    <div class="setting-sublabel">      </div>
+                                </div>
+                                <select class="settings-select" id="select-region">
+                                    <option value="US"> (US)</option>
+                                    <option value="RU"> (RU)</option>
+                                    <option value="GB">Великобритания (GB)</option>
+                                    <option value="DE">Германия (DE)</option>
+                                    <option value="FR">Франция (FR)</option>
+                                    <option value="JP">Япония (JP)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <div class="settings-section-title">Визуализер</div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Показывать визуализер на обложке</div>
+                                    <div class="setting-sublabel">Аудио-визуализация в плеере</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-visualizer"><div class="toggle-dot"></div></button>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label"> </div>
+                                </div>
+                                <select class="settings-select" id="select-visualizer-style">
+                                    <option value="bars">Полосы (Bars)</option>
+                                    <option value="wave">Волна (Wave)</option>
+                                    <option value="circle">Круг (Circle)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <div class="settings-section-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                                <div style="display:flex; align-items:center; gap:12px;">
+                                    <span>Эквалайзер</span>
+                                    <div id="eq-mode-btn-group" style="display:flex; background:rgba(255,255,255,0.06); padding:2px; border-radius:8px; border:1px solid rgba(255,255,255,0.1);">
+                                        <button class="eq-mode-btn active" data-mode="3" style="padding:3px 8px; font-size:11px; border-radius:6px; border:none; background:var(--primary); color:#fff; cursor:pointer; font-weight:600;">3 полосы</button>
+                                        <button class="eq-mode-btn" data-mode="6" style="padding:3px 8px; font-size:11px; border-radius:6px; border:none; background:transparent; color:var(--text-sec); cursor:pointer; font-weight:600;">6 полос</button>
+                                        <button class="eq-mode-btn" data-mode="10" style="padding:3px 8px; font-size:11px; border-radius:6px; border:none; background:transparent; color:var(--text-sec); cursor:pointer; font-weight:600;">10 полос</button>
+                                    </div>
+                                </div>
+                                <div style="display:flex; gap:8px; align-items:center;">
+                                    <!-- Sleek Custom Glass Dropdown -->
+                                    <div class="custom-glass-dropdown" id="eq-custom-preset-dropdown">
+                                        <button class="custom-glass-dropdown-btn" id="eq-dropdown-btn">
+                                            <span id="eq-preset-current-text">Пресет: Сброс (Flat)</span>
+                                            <i data-lucide="chevron-down" style="width:14px;height:14px"></i>
+                                        </button>
+                                        <div class="custom-glass-dropdown-menu hidden" id="eq-dropdown-menu">
+                                            <div class="custom-glass-dropdown-item active" data-value="flat">Пресет: Сброс (Flat)</div>
+                                            <div class="custom-glass-dropdown-item" data-value="bass_boost">Пресет: Усиление баса</div>
+                                            <div class="custom-glass-dropdown-item" data-value="treble_boost">Пресет: Усиление высоких</div>
+                                            <div class="custom-glass-dropdown-item" data-value="vocal">Пресет: Вокал</div>
+                                            <div class="custom-glass-dropdown-item" data-value="rock">Пресет: Рок</div>
+                                            <div class="custom-glass-dropdown-item" data-value="pop">Пресет: Поп</div>
+                                            <div class="custom-glass-dropdown-item" data-value="jazz">Пресет: Джаз</div>
+                                        </div>
+                                    </div>
+                                    <button id="btn-eq-reset" class="filter-btn" style="padding: 5px 12px; font-size:12px;">Сброс</button>
+                                </div>
+                            </div>
+                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; padding-bottom: 24px;">
+                                <div style="display:flex; justify-content:space-between; width:100%; margin-bottom: 8px;">
+                                    <span class="setting-label">Preamp</span>
+                                    <span id="eq-val-preamp" style="font-size:12px; color:var(--text-sec)">0 dB</span>
+                                </div>
+                                <input type="range" id="eq-preamp" class="slider-input eq-slider" min="-20" max="20" step="0.1" value="0" style="width:100%">
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:4px; height: 120px; margin-top: 10px; padding: 0 10px;" id="eq-bands-container">
+                                <!-- Generated by JS -->
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Particles -->
+                    <div id="settings-particles" class="settings-panel">
+                        <div class="settings-section">
+                            <div class="settings-section-title">Фоновые частицы</div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Включить частицы</div>
+                                </div>
+                                <button class="toggle-switch on" id="toggle-particles"><div class="toggle-dot"></div></button>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Количество: <span id="label-particles-count">30</span></div>
+                                </div>
+                                <input type="range" class="slider-input" id="slider-particles-count" min="5" max="80" value="30" style="width:140px">
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label"> : <span id="label-particles-size"></span></div>
+                                </div>
+                                <input type="range" class="slider-input" id="slider-particles-size" min="1" max="5" value="2" style="width:140px">
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">: <span id="label-particles-speed"></span></div>
+                                </div>
+                                <input type="range" class="slider-input" id="slider-particles-speed" min="1" max="3" value="2" style="width:140px">
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <div class="settings-section-title">Форма частиц</div>
+                            <div class="select-grid" style="grid-template-columns:repeat(4,1fr)">
+                                <button class="select-card particle-shape-btn active" data-shape="dot">● Круг</button>
+                                <button class="select-card particle-shape-btn" data-shape="heart">❤️ Сердце</button>
+                                <button class="select-card particle-shape-btn" data-shape="star">⭐ Звёзды</button>
+                                <button class="select-card particle-shape-btn" data-shape="snow">❄️ Снег</button>
+                                <button class="select-card particle-shape-btn" data-shape="flag_rf" title="Флаг РФ">
+                                    <span style="display:inline-flex; align-items:center; gap:6px;">
+                                        <span style="display:inline-block; width:18px; height:12px; border-radius:2px; overflow:hidden; border:1px solid rgba(255,255,255,0.3); vertical-align:middle; line-height:0; flex-shrink:0;">
+                                            <span style="display:block; height:4px; background:#ffffff;"></span>
+                                            <span style="display:block; height:4px; background:#0039a6;"></span>
+                                            <span style="display:block; height:4px; background:#d52b1e;"></span>
+                                        </span>
+                                        <span>Флаг РФ</span>
+                                    </span>
+                                </button>
+                                <button class="select-card particle-shape-btn" data-shape="coat_rf" title="Герб РФ">
+                                    <span style="display:inline-flex; align-items:center; gap:6px;">
+                                        <span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:14px; background:#cc0000; border:1px solid #ffd700; border-radius:2px; color:#ffd700; font-size:10px; flex-shrink:0; line-height:1;">🦅</span>
+                                        <span>Герб РФ</span>
+                                    </span>
+                                </button>
+                                <button class="select-card particle-shape-btn" data-shape="note">🎵 Ноты</button>
+                                <button class="select-card particle-shape-btn" data-shape="sparkle">✨ Блёстки</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Optimization -->
+                    <div id="settings-optimization" class="settings-panel">
+                        <div class="settings-section">
+                            <div class="settings-section-title">УМНАЯ ЭФФЕКТИВНОСТЬ (ФОНОВЫЙ РЕЖИМ)</div>
+
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">Режим энергосбережения</div>
+                                    <div class="setting-sublabel">Автоматически снижать нагрузку на систему при сворачивании или неактивности окна плеера</div>
+                                </div>
+                                <button class="toggle-switch" id="toggle-unfocus-enabled"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">Отключать размытие стекла</div>
+                                    <div class="setting-sublabel">Временно убирать тяжелый эффект матового стекла в фоне (экономит до 40% GPU)</div>
+                                </div>
+                                <button class="toggle-switch" id="toggle-unfocus-blur"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">Замораживать анимации</div>
+                                    <div class="setting-sublabel">Останавливать вращение пластинки и все плавные переходы CSS</div>
+                                </div>
+                                <button class="toggle-switch" id="toggle-unfocus-animations"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">Останавливать частицы и визуал</div>
+                                    <div class="setting-sublabel">Полностью останавливать рендер визуализатора в фоне</div>
+                                </div>
+                                <button class="toggle-switch" id="toggle-unfocus-visualizations"><div class="toggle-dot"></div></button>
+                            </div>
+
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">Лимит FPS в фоне</div>
+                                    <div class="setting-sublabel">Если визуал не остановлен, до скольки кадров снижать его рендер в фоне</div>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:12px">
+                                    <input type="range" class="slider-input" id="slider-unfocus-fps" min="5" max="30" step="5" value="15" style="width:140px">
+                                    <span id="label-unfocus-fps" style="font-size:12px; font-weight:700; color:var(--primary); min-width:48px">15 FPS</span>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div class="settings-section">
+                            <div class="settings-section-title">Оптимизация и Производительность</div>
+                            
+                            <!-- 1. Пресет производительности -->
+                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+                                <div class="setting-label" style="font-weight:600">Пресет производительности</div>
+                                <div style="display:flex; gap:8px; width:100%;" id="opt-perf-preset">
+                                    <button class="opt-card filter-btn" data-val="low" style="flex:1; padding:8px;">Низкий (Low)</button>
+                                    <button class="opt-card filter-btn" data-val="balanced" style="flex:1; padding:8px;">Баланс (Balanced)</button>
+                                    <button class="opt-card filter-btn active" data-val="high" style="flex:1; padding:8px;">Высокий (High)</button>
+                                </div>
+                            </div>
+
+                            <!-- 2. Лимит фоновой активности -->
+                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:8px; margin-top:12px;">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">Лимит фоновой активности</div>
+                                    <div class="setting-sublabel">Когда экономить ресурсы процессора и видеокарты</div>
+                                </div>
+                                <div style="display:flex; gap:8px; width:100%;" id="opt-limit-state">
+                                    <button class="opt-card filter-btn" data-val="off" style="flex:1; padding:8px;">Отключен</button>
+                                    <button class="opt-card filter-btn active" data-val="minimize" style="flex:1; padding:8px;">При сворачивании</button>
+                                    <button class="opt-card filter-btn" data-val="focus" style="flex:1; padding:8px;">При потере фокуса</button>
+                                </div>
+                            </div>
+
+                            <!-- 3. Качество Blur -->
+                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:8px; margin-top:12px;">
+                                <div class="setting-label" style="font-weight:600">Качество эффекта размытия (Blur)</div>
+                                <div style="display:flex; gap:8px; width:100%;" id="opt-blur-quality">
+                                    <button class="opt-card filter-btn" data-val="off" style="flex:1; padding:8px;">Выкл</button>
+                                    <button class="opt-card filter-btn" data-val="lq" style="flex:1; padding:8px;">Низкое (LQ)</button>
+                                    <button class="opt-card filter-btn active" data-val="hq" style="flex:1; padding:8px;">Высокое (HQ)</button>
+                                </div>
+                            </div>
+
+                            <!-- 4. Качество Glow -->
+                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:8px; margin-top:12px;">
+                                <div class="setting-label" style="font-weight:600">Качество фонового свечения (Glow)</div>
+                                <div style="display:flex; gap:8px; width:100%;" id="opt-glow-quality">
+                                    <button class="opt-card filter-btn" data-val="off" style="flex:1; padding:8px;">Выкл</button>
+                                    <button class="opt-card filter-btn" data-val="subtle" style="flex:1; padding:8px;">Умеренное</button>
+                                    <button class="opt-card filter-btn active" data-val="full" style="flex:1; padding:8px;">Полное</button>
+                                </div>
+                            </div>
+
+                            <!-- 5. FPS Sliders -->
+                            <div class="setting-row" style="margin-top:12px;">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">FPS частичек</div>
+                                    <div class="setting-sublabel">Частота кадров летающих частиц</div>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:12px">
+                                    <input type="range" class="slider-input" id="slider-fps-particles" min="5" max="30" step="1" value="24" style="width:140px">
+                                    <span id="label-fps-particles" style="font-size:12px; font-weight:700; color:var(--primary); min-width:48px">24 FPS</span>
+                                </div>
+                            </div>
+
+                            <div class="setting-row" style="margin-top:8px;">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">FPS визуализатора</div>
+                                    <div class="setting-sublabel">Частота кадров звукового визуализатора</div>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:12px">
+                                    <input type="range" class="slider-input" id="slider-fps-visualizer" min="10" max="60" step="5" value="30" style="width:140px">
+                                    <span id="label-fps-visualizer" style="font-size:12px; font-weight:700; color:var(--primary); min-width:48px">30 FPS</span>
+                                </div>
+                            </div>
+
+                            <div class="setting-row" style="margin-top:8px;">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">FPS интерфейса</div>
+                                    <div class="setting-sublabel">Частота плавных анимаций интерфейса</div>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:12px">
+                                    <input type="range" class="slider-input" id="slider-fps-ui" min="15" max="60" step="5" value="60" style="width:140px">
+                                    <span id="label-fps-ui" style="font-size:12px; font-weight:700; color:var(--primary); min-width:48px">60 FPS</span>
+                                </div>
+                            </div>
+
+                            <!-- 6. Активные ресурсы -->
+                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:8px; margin-top:16px;">
+                                <div>
+                                    <div class="setting-label" style="font-weight:600">Активные ресурсы и модули</div>
+                                    <div class="setting-sublabel">Переключатели активности визуальных компонентов</div>
+                                </div>
+                                <div style="display:flex; flex-wrap:wrap; gap:8px; width:100%;" id="opt-active-resources">
+                                    <button class="opt-toggle-btn filter-btn active" data-resource="bg" style="padding:6px 12px;">Фон</button>
+                                    <button class="opt-toggle-btn filter-btn active" data-resource="particles" style="padding:6px 12px;">Частицы</button>
+                                    <button class="opt-toggle-btn filter-btn active" data-resource="covers" style="padding:6px 12px;">Обложки</button>
+                                    <button class="opt-toggle-btn filter-btn active" data-resource="visualizers" style="padding:6px 12px;">Визуализатор</button>
+                                    <button class="opt-toggle-btn filter-btn active" data-resource="blur" style="padding:6px 12px;">Размытие</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="settings-auth" class="settings-panel">
+                        <div class="settings-section" style="display:none !important;">
+                            <div class="settings-section-title">Яндекс Музыка</div>
+                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px; border-bottom: none;">
+                                <div>
+                                    <div class="setting-label">Токен авторизации</div>
+                                    <div class="setting-sublabel">Нужен для полного доступа (без ограничения 30 сек). Вставьте вручную или нажмите «Получить токен»</div>
+                                </div>
+                                <input type="password" class="settings-input" id="input-yandex-token" placeholder="Введите yandex_token...">
+                                <div style="display:flex;gap:8px;align-items:center;width:100%;margin-top:4px">
+                                    <button id="btn-yandex-auth" style="padding:8px 16px;border-radius:8px;background:var(--primary);color:var(--bg-main);border:none;cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap">
+                                        🔑 Получить токен
+                                    </button>
+                                    <div id="yandex-device-status" style="font-size:12px;color:var(--text-sec);display:none;flex:1;word-break:break-all"></div>
+                                </div>
+                                <div id="yandex-auth-warning" class="warning-box" style="display: none;">
+                                    <i data-lucide="alert-triangle" style="width:16px;height:16px"></i>
+                                    <span>Ошибка авторизации Яндекс Музыка. Доступ ограничен 30 сек.</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <div class="settings-section-title">YouTube Music (Скоро)</div>
+                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px; border-bottom: none;">
+                                <div>
+                                    <div class="setting-label">OAuth 2.0 Client ID</div>
+                                    <div class="setting-sublabel">ID клиента для API YouTube Data v3</div>
+                                </div>
+                                <input type="text" class="settings-input" id="input-oauth-client-id" placeholder="Client ID..." disabled title="Функция пока недоступна">
+                                
+                                <div style="margin-top: 8px;">
+                                    <div class="setting-label">OAuth 2.0 Client Secret</div>
+                                    <div class="setting-sublabel">Секрет клиента для API YouTube Data v3 <span style="opacity:0.75;font-size:11px;">(⚠️ Client Secret не отправляется с фронтенда)</span></div>
+                                </div>
+                                <input type="password" class="settings-input" id="input-oauth-client-secret" placeholder="Client Secret..." disabled title="Функция пока недоступна">
+                                
+                                <div style="display:flex;gap:8px;align-items:center;width:100%;margin-top:8px">
+                                    <button id="btn-ytmusic-oauth" disabled title="Поддержка YouTube Music пока недоступна" style="padding:8px 16px;border-radius:8px;background:var(--primary);color:var(--bg-main);border:none;cursor:not-allowed;font-weight:600;font-size:13px;opacity:0.5">
+                                        Подключить YouTube Music
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <div class="settings-section-title">YouTube и SoundCloud (Обход ограничений)</div>
+                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                                <div>
+                                    <div class="setting-label">Использовать куки браузера</div>
+                                    <div class="setting-sublabel">Импортировать сессию авторизации из установленного браузера</div>
+                                </div>
+                                <select class="settings-select" id="select-browser-cookies">
+                                    <option value="none">Не использовать (None)</option>
+                                    <option value="chrome">Google Chrome</option>
+                                    <option value="firefox">Mozilla Firefox</option>
+                                    <option value="edge">Microsoft Edge</option>
+                                    <option value="opera">Opera</option>
+                                    <option value="safari">Apple Safari</option>
+                                </select>
+                            </div>
+                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                                <div>
+                                    <div class="setting-label">Путь к файлу куков (cookies.txt)</div>
+                                    <div class="setting-sublabel">Укажите путь к экспортированному файлу cookies.txt</div>
+                                </div>
+                                <input type="text" class="settings-input" id="input-cookies-path" placeholder="C:\path\to\cookies.txt">
+                            </div>
+                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px; border-bottom: none;">
+                                <div>
+                                    <div class="setting-label">HTTP/HTTPS Прокси</div>
+                                    <div class="setting-sublabel">Для обхода блокировок YouTube и сторонних сервисов (например, http://127.0.0.1:1080)</div>
+                                </div>
+                                <input type="text" class="settings-input" id="input-proxy-url" placeholder="http://127.0.0.1:1080">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Subscription -->
+
+
+                    <!-- Keybinds -->
+                    <div id="settings-keybinds" class="settings-panel">
+                        <div class="settings-section">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                                <div class="settings-section-title" style="margin-bottom:0">Кастомные горячие клавиши</div>
+                                <button class="filter-btn" id="btn-reset-keybinds">Сбросить сочетания</button>
+                            </div>
+                            <div class="setting-sublabel" style="margin-bottom:16px;">
+                                Нажмите на кнопку рядом с нужным действием и зажмите сочетание клавиш для изменения.
+                            </div>
+                            <div id="keybinds-list" style="display:flex; flex-direction:column; gap:10px;">
+                                <!-- Generated by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Storage Panel -->
+                    <div id="settings-storage" class="settings-panel">
+                        <div class="settings-section">
+                            <div class="settings-section-title">ХРАНИЛИЩЕ И КЭШ</div>
+                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                                <div>
+                                    <div class="setting-label">Статистика локального хранилища</div>
+                                    <div class="setting-sublabel">Здесь отображается объем кэша и сохраненных данных на вашем ПК</div>
+                                </div>
+                                <div style="display: flex; gap: 20px; font-size: 13px; color: var(--text-sec); margin-top: 5px; flex-wrap: wrap;">
+                                    <div>Всего: <span id="storage-total" style="color: var(--text); font-weight: 600;">0 MB</span></div>
+                                    <div>Кэш: <span id="storage-streams" style="color: var(--text); font-weight: 600;">0 MB</span></div>
+                                    <div>Защищено (Избранное/Загрузки): <span id="storage-protected" style="color: var(--primary); font-weight: 600;">0</span></div>
+                                </div>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Лимит кэша (Smart Storage)</div>
+                                    <div class="setting-sublabel">Автоматическая LRU-очистка при превышении лимита (скачанное и избранное не удаляются)</div>
+                                </div>
+                                <select id="select-cache-quota" class="glass-select" style="min-width:140px; padding:6px 12px; border-radius:8px;">
+                                    <option value="1">1 ГБ</option>
+                                    <option value="2">2 ГБ</option>
+                                    <option value="5" selected>5 ГБ (Реком.)</option>
+                                    <option value="10">10 ГБ</option>
+                                    <option value="0">Без лимита</option>
+                                </select>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Очистить кэш треков и обложек</div>
+                                    <div class="setting-sublabel">Удалить все сохраненные во временную память аудиофайлы и обложки</div>
+                                </div>
+                                <button id="btn-clear-storage" style="padding: 8px 16px; border-radius: 8px; background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); font-weight: 600; font-size: 12px; cursor: pointer;">
+                                    🗑 Очистить кэш
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Duplicate Track Scanner -->
+                        <div class="settings-section" style="margin-top: 24px;">
+                            <div class="settings-section-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                                <span>ПОИСК ДУБЛИКАТОВ ПО АУДИООТПЕЧАТКАМ</span>
+                                <button id="btn-scan-duplicates" class="filter-btn active" style="padding: 6px 14px; font-size:12px;">🔍 Сканировать медиатеку</button>
+                            </div>
+                            <div class="setting-row" style="flex-direction:column; align-items:flex-start; gap:10px;">
+                                <div class="setting-sublabel">Анализирует фактические аудиоотпечатки звука для отыскания идентичных файлов</div>
+                                <div id="duplicates-results-container" style="width:100%; margin-top:8px;">
+                                    <div style="font-size:12px; color:var(--text-sec);">Нажмите «Сканировать медиатеку», чтобы найти одинаковые аудиозаписи.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Import Panel -->
+                    <div id="settings-import" class="settings-panel">
+                        <div class="settings-section">
+                            <div class="settings-section-title">ИМПОРТ ПЛЕЙЛИСТОВ</div>
+                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 12px; border-bottom: none;">
+                                <div style="width: 100%;">
+                                    <div class="setting-label" style="margin-bottom:4px">Ссылка на внешнеый плейлист</div>
+                                    <div class="setting-sublabel" style="margin-bottom:8px">Поддерживаются Яндекс Музыка, YouTube и Spotify</div>
+                                    <input type="text" class="settings-input" id="input-import-playlist-url" placeholder="https://music.yandex.ru/users/.../playlists/...">
+                                </div>
+                                <div style="width: 100%;">
+                                    <div class="setting-label" style="margin-bottom:4px">Название для локального плейлиста</div>
+                                    <input type="text" class="settings-input" id="input-import-playlist-name" placeholder="Мой импортированный плейлист">
+                                </div>
+                                <button id="btn-import-playlist" style="padding: 10px 20px; border-radius: 8px; background: var(--primary); color: #fff; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="download-cloud" style="width: 16px; height: 16px;"></i> Начать импорт
+                                </button>
+                                <div id="import-playlist-status" style="font-size: 12px; color: var(--primary); font-weight: 600; display: none;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Zapret (Obchod DPI) Panel -->
+                    <div id="settings-zapret" class="settings-panel">
+                        <div class="settings-section">
+                            <div class="settings-section-title">ZAPRET (ОБХОД БЛОКИРОВОК И DPI)</div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Включить службы Zapret</div>
+                                    <div class="setting-sublabel">Маскировать трафик YouTube и сторонних музыкальных сервисов в текущей сессии</div>
+                                </div>
+                                <button class="toggle-switch" id="toggle-zapret-enabled"><div class="toggle-dot"></div></button>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Автоматический запуск Zapret</div>
+                                    <div class="setting-sublabel">Запускать службу обхода блокировок автоматически при старте приложения</div>
+                                </div>
+                                <button class="toggle-switch" id="toggle-zapret-autostart" aria-label="Автозапуск Zapret"><div class="toggle-dot"></div></button>
+                                <input type="checkbox" id="zapret-auto-start" style="display: none;" />
+                            </div>
+                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                                <div>
+                                    <div class="setting-label">Режим обхода</div>
+                                    <div class="setting-sublabel">Выберите стратегию обхода замедления (fake-packet / split / disord)</div>
+                                </div>
+                                <select class="settings-select" id="select-zapret-mode">
+                                    <option value="youtube_discord">YouTube & Discord (Рекомендуется)</option>
+                                    <option value="standard">Стандартный (Fake TLS + Split2)</option>
+                                    <option value="aggressive">Disorder2 (для строгого DPI)</option>
+                                    <option value="multisplit">Multisplit (Альтернативный)</option>
+                                </select>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Автообновление Zapret</div>
+                                    <div class="setting-sublabel">Автоматически проверять и скачивать актуальные версии winws с GitHub</div>
+                                </div>
+                                <button class="toggle-switch" id="toggle-zapret-autoupdate"><div class="toggle-dot"></div></button>
+                            </div>
+                            <div class="setting-row" style="border-bottom: none;">
+                                <div>
+                                    <div class="setting-label">Версия: <span id="zapret-version-badge" style="color:var(--primary); font-weight:700;">—</span></div>
+                                    <div class="setting-sublabel" id="zapret-update-status">Проверка обновлений доступна в один клик</div>
+                                </div>
+                                <button class="btn-primary text-xs" id="btn-update-zapret" style="padding: 6px 14px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="refresh-cw" style="width:14px;height:14px"></i>
+                                    <span>Обновить</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Player Bar (Bottom) -->
+<div id="player-bar">
+    <!-- Track Info (wider left) -->
+    <div class="pb-track">
+        <img id="pb-cover" class="pb-cover" src="" alt="">
+        <div class="pb-info">
+            <div class="pb-title" id="pb-title">Не играет</div>
+            <div class="pb-artist" id="pb-artist">Выберите трек</div>
+        </div>
+        <button class="btn-ctrl" id="pb-btn-like" title="Нравится">
+            <i data-lucide="heart" style="width:14px;height:14px"></i>
+        </button>
+        <!-- Three-dot track options -->
+        <button class="btn-ctrl" id="pb-btn-options" title="Опции" style="flex-shrink:0">
+            <i data-lucide="more-horizontal" style="width:14px;height:14px"></i>
+        </button>
+    </div>
+
+    <!-- Controls + Progress -->
+    <div class="pb-controls">
+        <div class="pb-buttons">
+            <button class="btn-ctrl" id="pb-btn-shuffle" title="Перемешать">
+                <i data-lucide="shuffle" style="width:14px;height:14px"></i>
+            </button>
+            <button class="btn-ctrl" id="pb-btn-prev" title="Предыдущий">
+                <i data-lucide="skip-back" style="width:16px;height:16px"></i>
+            </button>
+            <button class="btn-play-main" id="pb-btn-play" title="Воспроизведение">
+                <i data-lucide="play" style="width:16px;height:16px;fill:currentColor"></i>
+            </button>
+            <button class="btn-ctrl" id="pb-btn-next" title="">
+                <i data-lucide="skip-forward" style="width:16px;height:16px"></i>
+            </button>
+            <button class="btn-ctrl" id="pb-btn-repeat" title="Повтор">
+                <i data-lucide="repeat" style="width:14px;height:14px"></i>
+            </button>
+            <button class="btn-ctrl active" id="pb-btn-flow" title="Бесконечная волна (Flow)">
+                <i data-lucide="radio" style="width:14px;height:14px"></i>
+            </button>
+        </div>
+        <div class="pb-progress">
+            <span class="pb-time" id="pb-time-current">0:00</span>
+            <div class="progress-track" id="pb-progress-track" style="position: relative;">
+                <canvas id="pb-waveform-canvas" class="waveform-canvas hidden"></canvas>
+                <div class="progress-fill" id="pb-progress-fill" style="transform: translateX(-100%)"></div>
+            </div>
+            <span class="pb-time" id="pb-time-total">0:00</span>
+        </div>
+    </div>
+
+    <!-- Right: Queue + Volume (compact) -->
+    <div class="pb-right">
+        <button class="btn-ctrl" id="pb-btn-queue" title="Очередь">
+            <i data-lucide="list-music" style="width:16px;height:16px"></i>
+        </button>
+        <div class="volume-wrap">
+            <button class="btn-ctrl" id="pb-volume-btn" title="Громкость">
+                <i data-lucide="volume-2" style="width:16px;height:16px"></i>
+            </button>
+            <div class="volume-track" id="pb-volume-track">
+                <div class="volume-fill" id="pb-volume-fill" style="width:70%"></div>
+            </div>
+        </div>
+</div>
+</div>
+
+<!-- Playlist Context Menu -->
+<div id="playlist-context-menu" class="context-menu">
+    <div style="padding:6px 12px;font-size:11px;color:var(--text-dim);font-weight:600">ДОБАВТЬ В ПЛЕЙЛСТ</div>
+    <div id="playlist-menu-items"></div>
+</div>
+
+<!-- Track Options Menu (three-dot from player bar) -->
+<div id="track-options-menu" class="context-menu">
+    <div style="padding:6px 12px 4px;font-size:11px;color:var(--text-dim);font-weight:600" id="track-options-header">ОПЦ ТРЕКА</div>
+    <div class="context-menu-divider"></div>
+    <div style="padding:4px 8px;font-size:11px;color:var(--text-dim);font-weight:600">ДОБАВТЬ В ПЛЕЙЛСТ</div>
+    <div id="track-options-playlist-items"></div>
+    <div class="context-menu-divider"></div>
+    <button class="context-menu-item" id="track-options-download">
+        <i data-lucide="download" style="width:14px;height:14px"></i>  
+    </button>
+    <button class="context-menu-item" id="track-options-open-player">
+        <i data-lucide="maximize-2" style="width:14px;height:14px"></i> Открыть плеер
+    </button>
+    <button class="context-menu-item" id="track-options-copy">
+        <i data-lucide="copy" style="width:14px;height:14px"></i> Копировать название
+    </button>
+</div>
+
+<!-- Create Playlist Glassmorphism Modal -->
+<div id="modal-create-playlist" class="modal-overlay" style="display: none;">
+    <div class="glass-modal-card">
+        <div class="glass-modal-header">
+            <h3 class="glass-modal-title">Создать плейлист</h3>
+            <button class="glass-modal-close" id="modal-cp-close"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+        </div>
+        <div class="glass-modal-body">
+            <label class="glass-modal-label">Введите название плейлиста</label>
+            <input type="text" id="modal-cp-input" class="glass-modal-input" placeholder="Название плейлиста..." autocomplete="off">
+        </div>
+        <div class="glass-modal-footer">
+            <button class="filter-btn" id="modal-cp-cancel">Отмена</button>
+            <button class="btn-primary" id="modal-cp-submit" style="padding: 8px 18px; border-radius: 8px; font-weight: 600; cursor: pointer;">Создать</button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Playlist Confirmation Modal -->
+<div id="modal-delete-playlist" class="modal-overlay" style="display:none;">
+    <div class="glass-modal-card" style="max-width:360px; text-align:center;">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:16px; padding:8px 0 4px;">
+            <div style="width:52px; height:52px; border-radius:50%; background:rgba(239,68,68,0.15); border:1.5px solid rgba(239,68,68,0.35); display:flex; align-items:center; justify-content:center;">
+                <i data-lucide="trash-2" style="width:24px;height:24px;color:#ef4444;"></i>
+            </div>
+            <div>
+                <div style="font-size:16px; font-weight:700; color:var(--text-main); margin-bottom:6px;">Удалить плейлист?</div>
+                <div id="modal-dpl-name" style="font-size:13px; color:var(--text-sec); line-height:1.5;">Это действие нельзя отменить.</div>
+            </div>
+        </div>
+        <div class="glass-modal-footer" style="margin-top:8px;">
+            <button class="filter-btn" id="modal-dpl-cancel" style="flex:1;">Отмена</button>
+            <button id="modal-dpl-confirm" style="flex:1; padding:9px 0; border-radius:10px; border:none; background:rgba(239,68,68,0.85); color:#fff; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:background 0.2s;">
+                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                Удалить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Import Playlist Glassmorphism Modal -->
+<div id="modal-import-playlist" class="modal-overlay" style="display: none;">
+    <div class="glass-modal-card" style="max-width: 500px;">
+        <div class="glass-modal-header">
+            <h3 class="glass-modal-title">Импорт плейлиста</h3>
+            <button class="glass-modal-close" id="modal-ip-close"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+        </div>
+        <div class="glass-modal-body" style="display:flex; flex-direction:column; gap:12px;">
+            <div>
+                <label class="glass-modal-label" style="display:block; margin-bottom:6px; font-size:12px; color:var(--text-sec);">Ссылка на плейлист (YouTube, Spotify)</label>
+                <input type="text" id="modal-ip-url" class="glass-modal-input" placeholder="https://..." autocomplete="off">
+            </div>
+            <div>
+                <label class="glass-modal-label" style="display:block; margin-bottom:6px; font-size:12px; color:var(--text-sec);">Название плейлиста (опционально)</label>
+                <input type="text" id="modal-ip-name" class="glass-modal-input" placeholder="Мой импортированный плейлист..." autocomplete="off">
+            </div>
+            <div id="modal-ip-status" style="font-size:13px; color:var(--primary); display:none; align-items:center; gap:8px;">
+                <div class="spinner" style="width:14px; height:14px;"></div>
+                <span id="modal-ip-status-text">Импортирую треки...</span>
+            </div>
+        </div>
+        <div class="glass-modal-footer">
+            <button class="filter-btn" id="modal-ip-cancel">Отмена</button>
+            <button class="btn-primary" id="modal-ip-submit">Импортировать</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Track Tags Modal -->
+<div id="modal-edit-tags" class="modal-overlay" style="display: none; z-index: 9999;">
+    <div class="glass-modal-card" style="max-width: 520px;">
+        <div class="glass-modal-header">
+            <h3 class="glass-modal-title">Редактор тегов и метаданных</h3>
+            <button class="glass-modal-close" id="modal-et-close"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+        </div>
+        <div class="glass-modal-body" style="display:flex; gap:16px;">
+            <!-- Cover Art Column -->
+            <div style="display:flex; flex-direction:column; align-items:center; gap:10px; width:130px; flex-shrink:0;">
+                <div style="position:relative; width:120px; height:120px; border-radius:10px; overflow:hidden; border:1px solid rgba(255,255,255,0.15); background:rgba(0,0,0,0.3);">
+                    <img id="modal-et-cover-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%2318181b'/%3E%3Cpath d='M40 60V30l25-5v35' stroke='%2371717a' stroke-width='4' fill='none'/%3E%3Ccircle cx='35' cy='60' r='8' fill='%2371717a'/%3E%3Ccircle cx='60' cy='55' r='8' fill='%2371717a'/%3E%3C/svg%3E" alt="" style="width:100%; height:100%; object-fit:cover;" onerror="this.onerror=null;this.style.display='none';">
+                </div>
+                <button class="filter-btn" id="modal-et-btn-cover" style="width:100%; font-size:11px; padding:6px 4px; display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer;">
+                    <i data-lucide="image" style="width:12px;height:12px"></i> Обложка
+                </button>
+            </div>
+
+            <!-- Inputs Column -->
+            <div style="display:flex; flex-direction:column; gap:10px; flex:1;">
+                <input type="hidden" id="modal-et-track-id">
+                <input type="hidden" id="modal-et-cover-path">
+                <div>
+                    <label class="glass-modal-label" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Название трека</label>
+                    <input type="text" id="modal-et-title" class="glass-modal-input" placeholder="Название..." autocomplete="off">
+                </div>
+                <div>
+                    <label class="glass-modal-label" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Исполнитель / Артист</label>
+                    <input type="text" id="modal-et-artist" class="glass-modal-input" placeholder="Исполнитель..." autocomplete="off">
+                </div>
+                <div>
+                    <label class="glass-modal-label" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Альбом</label>
+                    <input type="text" id="modal-et-album" class="glass-modal-input" placeholder="Альбом..." autocomplete="off">
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <div style="flex:2;">
+                        <label class="glass-modal-label" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Жанр</label>
+                        <input type="text" id="modal-et-genre" class="glass-modal-input" placeholder="Жанр..." autocomplete="off">
+                    </div>
+                    <div style="flex:1;">
+                        <label class="glass-modal-label" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Год</label>
+                        <input type="number" id="modal-et-year" class="glass-modal-input" placeholder="2026" min="1900" max="2100">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="glass-modal-footer" style="margin-top:16px;">
+            <button class="filter-btn" id="modal-et-cancel">Отмена</button>
+            <button class="btn-primary" id="modal-et-submit" style="padding:8px 18px; border-radius:8px; font-weight:600; cursor:pointer;">Сохранить теги</button>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- ============================================== -->
+<!-- ONBOARDING WIZARD -->
+<!-- ============================================== -->
+<div id="onboarding-wizard" class="modal-overlay hidden" style="z-index: 10000; backdrop-filter: blur(12px); background: rgba(0,0,0,0.65);">
+    <div class="modal-content glass-panel" style="width: 700px; max-width: 90%; min-height: 500px; display: flex; flex-direction: column; position: relative;">
+        <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <div style="font-size: 24px; font-weight: 700; color: #fff;">Добро пожаловать в AURA Music</div>
+                <div style="font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 5px;">Настройте приложение под себя перед началом работы</div>
+            </div>
+            <button id="ob-btn-close" class="icon-btn" title="Закрыть" style="background: rgba(255,255,255,0.08); border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #fff;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+
+        <div class="onboarding-body" style="flex: 1; position: relative;">
+            
+            <!-- Step 1: Visuals & Presets -->
+            <div class="onboarding-step active" data-step="1">
+                <div style="font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 15px;">Шаг 1: Оформление и Производительность</div>
+                <div class="setting-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
+                    <div class="setting-label">Выберите пресет оптимизации:</div>
+                    <div style="display: flex; gap: 15px;">
+                        <div class="preset-card active" data-preset="beauty" style="flex: 1; padding: 20px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 2px solid var(--primary); cursor: pointer; text-align: center;">
+                            <i data-lucide="sparkles" style="color: var(--primary); margin-bottom: 10px;"></i>
+                            <div style="font-weight: 600; color: #fff;">Максимальная красота</div>
+                            <div style="font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 5px;">Частицы, блюр, неон (для мощных ПК)</div>
+                        </div>
+                        <div class="preset-card" data-preset="performance" style="flex: 1; padding: 20px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); cursor: pointer; text-align: center;">
+                            <i data-lucide="zap" style="color: #fff; margin-bottom: 10px;"></i>
+                            <div style="font-weight: 600; color: #fff;">Высокая скорость</div>
+                            <div style="font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 5px;">Минимум эффектов (для слабых ПК)</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="setting-row" style="margin-top: 25px;">
+                    <div class="setting-info">
+                        <div class="setting-label">Цветовой акцент</div>
+                        <div class="setting-sublabel">Выберите основной цвет интерфейса</div>
+                    </div>
+                    <input type="color" id="ob-accent-color" value="#a855f7" class="color-picker" style="width: 40px; height: 40px; border-radius: 8px; border: none; cursor: pointer; background: transparent;">
+                </div>
+            </div>
+
+            <!-- Step 2: Audio -->
+            <div class="onboarding-step hidden" data-step="2">
+                <div style="font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 15px;">Шаг 2: Настройка звука</div>
+                
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-label">Аудиоустройство по умолчанию</div>
+                        <div class="setting-sublabel">Через что будет играть музыка</div>
+                    </div>
+                    <select id="ob-audio-device" class="glass-select">
+                        <option value="default">Системное по умолчанию</option>
+                        <!-- Add options from backend later if supported -->
+                    </select>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-label">Плавный переход (Crossfade)</div>
+                        <div class="setting-sublabel">Микширование треков без пауз</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="ob-crossfade">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-label">Нормализация громкости</div>
+                        <div class="setting-sublabel">Автоматически выравнивать громкость всех треков</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="ob-volume-norm">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Step 3: Library -->
+            <div class="onboarding-step hidden" data-step="3">
+                <div style="font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 15px;">Шаг 3: Медиатека</div>
+                <div class="setting-info" style="margin-bottom: 15px;">
+                    <div class="setting-label">Импортировать плейлист</div>
+                    <div class="setting-sublabel">Вставьте ссылку на плейлист (Spotify, Яндекс, YouTube), чтобы сразу загрузить любимую музыку.</div>
+                </div>
+                <div style="margin: 0; width: 100%; height: 48px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; display: flex; align-items: center; padding: 0 14px; gap: 12px;">
+                    <div style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <i data-lucide="link" style="width: 18px; height: 18px; color: rgba(255,255,255,0.6);"></i>
+                    </div>
+                    <input type="text" id="ob-playlist-url" placeholder="https://music.youtube.com/playlist?list=..." style="flex: 1; width: 100%; min-width: 0; background: transparent; border: none; outline: none; color: #ffffff; font-size: 14px; font-weight: 400; padding: 0;">
+                </div>
+                <div style="margin-top: 10px; font-size: 12px; color: rgba(255,255,255,0.5);">Вы также сможете сделать это позже во вкладке «Медиатека».</div>
+            </div>
+
+            <!-- Step 4: System -->
+            <div class="onboarding-step hidden" data-step="4">
+                <div style="font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 15px;">Шаг 4: Система</div>
+                
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-label">Автозапуск</div>
+                        <div class="setting-sublabel">Запускать AURA Music при старте системы</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="ob-autostart">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-label">Сворачивать в трей</div>
+                        <div class="setting-sublabel">Не закрывать плеер при нажатии на крестик</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="ob-tray" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="modal-footer" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+            <button id="ob-btn-skip" class="btn btn-secondary" style="background: transparent; color: rgba(255,255,255,0.5);">Пропустить</button>
+            <div style="display: flex; gap: 10px;">
+                <button id="ob-btn-back" class="btn btn-secondary hidden">Назад</button>
+                <button id="ob-btn-next" class="btn btn-primary">Далее</button>
+                <button id="ob-btn-finish" class="btn btn-primary hidden">Завершить</button>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- QUEUE DRAWER -->
+<div id="queue-drawer">
+    <div id="queue-drawer-header">
+        <h2>Up Next</h2>
+        <button id="queue-drawer-close" class="icon-btn" style="color: white; border:none; background:transparent;"><i data-lucide="x"></i></button>
+    </div>
+    <div id="queue-drawer-content"></div>
+</div>
+
+<script src="js/boot.js?v=20260821"></script>
+<script type="module" src="js/main.js?v=20260821"></script>
+</body>
+</html>
+

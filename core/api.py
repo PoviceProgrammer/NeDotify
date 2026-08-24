@@ -722,6 +722,15 @@ class AppApi:
         except Exception:
             logger.debug("report_state: suppressed exception", exc_info=True)
 
+    def get_proxy_info(self):
+        """Return proxy port and auth token for local asset requests."""
+        if hasattr(self._core, 'proxy') and self._core.proxy:
+            return {
+                "port": getattr(self._core.proxy, "port", 0),
+                "token": getattr(self._core.proxy, "token", "")
+            }
+        return {"port": 0, "token": ""}
+
     def report_position(self, pos_ms: int, dur_ms: int = 0, duration_ms: int = 0):
         """Report position update."""
         duration = dur_ms or duration_ms
@@ -2112,8 +2121,17 @@ class AppApi:
     def create_local_playlist(self, name: str, tracks: list = None):
         """Create a playlist from supplied tracks or the current local library."""
         pid = self.create_playlist(name)
-        for track in (tracks if tracks is not None else self._core.db.get_all_tracks(source="local")):
-            self.add_to_playlist(pid, track)
+        track_list = tracks if tracks is not None else self._core.db.get_all_tracks(source="local")
+        track_ids = []
+        for track in track_list:
+            t_id = track.get("id") if isinstance(track, dict) else None
+            if not t_id and isinstance(track, dict):
+                t_id = self._core.db.ensure_track_exists(track)
+            if t_id:
+                track_ids.append(t_id)
+        if track_ids:
+            self._core.db.add_tracks_to_playlist(pid, track_ids)
+        self._emit("playlists_updated", {"playlist_id": pid})
         return pid
 
     def open_local_file(self):

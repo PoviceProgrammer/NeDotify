@@ -138,8 +138,9 @@ export function getCoverUrl(track) {
             return './covers/' + path.substring(idx + 15);
         }
         const idxWeb = path.indexOf('ui/web/covers/');
-        if (idxWeb !== -1) {
-            return './covers/' + path.substring(idxWeb + 14);
+        if (window.PROXY_PORT) {
+            const tokenQuery = window.PROXY_TOKEN ? `&auth_token=${encodeURIComponent(window.PROXY_TOKEN)}` : '';
+            return `http://127.0.0.1:${window.PROXY_PORT}/api/cover?path=${encodeURIComponent(track.cover_path)}${tokenQuery}`;
         }
         return 'file:///' + path;
     }

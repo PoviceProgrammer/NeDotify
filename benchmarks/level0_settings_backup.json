@@ -1,0 +1,13 @@
+{
+  "theme.transparency_level": "10",
+  "theme.glass_blur": "27",
+  "theme.bg_blur": "18",
+  "optimization.blur_quality": "hq",
+  "optimization.glow_quality": "full",
+  "ui.particles_enabled": "0",
+  "app.particles_enabled": "true",
+  "particles_enabled": "true",
+  "efficiency.unfocus_enabled": "false",
+  "efficiency.unfocus_blur_reduction": "false",
+  "efficiency.unfocus_disable_animations": "false"
+}

@@ -16,6 +16,7 @@ class SessionManager:
         "source",
         "source_id",
         "cover_url",
+        "file_path",
     )
 
     def __init__(self, settings: Any) -> None:
@@ -25,12 +26,15 @@ class SessionManager:
     def _slim_track(cls, track: Any) -> Any:
         """Reduce a queue entry to the persisted fields.
 
-        file_path is deliberately not persisted: restore_session nulls it for
-        cloud sources anyway, and it is the bulkiest field in the row.
+        file_path is preserved for local tracks (source == 'local') so local playback resumes cleanly.
         """
         if not isinstance(track, dict):
             return track
-        return {k: track.get(k) for k in cls.PERSISTED_TRACK_FIELDS if k in track}
+        return {
+            k: track.get(k)
+            for k in cls.PERSISTED_TRACK_FIELDS
+            if k in track and (k != "file_path" or track.get("source") == "local")
+        }
 
     def save_session(
         self,

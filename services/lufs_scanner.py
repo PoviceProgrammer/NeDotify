@@ -8,7 +8,7 @@ import os
 import logging
 import threading
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class LufsScannerService:
         self._core = app_core
         self._running = False
         self._thread = None
-        self._pool = ProcessPoolExecutor(max_workers=max(1, os.cpu_count() // 2))
+        self._pool = ThreadPoolExecutor(max_workers=max(1, (os.cpu_count() or 4) // 2), thread_name_prefix="LufsScanner")
 
     def start(self):
         if self._running:
@@ -51,7 +51,7 @@ class LufsScannerService:
     def stop(self):
         self._running = False
         if self._pool:
-            self._pool.shutdown(wait=False)
+            self._pool.shutdown(wait=False, cancel_futures=True)
 
     def _scan_loop(self):
         time.sleep(10)

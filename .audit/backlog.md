@@ -8,12 +8,6 @@
 ## Active Backlog Items
 
 ### CRITICAL
-- **[C-1]** `services/zapret_service.py:170-178 + wmic_csv_column_mismatch_and_swallowed_value_error` | Severity: `CRITICAL` | Status: `NEW`
-  - Mechanism: WMIC CSV formatting outputs `Node,CommandLine,ProcessId`. Splitting on the first two commas fails when arguments contain commas (`--wf-tcp=80,443`), raising `ValueError` in `int(parts[1])` which is swallowed, breaking elevated PID discovery.
-- **[C-2]** `services/zapret_service.py:205, 668-678 + standard_user_cannot_kill_elevated_winws` | Severity: `CRITICAL` | Status: `NEW`
-  - Mechanism: Standard non-elevated process cannot terminate elevated `winws.exe` (`taskkill` returns Access is denied). `stop()` deletes `run.pid`, leaving permanent orphan elevated winws locking WinDivert.
-- **[C-3 / SEC-1 / Z-5]** `services/zapret_service.py:597-610 + elevated_powershell_command_injection` | Severity: `CRITICAL` | Status: `NEW`
-  - Mechanism: Unescaped `raw_args` formatted directly into elevated PowerShell `-Command` string via `ShellExecuteW('runas', ...)`. Malicious arguments can execute arbitrary commands as Administrator.
 - **[C-4 / P-1]** `services/soundcloud_service.py:17-42 + ttl_cache_ordereddict_multithread_race` | Severity: `CRITICAL` | Status: `NEW`
   - Mechanism: `_TTLCache` uses unsynchronized `collections.OrderedDict` accessed concurrently across 10 thread pool workers, throwing `RuntimeError: OrderedDict mutated during iteration` and `KeyError`.
 - **[C-5 / P-2]** `services/soundcloud_service.py:268-270, 460, 560-561 + unclosed_youtube_service_thread_pool_leak` | Severity: `CRITICAL` | Status: `NEW`
@@ -86,10 +80,6 @@
   - Mechanism: Dead rate-limiting timestamp field with no debouncing or rate-limiting enforcement logic.
 - **[RPC-4]** `core/api.py:858 + stop_playback_does_not_clear_presence` | Severity: `MAJOR` | Status: `STILL`
   - Mechanism: `stop_track()` is a no-op backend stub; stopping playback leaves Rich Presence active indefinitely.
-- **[Z-3]** `services/zapret_service.py:134-160 + stale_pid_reuse_terminates_unrelated_apps` | Severity: `MAJOR` | Status: `NEW`
-  - Mechanism: `_pid_alive` and `_kill_pid` do not check executable name, killing unrelated processes on PID collision.
-- **[Z-4]** `services/zapret_service.py:182-195 + cim_commandline_access_restriction_elevation` | Severity: `MAJOR` | Status: `NEW`
-  - Mechanism: `Win32_Process.CommandLine` is empty across integrity boundaries for standard users.
 - **[Z-6]** `main.py:186-211 + stale_lock_pid_reuse_prevents_startup` | Severity: `MAJOR` | Status: `NEW`
   - Mechanism: Stale `nedotify_instance.lock` causes instant process exit without verifying image name.
 
@@ -117,9 +107,7 @@
 - **[RPC-7]** `core/services/discord_rpc.py:103 + discord_ipc_string_length_underflow` | Severity: `MINOR` | Status: `STILL`
 - **[RPC-8]** `core/services/discord_rpc.py:27 + thread_safety_partial_lock` | Severity: `MINOR` | Status: `STILL`
 - **[RPC-9]** `core/services/discord_rpc.py:108 + stale_progress_timestamps_on_replay` | Severity: `MINOR` | Status: `STILL`
-- **[Z-7]** `services/zapret_service.py:649 + false_uac_declined_error_message` | Severity: `MINOR` | Status: `NEW`
-- **[Z-8]** `services/zapret_service.py:432 + concurrent_update_and_start_race` | Severity: `MINOR` | Status: `NEW`
-- **[Z-9]** `services/zapret_service.py:58 + dns_blocking_in_check_internet` | Severity: `MINOR` | Status: `NEW`
+- **[BUILD-1]** `build_nuitka.bat:34 + non_existent_icon_path` | Severity: `MINOR` | Status: `STILL`
 - **[F-9]** `ui/web_new/js/particles.js:129 + particles_toggle_listener_leak` | Severity: `MINOR` | Status: `NEW`
 - **[F-10]** `ui/web_new/js/pages.js:88 + title_bar_logo_erased_on_nav` | Severity: `MINOR` | Status: `NEW`
 - **[F-11]** `ui/web_new/js/events.js:238 + duplicate_unreachable_switch_cases` | Severity: `MINOR` | Status: `NEW`
@@ -136,6 +124,15 @@
 - **[CRIT-1]** `core/settings.py:22` — Win32 GeoName crash (FIXED in `05cfd9e`)
 - **[B-5]** `core/proxy.py:217` — SSRF TOCTOU and redirect bypass (FIXED in `05cfd9e`)
 - **[Z-1 (legacy)]** `services/zapret_service.py:162` — Win11 elevated PID discovery (FIXED in `b4f02bc`)
+- **[C-1]** `services/zapret_service.py` — WMIC CSV column mismatch / swallowed ValueError (FIXED: `_scan_pids_with` now parses WMIC CSV via `csv.DictReader` and logs instead of swallowing)
+- **[C-2]** `services/zapret_service.py` — standard user cannot kill elevated winws / pidfile deleted on failure (FIXED: `_kill_pid` elevates taskkill via `ShellExecuteW('runas')`; `stop()` preserves pidfile while any target PID stays alive)
+- **[C-3 / SEC-1 / Z-5]** `services/zapret_service.py` — elevated PowerShell command injection (FIXED: args tokenized by `sanitize_zapret_args` grammar, re-joined with `subprocess.list2cmdline`, launched via `cmd.exe /c` — no PowerShell, no raw interpolation)
+- **[Z-3]** `services/zapret_service.py` — stale PID reuse terminates unrelated apps (FIXED: `_kill_pid` verifies process image is winws before any taskkill; `_is_our_winws_process` gates adoption)
+- **[Z-4]** `services/zapret_service.py` — CIM CommandLine empty across integrity boundary (FIXED: `_launch_elevated` discovery falls back to `_scan_all_winws_pids` + exe-path ownership check)
+- **[Z-7]** `services/zapret_service.py` — false "UAC declined" message (FIXED: crash analysis runs on stderr tail after elevated failure; UAC-cancel reported only for ShellExecuteW ret==5)
+- **[Z-8]** `services/zapret_service.py` — concurrent update/start race (FIXED: `_update_lock` serializes `download_binaries`/`update_zapret`; same-version forced re-download skipped when binary present; extraction validated before version.json bump; `start()` restarts winws when strategy args change)
+- **[Z-9]** `services/zapret_service.py` — DNS blocking in check_internet (FIXED: probe list includes raw IPs 77.88.8.8/8.8.8.8; sockets closed on failure)
+- **[Z-10]** `services/zapret_service.py` — OEM/CP866 UnicodeDecodeError kills subprocess reader threads on Russian Windows, silently disabling all tasklist/wmic/PowerShell PID scans (FIXED: all subprocess calls go through `_check_output_text()` with `errors="replace"` decoding)
 - **[Z-2 (legacy)]** `core/app.py:130` — Zapret premature autostart in `__init__` (FIXED in `0ac7974`)
 - **[S-STARTUP]** `main.py` / `ui/web_new/` — Startup hang & single instance (FIXED in `0ac7974` / `7bf8872`)
 - **[D-1 / D-3]** `.gitignore` — Asset and test tracking (FIXED in `a2b0257`)

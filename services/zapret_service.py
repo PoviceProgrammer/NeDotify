@@ -12,8 +12,11 @@ Phase 2 reliability contract:
 - Z-5: process liveness via saved PID (OpenProcess); status is cached (2.5s TTL)
         and refreshed in background, so get_status() never blocks the UI.
 - Z-7/8: the state lock is only held around process state transitions;
-        download/update work outside the lock; autoupdate defaults to OFF and,
-        when enabled, a running winws is never restarted (update applies on next launch).
+        download/update work outside the lock but is serialized by a dedicated
+        _update_lock (no concurrent downloads/updates of the same binaries);
+        autoupdate defaults to OFF and, when enabled, a running winws is never
+        restarted (update applies on next launch). start() on an already-running
+        winws with different arguments restarts it with the new strategy.
 """
 
 import csv
@@ -98,17 +101,41 @@ def validate_zapret_binary(path: str) -> bool:
 INTERNET_CHECK_HOSTS = ["ya.ru", "gosuslugi.ru", "77.88.8.8", "8.8.8.8"]
 
 
+def _check_output_text(cmd, timeout: float, shell: bool = False) -> str:
+    """subprocess.check_output that never dies on console codepages.
+
+    Windows console tools (tasklist / wmic / powershell) emit OEM codepage
+    output (CP866 on Russian systems: session name «Консоль», Cyrillic exe
+    paths). With text=True the strict UTF-8 reader thread crashes and
+    check_output silently returns nothing, disabling every PID scan below.
+    All match targets in this module are ASCII (winws.exe, PIDs, validated
+    --args), so a lenient replace-decode is sufficient and locale-proof.
+    """
+    try:
+        out = subprocess.check_output(cmd, shell=shell, stderr=subprocess.DEVNULL, timeout=timeout)
+        return out.decode("utf-8", errors="replace")
+    except Exception as e:
+        logger.debug("subprocess scan failed (%r): %s", cmd, e)
+        return ""
+
+
 def check_internet(timeout: float = 1.5) -> bool:
     """Fast check for active internet connection without blocking UI."""
     for host in INTERNET_CHECK_HOSTS:
+        sock = None
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(timeout)
             sock.connect((host, 443))
-            sock.close()
             return True
         except Exception:
             continue
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
     return False
 
 
@@ -118,6 +145,10 @@ class ZapretService:
         self.process = None
         self._log_handle = None
         self._lock = threading.RLock()
+        # Z-8: serializes download/update work (network fetch + binary extraction)
+        # so a background auto-update can never race start()'s auto-download or a
+        # second concurrent update writing the same winws.exe files.
+        self._update_lock = threading.Lock()
         self._last_args = ""
 
         self.app_dir = os.path.join(os.path.expanduser("~"), ".nedotify", "zapret")
@@ -252,11 +283,11 @@ class ZapretService:
                 logger.debug("_is_winws_process ctypes check failed for PID %s", pid, exc_info=True)
 
             # Fallback check: tasklist CSV query parsed with csv.reader
-            try:
-                out = subprocess.check_output(
-                    f'tasklist /FI "PID eq {pid}" /FO CSV /NH',
-                    shell=True, text=True, stderr=subprocess.DEVNULL, timeout=2.5
-                )
+            out = _check_output_text(
+                f'tasklist /FI "PID eq {pid}" /FO CSV /NH',
+                timeout=2.5, shell=True
+            )
+            if out:
                 for line in out.splitlines():
                     line = line.strip()
                     if not line:
@@ -266,8 +297,6 @@ class ZapretService:
                         if row and len(row) >= 1:
                             img_name = row[0].strip().lower()
                             return img_name in _ALLOWED_BINARY_NAMES
-            except Exception:
-                pass
             return False
         else:
             # POSIX check
@@ -358,46 +387,37 @@ class ZapretService:
         if sys.platform != "win32":
             return []
         pids: List[int] = []
-        try:
-            out = subprocess.check_output(
-                'tasklist /FO CSV /NH',
-                shell=True, text=True, stderr=subprocess.DEVNULL, timeout=3.0
+        out = _check_output_text('tasklist /FO CSV /NH', timeout=3.0, shell=True)
+        for line in out.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            reader = csv.reader([line])
+            for row in reader:
+                if row and len(row) >= 2:
+                    img_name = row[0].strip().lower()
+                    if img_name in _ALLOWED_BINARY_NAMES:
+                        try:
+                            pid = int(row[1].strip())
+                            if pid > 0 and self._pid_alive(pid) and self._is_our_winws_process(pid):
+                                if pid not in pids:
+                                    pids.append(pid)
+                        except ValueError:
+                            continue
+
+        if not pids:
+            ps_cmd = 'Get-Process -Name winws,zapret -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id'
+            out = _check_output_text(
+                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                timeout=4.0
             )
             for line in out.splitlines():
                 line = line.strip()
-                if not line:
-                    continue
-                reader = csv.reader([line])
-                for row in reader:
-                    if row and len(row) >= 2:
-                        img_name = row[0].strip().lower()
-                        if img_name in _ALLOWED_BINARY_NAMES:
-                            try:
-                                pid = int(row[1].strip())
-                                if pid > 0 and self._pid_alive(pid) and self._is_our_winws_process(pid):
-                                    if pid not in pids:
-                                        pids.append(pid)
-                            except ValueError:
-                                continue
-        except Exception as e:
-            logger.debug("tasklist scan failed: %s", e)
-
-        if not pids:
-            try:
-                ps_cmd = 'Get-Process -Name winws,zapret -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id'
-                out = subprocess.check_output(
-                    ["powershell", "-NoProfile", "-Command", ps_cmd],
-                    text=True, stderr=subprocess.DEVNULL, timeout=4.0
-                )
-                for line in out.splitlines():
-                    line = line.strip()
-                    if line.isdigit():
-                        pid = int(line)
-                        if self._pid_alive(pid) and self._is_our_winws_process(pid):
-                            if pid not in pids:
-                                pids.append(pid)
-            except Exception as e:
-                logger.debug("PowerShell Get-Process scan failed: %s", e)
+                if line.isdigit():
+                    pid = int(line)
+                    if self._pid_alive(pid) and self._is_our_winws_process(pid):
+                        if pid not in pids:
+                            pids.append(pid)
 
         return pids
 
@@ -413,64 +433,60 @@ class ZapretService:
             return pids
 
         # Attempt 1: WMIC with CSV format parsed via csv.DictReader
-        try:
-            cmd = 'wmic process where "name=\'winws.exe\'" get ProcessId,CommandLine /FORMAT:CSV'
-            out = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL, timeout=4.0)
-            clean_lines = [line.strip() for line in out.splitlines() if line.strip()]
-            if clean_lines:
-                reader = csv.DictReader(clean_lines)
-                if reader.fieldnames:
-                    pid_field = None
-                    cmd_field = None
-                    for f in reader.fieldnames:
-                        if not f:
-                            continue
-                        norm = f.strip().lower()
-                        if norm == "processid":
-                            pid_field = f
-                        elif norm == "commandline":
-                            cmd_field = f
-                    
-                    if pid_field:
-                        for row in reader:
-                            pid_val = row.get(pid_field)
-                            if not pid_val:
-                                continue
-                            try:
-                                p = int(str(pid_val).strip())
-                            except (ValueError, TypeError):
-                                continue
+        out = _check_output_text(
+            'wmic process where "name=\'winws.exe\'" get ProcessId,CommandLine /FORMAT:CSV',
+            timeout=4.0, shell=True
+        )
+        clean_lines = [line.strip() for line in out.splitlines() if line.strip()]
+        if clean_lines:
+            reader = csv.DictReader(clean_lines)
+            if reader.fieldnames:
+                pid_field = None
+                cmd_field = None
+                for f in reader.fieldnames:
+                    if not f:
+                        continue
+                    norm = f.strip().lower()
+                    if norm == "processid":
+                        pid_field = f
+                    elif norm == "commandline":
+                        cmd_field = f
 
-                            cmdline = str(row.get(cmd_field, "") or "").strip()
-                            if cmdline and args_signature in cmdline:
-                                if self._pid_alive(p) and self._is_winws_process(p):
-                                    if p not in pids:
-                                        pids.append(p)
-        except Exception as e:
-            logger.debug("wmic scan failed: %s", e)
+                if pid_field:
+                    for row in reader:
+                        pid_val = row.get(pid_field)
+                        if not pid_val:
+                            continue
+                        try:
+                            p = int(str(pid_val).strip())
+                        except (ValueError, TypeError):
+                            continue
+
+                        cmdline = str(row.get(cmd_field, "") or "").strip()
+                        if cmdline and args_signature in cmdline:
+                            if self._pid_alive(p) and self._is_winws_process(p):
+                                if p not in pids:
+                                    pids.append(p)
 
         # Attempt 2: PowerShell CIM query fallback
         if not pids:
-            try:
-                ps_cmd = 'Get-CimInstance Win32_Process -Filter "Name=\'winws.exe\'" | ForEach-Object { "$($_.ProcessId)|$($_.CommandLine)" }'
-                out = subprocess.check_output(
-                    ["powershell", "-NoProfile", "-Command", ps_cmd],
-                    text=True, stderr=subprocess.DEVNULL, timeout=6.0
-                )
-                for line in out.splitlines():
-                    if "|" in line:
-                        pid_str, cmdline = line.split("|", 1)
-                        try:
-                            p = int(pid_str.strip())
-                            cmdline = cmdline.strip()
-                            if cmdline and args_signature in cmdline:
-                                if self._pid_alive(p) and self._is_winws_process(p):
-                                    if p not in pids:
-                                        pids.append(p)
-                        except (ValueError, TypeError):
-                            continue
-            except Exception as e2:
-                logger.debug("PowerShell CIM scan failed: %s", e2)
+            ps_cmd = 'Get-CimInstance Win32_Process -Filter "Name=\'winws.exe\'" | ForEach-Object { "$($_.ProcessId)|$($_.CommandLine)" }'
+            out = _check_output_text(
+                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                timeout=6.0
+            )
+            for line in out.splitlines():
+                if "|" in line:
+                    pid_str, cmdline = line.split("|", 1)
+                    try:
+                        p = int(pid_str.strip())
+                        cmdline = cmdline.strip()
+                        if cmdline and args_signature in cmdline:
+                            if self._pid_alive(p) and self._is_winws_process(p):
+                                if p not in pids:
+                                    pids.append(p)
+                    except (ValueError, TypeError):
+                        continue
 
         return pids
 
@@ -593,6 +609,13 @@ class ZapretService:
     def _open_log_handle(self):
         self._close_log_handle()
         try:
+            # Repeated launches append forever; rotate once past 1 MiB so the
+            # log stays bounded while keeping the previous chunk as *.old.
+            try:
+                if os.path.exists(self.log_file) and os.path.getsize(self.log_file) > 1024 * 1024:
+                    os.replace(self.log_file, self.log_file + ".old")
+            except OSError:
+                logger.debug("zapret.log rotation failed", exc_info=True)
             self._log_handle = open(self.log_file, "ab")
         except Exception:
             self._log_handle = None
@@ -673,35 +696,42 @@ class ZapretService:
 
     def download_binaries(self) -> Tuple[bool, str]:
         """Download and extract winws/zapret binary bundle from official bol-van/zapret release."""
-        try:
-            logger.info("Downloading Zapret bundle from GitHub...")
-            zip_bytes = self._download_zip(ZAPRET_ZIP_URL, timeout=30.0)
+        with self._update_lock:
+            try:
+                logger.info("Downloading Zapret bundle from GitHub...")
+                zip_bytes = self._download_zip(ZAPRET_ZIP_URL, timeout=30.0)
 
-            if not _verify_zip_sha256(zip_bytes):
-                msg = f"Проверка SHA-256 не пройдена: архив {ZAPRET_VERSION} повреждён или подменён. Установка отменена."
-                logger.error(msg)
-                return False, msg
+                if not _verify_zip_sha256(zip_bytes):
+                    msg = f"Проверка SHA-256 не пройдена: архив {ZAPRET_VERSION} повреждён или подменён. Установка отменена."
+                    logger.error(msg)
+                    return False, msg
 
-            self._extract_zip(zip_bytes)
-            self._write_version_info(ZAPRET_VERSION)
-            logger.info("Zapret binaries successfully extracted to %s", self.app_dir)
-            return True, "Файлы Zapret успешно загружены!"
-        except Exception as e:
-            logger.error("Failed to download Zapret: %s", e)
-            return False, f"Ошибка загрузки Zapret: {e}"
+                self._extract_zip(zip_bytes)
+                if not self.find_binary():
+                    # Archive layout changed or nothing usable inside: never bump
+                    # version.json in this case, otherwise the app would believe
+                    # it is "installed" with no winws.exe on disk.
+                    msg = f"Архив {ZAPRET_VERSION} не содержит winws.exe — установка отменена."
+                    logger.error(msg)
+                    return False, msg
+                self._write_version_info(ZAPRET_VERSION)
+                logger.info("Zapret binaries successfully extracted to %s", self.app_dir)
+                return True, "Файлы Zapret успешно загружены!"
+            except Exception as e:
+                logger.error("Failed to download Zapret: %s", e)
+                return False, f"Ошибка загрузки Zapret: {e}"
 
     def get_local_version(self) -> str:
-        """Get local installed Zapret version tag."""
+        """Get local installed Zapret version tag ('' when nothing is installed)."""
         import json
         version_file = os.path.join(self.app_dir, "version.json")
         try:
             if os.path.exists(version_file):
                 with open(version_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    return data.get("version", ZAPRET_VERSION)
+                    return json.load(f).get("version", "")
         except Exception:
             logger.debug("get_local_version: suppressed exception", exc_info=True)
-        return ZAPRET_VERSION
+        return ""
 
     def get_latest_release_info(self) -> Tuple[str | None, str | None]:
         """Fetch latest release tag and zip download URL from GitHub."""
@@ -733,50 +763,63 @@ class ZapretService:
         }
 
     def update_zapret(self, force: bool = False) -> Tuple[bool, str]:
-        """Update Zapret to the latest GitHub release. Runs outside the state lock (Z-7)."""
-        latest_tag, zip_url = self.get_latest_release_info()
-        if not latest_tag or not zip_url:
-            return False, "Не удалось получить информацию о последней версии Zapret с GitHub"
+        """Update Zapret to the latest GitHub release. Serialized by _update_lock
+        (Z-7/8): downloads and extraction happen outside the state lock, but never
+        concurrently with another update or auto-download."""
+        with self._update_lock:
+            latest_tag, zip_url = self.get_latest_release_info()
+            if not latest_tag or not zip_url:
+                return False, "Не удалось получить информацию о последней версии Zapret с GitHub"
 
-        current_ver = self.get_local_version()
-        if not force and latest_tag == current_ver:
-            return True, f"У вас уже установлена последняя версия Zapret ({current_ver})"
+            current_ver = self.get_local_version()
+            # Same tag already on disk with a usable binary — nothing to fetch,
+            # even with force=True (a forced re-download of the identical zip
+            # only wastes bandwidth and can race a concurrent start()).
+            if latest_tag == current_ver and self.find_binary():
+                return True, f"У вас уже установлена последняя версия Zapret ({current_ver})"
 
-        try:
-            logger.info("Downloading Zapret %s from %s...", latest_tag, zip_url)
-            zip_bytes = self._download_zip(zip_url, timeout=40.0)
+            try:
+                logger.info("Downloading Zapret %s from %s...", latest_tag, zip_url)
+                zip_bytes = self._download_zip(zip_url, timeout=40.0)
 
-            # Verify integrity: pinned hash exists only for the bundled release.
-            expected_hash = ZAPRET_ZIP_SHA256 if zip_url == ZAPRET_ZIP_URL else ""
-            if not _verify_zip_sha256(zip_bytes, expected_hash):
-                msg = f"Проверка SHA-256 не пройдена: архив {latest_tag} повреждён или подменён. Обновление отменено."
-                logger.error(msg)
-                return False, msg
+                # Verify integrity: pinned hash exists only for the bundled release.
+                expected_hash = ZAPRET_ZIP_SHA256 if zip_url == ZAPRET_ZIP_URL else ""
+                if not _verify_zip_sha256(zip_bytes, expected_hash):
+                    msg = f"Проверка SHA-256 не пройдена: архив {latest_tag} повреждён или подменён. Обновление отменено."
+                    logger.error(msg)
+                    return False, msg
 
-            was_running = self.is_running()
-            if was_running:
-                self.stop()
-                time.sleep(1.0)
+                was_running = self.is_running()
+                if was_running:
+                    self.stop()
+                    time.sleep(1.0)
 
-            self._extract_zip(zip_bytes)
-            # Rewriting version.json drops any pending_update flag.
-            self._write_version_info(latest_tag)
-            logger.info("Zapret successfully updated to %s", latest_tag)
+                self._extract_zip(zip_bytes)
+                if not self.find_binary():
+                    # Extraction produced no usable binary (e.g. release layout
+                    # changed): keep the old version.json so the next attempt
+                    # still reports an update instead of a phantom install.
+                    msg = f"Архив {latest_tag} не содержит winws.exe — обновление отменено, предыдущая версия сохранена."
+                    logger.error(msg)
+                    return False, msg
+                # Rewriting version.json drops any pending_update flag.
+                self._write_version_info(latest_tag)
+                logger.info("Zapret successfully updated to %s", latest_tag)
 
-            if was_running:
-                mode = "youtube_discord"
-                custom_args = ""
-                bin_path = None
-                if self.settings:
-                    mode = self.settings.get("zapret", "mode", "youtube_discord")
-                    custom_args = self.settings.get("zapret", "custom_args", "")
-                    bin_path = self.settings.get("zapret", "binary_path", "")
-                self.start(mode=mode, custom_args=custom_args, binary_path=bin_path)
+                if was_running:
+                    mode = "youtube_discord"
+                    custom_args = ""
+                    bin_path = None
+                    if self.settings:
+                        mode = self.settings.get("zapret", "mode", "youtube_discord")
+                        custom_args = self.settings.get("zapret", "custom_args", "")
+                        bin_path = self.settings.get("zapret", "binary_path", "")
+                    self.start(mode=mode, custom_args=custom_args, binary_path=bin_path)
 
-            return True, f"Zapret успешно обновлен до версии {latest_tag}!"
-        except Exception as e:
-            logger.error("Failed to update Zapret: %s", e)
-            return False, f"Ошибка при обновлении Zapret: {e}"
+                return True, f"Zapret успешно обновлен до версии {latest_tag}!"
+            except Exception as e:
+                logger.error("Failed to update Zapret: %s", e)
+                return False, f"Ошибка при обновлении Zapret: {e}"
 
     def auto_update_in_background(self):
         """Z-8: background update check — only when autoupdate is enabled (default OFF).
@@ -827,7 +870,9 @@ class ZapretService:
     # ─── start / stop (Z-2, Z-3; lock only around state transitions) ───
 
     def start(self, mode="youtube_discord", custom_args="", binary_path=None) -> Tuple[bool, str]:
-        """Start Zapret process with specified strategy. Returns (success, status_message)."""
+        """Start Zapret process with specified strategy. Returns (success, status_message).
+        If winws is already running with DIFFERENT arguments (mode switched while
+        active), it is restarted with the new strategy instead of a silent no-op."""
         exe = self.find_binary(binary_path)
         if not exe:
             # Try auto-downloading if missing (network I/O — outside the lock)
@@ -857,7 +902,16 @@ class ZapretService:
 
         with self._lock:
             if self.is_running():
-                return True, "Zapret активен"
+                current_cmd = (self._last_args or self._read_cmd_file()).strip()
+                if current_cmd == raw_args.strip():
+                    return True, "Zapret активен"
+                # Already running with a DIFFERENT strategy (mode switched in the
+                # UI while active) — silently returning "active" would leave the
+                # old winws arguments in place. Restart with the new ones.
+                logger.info("Zapret strategy changed — restarting with new arguments")
+                stopped, stop_msg = self.stop()
+                if not stopped:
+                    return False, f"Не удалось применить новую стратегию: {stop_msg}"
             return self._launch(exe, raw_args)
 
     def _launch(self, exe: str, raw_args: str) -> Tuple[bool, str]:
@@ -1008,6 +1062,12 @@ class ZapretService:
                     self.process.terminate()
                 except Exception:
                     logger.debug("stop: suppressed exception on process.terminate", exc_info=True)
+                # terminate() is asynchronous: reap the child so the pidfile /
+                # taskkill path below does not race a dying process.
+                try:
+                    self.process.wait(timeout=2.0)
+                except Exception:
+                    logger.debug("stop: child did not exit within 2s after terminate", exc_info=True)
                 self.process = None
             self._close_log_handle()
 

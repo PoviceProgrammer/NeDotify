@@ -237,12 +237,18 @@ export function setEq(preamp, bands) {
 
 // Global track retry management (prevents audioA/audioB ping-pong infinite loops)
 let currentTrackRetries = 0;
+let streamRetryTimer = null;
 let lastRetriedTrackId = null;
 const STALL_FALLBACK_MS = 10000;
 
 function handleStreamError(audio, reason) {
     if (audio !== activeAudio || !currentTrack) return;
     disarmStallFallback(audio);
+    
+    if (streamRetryTimer) {
+        clearTimeout(streamRetryTimer);
+        streamRetryTimer = null;
+    }
     
     const trackIdKey = String(currentTrack.id || currentTrack.source_id || currentTrack.title || '');
     if (lastRetriedTrackId !== trackIdKey) {
@@ -254,7 +260,8 @@ function handleStreamError(audio, reason) {
     console.warn(`Audio stream error (${reason}), retry attempt ${currentTrackRetries} for:`, currentTrack.title);
     
     if (currentTrackRetries <= 2) {
-        setTimeout(() => {
+        streamRetryTimer = setTimeout(() => {
+            streamRetryTimer = null;
             if (audio === activeAudio && currentTrack && String(currentTrack.id || currentTrack.source_id || currentTrack.title || '') === trackIdKey) {
                 if (window.pywebview?.api?.play_track) {
                     // Force full re-resolution: drop cached stream/file urls so backend re-resolves
@@ -427,6 +434,11 @@ export function playTrack(track, streamUrl) {
     if (currentFadeInterval) {
         clearInterval(currentFadeInterval);
         currentFadeInterval = null;
+    }
+
+    if (streamRetryTimer) {
+        clearTimeout(streamRetryTimer);
+        streamRetryTimer = null;
     }
 
     const trackIdKey = String(track.id || track.source_id || track.title || '');

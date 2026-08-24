@@ -1,0 +1,297 @@
+/* =============================================
+   NeDotify — Theme System
+   Multi-theme architecture based on background and accent color
+   ============================================= */
+
+:root {
+    /* Global Semantic Tokens */
+    --text-main: #ffffff;
+    --text-sec: rgba(255, 255, 255, 0.7);
+    --text-dim: rgba(255, 255, 255, 0.45);
+    --border: rgba(255, 255, 255, 0.08);
+    --bg-panel: rgba(255, 255, 255, 0.03);
+    --bg-card: rgba(255, 255, 255, 0.03);
+    --bg-hover: rgba(255, 255, 255, 0.08);
+    --bg-active: rgba(255, 255, 255, 0.12);
+
+    --primary: #a855f7;
+    --primary-rgb: 168, 85, 247;
+    --primary-fg: #ffffff;
+    --accent: #a855f7;
+    --accent-glow: rgba(168, 85, 247, 0.25);
+    --ambient-glow: rgba(168, 85, 247, 0.2);
+    
+    --success: #10b981;
+    --error: #ef4444;
+    --warning: #f59e0b;
+    --shadow-color: rgba(0, 0, 0, 0.6);
+}
+
+/* 1. AMOLED */
+:root[data-theme="amoled"] {
+    --bg-main: #000000;
+    --bg-surface: #0a0a0a;
+    --accent: #ffffff;
+    --accent-glow: rgba(255, 255, 255, 0.15);
+    --border-glow: rgba(255, 255, 255, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 255, 255, 255;
+    --primary-fg: #000000;
+}
+
+/* 2. Dark */
+:root[data-theme="dark"], [data-theme="dark"] {
+    --bg-main: #0a0a0f;
+    --bg-surface: #14141d;
+    --accent: #a855f7;
+    --accent-glow: rgba(168, 85, 247, 0.25);
+    --ambient-glow: radial-gradient(circle at 30% 20%, rgba(168, 85, 247, 0.18), transparent 55%),
+                   radial-gradient(circle at 75% 75%, rgba(59, 130, 246, 0.12), transparent 50%),
+                   radial-gradient(circle at 15% 85%, rgba(236, 72, 153, 0.08), transparent 40%);
+    --border-glow: rgba(168, 85, 247, 0.12);
+    --primary: #a855f7;
+    --primary-rgb: 168, 85, 247;
+    --primary-fg: #ffffff;
+    --background: #0a0a0f;
+    --surface: #14141d;
+}
+
+/* 3. Midnight */
+:root[data-theme="midnight"] {
+    --bg-main: #0a0e17;
+    --bg-surface: #101622;
+    --accent: #3b82f6;
+    --accent-glow: rgba(59, 130, 246, 0.15);
+    --border-glow: rgba(59, 130, 246, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 59, 130, 246;
+    --primary-fg: #ffffff;
+}
+
+/* 4. Emerald */
+:root[data-theme="emerald"] {
+    --bg-main: #0b1410;
+    --bg-surface: #111f18;
+    --accent: #10b981;
+    --accent-glow: rgba(16, 185, 129, 0.15);
+    --border-glow: rgba(16, 185, 129, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 16, 185, 129;
+    --primary-fg: #ffffff;
+}
+
+/* 5. Sunset */
+:root[data-theme="sunset"] {
+    --bg-main: #170c0a;
+    --bg-surface: #241310;
+    --accent: #f97316;
+    --accent-glow: rgba(249, 115, 22, 0.15);
+    --border-glow: rgba(249, 115, 22, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 249, 115, 22;
+    --primary-fg: #ffffff;
+}
+
+/* 6. Ocean */
+:root[data-theme="ocean"] {
+    --bg-main: #06141a;
+    --bg-surface: #0a2029;
+    --accent: #06b6d4;
+    --accent-glow: rgba(6, 182, 212, 0.15);
+    --border-glow: rgba(6, 182, 212, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 6, 182, 212;
+    --primary-fg: #ffffff;
+}
+
+/* 7. Lavender */
+:root[data-theme="lavender"] {
+    --bg-main: #130b1c;
+    --bg-surface: #1d112b;
+    --accent: #a855f7;
+    --accent-glow: rgba(168, 85, 247, 0.15);
+    --border-glow: rgba(168, 85, 247, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 168, 85, 247;
+    --primary-fg: #ffffff;
+}
+
+/* 8. Rose */
+:root[data-theme="rose"] {
+    --bg-main: #1a0b12;
+    --bg-surface: #26111a;
+    --accent: #ec4899;
+    --accent-glow: rgba(236, 72, 153, 0.15);
+    --border-glow: rgba(236, 72, 153, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 236, 72, 153;
+    --primary-fg: #ffffff;
+}
+
+/* 9. Amber [Default/Active] */
+:root[data-theme="amber"], :root {
+    --bg-main: #1a120e;
+    --bg-surface: #261a15;
+    --accent: #ff9f1c;
+    --accent-glow: rgba(255, 159, 28, 0.15);
+    --border-glow: rgba(255, 159, 28, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 255, 159, 28;
+    --primary-fg: #000000;
+}
+
+/* 10. Slate */
+:root[data-theme="slate"] {
+    --bg-main: #0f172a;
+    --bg-surface: #1e293b;
+    --accent: #94a3b8;
+    --accent-glow: rgba(148, 163, 184, 0.15);
+    --border-glow: rgba(148, 163, 184, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 148, 163, 184;
+    --primary-fg: #ffffff;
+}
+
+/* 11. Neutral */
+:root[data-theme="neutral"] {
+    --bg-main: #18181b;
+    --bg-surface: #27272a;
+    --accent: #a1a1aa;
+    --accent-glow: rgba(161, 161, 170, 0.15);
+    --border-glow: rgba(161, 161, 170, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 161, 161, 170;
+    --primary-fg: #000000;
+}
+
+/* 12. Crimson */
+:root[data-theme="crimson"] {
+    --bg-main: #1a0b0e;
+    --bg-surface: #281115;
+    --accent: #ef4444;
+    --accent-glow: rgba(239, 68, 68, 0.15);
+    --border-glow: rgba(239, 68, 68, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 239, 68, 68;
+    --primary-fg: #ffffff;
+}
+
+/* 13. Dracula */
+:root[data-theme="dracula"] {
+    --bg-main: #1e1f29;
+    --bg-surface: #282a36;
+    --accent: #ff79c6;
+    --accent-glow: rgba(255, 121, 198, 0.15);
+    --border-glow: rgba(255, 121, 198, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 255, 121, 198;
+    --primary-fg: #ffffff;
+}
+
+/* 14. Nord */
+:root[data-theme="nord"] {
+    --bg-main: #2e3440;
+    --bg-surface: #3b4252;
+    --accent: #88c0d0;
+    --accent-glow: rgba(136, 192, 208, 0.15);
+    --border-glow: rgba(136, 192, 208, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 136, 192, 208;
+    --primary-fg: #2e3440;
+}
+
+/* 15. Sky */
+:root[data-theme="sky"] {
+    --bg-main: #0c192c;
+    --bg-surface: #13243f;
+    --accent: #38bdf8;
+    --accent-glow: rgba(56, 189, 248, 0.15);
+    --border-glow: rgba(56, 189, 248, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 56, 189, 248;
+    --primary-fg: #0c192c;
+}
+
+/* 16. Mint */
+:root[data-theme="mint"] {
+    --bg-main: #061a14;
+    --bg-surface: #0c2920;
+    --accent: #34d399;
+    --accent-glow: rgba(52, 211, 153, 0.15);
+    --border-glow: rgba(52, 211, 153, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 52, 211, 153;
+    --primary-fg: #061a14;
+}
+
+/* 17. Violet */
+:root[data-theme="violet"] {
+    --bg-main: #160c28;
+    --bg-surface: #22133e;
+    --accent: #a855f7;
+    --accent-glow: rgba(168, 85, 247, 0.15);
+    --border-glow: rgba(168, 85, 247, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 168, 85, 247;
+    --primary-fg: #ffffff;
+}
+
+/* 18. Blossom */
+:root[data-theme="blossom"] {
+    --bg-main: #1f0b18;
+    --bg-surface: #301126;
+    --accent: #f43f5e;
+    --accent-glow: rgba(244, 63, 94, 0.15);
+    --border-glow: rgba(244, 63, 94, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 244, 63, 94;
+    --primary-fg: #ffffff;
+}
+
+/* 19. Sakura */
+:root[data-theme="sakura"] {
+    --bg-main: #1c0d15;
+    --bg-surface: #2b1421;
+    --accent: #fb7185;
+    --accent-glow: rgba(251, 113, 133, 0.15);
+    --border-glow: rgba(251, 113, 133, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 251, 113, 133;
+    --primary-fg: #ffffff;
+}
+
+/* 20. Terminal */
+:root[data-theme="terminal"] {
+    --bg-main: #051405;
+    --bg-surface: #0a240a;
+    --accent: #22c55e;
+    --accent-glow: rgba(34, 197, 94, 0.15);
+    --border-glow: rgba(34, 197, 94, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 34, 197, 94;
+    --primary-fg: #051405;
+}
+
+/* 21. Sand */
+:root[data-theme="sand"] {
+    --bg-main: #1c160c;
+    --bg-surface: #2c2213;
+    --accent: #f59e0b;
+    --accent-glow: rgba(245, 158, 11, 0.15);
+    --border-glow: rgba(245, 158, 11, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 245, 158, 11;
+    --primary-fg: #000000;
+}
+
+/* 22. Aqua */
+:root[data-theme="aqua"] {
+    --bg-main: #081b24;
+    --bg-surface: #0e2b39;
+    --accent: #06b6d4;
+    --accent-glow: rgba(6, 182, 212, 0.15);
+    --border-glow: rgba(6, 182, 212, 0.08);
+    --primary: var(--accent);
+    --primary-rgb: 6, 182, 212;
+    --primary-fg: #ffffff;
+}
