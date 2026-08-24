@@ -109,15 +109,18 @@ DEFAULT_SETTINGS = {
         "resource_blur": True,
     },
     "hotkeys": {
+        # Values use the frontend combo format (parseKeyEventCombo in
+        # ui/*/js/hotkeys.js): e.code names joined with '+'. Arrows are
+        # Ctrl-modified on purpose - bare arrows hijacked list navigation.
         "play_pause": "Space",
-        "next_track": "Ctrl+Right",
-        "prev_track": "Ctrl+Left",
-        "volume_up": "Ctrl+Up",
-        "volume_down": "Ctrl+Down",
-        "mute": "Ctrl+M",
-        "like": "Ctrl+L",
-        "search": "Ctrl+F",
-        "toggle_overlay": "Ctrl+O",
+        "next_track": "Ctrl+ArrowRight",
+        "prev_track": "Ctrl+ArrowLeft",
+        "volume_up": "Ctrl+ArrowUp",
+        "volume_down": "Ctrl+ArrowDown",
+        "mute": "Ctrl+KeyM",
+        "like": "Ctrl+KeyK",
+        "search": "Slash",
+        "toggle_overlay": "Ctrl+KeyO",
     },
     "storage": {
         "cache_size_mb": 500,

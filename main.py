@@ -30,6 +30,9 @@ _ADDITIONAL_ARGS = (
     '--no-first-run '
     '--disable-background-networking '
     '--disable-component-update '
+    # Session autoplay restores playback without a click; without this flag
+    # Chromium's gesture requirement would block the programmatic play().
+    '--autoplay-policy=no-user-gesture-required '
     '--disable-features=CalculateNativeWinOcclusion,msSmartScreenProtection'
 )
 if 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS' in os.environ:
@@ -230,9 +233,11 @@ def main():
     api = AppApi(app_core)
 
     # Restore session state
+    session_position_sec = 0.0
     try:
         session_data = app_core.session.restore_session()
         queue = session_data.get("queue")
+        session_position_sec = float(session_data.get("position") or 0.0)
         if queue:
             app_core.engine.queue.set_tracks(queue, session_data.get("queue_index", 0))
             app_core.engine.queue.shuffle = session_data.get("shuffle", False)
@@ -242,9 +247,8 @@ def main():
             if app_core.engine.queue.current_track and hasattr(app_core.engine, '_on_track_changed') and app_core.engine._on_track_changed:
                 app_core.engine._on_track_changed(app_core.engine.queue.current_track)
 
-            # If autoplay is enabled, start playback
-            if app_core.session.should_autoplay and app_core.engine.queue.current_track:
-                pass
+            # Autoplay itself is triggered in on_loaded() via the
+            # 'session_autoplay' event once the UI bridge is ready.
     except Exception as e:
         print(f"Failed to restore session: {e}")
 
@@ -345,6 +349,16 @@ def main():
         logging.info(f"[startup] window loaded (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
         if app_core.engine.queue.current_track:
             app_core.engine._on_track_changed(app_core.engine.queue.current_track)
+        # Session autoplay: ask the UI to resume playback of the restored track.
+        # (The old code path here was a literal `pass` - the setting did nothing.)
+        try:
+            if app_core.session.should_autoplay and app_core.engine.queue.current_track:
+                api.emit_event("session_autoplay", {
+                    "track_id": app_core.engine.queue.current_track.get("id"),
+                    "position_sec": session_position_sec,
+                })
+        except Exception as ae:
+            logging.debug(f"session autoplay emit failed: {ae}")
         # Deferred Zapret autostart: runs strictly AFTER window loaded
         threading.Thread(target=app_core.start_zapret_if_enabled, daemon=True).start()
 

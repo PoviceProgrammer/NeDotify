@@ -712,6 +712,12 @@ export function initPlayer() {
             audioB.pause();
             try { activeAudio.currentTime = 0; } catch(e) {}
         }
+        // Tear down both elements fully: an empty src releases the lingering
+        // background HTTP connection to the stream proxy (project teardown rule).
+        [audioA, audioB].forEach(a => {
+            if (!a) return;
+            try { a.removeAttribute('src'); a.src = ''; a.load(); } catch(e) {}
+        });
         currentPosMs = 0;
         targetPosMs = 0;
         isPlaying = false;

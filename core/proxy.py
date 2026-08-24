@@ -70,6 +70,8 @@ def _is_loopback_origin(origin: str) -> bool:
 
 # Extensions a client may fetch through /api/avatar.
 AVATAR_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+# Extensions a client may fetch through /api/cover.
+COVER_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
 
 
 def _avatars_root() -> str:
@@ -77,12 +79,26 @@ def _avatars_root() -> str:
     return os.path.normpath(os.path.join(os.path.expanduser('~'), '.nedotify', 'avatars'))
 
 
-def _safe_avatar_path(raw_path: str) -> str:
-    """Resolve `raw_path` to a servable avatar file inside the avatars root.
+def _cover_roots() -> list:
+    """Directories /api/cover is allowed to serve files from.
 
-    Returns '' unless the path resolves strictly inside ~/.nedotify/avatars,
-    exists and carries an allow-listed image extension. Anything else (traversal
-    attempts, absolute paths elsewhere, UNC paths) is refused.
+    Every cover_path written by the app lands in ~/.nedotify/covers (file
+    scanner, tag editor); avatars live next door and are harmless images too.
+    """
+    nedotify = os.path.normpath(os.path.expanduser('~/.nedotify'))
+    return [
+        os.path.join(nedotify, 'covers'),
+        os.path.join(nedotify, 'avatars'),
+    ]
+
+
+def _resolve_inside_roots(raw_path: str, roots, extensions) -> str:
+    """Resolve `raw_path` to a servable file strictly inside one of `roots`.
+
+    Returns '' unless the path resolves (realpath, so symlinks/junctions are
+    collapsed) inside an allowed root, exists and carries an allow-listed
+    extension. Traversal attempts, UNC paths and arbitrary disk reads are all
+    refused.
     """
     try:
         if not raw_path:
@@ -92,18 +108,66 @@ def _safe_avatar_path(raw_path: str) -> str:
             candidate = candidate[len('file:///'):]
         candidate = os.path.normpath(urllib.parse.unquote(candidate))
         ext = os.path.splitext(candidate)[1].lower()
-        if ext not in AVATAR_EXTENSIONS:
+        if ext not in extensions:
             return ''
-        root = _avatars_root()
         resolved = os.path.realpath(candidate)
-        resolved_root = os.path.realpath(root)
-        if os.path.commonpath([resolved, resolved_root]) != resolved_root:
+        for root in roots:
+            resolved_root = os.path.realpath(root)
+            try:
+                if os.path.commonpath([resolved, resolved_root]) != resolved_root:
+                    continue
+            except ValueError:
+                # Different drives on Windows -> commonpath raises.
+                continue
+            if os.path.isfile(resolved):
+                return resolved
             return ''
-        if os.path.isfile(resolved):
-            return resolved
     except Exception:
-        logger.debug('_safe_avatar_path rejected %r', raw_path, exc_info=True)
+        logger.debug('_resolve_inside_roots rejected %r', raw_path, exc_info=True)
     return ''
+
+
+def _safe_avatar_path(raw_path: str) -> str:
+    """Resolve `raw_path` to a servable avatar file inside the avatars root."""
+    return _resolve_inside_roots(raw_path, [_avatars_root()], AVATAR_EXTENSIONS)
+
+
+def _safe_cover_path(raw_path: str) -> str:
+    """Resolve `raw_path` to a servable cover file inside the allowed roots."""
+    return _resolve_inside_roots(raw_path, _cover_roots(), COVER_EXTENSIONS)
+
+
+# Content-Type -> stream cache file extension. The on-disk cache probe in
+# do_GET() already looks for all of these, so saving under the real container
+# keeps later lookups and MIME handling consistent.
+_RESPONSE_EXTS = {
+    'audio/mp4': '.m4a',
+    'audio/x-m4a': '.m4a',
+    'audio/m4a': '.m4a',
+    'video/mp4': '.m4a',
+    'audio/webm': '.webm',
+    'video/webm': '.webm',
+    'audio/mpeg': '.mp3',
+    'audio/mp3': '.mp3',
+    'audio/ogg': '.ogg',
+    'application/ogg': '.ogg',
+    'audio/opus': '.ogg',
+}
+
+
+def _ext_for_response(resp) -> str:
+    """Pick a cache extension from the upstream response's Content-Type."""
+    try:
+        ct = ''
+        if hasattr(resp, 'headers') and resp.headers is not None:
+            ct = resp.headers.get('Content-Type') or ''
+        elif hasattr(resp, 'info'):
+            info = resp.info()
+            ct = (info.get('Content-Type') if info else '') or ''
+        base = ct.split(';', 1)[0].strip().lower()
+        return _RESPONSE_EXTS.get(base, '.m4a')
+    except Exception:
+        return '.m4a'
 
 
 class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -290,12 +354,9 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             if not path_param:
                 self.send_error(400, 'Missing path parameter')
                 return None
-            unquoted = urllib.parse.unquote(path_param)
-            if unquoted.startswith('file:///'):
-                unquoted = unquoted[8:]
-            unquoted = os.path.normpath(unquoted)
-            if os.path.isfile(unquoted) and os.path.exists(unquoted):
-                self.serve_local_file(unquoted)
+            cover_file = _safe_cover_path(path_param)
+            if cover_file:
+                self.serve_local_file(cover_file)
                 return None
             self.send_error(404, 'Cover file not found')
             return None
@@ -390,7 +451,10 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     logger.debug("do_GET: suppressed exception", exc_info=True)
                 return None
 
-            final_path = os.path.join(streams_dir, f"{cache_name}.m4a")
+            # NOTE: the cache file extension is decided from the upstream
+            # Content-Type once the response arrives (see _ext_for_response);
+            # hardcoding .m4a here previously cached webm/opus bytes under an
+            # m4a name and served them with a mismatched MIME type.
             unique_tag = f"{os.getpid()}_{threading.get_ident()}_{int(time.time() * 1000)}"
             temp_path = os.path.join(self.server.app_core.cache._temp_dir, f"{cache_name}_{unique_tag}.tmp")
 
@@ -616,6 +680,11 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                         expected_len = int(cl_val)
                     except (ValueError, TypeError):
                         expected_len = None
+
+                final_path = os.path.join(
+                    streams_dir,
+                    f"{cache_name}{_ext_for_response(resp)}",
+                )
 
                 bytes_written = 0
                 with open(temp_path, 'wb') as tmp:

@@ -1,5 +1,5 @@
 // NeDotify — Python Event Bridge
-import { onTrackChanged, onStateChanged, onPositionChanged, applySettings } from './player.js';
+import { onTrackChanged, onStateChanged, onPositionChanged, applySettings, togglePlayPause, seekTo, getIsPlaying } from './player.js';
 import { onSearchResults } from './search.js';
 import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome } from './home.js';
 import { loadLibrary, loadDownloaded, loadPlaylists } from './library.js';
@@ -250,6 +250,17 @@ export function initEvents() {
 
             case 'theme_changed':
                 window.dispatchEvent(new CustomEvent('nedotify:theme_changed', { detail: data }));
+                break;
+
+            case 'session_autoplay':
+                // Backend restored a session with autoplay enabled. Wait for the
+                // restored track's stream to land, then resume playback (and seek
+                // back to the saved position when provided).
+                setTimeout(() => {
+                    if (!getIsPlaying()) togglePlayPause();
+                    const pos = Number(data?.position_sec || 0);
+                    if (pos > 3) setTimeout(() => seekTo(Math.round(pos * 1000)), 600);
+                }, 400);
                 break;
 
             // ================= FUTURE EVENTS / DEPRECATED =================

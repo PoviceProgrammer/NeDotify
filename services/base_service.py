@@ -77,6 +77,10 @@ class BaseMusicService:
     _cache_lock = threading.RLock()
     _stream_cache: Dict[str, Any] = {}
     _MAX_CACHE_SIZE = 2000
+    # Provider stream URLs (googlevideo & co.) typically expire after ~6 hours,
+    # so cached entries older than that are dead weight: serving them forces a
+    # guaranteed 403 round trip through the proxy self-heal path.
+    _STREAM_CACHE_TTL = 6 * 3600.0
     _search_cache: Dict[str, Dict[str, Any]] = {}
     _SEARCH_CACHE_TTL = 300
     _SEARCH_CACHE_MAX_SIZE = 300
@@ -109,18 +113,31 @@ class BaseMusicService:
 
     @classmethod
     def get_from_cache(cls, key: str) -> Optional[dict]:
-        """Retrieve an item from the stream cache."""
+        """Retrieve an item from the stream cache, honouring the entry TTL.
+
+        Values written through set_to_cache() are wrapped with a timestamp;
+        raw values placed directly into _stream_cache (tests, external code)
+        are returned as-is for backwards compatibility.
+        """
         with cls._cache_lock:
-            return cls._stream_cache.get(key)
+            entry = cls._stream_cache.get(key)
+            if entry is None:
+                return None
+            if isinstance(entry, dict) and 'data' in entry and 'ts' in entry:
+                if time.time() - entry['ts'] > cls._STREAM_CACHE_TTL:
+                    cls._stream_cache.pop(key, None)
+                    return None
+                return entry['data']
+            return entry
 
     @classmethod
     def set_to_cache(cls, key: str, data: dict) -> None:
-        """Save an item to the stream cache, respecting the max size."""
+        """Save an item to the stream cache with a TTL stamp, size-capped."""
         with cls._cache_lock:
-            if len(cls._stream_cache) >= cls._MAX_CACHE_SIZE:
+            if len(cls._stream_cache) >= cls._MAX_CACHE_SIZE and key not in cls._stream_cache:
                 oldest_key = next(iter(cls._stream_cache))
                 cls._stream_cache.pop(oldest_key, None)
-            cls._stream_cache[key] = data
+            cls._stream_cache[key] = {'data': data, 'ts': time.time()}
 
     @classmethod
     def get_search_cache(cls, key: str) -> Optional[Any]:

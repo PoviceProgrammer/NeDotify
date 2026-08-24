@@ -56,7 +56,7 @@ class DownloadManager:
         return True
 
     def _init_db_table(self):
-        """Create download queue table if missing."""
+        """Create download queue table if missing and enforce one row per track."""
         try:
             self._core.db.conn.execute("""
                 CREATE TABLE IF NOT EXISTS download_queue (
@@ -72,6 +72,25 @@ class DownloadManager:
         except Exception as e:
             logger.error(f'Failed to init download_queue table: {e}')
 
+        # Older databases accumulated duplicate rows per track (dedup was only
+        # in-memory), so a plain UNIQUE constraint cannot be retrofitted onto the
+        # table. Collapse duplicates first (keep the newest attempt), then add a
+        # unique index that holds for both old and new databases.
+        try:
+            self._core.db.conn.execute("""
+                DELETE FROM download_queue
+                WHERE id NOT IN (
+                    SELECT MAX(id) FROM download_queue GROUP BY track_id
+                )
+            """)
+            self._core.db.conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_download_queue_track "
+                "ON download_queue(track_id)"
+            )
+            self._core.db.conn.commit()
+        except Exception as e:
+            logger.error(f'Failed to enforce unique download_queue.track_id: {e}')
+
     def _resume_pending_downloads(self):
         try:
             cursor = self._core.db.conn.cursor()
@@ -82,7 +101,7 @@ class DownloadManager:
             logger.error(f'Failed to resume downloads: {e}')
 
     def queue_download(self, track_id, source, source_id, from_db=False):
-        """Queue a track for download."""
+        """Queue a track for download (at most one row per track)."""
         if not from_db:
             try:
                 self._core.db.conn.execute(
@@ -91,7 +110,9 @@ class DownloadManager:
                 )
                 self._core.db.conn.commit()
             except Exception as e:
-                logger.error(f'Failed to insert download queue record: {e}')
+                # Unique index: the track already has a queue row - nothing to add.
+                logger.debug(f'Download queue insert skipped for track {track_id}: {e}')
+                return
 
         with self._queue_lock:
             if not any(item['track_id'] == track_id for item in self._queue):
@@ -130,7 +151,11 @@ class DownloadManager:
             row = cursor.fetchone()
             if row and (row['status'] if isinstance(row, dict) or hasattr(row, 'keys') else row[0]) == 'completed':
                 return
-            self._core.db.conn.execute("UPDATE download_queue SET status = 'downloading' WHERE track_id = ?", (track_id,))
+            self._core.db.conn.execute(
+                "UPDATE download_queue SET status = 'downloading' "
+                "WHERE track_id = ? AND status != 'completed'",
+                (track_id,),
+            )
             self._core.db.conn.commit()
         except Exception:
             pass

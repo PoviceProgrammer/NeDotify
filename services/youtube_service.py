@@ -57,17 +57,20 @@ class YouTubeService(BaseMusicService):
                 session.proxies = {"http": proxy, "https": proxy}
             self._ytmusic = YTMusic(language="ru", location="RU", requests_session=session)
 
-        self._ydl = None
-        self._ydl_fallback = None
+        # One YoutubeDL instance per thread: yt-dlp objects carry mutable shared
+        # state (cookie jars, internal caches) and are NOT safe to use
+        # concurrently. A single shared instance caused intermittent extraction
+        # races under parallel stream resolution.
+        self._ydl_tls = threading.local()
         self._ydl_lock = threading.Lock()
 
         if HAS_YTDLP:
             self._executor.submit(self._get_ydl, "high")
 
     def reset_ydl(self):
-        with self._ydl_lock:
-            self._ydl = None
-            self._ydl_fallback = None
+        # Replacing the thread-local storage drops cached instances in every
+        # thread at once; each thread rebuilds lazily on next use.
+        self._ydl_tls = threading.local()
 
         if HAS_YTMUSIC:
             if self.settings:
@@ -89,24 +92,26 @@ class YouTubeService(BaseMusicService):
                 self._ytmusic = YTMusic(language="ru", location="RU", requests_session=session)
 
     def _get_ydl(self, quality="high", fallback=False):
+        """Return this thread's YoutubeDL instance (created on first use)."""
+        store = getattr(self._ydl_tls, "instances", None)
+        if store is None:
+            store = {}
+            self._ydl_tls.instances = store
+
         quality_map = {
             "low": "bestaudio/best",
             "medium": "bestaudio/best",
             "high": "bestaudio/best",
             "lossless": "bestaudio/best",
         }
+        fmt = quality_map.get(quality, "bestaudio/best")
+        key = ("fallback", "best") if fallback else ("main", fmt)
 
-        with self._ydl_lock:
-            if fallback:
-                if not self._ydl_fallback:
-                    opts = self._get_ydl_opts("bestaudio/best", fallback=True)
-                    self._ydl_fallback = yt_dlp.YoutubeDL(opts)
-                return self._ydl_fallback
-
-            if not self._ydl:
-                opts = self._get_ydl_opts(quality_map.get(quality, "bestaudio/best"))
-                self._ydl = yt_dlp.YoutubeDL(opts)
-            return self._ydl
+        ydl = store.get(key)
+        if ydl is None:
+            ydl = yt_dlp.YoutubeDL(self._get_ydl_opts(fmt, fallback=fallback))
+            store[key] = ydl
+        return ydl
 
     def _prefetch_top_tracks(self, tracks: list):
         """Pre-resolve stream URLs for the top search results.
@@ -465,11 +470,8 @@ class YouTubeService(BaseMusicService):
         return None
 
     def _extract_info_safe(self, video_url: str, quality: str, fallback: bool = False):
+        ydl = self._get_ydl(quality, fallback=fallback)
         opts = self._get_ydl_opts("bestaudio/best", fallback=fallback)
-        if not fallback and self._ydl:
-            ydl = self._ydl
-        else:
-            ydl = yt_dlp.YoutubeDL(opts)
 
         try:
             return ydl.extract_info(video_url, download=False)

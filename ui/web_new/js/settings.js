@@ -900,7 +900,7 @@ export function initKeybinds() {
         resetBtn.addEventListener('click', () => {
             DEFAULT_KEYBINDS.forEach(kb => {
                 activeKeybinds[kb.id] = kb.defaultKey;
-                saveSetting(kb.id, kb.defaultKey, 'keybinds');
+                saveSetting(kb.id, kb.defaultKey, 'hotkeys');
             });
             setListeningKeybind(null);
             renderKeybindsList();

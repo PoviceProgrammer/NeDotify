@@ -658,6 +658,9 @@ class AppApi:
 
         track_copy = dict(track)
         self._enrich_track_lufs(track_copy)
+        # A new active track starts a fresh history session: the next real
+        # playback start is allowed to log exactly one history entry.
+        self._history_logged_key = None
         # Proxy cloud stream URL if the track already has a resolvable stream/file.
         # Tracks whose stream is still being resolved keep an empty stream_url so the
         # frontend can show a loading state instead of hanging on the proxy.
@@ -695,8 +698,41 @@ class AppApi:
         self._emit("audio_error", {"message": err_msg})
         self._emit("error", err_msg)
 
+    def maybe_log_history(self):
+        """Log one history entry per successful playback start of a track.
+
+        Called when the frontend reports a real 'playing' state (HTML5 audio
+        actually started). Deduplicated until the active track changes or
+        playback is stopped, so pause/resume cycles and backend re-resolution
+        notifications never inflate play_count.
+        """
+        try:
+            track = getattr(self, "_current_track", None)
+            if not isinstance(track, dict):
+                return
+            key = track.get("id") or track.get("source_id")
+            if key is None:
+                key = f"{track.get('artist', '')}::{track.get('title', '')}"
+            if not key or getattr(self, "_history_logged_key", None) == key:
+                return
+            self._history_logged_key = key
+            t_id = track.get("id")
+            if t_id:
+                try:
+                    self._core.db.add_to_history(int(t_id))
+                except (ValueError, TypeError):
+                    logger.debug("maybe_log_history: non-numeric track id %r", t_id)
+        except Exception:
+            logger.debug("maybe_log_history: suppressed exception", exc_info=True)
+
     def report_state(self, state: str, elapsed_ms: int = 0):
         """Report playback state update (playing, paused, stopped)."""
+        if state == "playing":
+            self.maybe_log_history()
+        elif state == "stopped":
+            # A manual stop ends the playback session: replaying the same track
+            # afterwards counts as a new play.
+            self._history_logged_key = None
         self._emit("state_changed", {"state": state, "elapsed_ms": elapsed_ms})
         if getattr(self, "_tray", None):
             self._tray.update_state(is_playing=(state == "playing"))
@@ -757,11 +793,11 @@ class AppApi:
                         t["id"] = t["track_id"]
                     self._enrich_track_lufs(t)
 
-        if isinstance(track, dict) and track.get("id"):
-            try:
-                self._core.db.add_to_history(track["id"])
-            except Exception:
-                logger.debug("play_track: suppressed exception", exc_info=True)
+        # NOTE: listening history is intentionally NOT written here. play_track()
+        # is also invoked by frontend stream-error retries and background
+        # re-resolution, which used to inflate play_count and pollute history
+        # with plays that never happened. History is logged once per successful
+        # playback start instead - see report_state()/maybe_log_history().
 
         if track_list:
             if index is None or index == 0:
@@ -1742,7 +1778,12 @@ class AppApi:
                 if getattr(sys, 'frozen', False):
                     exe_path = f'"{sys.executable}"'
                 else:
-                    main_py = os.path.abspath("main.py")
+                    # Anchor to this file, not the CWD: launching the app from a
+                    # different working directory used to register a broken
+                    # autostart entry.
+                    main_py = os.path.join(
+                        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py"
+                    )
                     exe_path = f'"{sys.executable}" "{main_py}"'
                 winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, exe_path)
             else:

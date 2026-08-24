@@ -2,10 +2,10 @@ import { togglePlayPause } from './player.js';
 
 export const DEFAULT_KEYBINDS = [
     { id: 'play_pause', label: 'Воспроизведение / Пауза', defaultKey: 'Space' },
-    { id: 'next_track', label: 'Следующий трек', defaultKey: 'ArrowRight' },
-    { id: 'prev_track', label: 'Предыдущий трек', defaultKey: 'ArrowLeft' },
-    { id: 'volume_up', label: 'Увеличить громкость (+5%)', defaultKey: 'ArrowUp' },
-    { id: 'volume_down', label: 'Уменьшить громкость (-5%)', defaultKey: 'ArrowDown' },
+    { id: 'next_track', label: 'Следующий трек', defaultKey: 'Ctrl+ArrowRight' },
+    { id: 'prev_track', label: 'Предыдущий трек', defaultKey: 'Ctrl+ArrowLeft' },
+    { id: 'volume_up', label: 'Увеличить громкость (+5%)', defaultKey: 'Ctrl+ArrowUp' },
+    { id: 'volume_down', label: 'Уменьшить громкость (-5%)', defaultKey: 'Ctrl+ArrowDown' },
     { id: 'toggle_mute', label: 'Вкл / Выкл звук', defaultKey: 'KeyM' },
     { id: 'toggle_lyrics', label: 'Открыть / закрыть текст', defaultKey: 'KeyL' },
     { id: 'toggle_mini', label: 'Компактный мини-плеер', defaultKey: 'KeyP' },
@@ -61,10 +61,20 @@ export function initHotkeys() {
     if (localSaved) {
         try { Object.assign(activeKeybinds, JSON.parse(localSaved)); } catch(e) {}
     }
+    // Migrate legacy defaults: bare arrow keys hijacked list/navigation,
+    // they are now Ctrl-modified.
+    const LEGACY_ARROW_MAP = { ArrowRight: 'Ctrl+ArrowRight', ArrowLeft: 'Ctrl+ArrowLeft', ArrowUp: 'Ctrl+ArrowUp', ArrowDown: 'Ctrl+ArrowDown' };
+    let migrated = false;
+    for (const [oldK, newK] of Object.entries(LEGACY_ARROW_MAP)) {
+        for (const [actionId, key] of Object.entries(activeKeybinds)) {
+            if (key === oldK) { activeKeybinds[actionId] = newK; migrated = true; }
+        }
+    }
+    if (migrated) saveKeybindsToStorage(activeKeybinds);
 
     // 3. Load backend keybinds category settings
     if (window.pywebview?.api?.get_settings_by_category) {
-        window.pywebview.api.get_settings_by_category('keybinds').then(saved => {
+        window.pywebview.api.get_settings_by_category('hotkeys').then(saved => {
             if (saved && typeof saved === 'object') {
                 Object.assign(activeKeybinds, saved);
                 saveKeybindsToStorage(activeKeybinds);
@@ -86,7 +96,7 @@ export function initHotkeys() {
                 activeKeybinds[listeningKeybindId] = combo;
                 saveKeybindsToStorage(activeKeybinds);
                 if (window.pywebview?.api?.save_setting) {
-                    window.pywebview.api.save_setting(listeningKeybindId, combo, 'keybinds');
+                    window.pywebview.api.save_setting(listeningKeybindId, combo, 'hotkeys');
                 }
             }
             listeningKeybindId = null;
