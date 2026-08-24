@@ -738,7 +738,7 @@ export function initPlayer() {
 
     if (mpLike) mpLike.addEventListener('click', async (e) => {
         e.stopPropagation();
-        const trk = currentTrack || (queue && queue[queueIndex]);
+        const trk = currentTrack;
         if (!trk) return;
         const res = await api('toggle_favorite', trk);
         if (res && res.success) {

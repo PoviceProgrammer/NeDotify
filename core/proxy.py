@@ -68,6 +68,44 @@ def _is_loopback_origin(origin: str) -> bool:
         return False
 
 
+# Extensions a client may fetch through /api/avatar.
+AVATAR_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+
+
+def _avatars_root() -> str:
+    """The only directory /api/avatar is allowed to serve files from."""
+    return os.path.normpath(os.path.join(os.path.expanduser('~'), '.nedotify', 'avatars'))
+
+
+def _safe_avatar_path(raw_path: str) -> str:
+    """Resolve `raw_path` to a servable avatar file inside the avatars root.
+
+    Returns '' unless the path resolves strictly inside ~/.nedotify/avatars,
+    exists and carries an allow-listed image extension. Anything else (traversal
+    attempts, absolute paths elsewhere, UNC paths) is refused.
+    """
+    try:
+        if not raw_path:
+            return ''
+        candidate = raw_path
+        if candidate.startswith('file:///'):
+            candidate = candidate[len('file:///'):]
+        candidate = os.path.normpath(urllib.parse.unquote(candidate))
+        ext = os.path.splitext(candidate)[1].lower()
+        if ext not in AVATAR_EXTENSIONS:
+            return ''
+        root = _avatars_root()
+        resolved = os.path.realpath(candidate)
+        resolved_root = os.path.realpath(root)
+        if os.path.commonpath([resolved, resolved_root]) != resolved_root:
+            return ''
+        if os.path.isfile(resolved):
+            return resolved
+    except Exception:
+        logger.debug('_safe_avatar_path rejected %r', raw_path, exc_info=True)
+    return ''
+
+
 class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Custom redirect handler that validates all redirect destinations against SSRF protection."""
     def __init__(self, max_redirects=5):
@@ -155,6 +193,9 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         if not expected:
             return True  # token generation failed; fail open rather than break playback
         supplied = (query_params.get(AUTH_PARAM) or [''])[0]
+        # Legacy alias some frontend helpers still send.
+        if not supplied:
+            supplied = (query_params.get('auth_token') or [''])[0]
         return hmac.compare_digest(str(supplied), str(expected))
 
     def _reject_unauthorized(self):
@@ -257,6 +298,18 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 self.serve_local_file(unquoted)
                 return None
             self.send_error(404, 'Cover file not found')
+            return None
+
+        if parsed_path.path == '/api/avatar':
+            path_param = query_params.get('path', [None])[0]
+            if not path_param:
+                self.send_error(400, 'Missing path parameter')
+                return None
+            avatar_file = _safe_avatar_path(urllib.parse.unquote(path_param))
+            if avatar_file:
+                self.serve_local_file(avatar_file)
+                return None
+            self.send_error(404, 'Avatar file not found')
             return None
 
         if parsed_path.path == '/api/stream':

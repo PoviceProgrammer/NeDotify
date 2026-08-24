@@ -136,38 +136,77 @@ _install_global_excepthooks()
 from core.app import AppCore
 from core.api import AppApi
 
-# Automatic DNS-over-HTTPS fallback for Russian ISP DNS blocking
+# Automatic DNS-over-HTTPS fallback for Russian ISP DNS blocking.
+#
+# Safety properties:
+#   * Only IP-hosted DoH endpoints are used (no hostname), so the HTTPS request
+#     itself never needs a DNS lookup and can NEVER recurse into this patch.
+#   * A thread-local re-entrancy guard is kept as a second line of defence: any
+#     nested getaddrinfo while a DoH lookup is running goes straight to the
+#     original resolver instead of re-entering the fallback.
+#   * Positive results are cached with a TTL so a flapped resolver cannot pin a
+#     stale IP forever.
 def _enable_doh_fallback():
-    import socket, urllib.request, json, ssl
+    import socket, urllib.request, json, ssl, threading, time as _time
     _orig_getaddrinfo = socket.getaddrinfo
-    _dns_cache = {}
+    _dns_cache = {}                      # host -> (ip, monotonic_ts)
+    _DNS_TTL = 300.0                     # seconds a resolved override stays valid
+    _DNS_CACHE_MAX = 256                 # simple size cap (oldest-insertion evicted)
+    _doh_inflight = threading.local()    # recursion guard
+
+    def _cache_get(host):
+        entry = _dns_cache.get(host)
+        if not entry:
+            return None
+        ip, ts = entry
+        if (_time.monotonic() - ts) > _DNS_TTL:
+            _dns_cache.pop(host, None)
+            return None
+        return ip
 
     def _doh_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
         try:
             return _orig_getaddrinfo(host, port, family, type, proto, flags)
         except socket.gaierror:
-            if host in _dns_cache:
-                try:
-                    return _orig_getaddrinfo(_dns_cache[host], port, family, type, proto, flags)
-                except Exception:
-                    logging.debug("_doh_getaddrinfo: suppressed exception", exc_info=True)
+            pass
+
+        cached_ip = _cache_get(host)
+        if cached_ip:
+            try:
+                return _orig_getaddrinfo(cached_ip, port, family, type, proto, flags)
+            except Exception:
+                logging.debug("_doh_getaddrinfo: suppressed exception", exc_info=True)
+
+        # Re-entrancy guard: a DoH request must never resolve names through
+        # this function again (it would recurse on an unresolvable endpoint).
+        if getattr(_doh_inflight, 'active', False):
+            raise socket.gaierror(f"DoH fallback busy resolving {host!r}")
+
+        _doh_inflight.active = True
+        try:
             for doh_url in [
                 f"https://1.1.1.1/dns-query?name={host}&type=A",
-                f"https://dns.google/resolve?name={host}&type=A",
+                f"https://8.8.8.8/resolve?name={host}&type=A",
                 f"https://77.88.8.8/dns-query?name={host}&type=A"
             ]:
                 try:
                     ctx = ssl.create_default_context()
                     req = urllib.request.Request(doh_url, headers={"accept": "application/dns-json", "User-Agent": "Mozilla/5.0"})
+                    # urllib resolves only literal IPs here -> no recursion possible.
                     with urllib.request.urlopen(req, timeout=2.0, context=ctx) as resp:
                         data = json.loads(resp.read().decode("utf-8"))
                         ips = [ans["data"] for ans in data.get("Answer", []) if ans.get("type") == 1]
                         if ips:
-                            _dns_cache[host] = ips[0]
+                            if len(_dns_cache) >= _DNS_CACHE_MAX:
+                                oldest = next(iter(_dns_cache))
+                                _dns_cache.pop(oldest, None)
+                            _dns_cache[host] = (ips[0], _time.monotonic())
                             return _orig_getaddrinfo(ips[0], port, family, type, proto, flags)
                 except Exception:
                     continue
-            raise
+            raise socket.gaierror(f"All DoH endpoints failed for {host!r}")
+        finally:
+            _doh_inflight.active = False
 
     socket.getaddrinfo = _doh_getaddrinfo
 

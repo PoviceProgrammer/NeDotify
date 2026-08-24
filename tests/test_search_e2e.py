@@ -290,7 +290,9 @@ class TestFeature12YandexSearchProvider(unittest.TestCase):
         service = YandexService(settings)
 
         with patch("services.yandex_service.HAS_YANDEX", True):
-            with patch("services.yandex_service.Client") as mock_client_cls:
+            # create=True: yandex_music is optional and may be absent, so the
+            # module-level `Client` name does not exist when the import failed.
+            with patch("services.yandex_service.Client", create=True) as mock_client_cls:
                 mock_client_cls.side_effect = [Exception("Auth Failed"), MagicMock()]
                 client = service._get_client()
 

@@ -506,6 +506,34 @@ async function init() {
 // version mismatch between two importers would instantiate the module twice and split
 // its state. Freshness is guaranteed by the no-store Cache-Control hook in main.py.
 
+// Local images (avatars) must be served through the loopback proxy: CSP forbids
+// file:// subresources on an http:// origin, so a raw path can never render.
+function getLocalImageUrl(path) {
+    if (!path) return '';
+    if (!window.PROXY_PORT) return '';
+    const tokenQuery = window.PROXY_TOKEN ? `&k=${encodeURIComponent(window.PROXY_TOKEN)}` : '';
+    return `http://127.0.0.1:${window.PROXY_PORT}/api/avatar?path=${encodeURIComponent(path)}${tokenQuery}`;
+}
+
+function showAvatar(avatarImg, avatarIcon, currentAvatar) {
+    if (!avatarImg || !avatarIcon) return;
+    const url = getLocalImageUrl(currentAvatar);
+    if (!url) {
+        avatarImg.style.display = 'none';
+        avatarIcon.style.display = 'block';
+        return;
+    }
+    avatarImg.onload = () => {
+        avatarImg.style.display = 'block';
+        avatarIcon.style.display = 'none';
+    };
+    avatarImg.onerror = () => {
+        avatarImg.style.display = 'none';
+        avatarIcon.style.display = 'block';
+    };
+    avatarImg.src = url;
+}
+
 async function loadProfile() {
     try {
         const { createTrackElement, renderIcons, formatListeningTimeShort } = await import('./utils.js');
@@ -517,15 +545,11 @@ async function loadProfile() {
             nicknameInput.value = window.settings.personalization.nickname;
         }
 
-        const avatarImg = document.getElementById('profile-avatar-img');
-        const avatarIcon = document.getElementById('profile-avatar-icon');
-        const currentAvatar = window.settings?.personalization?.avatar_path || window.settings?.app?.avatar_path;
-        if (avatarImg && avatarIcon && currentAvatar) {
-            const clean = currentAvatar.replace(/\\/g, '/');
-            avatarImg.src = clean.startsWith('file://') ? encodeURI(clean) : `file:///${encodeURI(clean.replace(/^\//, ''))}`;
-            avatarImg.style.display = 'block';
-            avatarIcon.style.display = 'none';
-        }
+        showAvatar(
+            document.getElementById('profile-avatar-img'),
+            document.getElementById('profile-avatar-icon'),
+            window.settings?.personalization?.avatar_path || window.settings?.app?.avatar_path
+        );
 
         await window.awaitBridge();
         if (!window.pywebview?.api?.get_profile_stats) return;
@@ -646,20 +670,15 @@ function setupProfileAndGreeting() {
     }
 
     function formatFileUrl(path) {
+        // Kept for callers that legitimately need a file URI; UI <img> tags must
+        // use getLocalImageUrl() instead (CSP blocks file:// on http origin).
         if (!path) return '';
         const clean = path.replace(/\\/g, '/');
         if (clean.startsWith('file://')) return encodeURI(clean);
         return `file:///${encodeURI(clean.replace(/^\//, ''))}`;
     }
 
-    if (avatarImg && avatarIcon) {
-        const currentAvatar = window.settings?.personalization?.avatar_path || window.settings?.app?.avatar_path;
-        if (currentAvatar) {
-            avatarImg.src = formatFileUrl(currentAvatar);
-            avatarImg.style.display = 'block';
-            avatarIcon.style.display = 'none';
-        }
-    }
+    showAvatar(avatarImg, avatarIcon, window.settings?.personalization?.avatar_path || window.settings?.app?.avatar_path);
 
     if (avatarBtn) {
         avatarBtn.addEventListener('click', async () => {
@@ -668,11 +687,7 @@ function setupProfileAndGreeting() {
                 if (newAvatar) {
                     if (!window.settings.personalization) window.settings.personalization = {};
                     window.settings.personalization.avatar_path = newAvatar;
-                    if (avatarImg && avatarIcon) {
-                        avatarImg.src = formatFileUrl(newAvatar);
-                        avatarImg.style.display = 'block';
-                        avatarIcon.style.display = 'none';
-                    }
+                    showAvatar(avatarImg, avatarIcon, newAvatar);
                     if (typeof showToast === 'function') showToast('Аватарка обновлена', 'success');
                 }
             }
