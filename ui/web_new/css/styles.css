@@ -3127,7 +3127,10 @@ body.mini-player-active {
 
 #mini-player-overlay {
     display: none;
-    position: fixed;
+    /* fixed !important: the overlay must always fill the viewport. Theme
+       presets must never be able to change this (a `relative` here collapsed
+       the card and exposed the native black background behind it). */
+    position: fixed !important;
     top: 0 !important;
     left: 0 !important;
     right: 0 !important;
@@ -4133,7 +4136,8 @@ html.queue-view-expanded #queue-drawer-content .track-item img {
 /* 7. Mini-Player Modifications */
 html.mp-progress-bg #mini-player-overlay {
     background-size: cover;
-    position: relative;
+    /* position must stay `fixed` (base rule): `relative` collapsed the overlay
+       to content height and exposed the black window background */
     overflow: hidden;
 }
 

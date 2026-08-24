@@ -264,7 +264,10 @@ def main():
     # Transparency flag (opaque fallback)
     is_transparent = app_core.settings.get("theme", "transparency_enabled", False)
 
-    # Create main app window (solid dark background, 100% stable, no white box)
+    # Create main app window. NOTE: background_color stays the theme dark even
+    # when transparency is enabled - with `#000000` any spot the WebView2 does
+    # not paint (it frequently refuses real transparency on Windows) showed as
+    # a harsh black rectangle behind the mini player.
     window = webview.create_window(
         "NeDotify",
         url=html_path,
@@ -275,7 +278,7 @@ def main():
         frameless=True,
         fullscreen=False,
         transparent=is_transparent,
-        background_color='#000000' if is_transparent else '#0f0f14',
+        background_color='#0f0f14',
         easy_drag=False
     )
 
