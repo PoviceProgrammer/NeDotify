@@ -157,15 +157,42 @@ document.addEventListener('error', (e) => {
     handleImageError(target, target.dataset.coverUrl, target.dataset.sourceId || '', target.dataset.source || '');
 }, true);
 
+// Artist avatar fallback: there is no artist-photo source in the local
+// database (get_top_artists returns names only), so render a deterministic
+// gradient disc with the artist's first letter on top of it.
+export function artistAvatarHtml(artistName) {
+    const name = (artistName || '').trim() || '?';
+    const letter = name.charAt(0).toUpperCase();
+    const grad = getCoverFallbackGradient(name);
+    return `<div class="artist-avatar-fallback" style="background:${grad}" role="img" aria-label="${escapeHtml(name)}"><span>${escapeHtml(letter)}</span></div>`;
+}
+
+// ─── Playlist cover collage ────────────────────────────────────────────────
+// Layout choice: CSS grid 2x2 (simpler and resolution-independent vs clipped
+// sector backgrounds). 4 covers -> 2x2; 3 -> first spans the top row;
+// 2 -> side by side; 1 -> single full-bleed cover; 0 -> '' (caller keeps the
+// skeleton placeholder).
+
+export function renderPlaylistCoverCollage(trackCovers) {
+    const covers = (Array.isArray(trackCovers) ? trackCovers : []).filter(Boolean).slice(0, 4);
+    if (covers.length === 0) return '';
+    const cells = covers
+        .map(src => `<div class="pl-collage-cell"><img src="${escapeHtml(src)}" loading="lazy" alt=""></div>`)
+        .join('');
+    return `<div class="pl-collage pl-collage-${covers.length}" aria-hidden="true">${cells}</div>`;
+}
+
 export function getCoverUrl(track) {
     if (!track) return '';
     if (track.cover_path) {
         const path = track.cover_path.replace(/\\/g, '/');
-        const idx = path.indexOf('web_new/covers/');
-        if (idx !== -1) {
-            return './covers/' + path.substring(idx + 15);
+        // Only paths inside THIS UI copy resolve relatively; the scanner also
+        // writes ui/web_new (v1) covers, which 404 as ./covers/ here and must
+        // go through the loopback proxy like any other local file.
+        const idxV2 = path.indexOf('web_new_v2/covers/');
+        if (idxV2 !== -1) {
+            return './covers/' + path.substring(idxV2 + 17);
         }
-        const idxWeb = path.indexOf('ui/web/covers/');
         if (window.PROXY_PORT) {
             const tokenQuery = window.PROXY_TOKEN ? `&k=${encodeURIComponent(window.PROXY_TOKEN)}` : '';
             return `http://127.0.0.1:${window.PROXY_PORT}/api/cover?path=${encodeURIComponent(track.cover_path)}${tokenQuery}`;

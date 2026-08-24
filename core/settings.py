@@ -109,18 +109,21 @@ DEFAULT_SETTINGS = {
         "resource_blur": True,
     },
     "hotkeys": {
-        # Values use the frontend combo format (parseKeyEventCombo in
-        # ui/*/js/hotkeys.js): e.code names joined with '+'. Arrows are
-        # Ctrl-modified on purpose - bare arrows hijacked list navigation.
+        # MUST mirror DEFAULT_KEYBINDS in ui/web_new_v2/js/hotkeys.js exactly:
+        # the frontend assigns these over its own defaults at startup, so any
+        # drift here silently disables the frontend defaults (e.g. a backend
+        # "Ctrl+KeyK" made the plain "K" like hotkey dead).
+        # Values use the frontend combo format (parseKeyEventCombo): e.code
+        # names joined with '+'. Arrows are Ctrl-modified on purpose - bare
+        # arrows hijacked list navigation.
         "play_pause": "Space",
         "next_track": "Ctrl+ArrowRight",
         "prev_track": "Ctrl+ArrowLeft",
         "volume_up": "Ctrl+ArrowUp",
         "volume_down": "Ctrl+ArrowDown",
-        "mute": "Ctrl+KeyM",
-        "like": "Ctrl+KeyK",
+        "mute": "KeyM",
+        "like": "KeyK",
         "search": "Slash",
-        "toggle_overlay": "Ctrl+KeyO",
     },
     "storage": {
         "cache_size_mb": 500,

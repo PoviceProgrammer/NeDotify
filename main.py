@@ -33,6 +33,11 @@ _ADDITIONAL_ARGS = (
     # Session autoplay restores playback without a click; without this flag
     # Chromium's gesture requirement would block the programmatic play().
     '--autoplay-policy=no-user-gesture-required '
+    # Kill the HTTP disk cache: WebView2 kept serving STALE ES modules (js/)
+    # despite Cache-Control: no-store, so frontend fixes silently did not
+    # apply until a cache-flush happened by luck. 1MB is enough for trivial
+    # reuse, stale module bodies no longer survive restarts.
+    '--disk-cache-size=1048576 '
     '--disable-features=CalculateNativeWinOcclusion,msSmartScreenProtection'
 )
 if 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS' in os.environ:

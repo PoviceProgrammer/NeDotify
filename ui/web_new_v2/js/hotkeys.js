@@ -64,20 +64,52 @@ export function initHotkeys() {
     // Migrate legacy defaults: bare arrow keys hijacked list/navigation,
     // they are now Ctrl-modified.
     const LEGACY_ARROW_MAP = { ArrowRight: 'Ctrl+ArrowRight', ArrowLeft: 'Ctrl+ArrowLeft', ArrowUp: 'Ctrl+ArrowUp', ArrowDown: 'Ctrl+ArrowDown' };
+    // Migrate OLD backend-default formats that used to leak into storage and
+    // shadow the current defaults ("like" was stuck at Ctrl+KeyK, so plain K
+    // never fired). null = drop the entry entirely (action no longer exists).
+    const LEGACY_DEFAULT_MIGRATION = {
+        'Ctrl+Right': 'Ctrl+ArrowRight', 'Ctrl+Left': 'Ctrl+ArrowLeft',
+        'Ctrl+Up': 'Ctrl+ArrowUp', 'Ctrl+Down': 'Ctrl+ArrowDown',
+        'Ctrl+KeyM': 'KeyM', 'Ctrl+KeyK': 'KeyK',
+        'Ctrl+M': 'KeyM', 'Ctrl+L': 'KeyK', 'Ctrl+F': 'Slash',
+        'Ctrl+KeyO': null, 'Ctrl+O': null
+    };
+    const KNOWN_ACTIONS = new Set(DEFAULT_KEYBINDS.map(kb => kb.id));
     let migrated = false;
     for (const [oldK, newK] of Object.entries(LEGACY_ARROW_MAP)) {
         for (const [actionId, key] of Object.entries(activeKeybinds)) {
             if (key === oldK) { activeKeybinds[actionId] = newK; migrated = true; }
         }
     }
+    for (const [actionId, key] of Object.entries(activeKeybinds)) {
+        if (Object.prototype.hasOwnProperty.call(LEGACY_DEFAULT_MIGRATION, key)) {
+            const newK = LEGACY_DEFAULT_MIGRATION[key];
+            if (newK === null) { delete activeKeybinds[actionId]; }
+            else { activeKeybinds[actionId] = newK; }
+            migrated = true;
+        } else if (!KNOWN_ACTIONS.has(actionId)) {
+            // Ghost entries for actions that no longer exist (e.g. toggle_overlay).
+            delete activeKeybinds[actionId];
+            migrated = true;
+        }
+    }
     if (migrated) saveKeybindsToStorage(activeKeybinds);
 
-    // 3. Load backend keybinds category settings
+    // 3. Load backend keybinds category settings.
+    // Only accept KNOWN actions: the backend must never inject ghost entries
+    // (an old "toggle_overlay" default used to linger here forever) and must
+    // not shadow the defaults for actions it does not know about.
     if (window.pywebview?.api?.get_settings_by_category) {
         window.pywebview.api.get_settings_by_category('hotkeys').then(saved => {
             if (saved && typeof saved === 'object') {
-                Object.assign(activeKeybinds, saved);
-                saveKeybindsToStorage(activeKeybinds);
+                let backendApplied = false;
+                for (const [actionId, key] of Object.entries(saved)) {
+                    if (KNOWN_ACTIONS.has(actionId) && typeof key === 'string' && key) {
+                        if (activeKeybinds[actionId] !== key) backendApplied = true;
+                        activeKeybinds[actionId] = key;
+                    }
+                }
+                if (backendApplied) saveKeybindsToStorage(activeKeybinds);
             }
             if (window.renderKeybindsList) window.renderKeybindsList();
         }).catch(() => {
@@ -106,7 +138,9 @@ export function initHotkeys() {
 
         // Ignore if user is typing in an input or editable element
         const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
-        if (activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable || e.target.matches('input, textarea, select, [contenteditable="true"]')) {
+        const targetIsEditable = e.target instanceof Element &&
+            e.target.matches('input, textarea, select, [contenteditable="true"]');
+        if (activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable || targetIsEditable) {
             return;
         }
 

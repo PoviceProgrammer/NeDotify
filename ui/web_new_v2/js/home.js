@@ -1,4 +1,4 @@
-import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, coverImgHtml } from './utils.js';
+import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, coverImgHtml, artistAvatarHtml, renderPlaylistCoverCollage } from './utils.js';
 
 const feedTimeouts = new Map();
 let trackChangeCount = 0;
@@ -324,6 +324,73 @@ export function renderAuthenticHome(sections) {
 
 export const renderAuthenticHomeFeed = renderAuthenticHome;
 
+// ─── Playlist collage covers ───────────────────────────────────────────────
+// Session cache: playlistId -> cover urls (first 4 tracks). Invalidated on
+// 'nedotify:playlists_changed' (see listener below).
+const _plCollageCache = new Map();
+
+export function clearPlaylistCollageCache() {
+    _plCollageCache.clear();
+}
+
+document.addEventListener('nedotify:playlists_changed', () => _plCollageCache.clear());
+
+// Cold-start safety: the very first renderHomePlaylists can race backend
+// warm-up (PROXY_PORT / bridge), leaving skeletons without collages. Once
+// init() fully finished, re-render the playlists section deterministically.
+window.addEventListener('nedotify:app_ready', async () => {
+    try {
+        await window.awaitBridge();
+        if (!document.getElementById('home-playlists')) return;
+        const playlists = await window.pywebview.api.get_playlists();
+        if (playlists && playlists.length > 0) renderHomePlaylists(playlists);
+    } catch (e) { /* non-fatal: skeletons remain */ }
+});
+
+export async function attachPlaylistCollage(pl, coverEl) {
+    if (!coverEl || !window.pywebview?.api?.get_playlist_tracks) return;
+    const pid = pl.id !== undefined ? pl.id : pl.ID;
+    let covers = _plCollageCache.get(pid);
+    if (!covers) {
+        covers = [];
+        try {
+            const res = await window.pywebview.api.get_playlist_tracks(pid);
+            const tracks = Array.isArray(res) ? res : (res && Array.isArray(res.tracks) ? res.tracks : []);
+            covers = tracks.map(t => getCoverUrl(t)).filter(Boolean).slice(0, 4);
+        } catch (e) {
+            covers = [];
+        }
+        // Cache successes only: a cold-start failure (bridge not ready yet)
+        // must not pin an empty result for the whole session - the next
+        // render retries and self-heals.
+        if (covers.length > 0) _plCollageCache.set(pid, covers);
+    }
+    // One retry for transient cold-start failures: the first render can run
+    // before the backend is fully warmed and return no tracks.
+    if (covers.length === 0 && (pl.track_count || 0) > 0 && !coverEl.dataset.collageRetried) {
+        coverEl.dataset.collageRetried = '1';
+        setTimeout(() => { attachPlaylistCollage(pl, coverEl); }, 3000);
+        return;
+    }
+    const html = renderPlaylistCoverCollage(covers);
+    if (!html) return;
+    // The home feed can be re-rendered while this lookup was in flight, so
+    // the captured coverEl may already be detached. Re-resolve the CURRENT
+    // card by its playlist id - otherwise the collage is lost to a re-render.
+    if (!coverEl.isConnected) {
+        const fresh = document.querySelector(
+            `#home-playlists .feed-card[data-pl-id="${String(pid)}"] .feed-card-cover`);
+        if (!fresh) return;
+        coverEl = fresh;
+    }
+    if (coverEl.querySelector('.pl-collage')) return; // already attached
+    // lucide replaces <i> with an svg and drops the original class, so match
+    // both the marker class and the rendered icon.
+    const skeleton = coverEl.querySelector('.pl-cover-skeleton, svg.lucide-list-music');
+    if (skeleton) skeleton.remove();
+    coverEl.insertAdjacentHTML('afterbegin', html);
+}
+
 export function renderHomePlaylists(playlists) {
     const container = document.getElementById('home-playlists');
     if (!container) return;
@@ -332,9 +399,10 @@ export function renderHomePlaylists(playlists) {
     playlists.forEach(pl => {
         const card = document.createElement('div');
         card.className = 'feed-card';
+        card.setAttribute('data-pl-id', String(pl.id !== undefined ? pl.id : pl.ID));
         card.innerHTML = `
             <div class="feed-card-cover" style="display:flex;align-items:center;justify-content:center">
-                <i data-lucide="list-music" style="width:32px;height:32px;color:var(--text-sec)"></i>
+                <i data-lucide="list-music" class="pl-cover-skeleton" style="width:32px;height:32px;color:var(--text-sec)"></i>
                 <div class="feed-card-overlay">
                     <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px"></i></button>
                 </div>
@@ -342,6 +410,9 @@ export function renderHomePlaylists(playlists) {
             <div class="feed-card-title">${escapeHtml(pl.name)}</div>
             <div class="feed-card-sub">${pl.track_count || 0} треков</div>
         `;
+        // Collage of the first 4 track covers (skeleton stays until resolved;
+        // with 0 covers the skeleton remains as-is).
+        attachPlaylistCollage(pl, card.querySelector('.feed-card-cover'));
         card.addEventListener('click', async () => {
             if (window.pywebview?.api?.get_playlist_tracks) {
                 const res = await window.pywebview.api.get_playlist_tracks(pl.id);
@@ -378,10 +449,13 @@ export function renderArtists(artists) {
         card.style.maxWidth = '120px';
         const cover = getCoverUrl(artist);
         const artistName = artist.artist || artist.name || 'Unknown';
+        // No artist-photo source exists locally (DB stores names only): show
+        // the gradient+letter avatar instead of a broken empty image.
+        const coverHtml = cover
+            ? `<div class="feed-card-cover">${coverImgHtml({ src: cover, coverUrl: artist.cover_url || '', alt: artistName })}</div>`
+            : `<div class="feed-card-cover">${artistAvatarHtml(artistName)}</div>`;
         card.innerHTML = `
-            <div class="feed-card-cover">
-                ${coverImgHtml({ src: cover, coverUrl: artist.cover_url || '', alt: artistName })}
-            </div>
+            ${coverHtml}
             <div class="feed-card-title" style="text-align:center">${escapeHtml(artistName)}</div>
         `;
         card.addEventListener('click', () => {

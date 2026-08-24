@@ -138,6 +138,8 @@ export function initEvents() {
                 if (libraryRefreshTimer) clearTimeout(libraryRefreshTimer);
                 libraryRefreshTimer = setTimeout(() => {
                     libraryRefreshTimer = null;
+                    // Collage caches must refetch after any playlist mutation
+                    window.dispatchEvent(new CustomEvent('nedotify:playlists_changed'));
                     const nextTrackChange = isNextTrackChange;
                     isNextTrackChange = false;
                     if (isPageVisible('library')) {
