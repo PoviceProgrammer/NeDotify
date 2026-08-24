@@ -705,39 +705,14 @@ export function initPlayer() {
 
     // Mini Player Controls
     const mpPlay = document.getElementById('mp-btn-play');
-    const mpStop = document.getElementById('mp-btn-stop');
     const mpNext = document.getElementById('mp-btn-next');
     const mpPrev = document.getElementById('mp-btn-prev');
     const mpLike = document.getElementById('mp-btn-like');
     const mpExpand = document.getElementById('mp-btn-expand');
 
-    function stopPlayback() {
-        if (activeAudio) {
-            activeAudio.pause();
-            audioA.pause();
-            audioB.pause();
-            try { activeAudio.currentTime = 0; } catch(e) {}
-        }
-        // Tear down both elements fully: an empty src releases the lingering
-        // background HTTP connection to the stream proxy (project teardown rule).
-        [audioA, audioB].forEach(a => {
-            if (!a) return;
-            try { a.removeAttribute('src'); a.src = ''; a.load(); } catch(e) {}
-        });
-        currentPosMs = 0;
-        targetPosMs = 0;
-        isPlaying = false;
-        onStateChanged('stopped');
-        api('stop_track');
-    }
-
     if (mpPlay) mpPlay.addEventListener('click', (e) => {
         e.stopPropagation();
         togglePlayPause();
-    });
-    if (mpStop) mpStop.addEventListener('click', (e) => {
-        e.stopPropagation();
-        stopPlayback();
     });
     if (mpNext) mpNext.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -799,6 +774,13 @@ export function initPlayer() {
             if (window.pywebview?.api?.start_drag) {
                 window.pywebview.api.start_drag();
             }
+        });
+        // Double-click on a blank area restores the full player window.
+        mpCard.addEventListener('dblclick', (e) => {
+            if (e.target.closest('button, input, select, a, .btn-ctrl, .icon-btn, .progress-track, .volume-track')) {
+                return;
+            }
+            if (window.toggleMiniPlayerMode) window.toggleMiniPlayerMode(false);
         });
     }
 

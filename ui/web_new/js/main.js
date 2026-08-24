@@ -132,17 +132,32 @@ export async function toggleMiniPlayerMode(targetState) {
     const isCurrentlyMini = document.body.classList.contains('mini-player-active');
     if (targetState === undefined) targetState = !isCurrentlyMini;
 
-    if (targetState) {
-        document.body.classList.add('mini-player-active');
-        if (window.pywebview?.api?.toggle_mini_player) {
-            try { await window.pywebview.api.toggle_mini_player(true); } catch(e) {}
+    // Optimistic class swap for an instant visual response...
+    document.body.classList.toggle('mini-player-active', targetState);
+
+    let backendOk = false;
+    if (window.pywebview?.api?.toggle_mini_player) {
+        try {
+            const res = await window.pywebview.api.toggle_mini_player(targetState);
+            // Backend returns {success, is_mini}; a bare `true` from older
+            // builds is also accepted.
+            backendOk = !res || res.success !== false;
+        } catch (e) {
+            backendOk = false;
         }
     } else {
-        document.body.classList.remove('mini-player-active');
-        if (window.pywebview?.api?.toggle_mini_player) {
-            try { await window.pywebview.api.toggle_mini_player(false); } catch(e) {}
-        }
+        backendOk = true; // no bridge (dev preview): CSS-only
     }
+
+    // ...rolled back when the native resize/move actually failed.
+    if (!backendOk) {
+        document.body.classList.toggle('mini-player-active', isCurrentlyMini);
+        window.dispatchEvent(new CustomEvent('nedotify:toast', {
+            detail: { msg: 'Не удалось переключить мини-плеер', type: 'error' }
+        }));
+        return isCurrentlyMini;
+    }
+    return targetState;
 }
 window.toggleMiniPlayerMode = toggleMiniPlayerMode;
 

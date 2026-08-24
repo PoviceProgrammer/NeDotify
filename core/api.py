@@ -36,10 +36,9 @@ PROVIDER_SEARCH_TIMEOUT = 4.0
 # instead of each stage getting its own timeout.
 BRIDGE_SYNC_BUDGET = 6.0
 
-# Window geometry: main window, compact mini player, and expanded mini player.
+# Window geometry: main window and compact mini player.
 MAIN_WINDOW_SIZE = (1100, 800)
 MINI_WINDOW_SIZE = (380, 110)
-MINI_EXPANDED_SIZE = (400, 180)
 
 
 def _is_ssrf_safe_url(url: str) -> bool:
@@ -101,7 +100,6 @@ class AppApi:
         self._mini_window = None
         self._is_mini_active = False
         self._saved_mini_pos = "bottom-right"
-        self._mini_size = None
         self._window_op_lock = threading.RLock()
 
         # C-2: lyrics cascade counter (verification: exactly one cascade per request)
@@ -226,43 +224,97 @@ class AppApi:
     def _on_restored(self):
         pass
 
-    def _set_window_pos_native(self, x, y, w, h, topmost=False):
-        """Native Windows resize to bypass pywebview restrictions."""
+    def _get_scale_factor(self) -> float:
+        """Logical-to-physical DPI scale of the window's current monitor.
+
+        pywebview's move()/resize() take LOGICAL pixels and convert internally;
+        every coordinate we compute must be in the same space or positioning
+        breaks on any display scaled above 100%.
+        """
         try:
-            if not getattr(self._window, 'native', None):
-                return False
-            
+            native = getattr(self._window, "native", None)
+            scale = getattr(native, "_scale", None)
+            if callable(scale):
+                try:
+                    scale = scale.fget(native) if hasattr(scale, "fget") else scale()
+                except Exception:
+                    scale = getattr(native, "_scale", None)
+            val = float(scale) if isinstance(scale, (int, float)) and scale > 0 else 1.0
+            return val
+        except Exception:
+            logger.debug("_get_scale_factor fallback", exc_info=True)
+            return 1.0
+
+    def _logical_workarea(self):
+        """(x, y, w, h) of the work area (taskbar excluded) under the window,
+        in LOGICAL pixels - matching what Window.move() expects."""
+        try:
             import ctypes
-            form = self._window.native
-            hwnd = form.Handle.ToInt64()
-            hwnd_ptr = ctypes.c_void_p(hwnd)
-            
-            try:
-                import clr
-                clr.AddReference('System.Drawing')
-                from System.Drawing import Size
-                form.MinimumSize = Size(0, 0)
-            except Exception:
-                logger.debug("_set_window_pos_native: suppressed exception", exc_info=True)
-                
+            from ctypes import wintypes
+
             user32 = ctypes.windll.user32
-            if user32.IsZoomed(hwnd_ptr) or user32.IsIconic(hwnd_ptr):
-                user32.ShowWindowAsync(hwnd_ptr, 9)
-                
-            HWND_TOPMOST = -1
-            HWND_NOTOPMOST = -2
-            SWP_NOACTIVATE = 0x0010
-            SWP_SHOWWINDOW = 0x0040
-            SWP_ASYNCWINDOWPOS = 0x4000
-            
-            flags = SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS | SWP_SHOWWINDOW
-            insert_after = ctypes.c_void_p(HWND_TOPMOST if topmost else HWND_NOTOPMOST)
-            
-            user32.SetWindowPos(hwnd_ptr, insert_after, int(x), int(y), int(w), int(h), flags)
-            return True
+
+            class RECT(ctypes.Structure):
+                _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                            ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+            hwnd = self._get_hwnd()
+            rect = RECT()
+            got = False
+            if hwnd:
+                mon_rc = RECT()
+
+                class MONITORINFO(ctypes.Structure):
+                    _fields_ = [("cbSize", wintypes.DWORD),
+                                ("rcMonitor", RECT),
+                                ("rcWork", RECT),
+                                ("dwFlags", wintypes.DWORD)]
+
+                hmon = user32.MonitorFromWindow(ctypes.c_void_p(hwnd), 2)  # MONITOR_DEFAULTTONEAREST
+                if hmon:
+                    mi = MONITORINFO()
+                    mi.cbSize = ctypes.sizeof(MONITORINFO)
+                    if user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+                        mon_rc = mi.rcWork
+                        got = True
+            if not got:
+                # Primary monitor work area fallback
+                if not user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):
+                    return None
+                mon_rc = rect
+
+            s = self._get_scale_factor()
+            x = int(mon_rc.left / s)
+            y = int(mon_rc.top / s)
+            w = int((mon_rc.right - mon_rc.left) / s)
+            h = int((mon_rc.bottom - mon_rc.top) / s)
+            return x, y, w, h
         except Exception as e:
-            logger.warning(f"Native SetWindowPos failed: {e}")
-            return False
+            logger.debug(f"_logical_workarea failed: {e}")
+            return None
+
+    def _saved_pos_coords(self, pos: str, w: int, h: int):
+        """Compute screen coordinates (logical px) for a mini-player position."""
+        area = self._logical_workarea()
+        if not area:
+            return None
+        ax, ay, aw, ah = area
+        margin = 20
+        if pos == 'top-left':
+            return ax + margin, ay + margin
+        if pos == 'top-center':
+            return ax + (aw - w) // 2, ay + margin
+        if pos == 'top-right':
+            return ax + aw - w - margin, ay + margin
+        if pos == 'bottom-left':
+            return ax + margin, ay + ah - h - margin
+        if pos == 'bottom-center':
+            return ax + (aw - w) // 2, ay + ah - h - margin
+        if pos == 'bottom-right':
+            return ax + aw - w - margin, ay + ah - h - margin
+        if pos == 'center':
+            return ax + (aw - w) // 2, ay + (ah - h) // 2
+        return ax + aw - w - margin, ay + margin
 
     def _deferred_window_op(self, delay: float, fn):
         """Run a native window operation on a background thread after a short delay.
@@ -290,9 +342,11 @@ class AppApi:
             else:
                 self._exit_mini_mode()
             self._emit("mini_player_toggled", {"is_mini": enable})
-            return enable
+            return {"success": True, "is_mini": enable}
         except Exception as e:
             logger.error(f"Error toggling mini player: {e}")
+            # Frontend rolls its optimistic CSS state back on success=False.
+            return {"success": False, "is_mini": not enable}
 
     def _enter_mini_mode(self):
         target_win = self._mini_window or self._window
@@ -306,12 +360,18 @@ class AppApi:
                 getattr(target_win, 'x', None),
                 getattr(target_win, 'y', None)
             )
+            # Entering mini from a maximized window must clear the stale flag:
+            # otherwise the next maximize button press restores first.
+            self._is_maximized = False
             if hasattr(target_win, 'on_top'):
                 target_win.on_top = True
             w, h = MINI_WINDOW_SIZE
-            self._mini_size = (w, h)
-            target_win.resize(w, h)
-            self._apply_window_pos(target_win, self._saved_mini_pos, w, h)
+            # All native ops go through the deferred path like every other
+            # bridge-initiated window operation (single threading model).
+            self._deferred_window_op(0.05, lambda: (
+                target_win.resize(w, h),
+                self._apply_window_pos(target_win, self._saved_mini_pos, w, h),
+            ))
         except Exception as err:
             logger.debug(f"Failed setting mini size: {err}")
 
@@ -324,82 +384,31 @@ class AppApi:
             if hasattr(target_win, 'on_top'):
                 target_win.on_top = False
             gw, gh, gx, gy = getattr(self, '_saved_main_geometry', (*MAIN_WINDOW_SIZE, None, None))
-            w = max(gw or MAIN_WINDOW_SIZE[0], 800)
-            h = max(gh or MAIN_WINDOW_SIZE[1], 600)
-            self._mini_size = (w, h)
-            target_win.resize(w, h)
-            if gx is not None and gy is not None and hasattr(target_win, 'move'):
-                target_win.move(gx, gy)
-            else:
-                try:
-                    import ctypes
-                    user32 = ctypes.windll.user32
-                    screen_w = user32.GetSystemMetrics(0)
-                    screen_h = user32.GetSystemMetrics(1)
-                    if hasattr(target_win, 'move'):
-                        target_win.move((screen_w - w) // 2, (screen_h - h) // 2)
-                except Exception:
-                    logger.debug("_exit_mini_mode: suppressed exception", exc_info=True)
+            # Restore EXACTLY what the user had; the old max(...,800/600) clamp
+            # silently enlarged deliberately smaller windows.
+            w = int(gw or MAIN_WINDOW_SIZE[0])
+            h = int(gh or MAIN_WINDOW_SIZE[1])
+
+            def _restore():
+                target_win.resize(w, h)
+                if gx is not None and gy is not None and hasattr(target_win, 'move'):
+                    target_win.move(int(gx), int(gy))
+                else:
+                    area = self._logical_workarea()
+                    if area and hasattr(target_win, 'move'):
+                        ax, ay, aw, ah = area
+                        target_win.move(ax + max(0, (aw - w) // 2), ay + max(0, (ah - h) // 2))
+
+            self._deferred_window_op(0.05, _restore)
         except Exception as err:
             logger.debug(f"Failed restoring main size: {err}")
 
-    def resize_mini_window(self, expanded: bool):
-        """Resize mini player window dynamically (compact / expanded)."""
-        logger.info(f"resize_mini_window called with expanded={expanded}")
-        self._deferred_window_op(0.1, lambda: self._apply_mini_resize(expanded))
-
-    def _apply_mini_resize(self, expanded: bool):
-        target_win = self._mini_window or self._window
-        if not target_win:
-            return
-        # Never reposition a window the user has dragged away from its corner.
-        try:
-            sx, sy = self._saved_pos_coords(self._saved_mini_pos, *MINI_WINDOW_SIZE)
-            wx = getattr(target_win, 'x', sx) or sx
-            wy = getattr(target_win, 'y', sy) or sy
-            anchored = abs(wx - sx) <= 8 and abs(wy - sy) <= 8
-        except Exception:
-            anchored = False
-        cur = self._mini_size or MINI_WINDOW_SIZE
-        target = MINI_EXPANDED_SIZE if expanded else MINI_WINDOW_SIZE
-        try:
-            steps = 8
-            for i in range(1, steps + 1):
-                w = cur[0] + (target[0] - cur[0]) * i // steps
-                h = cur[1] + (target[1] - cur[1]) * i // steps
-                target_win.resize(w, h)
-                time.sleep(0.02)
-            self._mini_size = target
-            if anchored and self._is_mini_active:
-                self._apply_window_pos(target_win, self._saved_mini_pos, *target)
-        except Exception as e:
-            logger.error(f"Failed to resize mini window: {e}")
-
-    def _saved_pos_coords(self, pos: str, w: int, h: int):
-        """Compute the screen coordinates for a saved mini-player position."""
-        import ctypes
-        user32 = ctypes.windll.user32
-        screen_w = user32.GetSystemMetrics(0)
-        screen_h = user32.GetSystemMetrics(1)
-        margin = 20
-        if pos == 'top-left':
-            return margin, margin
-        if pos == 'top-center':
-            return (screen_w - w) // 2, margin
-        if pos == 'top-right':
-            return screen_w - w - margin, margin
-        if pos == 'bottom-left':
-            return margin, screen_h - h - margin - 30
-        if pos == 'bottom-center':
-            return (screen_w - w) // 2, screen_h - h - margin - 30
-        if pos == 'bottom-right':
-            return screen_w - w - margin, screen_h - h - margin - 30
-        if pos == 'center':
-            return (screen_w - w) // 2, (screen_h - h) // 2
-        return screen_w - w - margin, margin
-
     def set_mini_player_position(self, pos: str):
-        """Move mini player window natively to screen position (top-left, top-right, bottom-left, bottom-right, center)."""
+        """Move mini player window to a screen position (top-left, top-right, bottom-left, bottom-right, center).
+
+        The position is remembered even while the mini player is inactive so it
+        applies on the next entry; the native move only happens in mini mode.
+        """
         if pos:
             self._saved_mini_pos = pos
 
@@ -415,7 +424,11 @@ class AppApi:
     def _apply_window_pos(self, target_win, pos: str, w: int, h: int):
         """Compute target screen position for size (w x h) and move the window."""
         try:
-            x, y = self._saved_pos_coords(pos, w, h)
+            coords = self._saved_pos_coords(pos, w, h)
+            if not coords:
+                logger.debug("No work area available for position %r", pos)
+                return
+            x, y = coords
             if hasattr(target_win, 'move'):
                 target_win.move(x, y)
         except Exception as e:
@@ -581,13 +594,47 @@ class AppApi:
         self.maximize()
 
     def start_drag(self):
-        """Trigger native frameless window drag."""
-        target_win = self._mini_window or self._window
-        if target_win and hasattr(target_win, "start_drag"):
-            try:
-                target_win.start_drag()
-            except Exception as e:
-                logger.debug(f"Native drag failed: {e}")
+        """Start a native frameless window drag.
+
+        pywebview's CSS drag-region (.pywebview-drag-region) only fires when the
+        mousedown lands inside such an element; blank areas of the mini player
+        call this bridge method instead. pywebview 6.x has no Window.start_drag,
+        so we perform the classic Win32 caption-drag ourselves.
+        """
+        if sys.platform != "win32":
+            return False
+        try:
+            import ctypes
+
+            hwnd = self._get_hwnd()
+            if not hwnd:
+                return False
+            user32 = ctypes.windll.user32
+
+            def _do_drag():
+                try:
+                    WM_NCLBUTTONDOWN = 0xA1
+                    HTCAPTION = 0x2
+                    user32.ReleaseCapture()
+                    user32.SendMessageW(ctypes.c_void_p(hwnd), WM_NCLBUTTONDOWN, HTCAPTION, 0)
+                except Exception:
+                    logger.debug("start_drag: SendMessageW failed", exc_info=True)
+
+            form = getattr(self._window, "native", None)
+            marshaled = False
+            if form is not None and hasattr(form, "BeginInvoke"):
+                try:
+                    from System import Action
+                    form.BeginInvoke(Action(_do_drag))
+                    marshaled = True
+                except Exception:
+                    logger.debug("start_drag: BeginInvoke unavailable", exc_info=True)
+            if not marshaled:
+                _do_drag()
+            return True
+        except Exception as e:
+            logger.debug(f"Native drag failed: {e}")
+            return False
 
     def open_url(self, url: str):
         """Open web URL in user's default browser."""
