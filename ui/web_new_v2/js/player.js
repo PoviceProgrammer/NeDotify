@@ -763,16 +763,13 @@ export function initPlayer() {
         }
     });
 
+    // Window drag is handled by pywebview's .pywebview-drag-region on the
+    // cover + info areas (see index.html). It is the only mechanism that
+    // works over WebView2; do NOT add a second (Win32) drag path here - the
+    // combination leaks a mousemove listener and the window sticks to the
+    // cursor after release.
     const mpCard = document.getElementById('mini-player-overlay');
     if (mpCard) {
-        mpCard.addEventListener('mousedown', (e) => {
-            if (e.target.closest('button, input, select, a, .btn-ctrl, .icon-btn, .mp-progress-bar-wrap, .progress-track')) {
-                return;
-            }
-            if (window.pywebview?.api?.start_drag) {
-                window.pywebview.api.start_drag();
-            }
-        });
         // Double-click on a blank area restores the full player window.
         mpCard.addEventListener('dblclick', (e) => {
             if (e.target.closest('button, input, select, a, .btn-ctrl, .icon-btn, .progress-track, .volume-track')) {

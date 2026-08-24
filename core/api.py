@@ -593,49 +593,6 @@ class AppApi:
         """Legacy handler redirecting to maximize() to guarantee Windows taskbar visibility."""
         self.maximize()
 
-    def start_drag(self):
-        """Start a native frameless window drag.
-
-        pywebview's CSS drag-region (.pywebview-drag-region) only fires when the
-        mousedown lands inside such an element; blank areas of the mini player
-        call this bridge method instead. pywebview 6.x has no Window.start_drag,
-        so we perform the classic Win32 caption-drag ourselves.
-        """
-        if sys.platform != "win32":
-            return False
-        try:
-            import ctypes
-
-            hwnd = self._get_hwnd()
-            if not hwnd:
-                return False
-            user32 = ctypes.windll.user32
-
-            def _do_drag():
-                try:
-                    WM_NCLBUTTONDOWN = 0xA1
-                    HTCAPTION = 0x2
-                    user32.ReleaseCapture()
-                    user32.SendMessageW(ctypes.c_void_p(hwnd), WM_NCLBUTTONDOWN, HTCAPTION, 0)
-                except Exception:
-                    logger.debug("start_drag: SendMessageW failed", exc_info=True)
-
-            form = getattr(self._window, "native", None)
-            marshaled = False
-            if form is not None and hasattr(form, "BeginInvoke"):
-                try:
-                    from System import Action
-                    form.BeginInvoke(Action(_do_drag))
-                    marshaled = True
-                except Exception:
-                    logger.debug("start_drag: BeginInvoke unavailable", exc_info=True)
-            if not marshaled:
-                _do_drag()
-            return True
-        except Exception as e:
-            logger.debug(f"Native drag failed: {e}")
-            return False
-
     def open_url(self, url: str):
         """Open web URL in user's default browser."""
         if url and _is_ssrf_safe_url(url):

@@ -70,12 +70,15 @@
 <div id="mini-player-overlay" class="mini-player-card">
     <div class="mp-compact-row">
         <!-- Cover Art -->
-        <div class="mp-cover-wrap">
+        <!-- Drag handle: cover + track info only. pywebview's drag-region is
+             the ONLY drag mechanism here (a Win32 HTCAPTION fallback does not
+             work over WebView2). Buttons/progress are outside it on purpose:
+             clicks there must never move the window. -->
+        <div class="mp-cover-wrap pywebview-drag-region">
             <svg id="mp-cover-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;opacity:0.6;position:absolute;top:calc(50% - 10px);left:calc(50% - 10px);"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
             <img id="mp-cover" src="" alt="Cover" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:8px;" onload="this.style.display='block'" onerror="this.onerror=null;this.style.display='none'">
         </div>
 
-        <!-- Track Info (Drag handle region) -->
         <div class="mp-info pywebview-drag-region">
             <div id="mp-title" class="mp-title" title="Трек не выбран">Трек не выбран</div>
             <div id="mp-artist" class="mp-artist">Выберите трек</div>

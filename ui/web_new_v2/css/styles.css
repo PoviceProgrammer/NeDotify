@@ -3466,6 +3466,8 @@ body.mini-player-active .lyrics-overlay {
     flex: 1 !important;
     min-height: 0 !important;
     -webkit-app-region: no-drag;
+    /* drag handle zone */
+    cursor: grab !important;
 }
 
 #mini-player-overlay .mp-cover-wrap {
