@@ -182,28 +182,30 @@ class PlaybackQueue:
             if self._repeat == "one":
                 return self.current_track
 
+            # End of queue without repeat: stay where we are and report None.
+            # Advancing first used to push a stale index onto the history
+            # stack, so a later prev_track() jumped backwards unexpectedly.
+            if self._current_index >= len(self._tracks) - 1:
+                if self._repeat != "all":
+                    return None
+                if self.current_track:
+                    self._history_stack.append(self._current_index)
+                if self._shuffle:
+                    current = self._tracks[0] if self._tracks else None
+                    random.shuffle(self._tracks)
+                    if current:
+                        try:
+                            idx = self._tracks.index(current)
+                            self._tracks[0], self._tracks[idx] = self._tracks[idx], self._tracks[0]
+                        except ValueError:
+                            pass
+                self._current_index = 0
+                return self.current_track
+
             if self.current_track:
                 self._history_stack.append(self._current_index)
 
             self._current_index += 1
-
-            if self._current_index >= len(self._tracks):
-                if self._repeat == "all":
-                    self._current_index = 0
-                    if self._shuffle:
-                        current = self._tracks[0] if self._tracks else None
-                        random.shuffle(self._tracks)
-                        if current:
-                            try:
-                                idx = self._tracks.index(current)
-                                self._tracks[0], self._tracks[idx] = self._tracks[idx], self._tracks[0]
-                            except ValueError:
-                                pass
-                        self._current_index = 0
-                else:
-                    self._current_index = len(self._tracks) - 1
-                    return None
-
             return self.current_track
 
     def previous_track(self) -> Optional[dict]:

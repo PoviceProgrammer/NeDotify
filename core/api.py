@@ -902,7 +902,9 @@ class AppApi:
                     if metadata and isinstance(metadata, dict):
                         if metadata.get("duration") and not target_track.get("duration"):
                             target_track["duration"] = metadata["duration"]
-                    self._core.engine.play_queue(track_list, safe_index)
+                    # Re-notify only. Re-running play_queue() here used to reset
+                    # the queue history stack and re-shuffle on every resolve.
+                    self._core.engine._notify_track_changed()
 
             def on_queue_error(err):
                 logger.warning(f"api.py -> queue resolve error: {err}")
@@ -1089,12 +1091,15 @@ class AppApi:
             return {"success": False, "error": str(e)}
 
     def get_setting(self, key: str, default=None):
-        """Get a setting by dotted key 'category.key' or (category, key)."""
+        """Get a setting by dotted key 'category.key'."""
         try:
             if "." in key:
                 cat, k = key.split(".", 1)
                 return self._core.settings.get(cat, k, default)
-            return self._core.settings.get("zapret", key, default)
+            # Bare keys are ambiguous (they used to silently hit the 'zapret'
+            # category); refuse them instead of returning a surprise value.
+            logger.warning("get_setting: bare key %r rejected, pass 'category.key'", key)
+            return default
         except Exception as e:
             logger.error(f"get_setting error: {e}")
             return default
@@ -1984,12 +1989,15 @@ class AppApi:
         }
 
     def set_equalizer(self, preamp: float = 0, bands: list = None):
-        """Set equalizer settings."""
+        """Persist equalizer settings.
+
+        The actual DSP lives in the frontend WebAudio graph (player.js setEq);
+        the backend only stores the values. The old engine.set_equalizer()
+        call here targeted a method AudioEngine never had and silently no-op'd.
+        """
         self._core.settings.set("equalizer", "preamp", preamp)
         if bands:
             self._core.settings.set("equalizer", "bands", bands)
-        if hasattr(self._core.engine, "set_equalizer"):
-            self._core.engine.set_equalizer(preamp, bands)
         return True
 
     def get_lyrics(self, track_name: str, artist_name: str, duration_ms: int = 0, file_path: str = None):
@@ -2054,24 +2062,21 @@ class AppApi:
         }
 
     def get_popular_tracks(self, region: str = "US"):
-        """Request popular tracks and deliver them through the frontend event contract."""
-        fallback = self._core.db.get_history(limit=10) or [
-            {"id": "yt_4NRXx6U8ABQ", "title": "Blinding Lights", "artist": "The Weeknd", "source": "youtube", "source_id": "4NRXx6U8ABQ", "duration": 200, "cover_url": "https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg"},
-            {"id": "yt_TUVcZfQe-Kw", "title": "Levitating", "artist": "Dua Lipa", "source": "youtube", "source_id": "TUVcZfQe-Kw", "duration": 203, "cover_url": "https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg"},
-            {"id": "yt_uelHwf8o7_U", "title": "Love The Way You Lie", "artist": "Eminem ft. Rihanna", "source": "youtube", "source_id": "uelHwf8o7_U", "duration": 263, "cover_url": "https://i.ytimg.com/vi/uelHwf8o7_U/hqdefault.jpg"},
-            {"id": "yt_fJ9rUzIMcZQ", "title": "Bohemian Rhapsody", "artist": "Queen", "source": "youtube", "source_id": "fJ9rUzIMcZQ", "duration": 359, "cover_url": "https://i.ytimg.com/vi/fJ9rUzIMcZQ/hqdefault.jpg"},
-            {"id": "yt_YykjpeuMNEk", "title": "Hymn for the Weekend", "artist": "Coldplay", "source": "youtube", "source_id": "YykjpeuMNEk", "duration": 258, "cover_url": "https://i.ytimg.com/vi/YykjpeuMNEk/hqdefault.jpg"},
-            {"id": "yt_JGwWNGJdvx8", "title": "Shape of You", "artist": "Ed Sheeran", "source": "youtube", "source_id": "JGwWNGJdvx8", "duration": 233, "cover_url": "https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg"},
-            {"id": "yt_7wtfhZwyrcc", "title": "Believer", "artist": "Imagine Dragons", "source": "youtube", "source_id": "7wtfhZwyrcc", "duration": 204, "cover_url": "https://i.ytimg.com/vi/7wtfhZwyrcc/hqdefault.jpg"},
-            {"id": "yt_DyDfgMOUjCI", "title": "bad guy", "artist": "Billie Eilish", "source": "youtube", "source_id": "DyDfgMOUjCI", "duration": 194, "cover_url": "https://i.ytimg.com/vi/DyDfgMOUjCI/hqdefault.jpg"},
-        ]
+        """Request popular tracks and deliver them through the frontend event contract.
+
+        With no local listening history and no chart provider response the UI
+        receives an empty list and shows its own empty state. The old hardcoded
+        "Blinding Lights / Levitating ..." fallback presented fake charts to new
+        users, which looked like real recommendations.
+        """
+        fallback = self._core.db.get_history(limit=10) or []
         try:
             provider = getattr(self._core.recommendations, "get_charts", None)
             if provider:
-                provider(region, callback=lambda tracks: self._emit("popular_results", tracks or fallback))
+                provider(region, callback=lambda tracks: self._emit("popular_results", tracks or []))
             else:
                 self._core.recommendations.get_releases(
-                    [region], callback=lambda tracks: self._emit("popular_results", tracks or fallback)
+                    [region], callback=lambda tracks: self._emit("popular_results", tracks or [])
                 )
         except Exception as exc:
             logger.info("Popular tracks fallback: %s", exc)
@@ -2275,7 +2280,11 @@ class AppApi:
     def _clean_stream_cache(self, max_size_mb: int = 350, max_age_hours: int = 48):
         """Clean cached audio streams using LRU and TTL to prevent disk bloat."""
         try:
-            streams_dir = os.path.join(os.path.expanduser("~"), ".nedotify", "streams")
+            # Use the CacheManager's actual streams dir; the old hardcoded
+            # ~/.nedotify/streams silently drifted if the root ever moved.
+            streams_dir = getattr(self._core.cache, "_streams_dir", None) or os.path.join(
+                os.path.expanduser("~"), ".nedotify", "streams"
+            )
             if not os.path.exists(streams_dir):
                 return
             now = time.time()
@@ -2401,22 +2410,13 @@ class AppApi:
         return []
 
     def get_home_artists(self, max_results: int = 10):
-        """Get top artists for home page with fallback to popular artists when local history is empty."""
-        artists = self._core.db.get_top_artists(limit=max_results)
-        if not artists:
-            fallback_artists = [
-                {"artist": "The Weeknd", "name": "The Weeknd", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb214f3cf1cbe7139c1e26ffbb"},
-                {"artist": "Dua Lipa", "name": "Dua Lipa", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb98165c7f8f6b49e0b82f0c76"},
-                {"artist": "Eminem", "name": "Eminem", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eba00b11c129b27a88fc72f36b"},
-                {"artist": "Taylor Swift", "name": "Taylor Swift", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb5a00969a4698c3132a15fbb0"},
-                {"artist": "Drake", "name": "Drake", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb4293385d324db8558179afd9"},
-                {"artist": "Billie Eilish", "name": "Billie Eilish", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5ebd8b9980db67ba102fe319c87"},
-                {"artist": "Queen", "name": "Queen", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb94bb714528c11e5f0378ea9f"},
-                {"artist": "Coldplay", "name": "Coldplay", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb86523da9730f579d54a2753a"},
-                {"artist": "Imagine Dragons", "name": "Imagine Dragons", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb920798797f1f9a888c3e8003"},
-                {"artist": "Ed Sheeran", "name": "Ed Sheeran", "play_count": 0, "plays": 0, "cover_url": "https://i.scdn.co/image/ab6761610000e5eb12a2f49da3c235730317b3c7"}
-            ]
-            artists = fallback_artists[:max_results]
+        """Get top artists for the home page.
+
+        No fabricated fallback: with empty history the UI receives an empty
+        list and renders its own "пока пусто" state instead of pretending the
+        user listens to The Weeknd.
+        """
+        artists = self._core.db.get_top_artists(limit=max_results) or []
         self._emit("artists_ready", artists)
         return artists
 

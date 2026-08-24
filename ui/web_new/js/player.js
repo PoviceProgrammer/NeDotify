@@ -536,6 +536,10 @@ export function seekTo(posMs) {
         setEl('pb-progress-fill', 'transform', txVal);
         setEl('pp-progress-fill', 'transform', txVal);
         setEl('mp-progress-fill', 'transform', txVal);
+        ['pb-progress-track', 'pp-progress-track', 'mp-progress-track'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.setAttribute('aria-valuenow', pct.toFixed(1));
+        });
         setElText('pb-time-current', formatTime(posMs / 1000));
         setElText('pp-time-current', formatTime(posMs / 1000));
         setElText('mp-time-current', formatTime(posMs / 1000));
@@ -845,6 +849,10 @@ export function initPlayer() {
     });
 
     // Volume bar drag
+    const syncVolumeAria = () => {
+        const vt = document.getElementById('pb-volume-track');
+        if (vt) vt.setAttribute('aria-valuenow', String(currentVolume));
+    };
     setupDragBar('pb-volume-track', {
         onDrag: (pct) => {
             isDraggingVolume = true;
@@ -852,6 +860,7 @@ export function initPlayer() {
             setEl('pb-volume-fill', 'width', `${pct * 100}%`);
             updateVolumeIcon(currentVolume);
             activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
+            syncVolumeAria();
             // M-1: throttle RPC while dragging — last value wins
             scheduleVolumeRpc(currentVolume, false);
         },
@@ -859,6 +868,7 @@ export function initPlayer() {
             isDraggingVolume = false;
             currentVolume = Math.round(pct * 100);
             activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
+            syncVolumeAria();
             // M-1: flush the final value immediately
             scheduleVolumeRpc(currentVolume, true);
         }
@@ -870,6 +880,7 @@ export function initPlayer() {
         setEl('pb-volume-fill', 'width', `${currentVolume}%`);
         updateVolumeIcon(currentVolume);
         if (activeAudio) activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
+        syncVolumeAria();
         // M-1: discrete event — send immediately
         scheduleVolumeRpc(currentVolume, true);
     };
@@ -1044,6 +1055,15 @@ function animateProgress(timestamp) {
             if (els.pbFill) els.pbFill.style.transform = txVal;
             if (els.ppFill) els.ppFill.style.transform = txVal;
             if (els.mpFill) els.mpFill.style.transform = txVal;
+            if (!els.pbTrack) {
+                els.pbTrack = document.getElementById('pb-progress-track');
+                els.ppTrack = document.getElementById('pp-progress-track');
+                els.mpTrack = document.getElementById('mp-progress-track');
+            }
+            const ariaNow = pct.toFixed(1);
+            if (els.pbTrack) els.pbTrack.setAttribute('aria-valuenow', ariaNow);
+            if (els.ppTrack) els.ppTrack.setAttribute('aria-valuenow', ariaNow);
+            if (els.mpTrack) els.mpTrack.setAttribute('aria-valuenow', ariaNow);
             if (els.pbTime) els.pbTime.textContent = timeStr;
             if (els.ppTime) els.ppTime.textContent = timeStr;
             if (els.mpTime) els.mpTime.textContent = timeStr;

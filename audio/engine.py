@@ -269,7 +269,10 @@ class AudioEngine:
                         out.append(qn)
                 return out
 
-            cascade_deadline = time.monotonic() + 10.0
+            # Whole-cascade wall-clock budget: every stage below shares it.
+            # Previously only the SoundCloud loop was bounded while the Tier-2
+            # YouTube retries could add another ~14s inside a proxy thread.
+            cascade_deadline = time.monotonic() + 20.0
             candidates = _build_queries(track_artist, track_title)[:3]
             for sc_query in candidates:
                 if time.monotonic() >= cascade_deadline:
@@ -318,9 +321,9 @@ class AudioEngine:
                                 logger.debug("_sc_done: suppressed exception", exc_info=True)
                         return url
 
-            # Tier 2 Fallback: YouTube Search Alternative
+            # Tier 2 Fallback: YouTube Search Alternative (shares the cascade budget)
             search_query = f"{track_artist} {track_title} audio".strip()
-            if search_query:
+            if search_query and time.monotonic() < cascade_deadline:
                 search_event = threading.Event()
                 search_results = []
 
@@ -334,8 +337,9 @@ class AudioEngine:
                 except Exception:
                     search_event.set()
 
-                search_event.wait(timeout=6)
-                if search_results and len(search_results) > 0:
+                remaining_search = max(0.5, cascade_deadline - time.monotonic())
+                search_event.wait(timeout=min(6.0, remaining_search))
+                if search_results and len(search_results) > 0 and time.monotonic() < cascade_deadline:
                     new_id = search_results[0].get("source_id")
                     if new_id and new_id != source_id:
                         event2 = threading.Event()
@@ -351,7 +355,8 @@ class AudioEngine:
                             self.app_core.youtube.get_stream_url(new_id, cb2, lambda e: event2.set())
                         except Exception:
                             event2.set()
-                        event2.wait(timeout=8)
+                        remaining_stream = max(0.5, cascade_deadline - time.monotonic())
+                        event2.wait(timeout=min(8.0, remaining_stream))
 
             return url
         if source == "spotify":

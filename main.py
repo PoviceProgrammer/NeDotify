@@ -457,8 +457,13 @@ def main():
                 creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
             env = os.environ.copy()
             env['NEDOTIFY_RESTART_COUNT'] = str(restart_count + 1)
+            # Frozen: sys.executable IS the app and argv[0] repeats it - passing
+            # argv in full spawned "exe exe ..." with a bogus first argument.
+            restart_args = [sys.executable] + (
+                sys.argv[1:] if getattr(sys, 'frozen', False) else sys.argv
+            )
             subprocess.Popen(
-                [sys.executable] + sys.argv,
+                restart_args,
                 creationflags=creation_flags,
                 close_fds=True,
                 env=env

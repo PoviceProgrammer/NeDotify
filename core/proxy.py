@@ -544,11 +544,14 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         import socket
         import time
         max_retries = 3
+        had_connection_issue = False
 
         for attempt in range(max_retries + 1):
             try:
                 resp = _safe_urlopen(req, timeout=12.0)
-                if hasattr(self.server.app_core, 'api') and hasattr(self.server.app_core.api, 'emit_event'):
+                # Announce recovery only after a visible problem: emitting
+                # 'connected' on every single stream open spammed the bridge.
+                if had_connection_issue and hasattr(self.server.app_core, 'api') and hasattr(self.server.app_core.api, 'emit_event'):
                     self.server.app_core.api.emit_event('proxy_status', {'proxy': 'connected'})
                 break
             except urllib.error.HTTPError as e:
@@ -626,6 +629,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                         self.end_headers()
                         return None
             except (urllib.error.URLError, ConnectionError, socket.timeout, TimeoutError) as e:
+                had_connection_issue = True
                 if attempt < max_retries:
                     backoff = 1.5 ** attempt + random.uniform(0.1, 0.5)
                     logger.warning(f'Network error {e}, retrying in {backoff:.2f}s...')

@@ -53,7 +53,7 @@
         <button id="btn-mini-player" title="Компактный мини-плеер" aria-label="Компактный мини-плеер"><i data-lucide="picture-in-picture-2" style="width:14px;height:14px"></i></button>
         <button id="btn-minimize" title="Свернуть" aria-label="Свернуть"><i data-lucide="minus" style="width:14px;height:14px"></i></button>
         <button id="btn-maximize" title="Развернуть" aria-label="Развернуть"><i data-lucide="square" style="width:12px;height:12px"></i></button>
-        <button id="btn-close" class="btn-close" title="Закрыть"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+        <button id="btn-close" class="btn-close" title="Закрыть" aria-label="Close"><i data-lucide="x" style="width:14px;height:14px"></i></button>
     </div>
 </div>
 
@@ -83,25 +83,25 @@
 
         <!-- Controls: Prev, Play/Pause, Next, Like, Minimize, Expand, Close -->
         <div class="mp-controls-row">
-            <button id="mp-btn-prev" class="btn-ctrl" title="Предыдущий">
+            <button id="mp-btn-prev" class="btn-ctrl" title="Предыдущий" aria-label="Previous track">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
             </button>
-            <button id="mp-btn-play" class="btn-ctrl btn-play-mini" title="Воспроизведение / Пауза">
+            <button id="mp-btn-play" class="btn-ctrl btn-play-mini" title="Воспроизведение / Пауза" aria-label="Play or pause">
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
             </button>
             <button id="mp-btn-next" class="btn-ctrl" title="Следующий" aria-label="Next">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
             </button>
-            <button id="mp-btn-like" class="icon-btn" title="В избранное">
+            <button id="mp-btn-like" class="icon-btn" title="В избранное" aria-label="Favorite">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>
             </button>
-            <button id="mp-btn-minimize" class="icon-btn" title="Свернуть в панель задач">
+            <button id="mp-btn-minimize" class="icon-btn" title="Свернуть в панель задач" aria-label="Minimize to mini player">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
-            <button id="mp-btn-expand" class="icon-btn" title="Развернуть окно плеера">
+            <button id="mp-btn-expand" class="icon-btn" title="Развернуть окно плеера" aria-label="Restore full player">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
             </button>
-            <button id="mp-btn-close" class="icon-btn btn-close" title="Закрыть приложение">
+            <button id="mp-btn-close" class="icon-btn btn-close" title="Закрыть приложение" aria-label="Close application">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
         </div>
@@ -110,7 +110,7 @@
     <!-- Duration Progress Bar -->
     <div class="mp-progress-row">
         <span id="mp-time-current" class="mp-time">0:00</span>
-        <div class="progress-track" id="mp-progress-track">
+        <div class="progress-track" id="mp-progress-track" role="slider" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
             <div class="progress-fill" id="mp-progress-fill" style="transform: translateX(-100%)"></div>
         </div>
         <span id="mp-time-total" class="mp-time">0:00</span>
@@ -317,7 +317,7 @@
                 <!-- Search capsule bar -->
                 <div class="search-capsule">
                     <i data-lucide="search" class="search-capsule-icon"></i>
-                    <input type="text" class="search-input" id="search-input" placeholder="Поиск..." autocomplete="off">
+                    <input type="text" class="search-input" id="search-input" aria-label="Search" placeholder="Поиск..." autocomplete="off">
                     <button class="search-clear" id="search-clear" title="Очистить"><i data-lucide="x" style="width:14px;height:14px"></i></button>
 
                     <!-- Platform Selector Dropdown -->
@@ -532,7 +532,7 @@
                     <!-- Progress Slider -->
                     <div class="pb-progress player-card-progress">
                         <span class="pb-time" id="pp-time-current">0:00</span>
-                        <div class="progress-track" id="pp-progress-track" style="position: relative;">
+                        <div class="progress-track" id="pp-progress-track" role="slider" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" style="position: relative;">
                             <canvas id="pp-waveform-canvas" class="waveform-canvas hidden"></canvas>
                             <div class="progress-fill" id="pp-progress-fill" style="transform: translateX(-100%)"></div>
                         </div>
@@ -553,13 +553,13 @@
                         <button class="btn-ctrl active" id="pp-btn-flow" title="Бесконечная волна (Flow)" aria-label="Flow">
                             <i data-lucide="radio" style="width:20px;height:20px"></i>
                         </button>
-                        <button class="btn-ctrl" id="pp-btn-prev" title="Предыдущий">
+                        <button class="btn-ctrl" id="pp-btn-prev" title="Предыдущий" aria-label="Previous track">
                             <i data-lucide="skip-back" style="width:20px;height:20px"></i>
                         </button>
-                        <button class="btn-play-large" id="pp-btn-play" title="Воспроизведение" style="width:48px;height:48px;font-size:20px;">
+                        <button class="btn-play-large" id="pp-btn-play" title="Воспроизведение" style="width:48px;height:48px;font-size:20px;" aria-label="Play or pause">
                             <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
                         </button>
-                        <button class="btn-ctrl" id="pp-btn-next" title="Следующий">
+                        <button class="btn-ctrl" id="pp-btn-next" title="Следующий" aria-label="Next track">
                             <i data-lucide="skip-forward" style="width:20px;height:20px"></i>
                         </button>
                         <button class="btn-ctrl" id="pp-btn-lyrics" title="Текст песни" aria-label="Lyrics">
@@ -1881,11 +1881,11 @@
             <div class="pb-title" id="pb-title">Не играет</div>
             <div class="pb-artist" id="pb-artist">Выберите трек</div>
         </div>
-        <button class="btn-ctrl" id="pb-btn-like" title="Нравится">
+        <button class="btn-ctrl" id="pb-btn-like" title="Нравится" aria-label="Favorite">
             <i data-lucide="heart" style="width:14px;height:14px"></i>
         </button>
         <!-- Three-dot track options -->
-        <button class="btn-ctrl" id="pb-btn-options" title="Опции" style="flex-shrink:0">
+        <button class="btn-ctrl" id="pb-btn-options" title="Опции" style="flex-shrink:0" aria-label="Track options">
             <i data-lucide="more-horizontal" style="width:14px;height:14px"></i>
         </button>
     </div>
@@ -1893,28 +1893,28 @@
     <!-- Controls + Progress -->
     <div class="pb-controls">
         <div class="pb-buttons">
-            <button class="btn-ctrl" id="pb-btn-shuffle" title="Перемешать">
+            <button class="btn-ctrl" id="pb-btn-shuffle" title="Перемешать" aria-label="Shuffle">
                 <i data-lucide="shuffle" style="width:14px;height:14px"></i>
             </button>
-            <button class="btn-ctrl" id="pb-btn-prev" title="Предыдущий">
+            <button class="btn-ctrl" id="pb-btn-prev" title="Предыдущий" aria-label="Previous track">
                 <i data-lucide="skip-back" style="width:16px;height:16px"></i>
             </button>
-            <button class="btn-play-main" id="pb-btn-play" title="Воспроизведение">
+            <button class="btn-play-main" id="pb-btn-play" title="Воспроизведение" aria-label="Play or pause">
                 <i data-lucide="play" style="width:16px;height:16px;fill:currentColor"></i>
             </button>
-            <button class="btn-ctrl" id="pb-btn-next" title="">
+            <button class="btn-ctrl" id="pb-btn-next" title="" aria-label="Next track">
                 <i data-lucide="skip-forward" style="width:16px;height:16px"></i>
             </button>
-            <button class="btn-ctrl" id="pb-btn-repeat" title="Повтор">
+            <button class="btn-ctrl" id="pb-btn-repeat" title="Повтор" aria-label="Repeat mode">
                 <i data-lucide="repeat" style="width:14px;height:14px"></i>
             </button>
-            <button class="btn-ctrl active" id="pb-btn-flow" title="Бесконечная волна (Flow)">
+            <button class="btn-ctrl active" id="pb-btn-flow" title="Бесконечная волна (Flow)" aria-label="Endless flow">
                 <i data-lucide="radio" style="width:14px;height:14px"></i>
             </button>
         </div>
         <div class="pb-progress">
             <span class="pb-time" id="pb-time-current">0:00</span>
-            <div class="progress-track" id="pb-progress-track" style="position: relative;">
+            <div class="progress-track" id="pb-progress-track" role="slider" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" style="position: relative;">
                 <canvas id="pb-waveform-canvas" class="waveform-canvas hidden"></canvas>
                 <div class="progress-fill" id="pb-progress-fill" style="transform: translateX(-100%)"></div>
             </div>
@@ -1924,14 +1924,14 @@
 
     <!-- Right: Queue + Volume (compact) -->
     <div class="pb-right">
-        <button class="btn-ctrl" id="pb-btn-queue" title="Очередь">
+        <button class="btn-ctrl" id="pb-btn-queue" title="Очередь" aria-label="Queue">
             <i data-lucide="list-music" style="width:16px;height:16px"></i>
         </button>
         <div class="volume-wrap">
-            <button class="btn-ctrl" id="pb-volume-btn" title="Громкость">
+            <button class="btn-ctrl" id="pb-volume-btn" title="Громкость" aria-label="Mute">
                 <i data-lucide="volume-2" style="width:16px;height:16px"></i>
             </button>
-            <div class="volume-track" id="pb-volume-track">
+            <div class="volume-track" id="pb-volume-track" role="slider" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" tabindex="0">
                 <div class="volume-fill" id="pb-volume-fill" style="width:70%"></div>
             </div>
         </div>

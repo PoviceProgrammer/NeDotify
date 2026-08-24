@@ -320,7 +320,11 @@ class CacheManager:
 
     def save_cover_from_url(self, url: str, track_id: int) -> Optional[str]:
         """Download and cache a cover image. Returns local path."""
-        if not url:
+        if not url or not isinstance(url, str):
+            return None
+        # Only remote http(s) images; anything else is either a local path the
+        # caller should handle itself or a probe at internal schemes.
+        if not url.startswith(("http://", "https://")):
             return None
 
         import urllib.request
@@ -335,13 +339,23 @@ class CacheManager:
         if os.path.exists(filepath):
             return filepath
 
+        # Download to temp first: an interrupted transfer used to leave a torn
+        # image cached forever (the exists() check above would keep serving it).
+        tmp_path = filepath + f".{os.getpid()}.part"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=10) as response:
-                with open(filepath, 'wb') as f:
-                    shutil.copyfileobj(response, f)
+            with urllib.request.urlopen(req, timeout=10) as response, open(tmp_path, 'wb') as f:
+                shutil.copyfileobj(response, f)
+            if os.path.getsize(tmp_path) == 0:
+                raise ValueError("empty cover response")
+            os.replace(tmp_path, filepath)
             self.mark_cache_dirty()
             return filepath
         except Exception as e:
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except OSError:
+                pass
             self.logger.error(f"Failed to download cover from {url}: {e}")
             return None

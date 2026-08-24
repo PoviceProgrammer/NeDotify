@@ -22,8 +22,6 @@ let libraryRefreshTimer = null;
 
 export function initEvents() {
     window.onPythonEvent = function(eventName, data) {
-        console.log('Python Event:', eventName, data);
-
         switch (eventName) {
             case 'track_changed':
                 isNextTrackChange = true;

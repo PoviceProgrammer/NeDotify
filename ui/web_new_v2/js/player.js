@@ -1,4 +1,4 @@
-// NeDotify Р Р†Р вЂљ" Player Module
+// NeDotify Р В Р вЂ Р В РІР‚С™" Player Module
 import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml } from './utils.js';
 
 let currentTrack = null;
@@ -114,7 +114,7 @@ export function toggleFlow() {
     updateFlowButtons();
     window.dispatchEvent(new CustomEvent('nedotify:toast', {
         detail: {
-            msg: isFlowEnabled ? '📻 «Бесконечная волна (Flow)» включена' : '📻 «Бесконечная волна (Flow)» выключена',
+            msg: isFlowEnabled ? 'рџ“» В«Р‘РµСЃРєРѕРЅРµС‡РЅР°СЏ РІРѕР»РЅР° (Flow)В» РІРєР»СЋС‡РµРЅР°' : 'рџ“» В«Р‘РµСЃРєРѕРЅРµС‡РЅР°СЏ РІРѕР»РЅР° (Flow)В» РІС‹РєР»СЋС‡РµРЅР°',
             type: 'info'
         }
     }));
@@ -137,7 +137,7 @@ function initAudioContext() {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         
         analyserNode = audioCtx.createAnalyser();
-        analyserNode.fftSize = 256; // 128 frequency bins — smoother visualizer
+        analyserNode.fftSize = 256; // 128 frequency bins вЂ” smoother visualizer
         analyserNode.smoothingTimeConstant = 0.8;
         
         // Create 10-band EQ filters (VLC / ISO standard curve)
@@ -274,7 +274,7 @@ function handleStreamError(audio, reason) {
         console.error(`Audio stream failed after ${currentTrackRetries} attempts. Stopping playback.`);
         currentTrackRetries = 0;
         lastRetriedTrackId = null;
-        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Не удалось воспроизвести: ${currentTrack.title || 'трек'}`, type: 'error' } }));
+        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `РќРµ СѓРґР°Р»РѕСЃСЊ РІРѕСЃРїСЂРѕРёР·РІРµСЃС‚Рё: ${currentTrack.title || 'С‚СЂРµРє'}`, type: 'error' } }));
         if (activeAudio) {
             try { activeAudio.pause(); } catch(e) {}
             try { activeAudio.currentTime = 0; } catch(e) {}
@@ -536,6 +536,10 @@ export function seekTo(posMs) {
         setEl('pb-progress-fill', 'transform', txVal);
         setEl('pp-progress-fill', 'transform', txVal);
         setEl('mp-progress-fill', 'transform', txVal);
+        ['pb-progress-track', 'pp-progress-track', 'mp-progress-track'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.setAttribute('aria-valuenow', pct.toFixed(1));
+        });
         setElText('pb-time-current', formatTime(posMs / 1000));
         setElText('pp-time-current', formatTime(posMs / 1000));
         setElText('mp-time-current', formatTime(posMs / 1000));
@@ -845,6 +849,10 @@ export function initPlayer() {
     });
 
     // Volume bar drag
+    const syncVolumeAria = () => {
+        const vt = document.getElementById('pb-volume-track');
+        if (vt) vt.setAttribute('aria-valuenow', String(currentVolume));
+    };
     setupDragBar('pb-volume-track', {
         onDrag: (pct) => {
             isDraggingVolume = true;
@@ -852,7 +860,8 @@ export function initPlayer() {
             setEl('pb-volume-fill', 'width', `${pct * 100}%`);
             updateVolumeIcon(currentVolume);
             activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
-            // M-1: throttle RPC while dragging — last value wins
+            // M-1: throttle RPC while dragging вЂ” last value wins
+            syncVolumeAria();
             scheduleVolumeRpc(currentVolume, false);
         },
         onRelease: (pct) => {
@@ -860,6 +869,7 @@ export function initPlayer() {
             currentVolume = Math.round(pct * 100);
             activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
             // M-1: flush the final value immediately
+            syncVolumeAria();
             scheduleVolumeRpc(currentVolume, true);
         }
     });
@@ -870,7 +880,8 @@ export function initPlayer() {
         setEl('pb-volume-fill', 'width', `${currentVolume}%`);
         updateVolumeIcon(currentVolume);
         if (activeAudio) activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
-        // M-1: discrete event — send immediately
+        // M-1: discrete event вЂ” send immediately
+        syncVolumeAria();
         scheduleVolumeRpc(currentVolume, true);
     };
 
@@ -899,7 +910,7 @@ export function initPlayer() {
             // Update track title in header
             const header = document.getElementById('track-options-header');
             if (header && currentTrack) {
-                header.textContent = currentTrack.title || 'ОПЦИИ ТРЕКА';
+                header.textContent = currentTrack.title || 'РћРџР¦РР РўР Р•РљРђ';
             }
 
             // Load playlists into menu
@@ -919,13 +930,13 @@ export function initPlayer() {
                                 await api('add_to_playlist', plId, currentTrack);
                                 optMenu.classList.remove('visible');
                                 const { showToast } = await import('./utils.js');
-                                showToast(`Добавлено в «${pl.name}»`, 'success');
+                                showToast(`Р”РѕР±Р°РІР»РµРЅРѕ РІ В«${pl.name}В»`, 'success');
                             });
                             itemsEl.appendChild(btn);
                         });
                         renderIcons();
                     } else {
-                        itemsEl.innerHTML = '<div class="context-menu-item" style="color:var(--text-dim)">Нет плейлистов</div>';
+                        itemsEl.innerHTML = '<div class="context-menu-item" style="color:var(--text-dim)">РќРµС‚ РїР»РµР№Р»РёСЃС‚РѕРІ</div>';
                     }
                 } catch(e) {
                     itemsEl.innerHTML = '';
@@ -951,7 +962,7 @@ export function initPlayer() {
         document.getElementById('track-options-copy')?.addEventListener('click', () => {
             optMenu.classList.remove('visible');
             if (currentTrack) {
-                const text = `${currentTrack.title} — ${currentTrack.artist || ''}`.trim();
+                const text = `${currentTrack.title} вЂ” ${currentTrack.artist || ''}`.trim();
                 navigator.clipboard?.writeText(text).catch(() => {});
             }
         });
@@ -969,7 +980,7 @@ export function initPlayer() {
         pbArtist.classList.add('clickable-artist');
         pbArtist.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Выберите трек') {
+            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Р’С‹Р±РµСЂРёС‚Рµ С‚СЂРµРє') {
                 if (window.searchArtistProfile) {
                     window.searchArtistProfile(currentTrack.artist);
                 } else if (window.NeDotify?.searchArtistProfile) {
@@ -984,7 +995,7 @@ export function initPlayer() {
         ppArtist.classList.add('clickable-artist');
         ppArtist.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Выберите трек') {
+            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Р’С‹Р±РµСЂРёС‚Рµ С‚СЂРµРє') {
                 if (window.searchArtistProfile) {
                     window.searchArtistProfile(currentTrack.artist);
                 } else if (window.NeDotify?.searchArtistProfile) {
@@ -1024,7 +1035,7 @@ function animateProgress(timestamp) {
     if (document.hidden) return;
     animFrameId = requestAnimationFrame(animateProgress);
 
-    // Throttle progress bar updates to ~15 FPS (66ms) — imperceptible and saves GPU
+    // Throttle progress bar updates to ~15 FPS (66ms) вЂ” imperceptible and saves GPU
     if (timestamp - lastProgressFrame < 66) return;
     lastProgressFrame = timestamp;
 
@@ -1044,6 +1055,15 @@ function animateProgress(timestamp) {
             if (els.pbFill) els.pbFill.style.transform = txVal;
             if (els.ppFill) els.ppFill.style.transform = txVal;
             if (els.mpFill) els.mpFill.style.transform = txVal;
+            if (!els.pbTrack) {
+                els.pbTrack = document.getElementById('pb-progress-track');
+                els.ppTrack = document.getElementById('pp-progress-track');
+                els.mpTrack = document.getElementById('mp-progress-track');
+            }
+            const ariaNow = pct.toFixed(1);
+            if (els.pbTrack) els.pbTrack.setAttribute('aria-valuenow', ariaNow);
+            if (els.ppTrack) els.ppTrack.setAttribute('aria-valuenow', ariaNow);
+            if (els.mpTrack) els.mpTrack.setAttribute('aria-valuenow', ariaNow);
             if (els.pbTime) els.pbTime.textContent = timeStr;
             if (els.ppTime) els.ppTime.textContent = timeStr;
             if (els.mpTime) els.mpTime.textContent = timeStr;
@@ -1128,7 +1148,7 @@ function animateProgress(timestamp) {
                                         }
                                         flowSessionCount += filtered.length;
                                         window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                                            detail: { msg: `📻 «Бесконечная волна»: подобрано ${filtered.length} похожих треков`, type: 'info' }
+                                            detail: { msg: `рџ“» В«Р‘РµСЃРєРѕРЅРµС‡РЅР°СЏ РІРѕР»РЅР°В»: РїРѕРґРѕР±СЂР°РЅРѕ ${filtered.length} РїРѕС…РѕР¶РёС… С‚СЂРµРєРѕРІ`, type: 'info' }
                                         }));
                                     }
                                 }
@@ -1188,7 +1208,7 @@ export async function triggerFlowAutoplayImmediate() {
                 }
                 flowSessionCount += filtered.length;
                 window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                    detail: { msg: `📻 «Бесконечная волна»: подобрано ${filtered.length} похожих треков`, type: 'info' }
+                    detail: { msg: `рџ“» В«Р‘РµСЃРєРѕРЅРµС‡РЅР°СЏ РІРѕР»РЅР°В»: РїРѕРґРѕР±СЂР°РЅРѕ ${filtered.length} РїРѕС…РѕР¶РёС… С‚СЂРµРєРѕРІ`, type: 'info' }
                 }));
                 if (window.pywebview?.api?.next_track) {
                     await window.pywebview.api.next_track();
@@ -1286,10 +1306,10 @@ export function onTrackChanged(track) {
     // Update bottom bar
     const pbTitleEl = document.getElementById('pb-title');
     if (pbTitleEl) {
-        pbTitleEl.textContent = track?.title || 'Не играет';
+        pbTitleEl.textContent = track?.title || 'РќРµ РёРіСЂР°РµС‚';
         pbTitleEl.title = track?.title || '';
     }
-    setElText('pb-artist', track?.artist || 'Выберите трек');
+    setElText('pb-artist', track?.artist || 'Р’С‹Р±РµСЂРёС‚Рµ С‚СЂРµРє');
     const pbCover = document.getElementById('pb-cover');
     if (pbCover) {
         pbCover.onload = () => {
@@ -1307,8 +1327,8 @@ export function onTrackChanged(track) {
     fetchAndRenderWaveform(track);
 
     // Update player page
-    const hasArtist = track?.artist && track.artist !== 'Локальный файл' && track.artist !== '...' && track.artist !== 'Unknown Artist';
-    const headerTitle = (track?.title || 'Трек не выбран') + (hasArtist ? ' — ' + track.artist : '');
+    const hasArtist = track?.artist && track.artist !== 'Р›РѕРєР°Р»СЊРЅС‹Р№ С„Р°Р№Р»' && track.artist !== '...' && track.artist !== 'Unknown Artist';
+    const headerTitle = (track?.title || 'РўСЂРµРє РЅРµ РІС‹Р±СЂР°РЅ') + (hasArtist ? ' вЂ” ' + track.artist : '');
     const headerEl = document.getElementById('pp-header-title');
     if (headerEl) {
         headerEl.textContent = headerTitle;
@@ -1328,8 +1348,8 @@ export function onTrackChanged(track) {
     setElText('pp-time-total', formatTime(currentDuration / 1000));
     setElText('mp-time-total', formatTime(currentDuration / 1000));
 
-    setElText('pp-title', track?.title || 'Трек не выбран');
-    setElText('pp-artist', track?.artist || 'Выберите трек для воспроизведения');
+    setElText('pp-title', track?.title || 'РўСЂРµРє РЅРµ РІС‹Р±СЂР°РЅ');
+    setElText('pp-artist', track?.artist || 'Р’С‹Р±РµСЂРёС‚Рµ С‚СЂРµРє РґР»СЏ РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ');
     setElSrc('pp-cover', coverUrl);
 
     // Update Mini Player widget
@@ -1365,8 +1385,8 @@ export function onTrackChanged(track) {
         }
     }
 
-    setMarqueeText('mp-title', track?.title || 'Трек не выбран');
-    setMarqueeText('mp-artist', track?.artist || 'Выберите трек');
+    setMarqueeText('mp-title', track?.title || 'РўСЂРµРє РЅРµ РІС‹Р±СЂР°РЅ');
+    setMarqueeText('mp-artist', track?.artist || 'Р’С‹Р±РµСЂРёС‚Рµ С‚СЂРµРє');
     setElSrc('mp-cover', coverUrl);
 
     // Update Player Page ambient background (cover image or fallback to standard ambient background)

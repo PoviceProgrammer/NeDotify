@@ -8,7 +8,7 @@ import { initSettings, applySettingsFromBackend, loadSettings } from './settings
 import { initParticles } from './particles.js';
 import { initVisualizer } from './visualizer.js';
 import { initEvents } from './events.js';
-import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota } from './utils.js';
+import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota, showToast } from './utils.js';
 import { initLyrics } from './lyrics.js';
 import { initEqualizer } from './equalizer.js';
 import { initQueue } from './queue.js';
@@ -664,7 +664,7 @@ function setupProfileAndGreeting() {
                 window.settings.personalization.nickname = newName;
                 saveNicknameBtn.style.display = 'none';
                 updateGreeting();
-                if (typeof showToast === 'function') showToast('Имя сохранено', 'success');
+                showToast('Имя сохранено', 'success');
             }
         });
     }
@@ -688,7 +688,7 @@ function setupProfileAndGreeting() {
                     if (!window.settings.personalization) window.settings.personalization = {};
                     window.settings.personalization.avatar_path = newAvatar;
                     showAvatar(avatarImg, avatarIcon, newAvatar);
-                    if (typeof showToast === 'function') showToast('Аватарка обновлена', 'success');
+                    showToast('Аватарка обновлена', 'success');
                 }
             }
         });
