@@ -33,6 +33,16 @@ function scheduleVolumeRpc(volume, immediate) {
     }, immediate ? 0 : 100);
 }
 
+// Duration units normalizer: the backend persists seconds; anything already
+// looking like milliseconds (a >50000s "track" is impossible) passes through.
+// Single source of truth - the duplicated heuristics below used to disagree
+// and the trailing one silently overwrote the earlier result.
+function normalizeDurationMs(dur) {
+    const d = Number(dur);
+    if (!d || isNaN(d) || d <= 0) return 0;
+    return d > 50000 ? Math.round(d) : Math.round(d * 1000);
+}
+
 export function getQueueVersion() {
     return currentQueueVersion;
 }
@@ -483,15 +493,7 @@ export function playTrack(track, streamUrl) {
     } catch(e) {}
 
     const dur = track.duration || parsedDuration;
-    if (dur && dur > 0) {
-        if (dur > 50000) {
-            currentDuration = dur;
-        } else {
-            currentDuration = dur * 1000;
-        }
-    } else {
-        currentDuration = 0;
-    }
+    currentDuration = normalizeDurationMs(dur);
 
     let finalSrc = streamUrl;
     if (finalSrc && finalSrc.match(/^[a-zA-Z]:\\/)) {
@@ -1238,16 +1240,8 @@ export function onTrackChanged(track) {
         currentReplayGain = 1.0;
     }
     
-    if (track.duration && track.duration > 0) {
-        if (track.duration > 50000) {
-            currentDuration = track.duration;
-        } else {
-            currentDuration = track.duration * 1000;
-        }
-    } else {
-        currentDuration = 0;
-    }
-    
+    currentDuration = normalizeDurationMs(track.duration);
+
     setEl('pb-progress-fill', 'width', '0%');
     setEl('pp-progress-fill', 'width', '0%');
     setEl('mp-progress-fill', 'width', '0%');
@@ -1336,7 +1330,10 @@ export function onTrackChanged(track) {
     // Atomically reset progress bar and position tracking to prevent 100% / ended flicker
     currentPosMs = 0;
     targetPosMs = 0;
-    currentDuration = (track?.duration ? track.duration * 1000 : 0);
+    // Keep the duration computed above (it already went through
+    // normalizeDurationMs); re-deriving with a *1000 here used to clobber it.
+    const normalizedDur = normalizeDurationMs(track?.duration);
+    if (normalizedDur > 0) currentDuration = normalizedDur;
     setEl('pb-progress-fill', 'width', '0%');
     setEl('pp-progress-fill', 'width', '0%');
     setEl('mp-progress-fill', 'width', '0%');

@@ -1,4 +1,4 @@
-// NeDotify Р В Р вЂ Р В РІР‚С™" Player Module
+// NeDotify Р В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ў" Player Module
 import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml } from './utils.js';
 
 let currentTrack = null;
@@ -31,6 +31,14 @@ function scheduleVolumeRpc(volume, immediate) {
         volumeRpcTimer = null;
         api('set_volume', volume);
     }, immediate ? 0 : 100);
+}
+
+// Duration units normalizer: the backend persists seconds; anything already
+// looking like milliseconds (a >50000s "track" is impossible) passes through.
+function normalizeDurationMs(dur) {
+    const d = Number(dur);
+    if (!d || isNaN(d) || d <= 0) return 0;
+    return d > 50000 ? Math.round(d) : Math.round(d * 1000);
 }
 
 export function getQueueVersion() {
@@ -114,7 +122,7 @@ export function toggleFlow() {
     updateFlowButtons();
     window.dispatchEvent(new CustomEvent('nedotify:toast', {
         detail: {
-            msg: isFlowEnabled ? 'рџ“» В«Р‘РµСЃРєРѕРЅРµС‡РЅР°СЏ РІРѕР»РЅР° (Flow)В» РІРєР»СЋС‡РµРЅР°' : 'рџ“» В«Р‘РµСЃРєРѕРЅРµС‡РЅР°СЏ РІРѕР»РЅР° (Flow)В» РІС‹РєР»СЋС‡РµРЅР°',
+            msg: isFlowEnabled ? 'СЂСџвЂњВ» Р’В«Р вЂР ВµРЎРѓР С”Р С•Р Р…Р ВµРЎвЂЎР Р…Р В°РЎРЏ Р Р†Р С•Р В»Р Р…Р В° (Flow)Р’В» Р Р†Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р В°' : 'СЂСџвЂњВ» Р’В«Р вЂР ВµРЎРѓР С”Р С•Р Р…Р ВµРЎвЂЎР Р…Р В°РЎРЏ Р Р†Р С•Р В»Р Р…Р В° (Flow)Р’В» Р Р†РЎвЂ№Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р В°',
             type: 'info'
         }
     }));
@@ -137,7 +145,7 @@ function initAudioContext() {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         
         analyserNode = audioCtx.createAnalyser();
-        analyserNode.fftSize = 256; // 128 frequency bins вЂ” smoother visualizer
+        analyserNode.fftSize = 256; // 128 frequency bins РІР‚вЂќ smoother visualizer
         analyserNode.smoothingTimeConstant = 0.8;
         
         // Create 10-band EQ filters (VLC / ISO standard curve)
@@ -274,7 +282,7 @@ function handleStreamError(audio, reason) {
         console.error(`Audio stream failed after ${currentTrackRetries} attempts. Stopping playback.`);
         currentTrackRetries = 0;
         lastRetriedTrackId = null;
-        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `РќРµ СѓРґР°Р»РѕСЃСЊ РІРѕСЃРїСЂРѕРёР·РІРµСЃС‚Рё: ${currentTrack.title || 'С‚СЂРµРє'}`, type: 'error' } }));
+        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ Р Р†Р С•РЎРѓР С—РЎР‚Р С•Р С‘Р В·Р Р†Р ВµРЎРѓРЎвЂљР С‘: ${currentTrack.title || 'РЎвЂљРЎР‚Р ВµР С”'}`, type: 'error' } }));
         if (activeAudio) {
             try { activeAudio.pause(); } catch(e) {}
             try { activeAudio.currentTime = 0; } catch(e) {}
@@ -483,15 +491,7 @@ export function playTrack(track, streamUrl) {
     } catch(e) {}
 
     const dur = track.duration || parsedDuration;
-    if (dur && dur > 0) {
-        if (dur > 50000) {
-            currentDuration = dur;
-        } else {
-            currentDuration = dur * 1000;
-        }
-    } else {
-        currentDuration = 0;
-    }
+    currentDuration = normalizeDurationMs(dur);
 
     let finalSrc = streamUrl;
     if (finalSrc && finalSrc.match(/^[a-zA-Z]:\\/)) {
@@ -860,7 +860,7 @@ export function initPlayer() {
             setEl('pb-volume-fill', 'width', `${pct * 100}%`);
             updateVolumeIcon(currentVolume);
             activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
-            // M-1: throttle RPC while dragging вЂ” last value wins
+            // M-1: throttle RPC while dragging РІР‚вЂќ last value wins
             syncVolumeAria();
             scheduleVolumeRpc(currentVolume, false);
         },
@@ -880,7 +880,7 @@ export function initPlayer() {
         setEl('pb-volume-fill', 'width', `${currentVolume}%`);
         updateVolumeIcon(currentVolume);
         if (activeAudio) activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
-        // M-1: discrete event вЂ” send immediately
+        // M-1: discrete event РІР‚вЂќ send immediately
         syncVolumeAria();
         scheduleVolumeRpc(currentVolume, true);
     };
@@ -910,7 +910,7 @@ export function initPlayer() {
             // Update track title in header
             const header = document.getElementById('track-options-header');
             if (header && currentTrack) {
-                header.textContent = currentTrack.title || 'РћРџР¦РР РўР Р•РљРђ';
+                header.textContent = currentTrack.title || 'Р С›Р СџР В¦Р ВР В Р СћР В Р вЂўР С™Р С’';
             }
 
             // Load playlists into menu
@@ -930,13 +930,13 @@ export function initPlayer() {
                                 await api('add_to_playlist', plId, currentTrack);
                                 optMenu.classList.remove('visible');
                                 const { showToast } = await import('./utils.js');
-                                showToast(`Р”РѕР±Р°РІР»РµРЅРѕ РІ В«${pl.name}В»`, 'success');
+                                showToast(`Р вЂќР С•Р В±Р В°Р Р†Р В»Р ВµР Р…Р С• Р Р† Р’В«${pl.name}Р’В»`, 'success');
                             });
                             itemsEl.appendChild(btn);
                         });
                         renderIcons();
                     } else {
-                        itemsEl.innerHTML = '<div class="context-menu-item" style="color:var(--text-dim)">РќРµС‚ РїР»РµР№Р»РёСЃС‚РѕРІ</div>';
+                        itemsEl.innerHTML = '<div class="context-menu-item" style="color:var(--text-dim)">Р СњР ВµРЎвЂљ Р С—Р В»Р ВµР в„–Р В»Р С‘РЎРѓРЎвЂљР С•Р Р†</div>';
                     }
                 } catch(e) {
                     itemsEl.innerHTML = '';
@@ -962,7 +962,7 @@ export function initPlayer() {
         document.getElementById('track-options-copy')?.addEventListener('click', () => {
             optMenu.classList.remove('visible');
             if (currentTrack) {
-                const text = `${currentTrack.title} вЂ” ${currentTrack.artist || ''}`.trim();
+                const text = `${currentTrack.title} РІР‚вЂќ ${currentTrack.artist || ''}`.trim();
                 navigator.clipboard?.writeText(text).catch(() => {});
             }
         });
@@ -980,7 +980,7 @@ export function initPlayer() {
         pbArtist.classList.add('clickable-artist');
         pbArtist.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Р’С‹Р±РµСЂРёС‚Рµ С‚СЂРµРє') {
+            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂљРЎР‚Р ВµР С”') {
                 if (window.searchArtistProfile) {
                     window.searchArtistProfile(currentTrack.artist);
                 } else if (window.NeDotify?.searchArtistProfile) {
@@ -995,7 +995,7 @@ export function initPlayer() {
         ppArtist.classList.add('clickable-artist');
         ppArtist.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Р’С‹Р±РµСЂРёС‚Рµ С‚СЂРµРє') {
+            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂљРЎР‚Р ВµР С”') {
                 if (window.searchArtistProfile) {
                     window.searchArtistProfile(currentTrack.artist);
                 } else if (window.NeDotify?.searchArtistProfile) {
@@ -1035,7 +1035,7 @@ function animateProgress(timestamp) {
     if (document.hidden) return;
     animFrameId = requestAnimationFrame(animateProgress);
 
-    // Throttle progress bar updates to ~15 FPS (66ms) вЂ” imperceptible and saves GPU
+    // Throttle progress bar updates to ~15 FPS (66ms) РІР‚вЂќ imperceptible and saves GPU
     if (timestamp - lastProgressFrame < 66) return;
     lastProgressFrame = timestamp;
 
@@ -1148,7 +1148,7 @@ function animateProgress(timestamp) {
                                         }
                                         flowSessionCount += filtered.length;
                                         window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                                            detail: { msg: `рџ“» В«Р‘РµСЃРєРѕРЅРµС‡РЅР°СЏ РІРѕР»РЅР°В»: РїРѕРґРѕР±СЂР°РЅРѕ ${filtered.length} РїРѕС…РѕР¶РёС… С‚СЂРµРєРѕРІ`, type: 'info' }
+                                            detail: { msg: `СЂСџвЂњВ» Р’В«Р вЂР ВµРЎРѓР С”Р С•Р Р…Р ВµРЎвЂЎР Р…Р В°РЎРЏ Р Р†Р С•Р В»Р Р…Р В°Р’В»: Р С—Р С•Р Т‘Р С•Р В±РЎР‚Р В°Р Р…Р С• ${filtered.length} Р С—Р С•РЎвЂ¦Р С•Р В¶Р С‘РЎвЂ¦ РЎвЂљРЎР‚Р ВµР С”Р С•Р Р†`, type: 'info' }
                                         }));
                                     }
                                 }
@@ -1208,7 +1208,7 @@ export async function triggerFlowAutoplayImmediate() {
                 }
                 flowSessionCount += filtered.length;
                 window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                    detail: { msg: `рџ“» В«Р‘РµСЃРєРѕРЅРµС‡РЅР°СЏ РІРѕР»РЅР°В»: РїРѕРґРѕР±СЂР°РЅРѕ ${filtered.length} РїРѕС…РѕР¶РёС… С‚СЂРµРєРѕРІ`, type: 'info' }
+                    detail: { msg: `СЂСџвЂњВ» Р’В«Р вЂР ВµРЎРѓР С”Р С•Р Р…Р ВµРЎвЂЎР Р…Р В°РЎРЏ Р Р†Р С•Р В»Р Р…Р В°Р’В»: Р С—Р С•Р Т‘Р С•Р В±РЎР‚Р В°Р Р…Р С• ${filtered.length} Р С—Р С•РЎвЂ¦Р С•Р В¶Р С‘РЎвЂ¦ РЎвЂљРЎР‚Р ВµР С”Р С•Р Р†`, type: 'info' }
                 }));
                 if (window.pywebview?.api?.next_track) {
                     await window.pywebview.api.next_track();
@@ -1238,15 +1238,7 @@ export function onTrackChanged(track) {
         currentReplayGain = 1.0;
     }
     
-    if (track.duration && track.duration > 0) {
-        if (track.duration > 50000) {
-            currentDuration = track.duration;
-        } else {
-            currentDuration = track.duration * 1000;
-        }
-    } else {
-        currentDuration = 0;
-    }
+    currentDuration = normalizeDurationMs(track.duration);
     
     setEl('pb-progress-fill', 'width', '0%');
     setEl('pp-progress-fill', 'width', '0%');
@@ -1306,10 +1298,10 @@ export function onTrackChanged(track) {
     // Update bottom bar
     const pbTitleEl = document.getElementById('pb-title');
     if (pbTitleEl) {
-        pbTitleEl.textContent = track?.title || 'РќРµ РёРіСЂР°РµС‚';
+        pbTitleEl.textContent = track?.title || 'Р СњР Вµ Р С‘Р С–РЎР‚Р В°Р ВµРЎвЂљ';
         pbTitleEl.title = track?.title || '';
     }
-    setElText('pb-artist', track?.artist || 'Р’С‹Р±РµСЂРёС‚Рµ С‚СЂРµРє');
+    setElText('pb-artist', track?.artist || 'Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂљРЎР‚Р ВµР С”');
     const pbCover = document.getElementById('pb-cover');
     if (pbCover) {
         pbCover.onload = () => {
@@ -1327,8 +1319,8 @@ export function onTrackChanged(track) {
     fetchAndRenderWaveform(track);
 
     // Update player page
-    const hasArtist = track?.artist && track.artist !== 'Р›РѕРєР°Р»СЊРЅС‹Р№ С„Р°Р№Р»' && track.artist !== '...' && track.artist !== 'Unknown Artist';
-    const headerTitle = (track?.title || 'РўСЂРµРє РЅРµ РІС‹Р±СЂР°РЅ') + (hasArtist ? ' вЂ” ' + track.artist : '');
+    const hasArtist = track?.artist && track.artist !== 'Р вЂєР С•Р С”Р В°Р В»РЎРЉР Р…РЎвЂ№Р в„– РЎвЂћР В°Р в„–Р В»' && track.artist !== '...' && track.artist !== 'Unknown Artist';
+    const headerTitle = (track?.title || 'Р СћРЎР‚Р ВµР С” Р Р…Р Вµ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…') + (hasArtist ? ' РІР‚вЂќ ' + track.artist : '');
     const headerEl = document.getElementById('pp-header-title');
     if (headerEl) {
         headerEl.textContent = headerTitle;
@@ -1337,7 +1329,8 @@ export function onTrackChanged(track) {
     // Atomically reset progress bar and position tracking to prevent 100% / ended flicker
     currentPosMs = 0;
     targetPosMs = 0;
-    currentDuration = (track?.duration ? track.duration * 1000 : 0);
+    const normalizedDur = normalizeDurationMs(track?.duration);
+    if (normalizedDur > 0) currentDuration = normalizedDur;
     setEl('pb-progress-fill', 'width', '0%');
     setEl('pp-progress-fill', 'width', '0%');
     setEl('mp-progress-fill', 'width', '0%');
@@ -1348,8 +1341,8 @@ export function onTrackChanged(track) {
     setElText('pp-time-total', formatTime(currentDuration / 1000));
     setElText('mp-time-total', formatTime(currentDuration / 1000));
 
-    setElText('pp-title', track?.title || 'РўСЂРµРє РЅРµ РІС‹Р±СЂР°РЅ');
-    setElText('pp-artist', track?.artist || 'Р’С‹Р±РµСЂРёС‚Рµ С‚СЂРµРє РґР»СЏ РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ');
+    setElText('pp-title', track?.title || 'Р СћРЎР‚Р ВµР С” Р Р…Р Вµ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…');
+    setElText('pp-artist', track?.artist || 'Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂљРЎР‚Р ВµР С” Р Т‘Р В»РЎРЏ Р Р†Р С•РЎРѓР С—РЎР‚Р С•Р С‘Р В·Р Р†Р ВµР Т‘Р ВµР Р…Р С‘РЎРЏ');
     setElSrc('pp-cover', coverUrl);
 
     // Update Mini Player widget
@@ -1385,8 +1378,8 @@ export function onTrackChanged(track) {
         }
     }
 
-    setMarqueeText('mp-title', track?.title || 'РўСЂРµРє РЅРµ РІС‹Р±СЂР°РЅ');
-    setMarqueeText('mp-artist', track?.artist || 'Р’С‹Р±РµСЂРёС‚Рµ С‚СЂРµРє');
+    setMarqueeText('mp-title', track?.title || 'Р СћРЎР‚Р ВµР С” Р Р…Р Вµ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…');
+    setMarqueeText('mp-artist', track?.artist || 'Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂљРЎР‚Р ВµР С”');
     setElSrc('mp-cover', coverUrl);
 
     // Update Player Page ambient background (cover image or fallback to standard ambient background)

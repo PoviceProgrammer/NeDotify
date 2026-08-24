@@ -264,11 +264,11 @@ export function initEvents() {
                 break;
 
             // ================= FUTURE EVENTS / DEPRECATED =================
+            // NOTE: yandex_device_auth_* are handled above; do not duplicate
+            // them here - JS switch silently shadows the first handler.
             case 'proxy_status':
             case 'smart_home_ready':
             case 'yandex_auth_error':
-            case 'yandex_device_auth_code':
-            case 'yandex_device_auth_result':
                 logFutureEvent(eventName, data);
                 break;
 

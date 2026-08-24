@@ -671,7 +671,9 @@ class DatabaseManager:
             if t_row and t_row[0] and float(t_row[0]) > 0:
                 duration_listened = float(t_row[0])
             else:
-                duration_listened = 180.0
+                # Unknown length: record an honest 0 instead of a fabricated
+                # three-minute listen that skewed total-time statistics.
+                duration_listened = 0.0
         cursor.execute(
             "INSERT INTO history (track_id, duration_listened, completed) VALUES (?, ?, ?)",
             (track_id, duration_listened, 1 if completed else 0),
