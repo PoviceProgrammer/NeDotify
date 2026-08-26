@@ -158,19 +158,21 @@ def _enable_doh_fallback():
     import socket, urllib.request, json, ssl, threading, time as _time
     _orig_getaddrinfo = socket.getaddrinfo
     _dns_cache = {}                      # host -> (ip, monotonic_ts)
+    _dns_cache_lock = threading.Lock()
     _DNS_TTL = 300.0                     # seconds a resolved override stays valid
     _DNS_CACHE_MAX = 256                 # simple size cap (oldest-insertion evicted)
     _doh_inflight = threading.local()    # recursion guard
 
     def _cache_get(host):
-        entry = _dns_cache.get(host)
-        if not entry:
-            return None
-        ip, ts = entry
-        if (_time.monotonic() - ts) > _DNS_TTL:
-            _dns_cache.pop(host, None)
-            return None
-        return ip
+        with _dns_cache_lock:
+            entry = _dns_cache.get(host)
+            if not entry:
+                return None
+            ip, ts = entry
+            if (_time.monotonic() - ts) > _DNS_TTL:
+                _dns_cache.pop(host, None)
+                return None
+            return ip
 
     def _doh_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
         try:
@@ -205,10 +207,11 @@ def _enable_doh_fallback():
                         data = json.loads(resp.read().decode("utf-8"))
                         ips = [ans["data"] for ans in data.get("Answer", []) if ans.get("type") == 1]
                         if ips:
-                            if len(_dns_cache) >= _DNS_CACHE_MAX:
-                                oldest = next(iter(_dns_cache))
-                                _dns_cache.pop(oldest, None)
-                            _dns_cache[host] = (ips[0], _time.monotonic())
+                            with _dns_cache_lock:
+                                if len(_dns_cache) >= _DNS_CACHE_MAX:
+                                    oldest = next(iter(_dns_cache))
+                                    _dns_cache.pop(oldest, None)
+                                _dns_cache[host] = (ips[0], _time.monotonic())
                             return _orig_getaddrinfo(ips[0], port, family, type, proto, flags)
                 except Exception:
                     continue
@@ -263,7 +266,7 @@ def main():
     else:
         base_dir = os.path.dirname(os.path.abspath(__file__))
     
-    ui_dir_name = "web_new_v2" if ("--v2" in sys.argv or "--ui-v2" in sys.argv) else os.environ.get("NEDOTIFY_UI_DIR", "web_new")
+    ui_dir_name = "web_new" if ("--v1" in sys.argv or "--ui-v1" in sys.argv) else os.environ.get("NEDOTIFY_UI_DIR", "web_new_v2")
     html_path = os.path.join(base_dir, "ui", ui_dir_name, "index.html")
 
     # Transparency flag (opaque fallback)

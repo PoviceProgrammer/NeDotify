@@ -10,7 +10,7 @@ from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
 
-extra_datas = [('ui/web_new', 'ui/web_new')] + collect_data_files('ytmusicapi')
+extra_datas = [('ui/web_new', 'ui/web_new'), ('ui/web_new_v2', 'ui/web_new_v2')] + collect_data_files('ytmusicapi')
 for extra_folder in ['zapret', 'bin']:
     if os.path.exists(extra_folder):
         extra_datas.append((extra_folder, extra_folder))
