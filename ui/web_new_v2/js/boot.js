@@ -20,6 +20,10 @@ window.addEventListener('load', function () {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
+    var gfonts = document.getElementById('gfonts-stylesheet');
+    if (gfonts && gfonts.media === 'print') {
+        gfonts.media = 'all';
+    }
     if (window.lucide) {
         window.lucide.createIcons();
     }

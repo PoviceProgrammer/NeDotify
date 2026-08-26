@@ -12,13 +12,21 @@
     <!-- Fonts: Sora (Headings) + DM Sans (Body) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Sora:wght@600;700&display=swap">
+    <link id="gfonts-stylesheet" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Sora:wght@600;700&display=swap" media="print" onload="this.media='all'">
+    <noscript>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Sora:wght@600;700&display=swap">
+    </noscript>
     <script src="js/lucide.min.js"></script>
     <script src="js/hls.min.js"></script>
     <link rel="icon" type="image/png" href="logo.png">
-    <link rel="stylesheet" href="css/tokens.css?v=20260823">
-    <link rel="stylesheet" href="css/themes.css?v=20260823">
-    <link rel="stylesheet" href="css/styles.css?v=20260823">
+    <link rel="stylesheet" href="css/tokens.css?v=20260826">
+    <link rel="stylesheet" href="css/components/base.css?v=20260826">
+    <link rel="stylesheet" href="css/components/player-bar.css?v=20260826">
+    <link rel="stylesheet" href="css/components/player-view.css?v=20260826">
+    <link rel="stylesheet" href="css/components/lyrics.css?v=20260826">
+    <link rel="stylesheet" href="css/components/home-view.css?v=20260826">
+    <link rel="stylesheet" href="css/components/track-table.css?v=20260826">
+    <link rel="stylesheet" href="css/themes.css?v=20260826">
 </head>
 <body>
 
@@ -180,25 +188,15 @@
             <div style="position:relative; z-index:1;">
                 <h1 class="page-title" id="home-greeting">Добро пожаловать в NeDotify</h1>
 
-                <!-- Stats -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-tracks">0</div>
-                    <div class="stat-label">Треков прослушано</div>
+                <!-- Quick Access Grid (2x3 Dynamic Grid) -->
+                <div class="quick-access-grid" id="home-quick-access">
+                    <div class="skeleton-card skeleton-qa-card"></div>
+                    <div class="skeleton-card skeleton-qa-card"></div>
+                    <div class="skeleton-card skeleton-qa-card"></div>
+                    <div class="skeleton-card skeleton-qa-card"></div>
+                    <div class="skeleton-card skeleton-qa-card"></div>
+                    <div class="skeleton-card skeleton-qa-card"></div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-time">0 мин</div>
-                    <div class="stat-label">Время прослушивания</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-playlists">0</div>
-                    <div class="stat-label">Плейлистов</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-favorites">0</div>
-                    <div class="stat-label">Избранных</div>
-                </div>
-            </div>
 
             <!-- History -->
             <div class="feed-section">
@@ -585,8 +583,9 @@
                         <span class="player-lyrics-title">Текст песни</span>
                         <div class="lyrics-offset-controls">
                             <button id="btn-toggle-lyrics-translation-page" class="lyrics-btn-pill" title="Включить двуязычный режим (Перевод)">🌐 Перевод</button>
-                            <button id="btn-lyrics-offset-minus-page" class="lyrics-offset-btn" title="Задержать текст на 0.5s">-0.5s</button>
-                            <button id="btn-lyrics-offset-plus-page" class="lyrics-offset-btn" title="Ускорить текст на 0.5s">+0.5s</button>
+                            <button id="btn-lyrics-offset-minus-page" class="lyrics-offset-btn" title="Задержать текст на 0.5s (назад)">-0.5s</button>
+                            <button id="btn-lyrics-offset-reset-page" class="lyrics-offset-btn" title="Сбросить смещение в 0.0s" style="font-size:11px;min-width:38px;padding:4px 8px;">0.0s</button>
+                            <button id="btn-lyrics-offset-plus-page" class="lyrics-offset-btn" title="Ускорить текст на 0.5s (вперёд)">+0.5s</button>
                         </div>
                     </div>
                     <div class="player-lyrics-container" id="player-lyrics-scroll">
@@ -605,8 +604,9 @@
                 <div class="lyrics-title" id="lyrics-title">Текст песни</div>
                 <div class="lyrics-offset-controls" style="display:flex;align-items:center;gap:6px;margin-left:auto;margin-right:16px;">
                     <button id="btn-toggle-lyrics-translation" class="btn-sm text-xs" style="padding:4px 10px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Включить двуязычный режим (Перевод)">🌐 Перевод</button>
-                    <button id="btn-lyrics-offset-minus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Задержать текст на 0.5s">-0.5s</button>
-                    <button id="btn-lyrics-offset-plus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Ускорить текст на 0.5s">+0.5s</button>
+                    <button id="btn-lyrics-offset-minus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Задержать текст на 0.5s (назад)">-0.5s</button>
+                    <button id="btn-lyrics-offset-reset" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;font-size:11px;min-width:38px;" title="Сбросить смещение в 0.0s">0.0s</button>
+                    <button id="btn-lyrics-offset-plus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Ускорить текст на 0.5s (вперёд)">+0.5s</button>
                 </div>
             </div>
             <div class="lyrics-scroll-container" id="lyrics-container">
@@ -1130,7 +1130,7 @@
                     <!-- Background -->
                     <div id="settings-background" class="settings-panel">
                         <div class="settings-section">
-                            <div class="settings-section-title">ФОНОВОЕ ЗОБРАЖЕНЕ</div>
+                            <div class="settings-section-title">ФОНОВОЕ ИЗОБРАЖЕНИЕ</div>
                             <div class="setting-row">
                                 <div>
                                     <div class="setting-label">Загрузить фон с ПК</div>
@@ -1355,15 +1355,15 @@
                             </div>
                         </div>
                         <div class="settings-section">
-                            <div class="settings-section-title"></div>
+                            <div class="settings-section-title">РЕГИОН И ЯЗЫК</div>
                             <div class="setting-row">
                                 <div>
-                                    <div class="setting-label"> </div>
-                                    <div class="setting-sublabel">      </div>
+                                    <div class="setting-label">Регион поиска</div>
+                                    <div class="setting-sublabel">Страна для трендов и чартов</div>
                                 </div>
                                 <select class="settings-select" id="select-region">
-                                    <option value="US"> (US)</option>
-                                    <option value="RU"> (RU)</option>
+                                    <option value="US">США (US)</option>
+                                    <option value="RU">Россия (RU)</option>
                                     <option value="GB">Великобритания (GB)</option>
                                     <option value="DE">Германия (DE)</option>
                                     <option value="FR">Франция (FR)</option>
@@ -1372,17 +1372,17 @@
                             </div>
                         </div>
                         <div class="settings-section">
-                            <div class="settings-section-title">Визуализер</div>
+                            <div class="settings-section-title">Визуализатор</div>
                             <div class="setting-row">
                                 <div>
-                                    <div class="setting-label">Показывать визуализер на обложке</div>
+                                    <div class="setting-label">Показывать визуализатор на обложке</div>
                                     <div class="setting-sublabel">Аудио-визуализация в плеере</div>
                                 </div>
                                 <button class="toggle-switch on" id="toggle-visualizer"><div class="toggle-dot"></div></button>
                             </div>
                             <div class="setting-row">
                                 <div>
-                                    <div class="setting-label"> </div>
+                                    <div class="setting-label">Стиль визуализатора</div>
                                 </div>
                                 <select class="settings-select" id="select-visualizer-style">
                                     <option value="bars">Полосы (Bars)</option>
@@ -1935,19 +1935,19 @@
 
 <!-- Playlist Context Menu -->
 <div id="playlist-context-menu" class="context-menu">
-    <div style="padding:6px 12px;font-size:11px;color:var(--text-dim);font-weight:600">ДОБАВТЬ В ПЛЕЙЛСТ</div>
+    <div style="padding:6px 12px;font-size:11px;color:var(--text-dim);font-weight:600">ДОБАВИТЬ В ПЛЕЙЛИСТ</div>
     <div id="playlist-menu-items"></div>
 </div>
 
 <!-- Track Options Menu (three-dot from player bar) -->
 <div id="track-options-menu" class="context-menu">
-    <div style="padding:6px 12px 4px;font-size:11px;color:var(--text-dim);font-weight:600" id="track-options-header">ОПЦ ТРЕКА</div>
+    <div style="padding:6px 12px 4px;font-size:11px;color:var(--text-dim);font-weight:600" id="track-options-header">ОПЦИИ ТРЕКА</div>
     <div class="context-menu-divider"></div>
-    <div style="padding:4px 8px;font-size:11px;color:var(--text-dim);font-weight:600">ДОБАВТЬ В ПЛЕЙЛСТ</div>
+    <div style="padding:4px 8px;font-size:11px;color:var(--text-dim);font-weight:600">ДОБАВИТЬ В ПЛЕЙЛИСТ</div>
     <div id="track-options-playlist-items"></div>
     <div class="context-menu-divider"></div>
     <button class="context-menu-item" id="track-options-download">
-        <i data-lucide="download" style="width:14px;height:14px"></i>  
+        <i data-lucide="download" style="width:14px;height:14px"></i> Скачать
     </button>
     <button class="context-menu-item" id="track-options-open-player">
         <i data-lucide="maximize-2" style="width:14px;height:14px"></i> Открыть плеер
