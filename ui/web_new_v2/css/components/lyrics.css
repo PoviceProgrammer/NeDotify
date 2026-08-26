@@ -1,0 +1,383 @@
+/* ==========================================================================
+   NeDotify v2 — Component: Lyrics Subsystem (Kinetic Karaoke Engine)
+   Apple Music-Style Kinetic Lyrics with GPU Scaling, Blur Depth,
+   Gradient Edge Masks, and Comprehensive Performance Guards.
+   ========================================================================== */
+
+/* ─── 1. Viewport & Scroll Containers ─── */
+.player-lyrics-container,
+.lyrics-scroll-container,
+#player-lyrics-scroll,
+#lyrics-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%);
+}
+
+.player-lyrics-container::-webkit-scrollbar,
+.lyrics-scroll-container::-webkit-scrollbar,
+#player-lyrics-scroll::-webkit-scrollbar,
+#lyrics-container::-webkit-scrollbar {
+    width: 4px;
+}
+
+.player-lyrics-container::-webkit-scrollbar-track,
+.lyrics-scroll-container::-webkit-scrollbar-track,
+#player-lyrics-scroll::-webkit-scrollbar-track,
+#lyrics-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.player-lyrics-container::-webkit-scrollbar-thumb,
+.lyrics-scroll-container::-webkit-scrollbar-thumb,
+#player-lyrics-scroll::-webkit-scrollbar-thumb,
+#lyrics-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-full, 9999px);
+}
+
+.player-lyrics-container::-webkit-scrollbar-thumb:hover,
+.lyrics-scroll-container::-webkit-scrollbar-thumb:hover,
+#player-lyrics-scroll::-webkit-scrollbar-thumb:hover,
+#lyrics-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.player-lyrics-content,
+.lyrics-content,
+#lyrics-content,
+#overlay-lyrics-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: center;
+    gap: var(--space-md, 16px);
+    padding: 45vh var(--space-lg, 24px);
+    min-height: 100%;
+    box-sizing: border-box;
+}
+
+/* Center empty states cleanly without excessive scroll height */
+.player-lyrics-content:has(.empty-state),
+.lyrics-content:has(.empty-state),
+#lyrics-content:has(.empty-state),
+#overlay-lyrics-content:has(.empty-state) {
+    padding: var(--space-xl, 32px) var(--space-lg, 24px);
+    justify-content: center;
+}
+
+.player-lyrics-content .empty-state,
+.lyrics-content .empty-state {
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm, 8px);
+    color: var(--color-text-dim, rgba(255, 245, 247, 0.40));
+    font-family: var(--font-body, 'DM Sans', sans-serif);
+    font-size: var(--font-size-sm, 13px);
+}
+
+/* ─── 2. Kinetic Lyric Line Styling (Apple Music Style) ─── */
+.lyric-line {
+    font-family: var(--font-display, 'Sora', sans-serif);
+    font-size: var(--font-size-xl, 24px);
+    font-weight: 700;
+    line-height: 1.4;
+    color: var(--color-text-main, #ffffff);
+    opacity: 0.40;
+    filter: blur(1.5px);
+    transform: scale(1);
+    transform-origin: center center;
+    cursor: pointer;
+    user-select: none;
+    margin: 8px 0;
+    padding: 8px 20px;
+    border-radius: var(--radius-md, 12px);
+    transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+                opacity 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+                filter 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+                color 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+                text-shadow 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+                background-color 0.2s ease;
+}
+
+.lyric-line:hover:not(.active) {
+    opacity: 0.85;
+    filter: blur(0px);
+    transform: scale(1.03);
+    color: var(--color-text-main, #ffffff);
+    background: rgba(255, 255, 255, 0.04);
+    will-change: transform, opacity;
+}
+
+.lyric-line.active {
+    opacity: 1;
+    filter: blur(0px) !important;
+    transform: scale(1.15);
+    color: var(--color-primary, var(--primary, #f43f5e)) !important;
+    font-weight: 800;
+    text-shadow: 0 0 24px var(--color-primary-glow, var(--accent-glow, rgba(244, 63, 94, 0.35))),
+                 0 0 48px var(--color-primary-glow, var(--accent-glow, rgba(244, 63, 94, 0.20)));
+    position: relative;
+    z-index: 5;
+    background: transparent;
+    will-change: transform, opacity;
+}
+
+.lyric-orig-text {
+    text-align: center;
+    width: 100%;
+    word-break: break-word;
+}
+
+/* ─── 3. Bilingual / Translation Line ─── */
+.lyric-translation {
+    font-family: var(--font-body, 'DM Sans', sans-serif);
+    font-size: var(--font-size-sm, 13px);
+    color: var(--color-text-muted, rgba(255, 245, 247, 0.65));
+    font-weight: 500;
+    margin-top: 6px;
+    text-align: center;
+    width: 100%;
+    opacity: 0.85;
+    transition: color 0.3s ease, opacity 0.3s ease;
+}
+
+.lyric-line.active .lyric-translation {
+    color: var(--color-text-main, #ffffff);
+    opacity: 1;
+    font-weight: 600;
+}
+
+/* ─── 4. Plain (Unsynchronized) Lyrics ─── */
+.lyric-plain {
+    font-family: var(--font-body, 'DM Sans', sans-serif);
+    font-size: var(--font-size-lg, 20px);
+    font-weight: 500;
+    line-height: 1.6;
+    color: var(--color-text-main, #ffffff);
+    opacity: 0.85;
+    filter: none !important;
+    text-align: center;
+    margin: 6px 0;
+    cursor: default;
+    transition: opacity 0.2s ease;
+}
+
+.lyric-plain:hover {
+    opacity: 1;
+    transform: none;
+}
+
+.lyric-notice {
+    font-size: var(--font-size-xs, 12px);
+    color: var(--color-text-dim, rgba(255, 245, 247, 0.40));
+    margin-bottom: var(--space-md, 16px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* ─── 5. Fullscreen Overlay & Panels ─── */
+.lyrics-overlay,
+#lyrics-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(14, 7, 17, 0.88);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(16px);
+    transition: opacity 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+                transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.lyrics-overlay.active,
+.lyrics-overlay.visible,
+#lyrics-overlay.active,
+#lyrics-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.lyrics-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md, 16px) var(--space-xl, 32px);
+    border-bottom: 1px solid var(--color-border, rgba(244, 63, 94, 0.12));
+    background: rgba(0, 0, 0, 0.25);
+    flex-shrink: 0;
+}
+
+.player-lyrics-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-xs, 4px) var(--space-md, 16px);
+    margin-bottom: var(--space-xs, 4px);
+    flex-shrink: 0;
+}
+
+.lyrics-title,
+#lyrics-title {
+    font-family: var(--font-display, 'Sora', sans-serif);
+    font-size: var(--font-size-md, 16px);
+    font-weight: 700;
+    color: var(--color-text-main, #ffffff);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 50vw;
+}
+
+.player-lyrics-title {
+    font-family: var(--font-display, 'Sora', sans-serif);
+    font-size: var(--font-size-xs, 11px);
+    font-weight: 600;
+    color: var(--color-text-muted, rgba(255, 245, 247, 0.65));
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+/* ─── 6. Controls & Buttons ─── */
+.lyrics-offset-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs, 6px);
+}
+
+.lyrics-btn-pill,
+.lyrics-offset-btn,
+#btn-toggle-lyrics-translation,
+#btn-toggle-lyrics-translation-page,
+#btn-lyrics-offset-minus,
+#btn-lyrics-offset-plus,
+#btn-lyrics-offset-minus-page,
+#btn-lyrics-offset-plus-page {
+    padding: 6px 12px;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--color-surface, rgba(255, 255, 255, 0.035));
+    border: 1px solid var(--color-border, rgba(244, 63, 94, 0.12));
+    color: var(--color-text-muted, rgba(255, 245, 247, 0.65));
+    font-family: var(--font-body, sans-serif);
+    font-size: var(--font-size-xs, 11px);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.lyrics-btn-pill:hover,
+.lyrics-offset-btn:hover,
+#btn-toggle-lyrics-translation:hover,
+#btn-toggle-lyrics-translation-page:hover,
+#btn-lyrics-offset-minus:hover,
+#btn-lyrics-offset-plus:hover,
+#btn-lyrics-offset-minus-page:hover,
+#btn-lyrics-offset-plus-page:hover {
+    background: var(--color-surface-hover, rgba(244, 63, 94, 0.08));
+    color: var(--color-text-main, #ffffff);
+    border-color: var(--color-border-glow, rgba(244, 63, 94, 0.45));
+    transform: translateY(-1px);
+}
+
+.lyrics-btn-pill.active,
+#btn-toggle-lyrics-translation.active,
+#btn-toggle-lyrics-translation-page.active {
+    background: var(--color-primary, var(--primary, #f43f5e)) !important;
+    color: var(--color-primary-fg, #ffffff) !important;
+    border-color: var(--color-primary, var(--primary, #f43f5e)) !important;
+    box-shadow: 0 0 12px var(--color-primary-glow, rgba(244, 63, 94, 0.35));
+}
+
+#btn-close-lyrics,
+#lyrics-close {
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted, rgba(255, 245, 247, 0.65));
+    cursor: pointer;
+    padding: 6px;
+    border-radius: var(--radius-full, 9999px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+
+#btn-close-lyrics:hover,
+#lyrics-close:hover {
+    color: var(--color-text-main, #ffffff);
+    background: var(--color-surface-hover, rgba(244, 63, 94, 0.08));
+    transform: scale(1.1);
+}
+
+/* ─── 7. PERFORMANCE GUARDS (Low/Medium Perf & Battery Saver) ─── */
+:root.perf-low .lyric-line,
+:root.perf-medium .lyric-line,
+:root.battery-saver-active .lyric-line,
+.perf-low .lyric-line,
+.perf-medium .lyric-line,
+.battery-saver-active .lyric-line {
+    filter: none !important;
+    will-change: auto;
+    transition: transform 0.25s ease, opacity 0.25s ease, color 0.25s ease;
+}
+
+:root.perf-low .lyric-line:not(.active),
+:root.perf-medium .lyric-line:not(.active),
+:root.battery-saver-active .lyric-line:not(.active),
+.perf-low .lyric-line:not(.active),
+.perf-medium .lyric-line:not(.active),
+.battery-saver-active .lyric-line:not(.active) {
+    filter: none !important;
+    opacity: 0.40 !important;
+}
+
+:root.perf-low .lyric-line.active,
+:root.perf-medium .lyric-line.active,
+:root.battery-saver-active .lyric-line.active,
+.perf-low .lyric-line.active,
+.perf-medium .lyric-line.active,
+.battery-saver-active .lyric-line.active {
+    text-shadow: none !important;
+}
+
+:root.perf-low .lyrics-overlay,
+:root.perf-medium .lyrics-overlay,
+:root.battery-saver-active .lyrics-overlay,
+.perf-low .lyrics-overlay,
+.perf-medium .lyrics-overlay,
+.battery-saver-active .lyrics-overlay,
+:root.perf-low #lyrics-overlay,
+:root.perf-medium #lyrics-overlay,
+:root.battery-saver-active #lyrics-overlay,
+.perf-low #lyrics-overlay,
+.perf-medium #lyrics-overlay,
+.battery-saver-active #lyrics-overlay {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(14, 7, 17, 0.96) !important;
+}
