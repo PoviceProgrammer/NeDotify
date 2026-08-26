@@ -98,15 +98,22 @@ window.NeDotify = {
         await window.awaitBridge();
         if (!window.pywebview?.api?.get_track_wave) return;
 
-        const longWaitTimer = setTimeout(() => toastFn('⏳ Волна собирается дольше обычного...', 'info'), 8000);
-        const handler = (e) => {
-            clearTimeout(longWaitTimer);
+        if (window._activeTrackWaveCleanup) {
+            window._activeTrackWaveCleanup();
+        }
+
+        let longWaitTimer = setTimeout(() => toastFn('⏳ Волна собирается дольше обычного...', 'info'), 8000);
+        const handler = async (e) => {
+            if (longWaitTimer) { clearTimeout(longWaitTimer); longWaitTimer = null; }
             window.removeEventListener('nedotify:track_wave_ready', handler);
+            window._activeTrackWaveCleanup = null;
             const tracks = (e.detail && e.detail.tracks) || [];
             if (tracks.length > 0) {
-                for (const t of tracks) {
-                    if (window.pywebview?.api?.add_to_queue) {
-                        window.pywebview.api.add_to_queue(t);
+                if (window.pywebview?.api?.add_tracks_to_queue) {
+                    await window.pywebview.api.add_tracks_to_queue(tracks);
+                } else if (window.pywebview?.api?.add_to_queue) {
+                    for (const t of tracks) {
+                        await window.pywebview.api.add_to_queue(t);
                     }
                 }
                 toastFn(`📻 В волну добавлено ${tracks.length} треков!`, 'success');
@@ -114,14 +121,17 @@ window.NeDotify = {
                 toastFn('Не удалось найти похожие треки для волны', 'warning');
             }
         };
+        window._activeTrackWaveCleanup = () => {
+            if (longWaitTimer) { clearTimeout(longWaitTimer); longWaitTimer = null; }
+            window.removeEventListener('nedotify:track_wave_ready', handler);
+        };
         window.addEventListener('nedotify:track_wave_ready', handler);
 
         const seedId = seedTrack.id || seedTrack.source_id;
         try {
             window.pywebview.api.get_track_wave(seedTrack, 15, seedId ? [seedId] : []);
         } catch(e) {
-            clearTimeout(longWaitTimer);
-            window.removeEventListener('nedotify:track_wave_ready', handler);
+            if (window._activeTrackWaveCleanup) window._activeTrackWaveCleanup();
             console.error('Error starting track wave:', e);
         }
     },
@@ -294,16 +304,29 @@ window.toggleMiniPlayerMode = toggleMiniPlayerMode;
 })();
 
 // Wait for the pywebview bridge (can take ~16s on a cold WebView2 start).
-// NEVER run init() without the bridge: its guards would exit and the UI would
-// stay dead on the skeleton splash. Skeleton stays visible until the bridge arrives.
-function tryInit() {
-    if (window.pywebview?.api) init();
+// Await the bridge via both immediate check, polling, and pywebviewready event.
+function startAppInit() {
+    if (window.awaitBridge) {
+        window.awaitBridge().then(() => init()).catch(() => init());
+    } else if (window.pywebview?.api) {
+        init();
+    }
 }
+
 if (window.pywebview?.api) {
-    tryInit();
+    startAppInit();
 } else {
-    window.addEventListener('pywebviewready', tryInit, { once: true });
+    window.addEventListener('pywebviewready', () => startAppInit());
+    startAppInit();
 }
+
+// Fallback safety timeout: ensure init() runs even if bridge event was dropped
+setTimeout(() => {
+    if (!window._nedotifyInitialized) {
+        console.warn('Fallback init trigger after 4s timeout');
+        init();
+    }
+}, 4000);
 
 // Bridge-dead last resort: count page loads that happened without a bridge
 // (the backend watchdog silently reloads twice), and only then show the error
@@ -325,32 +348,46 @@ async function init() {
     if (window._nedotifyInitialized) return;
     window._nedotifyInitialized = true;
     try {
-        // Fetch settings from backend early
-        if (window.pywebview && window.pywebview.api) {
-            try {
-                const settings = await window.pywebview.api.get_settings();
-                if (settings) {
-                    window.settings = settings;
-                    applySettings(settings);
-                    applySettingsFromBackend(settings);
-                }
-
-            } catch (e) {
-                console.error('Error fetching settings early:', e);
+        // 1. Immediately apply cached settings from localStorage (0ms latency, unblocks first render)
+        try {
+            const cachedRaw = localStorage.getItem('nedotify_cached_settings');
+            if (cachedRaw) {
+                const cachedSettings = JSON.parse(cachedRaw);
+                window.settings = cachedSettings;
+                applySettings(cachedSettings);
+                applySettingsFromBackend(cachedSettings);
             }
+        } catch (e) {
+            console.debug('Failed to apply cached settings:', e);
+        }
+
+        // 2. Fetch fresh settings asynchronously in background without blocking UI initialization
+        if (window.pywebview && window.pywebview.api) {
+            window.pywebview.api.get_settings().then((freshSettings) => {
+                if (freshSettings) {
+                    const freshStr = JSON.stringify(freshSettings);
+                    const cachedStr = localStorage.getItem('nedotify_cached_settings');
+                    if (freshStr !== cachedStr) {
+                        localStorage.setItem('nedotify_cached_settings', freshStr);
+                        window.settings = freshSettings;
+                        applySettings(freshSettings);
+                        applySettingsFromBackend(freshSettings);
+                    }
+                }
+            }).catch((err) => {
+                console.error('Async get_settings error:', err);
+            });
         }
 
         // Init Onboarding next (blocks UI if first launch)
         if (typeof initOnboarding === 'function') {
-            initOnboarding();
+            try { initOnboarding(); } catch(e) { console.error('initOnboarding error:', e); }
         }
 
-
-
-        initContextMenu();
-        initHotkeys();
-        initEfficiency();
-        initBlurObserver();
+        try { initContextMenu(); } catch(e) { console.error('initContextMenu error:', e); }
+        try { initHotkeys(); } catch(e) { console.error('initHotkeys error:', e); }
+        try { initEfficiency(); } catch(e) { console.error('initEfficiency error:', e); }
+        try { initBlurObserver(); } catch(e) { console.error('initBlurObserver error:', e); }
 
         // M-9: debug.js was orphaned — load it on demand via ?debug=1 (never in normal UI)
         try {
@@ -484,7 +521,7 @@ async function init() {
             const splash = document.getElementById('app-splash');
             if (splash) {
                 splash.classList.add('hidden');
-                setTimeout(() => splash.remove(), 400);
+                setTimeout(() => { try { splash.remove(); } catch(e) {} }, 400);
             }
         } catch (err) {
             console.error('Failed to remove splash:', err);
@@ -511,6 +548,13 @@ async function init() {
         console.log('NeDotify initialized successfully');
     } catch (e) {
         console.error("Init Error:", e);
+        try {
+            const splash = document.getElementById('app-splash');
+            if (splash) {
+                splash.classList.add('hidden');
+                setTimeout(() => { try { splash.remove(); } catch(e2) {} }, 400);
+            }
+        } catch(se) {}
         const tc = document.getElementById('toast-container');
         if (tc) tc.innerHTML = `<div style="background:red;padding:10px;color:white;z-index:9999;">Critical Init Error: ${escapeHtml(e.message)}</div>`;
     }
