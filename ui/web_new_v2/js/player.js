@@ -1,4 +1,4 @@
-// NeDotify Р В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ў" Player Module
+// NeDotify — Player Module
 import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml } from './utils.js';
 
 let currentTrack = null;
@@ -122,7 +122,7 @@ export function toggleFlow() {
     updateFlowButtons();
     window.dispatchEvent(new CustomEvent('nedotify:toast', {
         detail: {
-            msg: isFlowEnabled ? 'СЂСџвЂњВ» Р’В«Р вЂР ВµРЎРѓР С”Р С•Р Р…Р ВµРЎвЂЎР Р…Р В°РЎРЏ Р Р†Р С•Р В»Р Р…Р В° (Flow)Р’В» Р Р†Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р В°' : 'СЂСџвЂњВ» Р’В«Р вЂР ВµРЎРѓР С”Р С•Р Р…Р ВµРЎвЂЎР Р…Р В°РЎРЏ Р Р†Р С•Р В»Р Р…Р В° (Flow)Р’В» Р Р†РЎвЂ№Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р В°',
+            msg: isFlowEnabled ? '📻 «Бесконечная волна (Flow)» включена' : '📻 «Бесконечная волна (Flow)» выключена',
             type: 'info'
         }
     }));
@@ -282,7 +282,7 @@ function handleStreamError(audio, reason) {
         console.error(`Audio stream failed after ${currentTrackRetries} attempts. Stopping playback.`);
         currentTrackRetries = 0;
         lastRetriedTrackId = null;
-        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ Р Р†Р С•РЎРѓР С—РЎР‚Р С•Р С‘Р В·Р Р†Р ВµРЎРѓРЎвЂљР С‘: ${currentTrack.title || 'РЎвЂљРЎР‚Р ВµР С”'}`, type: 'error' } }));
+        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Не удалось воспроизвести: ${currentTrack.title || 'трек'}`, type: 'error' } }));
         if (activeAudio) {
             try { activeAudio.pause(); } catch(e) {}
             try { activeAudio.currentTime = 0; } catch(e) {}
@@ -477,8 +477,11 @@ export function playTrack(track, streamUrl) {
         disarmStallFallback(oldAudio);
         try { oldAudio.pause(); } catch(e) {}
         try { oldAudio.currentTime = 0; } catch(e) {}
+        oldAudio.removeAttribute('src');
         oldAudio.src = '';
+        try { oldAudio.load(); } catch(e) {}
     }
+    flowSessionCount = 0;
 
     // Parse duration from streamUrl if track.duration is missing
     let parsedDuration = 0;
@@ -889,7 +892,7 @@ export function initPlayer() {
             // Update track title in header
             const header = document.getElementById('track-options-header');
             if (header && currentTrack) {
-                header.textContent = currentTrack.title || 'Р С›Р СџР В¦Р ВР В Р СћР В Р вЂўР С™Р С’';
+                header.textContent = currentTrack.title || 'ОПЦИИ ТРЕКА';
             }
 
             // Load playlists into menu
@@ -909,13 +912,13 @@ export function initPlayer() {
                                 await api('add_to_playlist', plId, currentTrack);
                                 optMenu.classList.remove('visible');
                                 const { showToast } = await import('./utils.js');
-                                showToast(`Р вЂќР С•Р В±Р В°Р Р†Р В»Р ВµР Р…Р С• Р Р† Р’В«${pl.name}Р’В»`, 'success');
+                                showToast(`Добавлено в «${pl.name}»`, 'success');
                             });
                             itemsEl.appendChild(btn);
                         });
                         renderIcons();
                     } else {
-                        itemsEl.innerHTML = '<div class="context-menu-item" style="color:var(--text-dim)">Р СњР ВµРЎвЂљ Р С—Р В»Р ВµР в„–Р В»Р С‘РЎРѓРЎвЂљР С•Р Р†</div>';
+                        itemsEl.innerHTML = '<div class="context-menu-item" style="color:var(--text-dim)">Нет плейлистов</div>';
                     }
                 } catch(e) {
                     itemsEl.innerHTML = '';
@@ -941,7 +944,7 @@ export function initPlayer() {
         document.getElementById('track-options-copy')?.addEventListener('click', () => {
             optMenu.classList.remove('visible');
             if (currentTrack) {
-                const text = `${currentTrack.title} РІР‚вЂќ ${currentTrack.artist || ''}`.trim();
+                const text = `${currentTrack.title} — ${currentTrack.artist || ''}`.trim();
                 navigator.clipboard?.writeText(text).catch(() => {});
             }
         });
@@ -959,7 +962,7 @@ export function initPlayer() {
         pbArtist.classList.add('clickable-artist');
         pbArtist.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂљРЎР‚Р ВµР С”') {
+            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Выберите трек') {
                 if (window.searchArtistProfile) {
                     window.searchArtistProfile(currentTrack.artist);
                 } else if (window.NeDotify?.searchArtistProfile) {
@@ -974,7 +977,7 @@ export function initPlayer() {
         ppArtist.classList.add('clickable-artist');
         ppArtist.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂљРЎР‚Р ВµР С”') {
+            if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Выберите трек') {
                 if (window.searchArtistProfile) {
                     window.searchArtistProfile(currentTrack.artist);
                 } else if (window.NeDotify?.searchArtistProfile) {
@@ -1121,13 +1124,21 @@ function animateProgress(timestamp) {
                                             const k2 = `${(nt.artist || '').toLowerCase()}:${(nt.title || '').toLowerCase()}`;
                                             if (k1) flowHistoryKeys.add(k1);
                                             flowHistoryKeys.add(k2);
-                                            if (window.pywebview?.api?.add_to_queue) {
+                                        }
+                                        if (flowHistoryKeys.size > 100) {
+                                            const toDrop = Array.from(flowHistoryKeys).slice(0, flowHistoryKeys.size - 100);
+                                            toDrop.forEach(k => flowHistoryKeys.delete(k));
+                                        }
+                                        if (window.pywebview?.api?.add_tracks_to_queue) {
+                                            await window.pywebview.api.add_tracks_to_queue(filtered);
+                                        } else if (window.pywebview?.api?.add_to_queue) {
+                                            for (const nt of filtered) {
                                                 await window.pywebview.api.add_to_queue(nt);
                                             }
                                         }
                                         flowSessionCount += filtered.length;
                                         window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                                            detail: { msg: `СЂСџвЂњВ» Р’В«Р вЂР ВµРЎРѓР С”Р С•Р Р…Р ВµРЎвЂЎР Р…Р В°РЎРЏ Р Р†Р С•Р В»Р Р…Р В°Р’В»: Р С—Р С•Р Т‘Р С•Р В±РЎР‚Р В°Р Р…Р С• ${filtered.length} Р С—Р С•РЎвЂ¦Р С•Р В¶Р С‘РЎвЂ¦ РЎвЂљРЎР‚Р ВµР С”Р С•Р Р†`, type: 'info' }
+                                            detail: { msg: `📻 «Бесконечная волна»: подобрано ${filtered.length} похожих треков`, type: 'info' }
                                         }));
                                     }
                                 }
@@ -1181,13 +1192,21 @@ export async function triggerFlowAutoplayImmediate() {
                     const k2 = `${(nt.artist || '').toLowerCase()}:${(nt.title || '').toLowerCase()}`;
                     if (k1) flowHistoryKeys.add(k1);
                     flowHistoryKeys.add(k2);
-                    if (window.pywebview?.api?.add_to_queue) {
+                }
+                if (flowHistoryKeys.size > 100) {
+                    const toDrop = Array.from(flowHistoryKeys).slice(0, flowHistoryKeys.size - 100);
+                    toDrop.forEach(k => flowHistoryKeys.delete(k));
+                }
+                if (window.pywebview?.api?.add_tracks_to_queue) {
+                    await window.pywebview.api.add_tracks_to_queue(filtered);
+                } else if (window.pywebview?.api?.add_to_queue) {
+                    for (const nt of filtered) {
                         await window.pywebview.api.add_to_queue(nt);
                     }
                 }
                 flowSessionCount += filtered.length;
                 window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                    detail: { msg: `СЂСџвЂњВ» Р’В«Р вЂР ВµРЎРѓР С”Р С•Р Р…Р ВµРЎвЂЎР Р…Р В°РЎРЏ Р Р†Р С•Р В»Р Р…Р В°Р’В»: Р С—Р С•Р Т‘Р С•Р В±РЎР‚Р В°Р Р…Р С• ${filtered.length} Р С—Р С•РЎвЂ¦Р С•Р В¶Р С‘РЎвЂ¦ РЎвЂљРЎР‚Р ВµР С”Р С•Р Р†`, type: 'info' }
+                    detail: { msg: `📻 «Бесконечная волна»: подобрано ${filtered.length} похожих треков`, type: 'info' }
                 }));
                 if (window.pywebview?.api?.next_track) {
                     await window.pywebview.api.next_track();
@@ -1277,10 +1296,10 @@ export function onTrackChanged(track) {
     // Update bottom bar
     const pbTitleEl = document.getElementById('pb-title');
     if (pbTitleEl) {
-        pbTitleEl.textContent = track?.title || 'Р СњР Вµ Р С‘Р С–РЎР‚Р В°Р ВµРЎвЂљ';
+        pbTitleEl.textContent = track?.title || 'Не играет';
         pbTitleEl.title = track?.title || '';
     }
-    setElText('pb-artist', track?.artist || 'Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂљРЎР‚Р ВµР С”');
+    setElText('pb-artist', track?.artist || 'Выберите трек');
     const pbCover = document.getElementById('pb-cover');
     if (pbCover) {
         pbCover.onload = () => {
@@ -1298,8 +1317,8 @@ export function onTrackChanged(track) {
     fetchAndRenderWaveform(track);
 
     // Update player page
-    const hasArtist = track?.artist && track.artist !== 'Р вЂєР С•Р С”Р В°Р В»РЎРЉР Р…РЎвЂ№Р в„– РЎвЂћР В°Р в„–Р В»' && track.artist !== '...' && track.artist !== 'Unknown Artist';
-    const headerTitle = (track?.title || 'Р СћРЎР‚Р ВµР С” Р Р…Р Вµ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…') + (hasArtist ? ' РІР‚вЂќ ' + track.artist : '');
+    const hasArtist = track?.artist && track.artist !== 'Локальный файл' && track.artist !== '...' && track.artist !== 'Unknown Artist';
+    const headerTitle = (track?.title || 'Трек не выбран') + (hasArtist ? ' — ' + track.artist : '');
     const headerEl = document.getElementById('pp-header-title');
     if (headerEl) {
         headerEl.textContent = headerTitle;
@@ -1320,8 +1339,8 @@ export function onTrackChanged(track) {
     setElText('pp-time-total', formatTime(currentDuration / 1000));
     setElText('mp-time-total', formatTime(currentDuration / 1000));
 
-    setElText('pp-title', track?.title || 'Р СћРЎР‚Р ВµР С” Р Р…Р Вµ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…');
-    setElText('pp-artist', track?.artist || 'Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂљРЎР‚Р ВµР С” Р Т‘Р В»РЎРЏ Р Р†Р С•РЎРѓР С—РЎР‚Р С•Р С‘Р В·Р Р†Р ВµР Т‘Р ВµР Р…Р С‘РЎРЏ');
+    setElText('pp-title', track?.title || 'Трек не выбран');
+    setElText('pp-artist', track?.artist || 'Выберите трек для воспроизведения');
     setElSrc('pp-cover', coverUrl);
 
     // Update Mini Player widget
@@ -1357,8 +1376,8 @@ export function onTrackChanged(track) {
         }
     }
 
-    setMarqueeText('mp-title', track?.title || 'Р СћРЎР‚Р ВµР С” Р Р…Р Вµ Р Р†РЎвЂ№Р В±РЎР‚Р В°Р Р…');
-    setMarqueeText('mp-artist', track?.artist || 'Р вЂ™РЎвЂ№Р В±Р ВµРЎР‚Р С‘РЎвЂљР Вµ РЎвЂљРЎР‚Р ВµР С”');
+    setMarqueeText('mp-title', track?.title || 'Трек не выбран');
+    setMarqueeText('mp-artist', track?.artist || 'Выберите трек');
     setElSrc('mp-cover', coverUrl);
 
     // Update Player Page ambient background (cover image or fallback to standard ambient background)
@@ -1580,27 +1599,21 @@ function setupDragBar(trackId, { onDrag, onRelease }) {
     const track = document.getElementById(trackId);
     if (!track) return;
 
-    let dragging = false;
-
     function getPct(e) {
         const rect = track.getBoundingClientRect();
         return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     }
 
     track.addEventListener('mousedown', (e) => {
-        dragging = true;
         onDrag(getPct(e));
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (dragging) onDrag(getPct(e));
-    });
-
-    document.addEventListener('mouseup', (e) => {
-        if (dragging) {
-            dragging = false;
-            onRelease(getPct(e));
-        }
+        const onMouseMove = (e2) => onDrag(getPct(e2));
+        const onMouseUp = (e2) => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            onRelease(getPct(e2));
+        };
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
     });
 }
 
@@ -1920,13 +1933,17 @@ function startOrbitGlowLoop() {
                 } catch(e) {}
             }
             
-            const spread = 14 + (bassFactor * 24);
-            const opacity = 0.20 + (bassFactor * 0.30);
-            const c = orbitGlowDominantColor;
-            const glowVal = `0 8px ${spread.toFixed(1)}px rgba(${c.r}, ${c.g}, ${c.b}, ${opacity.toFixed(2)}), 0 0 1px var(--color-border)`;
+            const opacity = 0.25 + (bassFactor * 0.55);
+            const scale = 1.0 + (bassFactor * 0.015);
             
-            if (pb) pb.style.boxShadow = glowVal;
-            if (ppCard) ppCard.style.boxShadow = glowVal;
+            if (pb) {
+                pb.style.setProperty('--orbit-glow-opacity', opacity.toFixed(2));
+                pb.style.setProperty('--orbit-glow-scale', scale.toFixed(3));
+            }
+            if (ppCard) {
+                ppCard.style.setProperty('--orbit-glow-opacity', opacity.toFixed(2));
+                ppCard.style.setProperty('--orbit-glow-scale', scale.toFixed(3));
+            }
         }
         
         orbitGlowRafId = requestAnimationFrame(loop);
@@ -1943,8 +1960,16 @@ function stopOrbitGlowLoop() {
     }
     const pb = document.getElementById('player-bar');
     const ppCard = document.querySelector('.player-glass-card');
-    if (pb) pb.style.boxShadow = '';
-    if (ppCard) ppCard.style.boxShadow = '';
+    if (pb) {
+        pb.style.removeProperty('--orbit-glow-opacity');
+        pb.style.removeProperty('--orbit-glow-scale');
+        pb.style.boxShadow = '';
+    }
+    if (ppCard) {
+        ppCard.style.removeProperty('--orbit-glow-opacity');
+        ppCard.style.removeProperty('--orbit-glow-scale');
+        ppCard.style.boxShadow = '';
+    }
 }
 
 // Window visibility & optimization events
