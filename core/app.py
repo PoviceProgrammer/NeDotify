@@ -22,12 +22,9 @@ from core.settings import SettingsManager
 from services.lufs_scanner import LufsScannerService
 from services.lyrics_service import LyricsService
 from services.playlist_import_service import PlaylistImportService
-from services.recommendation_service import RecommendationService
-from services.soundcloud_service import SoundCloudService
 from services.spotify_service import SpotifyService
 from services.vk_service import VKService
 from services.watchdog_service import WatchdogService
-from services.yandex_service import YandexService
 from services.youtube_service import YouTubeService
 from services.zapret_service import ZapretService
 from services.artist_service import ArtistService
@@ -88,6 +85,10 @@ class AppCore:
 
     def __init__(self):
         self.update_lock = threading.Lock()
+        self._service_lock = threading.Lock()
+        self._soundcloud = None
+        self._yandex = None
+        self._recommendations = None
 
         # Database & Base Services
         self.db = DatabaseManager()
@@ -103,14 +104,11 @@ class AppCore:
         self.engine = AudioEngine()
         self.engine.app_core = self
 
-        # Streaming Services
+        # Streaming Services (eager: fast lightweight services)
         self.youtube = YouTubeService(self.settings)
-        self.soundcloud = SoundCloudService(self.settings)
         self.vk = VKService(self.settings)
-        self.yandex = YandexService(self.settings)
         self.spotify = SpotifyService(self.settings)
         self.lyrics = LyricsService(self.settings)
-        self.recommendations = RecommendationService(settings=self.settings, db=self.db, soundcloud_service=self.soundcloud, youtube_service=self.youtube)
         self.artists = ArtistService(youtube_service=self.youtube, settings=self.settings)
 
         # Proxy, Downloader & Plugins
@@ -162,6 +160,50 @@ class AppCore:
                     logger.debug("Cache cleanup error: %s", ce)
 
         threading.Thread(target=_cache_cleanup_loop, name="CacheCleanup", daemon=True).start()
+
+    @property
+    def soundcloud(self):
+        if self._soundcloud is None:
+            with self._service_lock:
+                if self._soundcloud is None:
+                    from services.soundcloud_service import SoundCloudService
+                    self._soundcloud = SoundCloudService(self.settings)
+        return self._soundcloud
+
+    @soundcloud.setter
+    def soundcloud(self, val):
+        self._soundcloud = val
+
+    @property
+    def yandex(self):
+        if self._yandex is None:
+            with self._service_lock:
+                if self._yandex is None:
+                    from services.yandex_service import YandexService
+                    self._yandex = YandexService(self.settings)
+        return self._yandex
+
+    @yandex.setter
+    def yandex(self, val):
+        self._yandex = val
+
+    @property
+    def recommendations(self):
+        if self._recommendations is None:
+            with self._service_lock:
+                if self._recommendations is None:
+                    from services.recommendation_service import RecommendationService
+                    self._recommendations = RecommendationService(
+                        settings=self.settings,
+                        db=self.db,
+                        soundcloud_service=self.soundcloud,
+                        youtube_service=self.youtube
+                    )
+        return self._recommendations
+
+    @recommendations.setter
+    def recommendations(self, val):
+        self._recommendations = val
 
     def start_zapret_if_enabled(self):
         """Start Zapret only if auto_start is enabled in settings. Called AFTER the WebView2
@@ -372,6 +414,8 @@ class AppCore:
             _step("cache_cleanup.stop", self._cache_cleanup_stop.set)
         if getattr(self, "settings", None) and hasattr(self.settings, "flush"):
             _step("settings.flush", self.settings.flush)
+        if getattr(self, "db", None) and hasattr(self.db, "close"):
+            _step("db.close", self.db.close)
 
         # O-15: shutdown(wait=False) all thread pools so app exit never blocks
         def _shutdown_shared_pool():
@@ -387,8 +431,8 @@ class AppCore:
             getattr(self, "downloader", None) and getattr(self.downloader, "_pool", None),
             getattr(self, "cache", None) and getattr(self.cache, "_executor", None),
             getattr(self, "youtube", None) and getattr(self.youtube, "_executor", None),
-            getattr(self, "soundcloud", None) and getattr(self.soundcloud, "_executor", None),
-            getattr(self, "yandex", None) and getattr(self.yandex, "_executor", None),
+            getattr(self, "_soundcloud", None) and getattr(self._soundcloud, "_executor", None),
+            getattr(self, "_yandex", None) and getattr(self._yandex, "_executor", None),
             getattr(self, "spotify", None) and getattr(self.spotify, "_executor", None),
         ):
             if _pool is None:
