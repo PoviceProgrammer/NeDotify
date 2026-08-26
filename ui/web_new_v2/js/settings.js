@@ -4,6 +4,8 @@ import { initParticles, stopParticles, setParticlesFps } from './particles.js';
 import { setVisualizerFps } from './visualizer.js';
 import { initOnboarding } from './onboarding.js';
 import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js';
+import { evaluateEfficiencyState } from './efficiency.js';
+import { setUiFps } from './player.js';
 
 // Helper: read a localStorage setting that was saved by saveSetting()
 function getLocalSetting(key, defaultVal) {
@@ -36,14 +38,7 @@ export function initSettings() {
         applyThemeMode?.(String(e.detail ?? getLocalSetting('theme_mode', 'system')));
     });
 
-    setupToggle('toggle-unfocus-enabled', 'unfocus_enabled', 'efficiency');
-    setupToggle('toggle-unfocus-blur', 'unfocus_blur_reduction', 'efficiency');
-    setupToggle('toggle-unfocus-animations', 'unfocus_disable_animations', 'efficiency');
-    setupToggle('toggle-unfocus-visualizations', 'unfocus_disable_visualizations', 'efficiency');
-    
-    setupSlider('slider-unfocus-fps', 'unfocus_fps_limit', 'efficiency', (v) => {
-        setElText('label-unfocus-fps', `${v} FPS`);
-    });
+    setupEfficiencyPanel();
 
     // Settings panel navigation
     document.querySelectorAll('.settings-nav-btn[data-panel]').forEach(btn => {
@@ -68,7 +63,10 @@ export function initSettings() {
 
             if (panelName === 'icons') setupIconsPanel();
             if (panelName === 'workshop') setupWorkshopPanel();
-            if (panelName === 'optimization') setupOptimizationPanel();
+            if (panelName === 'optimization') {
+                setupEfficiencyPanel();
+                setupOptimizationPanel();
+            }
             if (panelName === 'zapret') setupZapretPanel();
 
             try {
@@ -566,7 +564,9 @@ function setupToggle(id, key, category, onChange) {
     const toggle = document.getElementById(id);
     if (!toggle) return;
 
-    toggle.addEventListener('click', () => {
+    if (toggle._boundClick) toggle.removeEventListener('click', toggle._boundClick);
+
+    const clickHandler = () => {
         const isOn = toggle.classList.toggle('on');
         saveSetting(key, isOn, category);
         
@@ -585,7 +585,9 @@ function setupToggle(id, key, category, onChange) {
             const canvas = document.getElementById('visualizer-canvas');
             if (canvas) canvas.style.display = isOn ? 'block' : 'none';
         }
-    });
+    };
+    toggle._boundClick = clickHandler;
+    toggle.addEventListener('click', clickHandler);
 }
 
 function setupSlider(id, key, category, onChange) {
@@ -593,18 +595,28 @@ function setupSlider(id, key, category, onChange) {
     if (!slider) return;
 
     const updatePercent = (val) => {
-        const pct = (val - slider.min) / (slider.max - slider.min) * 100;
+        const min = parseFloat(slider.min) || 0;
+        const max = parseFloat(slider.max) || 100;
+        const pct = (val - min) / (max - min) * 100;
         slider.style.setProperty('--value-percent', `${pct}%`);
     };
     updatePercent(slider.value);
 
-    slider.addEventListener('input', (e) => {
+    if (slider._boundInput) slider.removeEventListener('input', slider._boundInput);
+    if (slider._boundChange) slider.removeEventListener('change', slider._boundChange);
+
+    const inputHandler = (e) => {
         updatePercent(e.target.value);
         if (onChange) onChange(e.target.value);
-    });
-    slider.addEventListener('change', (e) => {
+    };
+    const changeHandler = (e) => {
         saveSetting(key, parseInt(e.target.value), category);
-    });
+    };
+
+    slider._boundInput = inputHandler;
+    slider._boundChange = changeHandler;
+    slider.addEventListener('input', inputHandler);
+    slider.addEventListener('change', changeHandler);
 }
 
 export function applySettingsFromBackend(settings) {
@@ -737,12 +749,12 @@ export function applySettingsFromBackend(settings) {
         }
     }
 
+    if (settings.efficiency) {
+        setupEfficiencyPanel();
+    }
+
     if (settings.optimization) {
-        if (settings.optimization.performance_preset) applyPerformancePreset(settings.optimization.performance_preset, true);
-        if (settings.optimization.blur_quality) applyBlurQuality(settings.optimization.blur_quality);
-        if (settings.optimization.glow_quality) applyGlowSettings(settings.optimization.glow_quality);
-        if (settings.optimization.fps_particles !== undefined) setParticlesFps(settings.optimization.fps_particles);
-        if (settings.optimization.fps_visualizer !== undefined) setVisualizerFps(settings.optimization.fps_visualizer);
+        setupOptimizationPanel();
     }
 
     if (settings.player) {
@@ -1017,89 +1029,230 @@ function renderKeybindsList() {
 }
 
 // --- Exported so applySettingsFromBackend can restore preset on load ---
+export function setupEfficiencyPanel() {
+    const syncSwitch = (id, key, defaultVal = true) => {
+        const toggle = document.getElementById(id);
+        if (!toggle) return;
+        let val = window.settings?.efficiency?.[key];
+        if (val === undefined) {
+            val = getLocalSetting(`nedotify_efficiency_${key}`, defaultVal);
+        }
+        toggle.classList.toggle('on', !!val);
+    };
+
+    syncSwitch('toggle-unfocus-enabled', 'unfocus_enabled', true);
+    syncSwitch('toggle-unfocus-blur', 'unfocus_blur_reduction', true);
+    syncSwitch('toggle-unfocus-animations', 'unfocus_disable_animations', true);
+    syncSwitch('toggle-unfocus-visualizations', 'unfocus_disable_visualizations', true);
+
+    const sliderFps = document.getElementById('slider-unfocus-fps');
+    if (sliderFps) {
+        let fps = window.settings?.efficiency?.unfocus_fps_limit;
+        if (fps === undefined) {
+            fps = getLocalSetting('nedotify_efficiency_unfocus_fps_limit', 15);
+        }
+        sliderFps.value = fps;
+        const pct = (fps - sliderFps.min) / (sliderFps.max - sliderFps.min) * 100;
+        sliderFps.style.setProperty('--value-percent', `${pct}%`);
+        setElText('label-unfocus-fps', `${fps} FPS`);
+    }
+
+    const onEffChange = () => {
+        window.dispatchEvent(new CustomEvent('nedotify:efficiency_setting_changed'));
+        evaluateEfficiencyState();
+    };
+
+    setupToggle('toggle-unfocus-enabled', 'unfocus_enabled', 'efficiency', onEffChange);
+    setupToggle('toggle-unfocus-blur', 'unfocus_blur_reduction', 'efficiency', onEffChange);
+    setupToggle('toggle-unfocus-animations', 'unfocus_disable_animations', 'efficiency', onEffChange);
+    setupToggle('toggle-unfocus-visualizations', 'unfocus_disable_visualizations', 'efficiency', onEffChange);
+    
+    setupSlider('slider-unfocus-fps', 'unfocus_fps_limit', 'efficiency', (v) => {
+        setElText('label-unfocus-fps', `${v} FPS`);
+        onEffChange();
+    });
+}
+
+function _syncActiveCard(containerId, val) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.querySelectorAll('.opt-card').forEach(c => {
+        const cVal = c.dataset.val;
+        const matches = (cVal === val) ||
+                        (val === 'balanced' && cVal === 'medium') ||
+                        (val === 'medium' && cVal === 'balanced') ||
+                        (val === 'subtle' && cVal === 'soft') ||
+                        (val === 'soft' && cVal === 'subtle') ||
+                        (val === 'lq' && cVal === 'mid') ||
+                        (val === 'mid' && cVal === 'lq');
+        c.classList.toggle('active', !!matches);
+    });
+}
+
 export function applyPerformancePreset(preset, skipSave = false) {
     const root = document.documentElement;
+    const normalized = (preset === 'balanced' || preset === 'medium') ? 'medium' : (preset === 'low' ? 'low' : 'high');
+    
     root.classList.remove('perf-medium', 'perf-low');
 
-    document.querySelectorAll('#opt-perf-preset .opt-card').forEach(c => {
-        c.classList.toggle('active', c.dataset.val === preset);
-    });
+    _syncActiveCard('opt-perf-preset', preset);
 
-    if (preset === 'medium') {
-        root.classList.add('perf-medium');
-        _setSlidersForPreset(20, 18);
-    } else if (preset === 'low') {
+    if (normalized === 'low') {
         root.classList.add('perf-low');
-        _setSlidersForPreset(15, 12);
-    } else {
-        _setSlidersForPreset(30, 24);
+        applyBlurQuality('off');
+        applyGlowSettings('off');
+        _setSlidersForPreset(15, 10, 30);
+        _syncActiveCard('opt-blur-quality', 'off');
+        _syncActiveCard('opt-glow-quality', 'off');
+    } else if (normalized === 'medium') {
+        root.classList.add('perf-medium');
+        applyBlurQuality('lq');
+        applyGlowSettings('subtle');
+        _setSlidersForPreset(30, 18, 45);
+        _syncActiveCard('opt-blur-quality', 'lq');
+        _syncActiveCard('opt-glow-quality', 'subtle');
+    } else { // high
+        applyBlurQuality('hq');
+        applyGlowSettings('full');
+        _setSlidersForPreset(60, 24, 60);
+        _syncActiveCard('opt-blur-quality', 'hq');
+        _syncActiveCard('opt-glow-quality', 'full');
     }
 
     if (!skipSave) {
         saveSetting('performance_preset', preset, 'optimization');
     }
     applyAuraOrbs(getLocalSetting('nedotify_player_aura_orbs_enabled', true));
+    window.dispatchEvent(new CustomEvent('nedotify:performance_preset_changed', { detail: { preset: normalized } }));
 }
 
-function _setSlidersForPreset(vizFps, particlesFps) {
+function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
     const sv = document.getElementById('slider-fps-visualizer');
     if (sv) {
         sv.value = vizFps;
+        const pct = (vizFps - sv.min) / (sv.max - sv.min) * 100;
+        sv.style.setProperty('--value-percent', `${pct}%`);
         setElText('label-fps-visualizer', `${vizFps} FPS`);
         setVisualizerFps(vizFps);
+        saveSetting('fps_visualizer', vizFps, 'optimization');
     }
     const sp = document.getElementById('slider-fps-particles');
     if (sp) {
         sp.value = particlesFps;
+        const pct = (particlesFps - sp.min) / (sp.max - sp.min) * 100;
+        sp.style.setProperty('--value-percent', `${pct}%`);
         setElText('label-fps-particles', `${particlesFps} FPS`);
         setParticlesFps(particlesFps);
+        saveSetting('fps_particles', particlesFps, 'optimization');
+    }
+    const su = document.getElementById('slider-fps-ui');
+    if (su) {
+        su.value = uiFps;
+        const pct = (uiFps - su.min) / (su.max - su.min) * 100;
+        su.style.setProperty('--value-percent', `${pct}%`);
+        setElText('label-fps-ui', `${uiFps} FPS`);
+        setUiFps(uiFps);
+        saveSetting('fps_ui', uiFps, 'optimization');
     }
 }
 
-function applyBlurQuality(val) {
-    const map = { hq: { sm: '8px',  md: '14px', lg: '18px', xl: '24px', glass: '10px' },
-                  mid: { sm: '4px', md: '8px',  lg: '10px', xl: '12px', glass: '6px'  },
-                  fast:{ sm: '2px', md: '4px',  lg: '6px',  xl: '8px',  glass: '4px'  },
-                  off: { sm: '0px', md: '0px',  lg: '0px',  xl: '0px',  glass: '0px'  } };
+export function applyBlurQuality(val) {
+    const map = {
+        hq:   { sm: '8px', md: '14px', lg: '18px', xl: '24px', glass: '14px' },
+        lq:   { sm: '4px', md: '6px',  lg: '8px',  xl: '10px', glass: '6px'  },
+        mid:  { sm: '4px', md: '6px',  lg: '8px',  xl: '10px', glass: '6px'  },
+        fast: { sm: '2px', md: '4px',  lg: '6px',  xl: '8px',  glass: '4px'  },
+        off:  { sm: '0px', md: '0px',  lg: '0px',  xl: '0px',  glass: '0px'  }
+    };
     const v = map[val] || map.hq;
     const root = document.documentElement;
     root.style.setProperty('--blur-sm',   v.sm);
     root.style.setProperty('--blur-md',   v.md);
     root.style.setProperty('--blur-lg',   v.lg);
     root.style.setProperty('--blur-xl',   v.xl);
-    // Only update --glass-blur if not overridden by user's manual slider
+    root.style.setProperty('--glass-blur', v.glass);
+
+    root.classList.toggle('blur-disabled', val === 'off');
+
     const glassSlider = document.getElementById('slider-glass-blur');
-    if (!glassSlider || glassSlider.dataset.userSet !== '1') {
-        root.style.setProperty('--glass-blur', v.glass);
-        if (glassSlider) {
-            glassSlider.value = parseInt(v.glass);
-            const pct = (glassSlider.value - glassSlider.min) / (glassSlider.max - glassSlider.min) * 100;
-            glassSlider.style.setProperty('--value-percent', `${pct}%`);
-            setElText('label-glass-blur', v.glass);
-        }
+    if (glassSlider) {
+        glassSlider.value = parseInt(v.glass) || 0;
+        const min = parseFloat(glassSlider.min) || 0;
+        const max = parseFloat(glassSlider.max) || 30;
+        const pct = ((glassSlider.value - min) / (max - min)) * 100;
+        glassSlider.style.setProperty('--value-percent', `${pct}%`);
+        setElText('label-glass-blur', v.glass);
     }
 }
 
-function applyGlowSettings(val) {
-    const map = { full: { blur: '40px', opacity: '0.55' },
-                  soft: { blur: '22px', opacity: '0.35' },
-                  off:  { blur:  '0px', opacity:  '0'   } };
+export function applyGlowSettings(val) {
+    const map = {
+        full:   { blur: '40px', opacity: '0.55', mode: 'full' },
+        subtle: { blur: '20px', opacity: '0.35', mode: 'med' },
+        soft:   { blur: '20px', opacity: '0.35', mode: 'med' },
+        off:    { blur:  '0px', opacity: '0',    mode: 'off' }
+    };
     const v = map[val] || map.full;
-    document.documentElement.style.setProperty('--player-glow-blur',    v.blur);
-    document.documentElement.style.setProperty('--player-glow-opacity', v.opacity);
+    const root = document.documentElement;
+    root.style.setProperty('--player-glow-blur',    v.blur);
+    root.style.setProperty('--player-glow-opacity', v.opacity);
+
+    root.classList.remove('orbit-glow-low', 'orbit-glow-med', 'orbit-glow-off');
+    if (v.mode === 'off') {
+        root.classList.add('orbit-glow-off', 'orbit-glow-low');
+    } else if (v.mode === 'med') {
+        root.classList.add('orbit-glow-med');
+    }
+
+    _syncActiveCard('opt-glow-quality', val);
+    window.dispatchEvent(new CustomEvent('nedotify:performance_preset_changed', { detail: { glow: val } }));
 }
 
-function setupOptimizationPanel() {
+export function applyResourceToggle(res, isActive) {
+    const root = document.documentElement;
+    if (res === 'bg') {
+        root.classList.toggle('resource-bg-disabled', !isActive);
+        const bgLayer = document.getElementById('custom-bg-layer');
+        const dimLayer = document.getElementById('custom-bg-dim-layer');
+        const orbs = document.getElementById('aura-orbs-container');
+        if (bgLayer) bgLayer.style.display = isActive ? '' : 'none';
+        if (dimLayer) dimLayer.style.display = isActive ? '' : 'none';
+        if (orbs) orbs.style.display = isActive ? '' : 'none';
+    } else if (res === 'particles') {
+        if (isActive) initParticles(); else stopParticles();
+        const togglePart = document.getElementById('toggle-particles');
+        if (togglePart) togglePart.classList.toggle('on', isActive);
+        if (window.settings && window.settings.ui) window.settings.ui.particles_enabled = isActive;
+    } else if (res === 'covers') {
+        root.classList.toggle('resource-covers-disabled', !isActive);
+    } else if (res === 'visualizers') {
+        const canvases = ['visualizer-canvas', 'home-visualizer-canvas'];
+        canvases.forEach(id => {
+            const c = document.getElementById(id);
+            if (c) c.style.display = isActive ? '' : 'none';
+        });
+        const toggleViz = document.getElementById('toggle-visualizer');
+        if (toggleViz) toggleViz.classList.toggle('on', isActive);
+    } else if (res === 'blur') {
+        applyBlurQuality(isActive ? 'hq' : 'off');
+        _syncActiveCard('opt-blur-quality', isActive ? 'hq' : 'off');
+    }
+}
+
+export function setupOptimizationPanel() {
     const setupCardGroup = (containerId, settingKey, onChange) => {
         const container = document.getElementById(containerId);
         if (!container) return;
         container.querySelectorAll('.opt-card').forEach(card => {
-            card.addEventListener('click', () => {
+            if (card._boundClick) card.removeEventListener('click', card._boundClick);
+            const clickHandler = () => {
                 container.querySelectorAll('.opt-card').forEach(c => c.classList.remove('active'));
                 card.classList.add('active');
                 saveSetting(settingKey, card.dataset.val, 'optimization');
                 if (onChange) onChange(card.dataset.val);
-            });
+            };
+            card._boundClick = clickHandler;
+            card.addEventListener('click', clickHandler);
         });
     };
 
@@ -1111,6 +1264,7 @@ function setupOptimizationPanel() {
         const root = document.documentElement;
         root.classList.remove('limit-state-off', 'limit-state-minimize', 'limit-state-focus');
         root.classList.add(`limit-state-${val}`);
+        evaluateEfficiencyState();
     });
 
     // 3. Blur Quality
@@ -1123,28 +1277,15 @@ function setupOptimizationPanel() {
     const resourceContainer = document.getElementById('opt-active-resources');
     if (resourceContainer) {
         resourceContainer.querySelectorAll('.opt-toggle-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
+            if (btn._boundClick) btn.removeEventListener('click', btn._boundClick);
+            const clickHandler = () => {
                 const isActive = btn.classList.toggle('active');
                 const res = btn.dataset.resource;
                 saveSetting(`resource_${res}`, isActive, 'optimization');
-
-                if (res === 'particles') {
-                    if (isActive) initParticles(); else stopParticles();
-                }
-                if (res === 'visualizers') {
-                    const canvases = ['visualizer-canvas', 'home-visualizer-canvas'];
-                    canvases.forEach(id => {
-                        const c = document.getElementById(id);
-                        if (c) c.style.display = isActive ? '' : 'none';
-                    });
-                }
-                if (res === 'blur') {
-                    applyBlurQuality(isActive ? 'hq' : 'off');
-                }
-                if (res === 'glow') {
-                    applyGlowSettings(isActive ? 'full' : 'off');
-                }
-            });
+                applyResourceToggle(res, isActive);
+            };
+            btn._boundClick = clickHandler;
+            btn.addEventListener('click', clickHandler);
         });
     }
 
@@ -1159,6 +1300,7 @@ function setupOptimizationPanel() {
     });
     setupSlider('slider-fps-ui', 'fps_ui', 'optimization', (v) => {
         setElText('label-fps-ui', `${v} FPS`);
+        setUiFps(v);
     });
 
     // 7. Glass blur listener
@@ -1167,31 +1309,36 @@ function setupOptimizationPanel() {
         glassSlider.addEventListener('mousedown', () => { glassSlider.dataset.userSet = '1'; });
     }
 
-    // 8. Restore all saved optimization settings from localStorage
+    // 8. Restore all saved optimization settings from localStorage/window.settings
     try {
-        const preset = getLocalSetting('nedotify_optimization_performance_preset', 'high');
-        const limitState = getLocalSetting('nedotify_optimization_limit_state', 'minimize');
-        const blur = getLocalSetting('nedotify_optimization_blur_quality', 'hq');
-        const glow = getLocalSetting('nedotify_optimization_glow_quality', 'full');
-        const fpsPart = getLocalSetting('nedotify_optimization_fps_particles', 24);
-        const fpsViz = getLocalSetting('nedotify_optimization_fps_visualizer', 30);
-        const fpsUi = getLocalSetting('nedotify_optimization_fps_ui', 60);
+        let preset = window.settings?.optimization?.performance_preset;
+        if (!preset) preset = getLocalSetting('nedotify_optimization_performance_preset', 'high');
 
-        const syncGroup = (containerId, val) => {
-            const container = document.getElementById(containerId);
-            if (container) {
-                container.querySelectorAll('.opt-card').forEach(c => {
-                    c.classList.toggle('active', c.dataset.val === val);
-                });
-            }
-        };
+        let limitState = window.settings?.optimization?.limit_state;
+        if (!limitState) limitState = getLocalSetting('nedotify_optimization_limit_state', 'minimize');
 
-        syncGroup('opt-perf-preset', preset);
-        syncGroup('opt-limit-state', limitState);
-        syncGroup('opt-blur-quality', blur);
-        syncGroup('opt-glow-quality', glow);
+        let blur = window.settings?.optimization?.blur_quality;
+        if (!blur) blur = getLocalSetting('nedotify_optimization_blur_quality', 'hq');
+
+        let glow = window.settings?.optimization?.glow_quality;
+        if (!glow) glow = getLocalSetting('nedotify_optimization_glow_quality', 'full');
+
+        let fpsPart = window.settings?.optimization?.fps_particles;
+        if (fpsPart === undefined) fpsPart = getLocalSetting('nedotify_optimization_fps_particles', 24);
+
+        let fpsViz = window.settings?.optimization?.fps_visualizer;
+        if (fpsViz === undefined) fpsViz = getLocalSetting('nedotify_optimization_fps_visualizer', 30);
+
+        let fpsUi = window.settings?.optimization?.fps_ui;
+        if (fpsUi === undefined) fpsUi = getLocalSetting('nedotify_optimization_fps_ui', 60);
+
+        _syncActiveCard('opt-perf-preset', preset);
+        _syncActiveCard('opt-limit-state', limitState);
+        _syncActiveCard('opt-blur-quality', blur);
+        _syncActiveCard('opt-glow-quality', glow);
 
         applyPerformancePreset(preset, true);
+
         const root = document.documentElement;
         root.classList.remove('limit-state-off', 'limit-state-minimize', 'limit-state-focus');
         root.classList.add(`limit-state-${limitState}`);
@@ -1200,19 +1347,41 @@ function setupOptimizationPanel() {
         applyGlowSettings(glow);
 
         const sp = document.getElementById('slider-fps-particles');
-        if (sp) { sp.value = fpsPart; setElText('label-fps-particles', `${fpsPart} FPS`); setParticlesFps(fpsPart); }
+        if (sp) {
+            sp.value = fpsPart;
+            const pct = (fpsPart - sp.min) / (sp.max - sp.min) * 100;
+            sp.style.setProperty('--value-percent', `${pct}%`);
+            setElText('label-fps-particles', `${fpsPart} FPS`);
+            setParticlesFps(fpsPart);
+        }
 
         const sv = document.getElementById('slider-fps-visualizer');
-        if (sv) { sv.value = fpsViz; setElText('label-fps-visualizer', `${fpsViz} FPS`); setVisualizerFps(fpsViz); }
+        if (sv) {
+            sv.value = fpsViz;
+            const pct = (fpsViz - sv.min) / (sv.max - sv.min) * 100;
+            sv.style.setProperty('--value-percent', `${pct}%`);
+            setElText('label-fps-visualizer', `${fpsViz} FPS`);
+            setVisualizerFps(fpsViz);
+        }
 
         const su = document.getElementById('slider-fps-ui');
-        if (su) { su.value = fpsUi; setElText('label-fps-ui', `${fpsUi} FPS`); }
+        if (su) {
+            su.value = fpsUi;
+            const pct = (fpsUi - su.min) / (su.max - su.min) * 100;
+            su.style.setProperty('--value-percent', `${pct}%`);
+            setElText('label-fps-ui', `${fpsUi} FPS`);
+            setUiFps(fpsUi);
+        }
 
-        // Sync resource toggle buttons
+        // Sync & apply resource toggle buttons
         ['bg', 'particles', 'covers', 'visualizers', 'blur'].forEach(res => {
-            const val = getLocalSetting(`nedotify_optimization_resource_${res}`, true);
+            let val = window.settings?.optimization?.[`resource_${res}`];
+            if (val === undefined) {
+                val = getLocalSetting(`nedotify_optimization_resource_${res}`, true);
+            }
             const btn = document.querySelector(`#opt-active-resources [data-resource="${res}"]`);
             if (btn) btn.classList.toggle('active', !!val);
+            applyResourceToggle(res, !!val);
         });
     } catch(e) {}
 }

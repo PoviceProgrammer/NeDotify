@@ -3423,23 +3423,63 @@ body.unfocused-blur-disabled .settings-modal-card {
 
 body.unfocused-blur-disabled #sidebar,
 body.unfocused-blur-disabled #player-bar,
+body.unfocused-blur-disabled .player-glass-card,
+body.unfocused-blur-disabled .glass-panel,
+body.unfocused-blur-disabled .card,
 body.unfocused-blur-disabled .glass-modal,
 body.unfocused-blur-disabled #queue-drawer,
-body.unfocused-blur-disabled .context-menu {
-    /* Replace heavy blur with a slightly more opaque background */
+body.unfocused-blur-disabled .context-menu,
+body.unfocused-blur-disabled .settings-modal-card,
+body.unfocused-blur-disabled .topbar,
+body.unfocused-blur-disabled .top-bar {
     backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     background-color: rgba(18, 18, 18, 0.95) !important;
 }
 
 body.unfocused-animations-disabled * {
-    /* Disable all transitions and animations to save CPU */
-    animation: none !important;
     transition: none !important;
 }
 
-body.unfocused-animations-disabled .cover-image-container img {
-    /* Stop CD spinning */
+body.unfocused-animations-disabled .pb-cover.spinning,
+body.unfocused-animations-disabled .player-cover,
+body.unfocused-animations-disabled .player-cover img,
+body.unfocused-animations-disabled .cover-image-container img,
+body.unfocused-animations-disabled .aura-orb,
+body.unfocused-animations-disabled .animate-spin,
+body.unfocused-animations-disabled .animate-spin-slow,
+body.unfocused-animations-disabled .spinner {
     animation-play-state: paused !important;
+}
+
+/* Quality & Resource Toggle Overrides */
+:root.blur-disabled * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+:root.resource-bg-disabled #custom-bg-layer,
+:root.resource-bg-disabled #custom-bg-dim-layer,
+:root.resource-bg-disabled #aura-orbs-container,
+:root.resource-bg-disabled .aura-orbs-container {
+    display: none !important;
+    opacity: 0 !important;
+}
+
+:root.resource-covers-disabled img.track-cover,
+:root.resource-covers-disabled .pb-cover img,
+:root.resource-covers-disabled .player-cover img,
+:root.resource-covers-disabled .album-card-cover img,
+:root.resource-covers-disabled .playlist-card-cover img,
+:root.resource-covers-disabled .card-cover img {
+    opacity: 0 !important;
+    visibility: hidden !important;
+}
+
+:root.orbit-glow-off #player-bar::after,
+:root.orbit-glow-off .player-glass-card::after {
+    display: none !important;
+    opacity: 0 !important;
 }
 
 

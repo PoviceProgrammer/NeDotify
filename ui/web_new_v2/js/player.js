@@ -1009,6 +1009,16 @@ function _getProgEls() {
     return _prog;
 }
 
+let progressThrottleMs = 33;
+
+export function setUiFps(fps) {
+    const clamped = Math.max(10, Math.min(60, parseInt(fps) || 30));
+    progressThrottleMs = Math.round(1000 / clamped);
+    document.documentElement.style.setProperty('--ui-fps', clamped);
+    const transSec = (clamped / 60) * 0.2;
+    document.documentElement.style.setProperty('--ui-transition-duration', `${transSec.toFixed(3)}s`);
+}
+
 function animateProgress(timestamp) {
     if (!isPlaying) {
         animFrameId = null;
@@ -1017,8 +1027,8 @@ function animateProgress(timestamp) {
     if (document.hidden) return;
     animFrameId = requestAnimationFrame(animateProgress);
 
-    // Throttle progress bar updates to ~15 FPS (66ms) РІР‚вЂќ imperceptible and saves GPU
-    if (timestamp - lastProgressFrame < 66) return;
+    // Throttle progress bar updates to target UI FPS
+    if (timestamp - lastProgressFrame < progressThrottleMs) return;
     lastProgressFrame = timestamp;
 
     if (!isDraggingProgress && !isSeeking && activeAudio) {

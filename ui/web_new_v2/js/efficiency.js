@@ -56,63 +56,112 @@ export function initBlurObserver() {
 
 export let isEfficiencyModeActive = false;
 
+export function evaluateEfficiencyState() {
+    // 1. Check if master toggle is enabled
+    let enabled = window.settings?.efficiency?.unfocus_enabled;
+    if (enabled === undefined) {
+        try {
+            const raw = localStorage.getItem('nedotify_efficiency_unfocus_enabled');
+            if (raw !== null) enabled = JSON.parse(raw);
+        } catch(e) {}
+    }
+    if (enabled === undefined) enabled = true;
+
+    // 2. Check limit_state condition (off, minimize, focus)
+    let limitState = window.settings?.optimization?.limit_state;
+    if (!limitState) {
+        try {
+            const raw = localStorage.getItem('nedotify_optimization_limit_state');
+            if (raw !== null) limitState = JSON.parse(raw);
+        } catch(e) {}
+    }
+    limitState = limitState || 'minimize';
+
+    const isHidden = document.hidden;
+    const isBlurred = !document.hasFocus();
+
+    let shouldBeEfficiency = false;
+    if (enabled && limitState !== 'off') {
+        if (limitState === 'minimize') {
+            shouldBeEfficiency = isHidden;
+        } else { // 'focus'
+            shouldBeEfficiency = isHidden || isBlurred;
+        }
+    }
+
+    isEfficiencyModeActive = shouldBeEfficiency;
+
+    // 3. Resolve sub-options
+    let blurReduction = window.settings?.efficiency?.unfocus_blur_reduction;
+    if (blurReduction === undefined) {
+        try {
+            const raw = localStorage.getItem('nedotify_efficiency_unfocus_blur_reduction');
+            if (raw !== null) blurReduction = JSON.parse(raw);
+        } catch(e) {}
+    }
+    if (blurReduction === undefined) blurReduction = true;
+
+    let disableAnimations = window.settings?.efficiency?.unfocus_disable_animations;
+    if (disableAnimations === undefined) {
+        try {
+            const raw = localStorage.getItem('nedotify_efficiency_unfocus_disable_animations');
+            if (raw !== null) disableAnimations = JSON.parse(raw);
+        } catch(e) {}
+    }
+    if (disableAnimations === undefined) disableAnimations = true;
+
+    let disableVisualizations = window.settings?.efficiency?.unfocus_disable_visualizations;
+    if (disableVisualizations === undefined) {
+        try {
+            const raw = localStorage.getItem('nedotify_efficiency_unfocus_disable_visualizations');
+            if (raw !== null) disableVisualizations = JSON.parse(raw);
+        } catch(e) {}
+    }
+    if (disableVisualizations === undefined) disableVisualizations = true;
+
+    let fpsLimit = window.settings?.efficiency?.unfocus_fps_limit;
+    if (fpsLimit === undefined) {
+        try {
+            const raw = localStorage.getItem('nedotify_efficiency_unfocus_fps_limit');
+            if (raw !== null) fpsLimit = JSON.parse(raw);
+        } catch(e) {}
+    }
+    fpsLimit = fpsLimit || 15;
+
+    // 4. Apply CSS classes to document.body
+    document.body.classList.toggle('unfocused-blur-disabled', isEfficiencyModeActive && blurReduction);
+    document.body.classList.toggle('unfocused-animations-disabled', isEfficiencyModeActive && disableAnimations);
+
+    // 5. Dispatch efficiency state event for particles, visualizer, and orbs
+    window.dispatchEvent(new CustomEvent('nedotify:efficiency_state', {
+        detail: {
+            active: isEfficiencyModeActive,
+            fps_limit: fpsLimit,
+            disable_visualizations: disableVisualizations
+        }
+    }));
+}
+
 export function initEfficiency() {
     let focusTimer = null;
 
-    const evaluateState = () => {
-        // If unfocus_enabled is false in settings, never trigger efficiency mode
-        const enabled = window.settings?.efficiency?.unfocus_enabled !== false;
-        
-        // We consider app "unfocused" if document is hidden (minimized) OR window doesn't have focus
-        const isHidden = document.hidden;
-        const isBlurred = !document.hasFocus();
-        
-        // Final state
-        const shouldBeEfficiency = enabled && (isHidden || isBlurred);
-        
-        if (shouldBeEfficiency !== isEfficiencyModeActive) {
-            isEfficiencyModeActive = shouldBeEfficiency;
-            
-            // Apply CSS classes based on specific efficiency settings
-            if (isEfficiencyModeActive) {
-                if (window.settings?.efficiency?.unfocus_blur_reduction !== false) {
-                    document.body.classList.add('unfocused-blur-disabled');
-                }
-                if (window.settings?.efficiency?.unfocus_disable_animations !== false) {
-                    document.body.classList.add('unfocused-animations-disabled');
-                }
-            } else {
-                document.body.classList.remove('unfocused-blur-disabled');
-                document.body.classList.remove('unfocused-animations-disabled');
-            }
-
-            // Dispatch event for visualizer and particles to listen
-            window.dispatchEvent(new CustomEvent('nedotify:efficiency_state', { 
-                detail: { 
-                    active: isEfficiencyModeActive,
-                    fps_limit: window.settings?.efficiency?.unfocus_fps_limit || 15,
-                    disable_visualizations: window.settings?.efficiency?.unfocus_disable_visualizations !== false
-                } 
-            }));
-        }
+    const debouncedEvaluate = () => {
+        clearTimeout(focusTimer);
+        focusTimer = setTimeout(evaluateEfficiencyState, 150);
     };
 
-    window.addEventListener('blur', () => {
-        // Debounce slightly to avoid flickering on alt-tab
-        clearTimeout(focusTimer);
-        focusTimer = setTimeout(evaluateState, 200);
-    });
-
+    window.addEventListener('blur', debouncedEvaluate);
     window.addEventListener('focus', () => {
         clearTimeout(focusTimer);
-        evaluateState();
+        evaluateEfficiencyState();
     });
-
     document.addEventListener('visibilitychange', () => {
         clearTimeout(focusTimer);
-        evaluateState();
+        evaluateEfficiencyState();
+    });
+    window.addEventListener('nedotify:efficiency_setting_changed', () => {
+        evaluateEfficiencyState();
     });
 
-    // Initial evaluation
-    evaluateState();
+    evaluateEfficiencyState();
 }

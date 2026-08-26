@@ -4,6 +4,7 @@ let ctx = null;
 let animFrameId = null;
 let lastFrameTime = 0;
 let isParticlesRunning = false;
+let animateFn = null;
 
 let particles = [];
 let mouse = { x: -1000, y: -1000, active: false };
@@ -364,10 +365,6 @@ export function initParticles() {
     animateFn = animate;
     animate(performance.now());
 }
-
-
-
-let animateFn = null;
 
 window.addEventListener('nedotify:efficiency_state', (e) => {
     const state = e.detail;
