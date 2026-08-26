@@ -1,4 +1,4 @@
-// NeDotify Р Р†Р вЂљ" Settings Module
+// NeDotify — Settings Module
 import { renderIcons, escapeHtml, compressBackgroundImage, showToast } from './utils.js';
 import { initParticles, stopParticles, setParticlesFps } from './particles.js';
 import { setVisualizerFps } from './visualizer.js';
@@ -1921,6 +1921,15 @@ export function applyPlayerStyle(style) {
     root.classList.add(`player-style-${style}`);
 }
 
+export function syncAuraOrbsState() {
+    const el = document.getElementById('aura-orbs-container');
+    if (!el || el.classList.contains('disabled')) return;
+    const isPlaying = document.body.classList.contains('playback-playing');
+    const isWindowFocused = !document.hidden && !document.body.classList.contains('unfocused-animations-disabled');
+    const shouldPause = !isPlaying || !isWindowFocused;
+    el.classList.toggle('paused', shouldPause);
+}
+
 export function applyAuraOrbs(enabled) {
     const el = document.getElementById('aura-orbs-container');
     if (!el) return;
@@ -1931,7 +1940,21 @@ export function applyAuraOrbs(enabled) {
     // Automatically disable in light mode or low-performance / battery saver modes
     const shouldDisable = !enabled || isLightMode || isPerfLow || isBatterySaver;
     el.classList.toggle('disabled', shouldDisable);
+    if (!shouldDisable) {
+        syncAuraOrbsState();
+    }
 }
+
+// Window visibility & playback state listeners for Aura Orbs power saving
+window.addEventListener('blur', syncAuraOrbsState);
+window.addEventListener('focus', syncAuraOrbsState);
+document.addEventListener('visibilitychange', syncAuraOrbsState);
+document.addEventListener('nedotify:state_changed', (e) => {
+    document.body.classList.toggle('playback-playing', e.detail === 'playing');
+    document.body.classList.toggle('playback-paused', e.detail !== 'playing');
+    syncAuraOrbsState();
+});
+document.addEventListener('nedotify:efficiency_state', syncAuraOrbsState);
 
 export function applySliderType(type) {
     const root = document.documentElement;
