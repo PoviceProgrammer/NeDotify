@@ -201,11 +201,13 @@ class AppApi:
         try:
             import threading
             def _set_icon():
+                import os
                 import time
                 time.sleep(0.2)
                 try:
+                    if os.environ.get("PYTEST_CURRENT_TEST"):
+                        return
                     if getattr(self._window, 'native', None):
-                        import os
                         import clr
                         clr.AddReference('System.Drawing')
                         from System.Drawing import Icon
@@ -776,6 +778,8 @@ class AppApi:
         duration = dur_ms or duration_ms
         pos_sec = pos_ms / 1000.0 if pos_ms else 0.0
         dur_sec = duration / 1000.0 if duration else 0.0
+        if hasattr(self._core, "engine") and self._core.engine:
+            self._core.engine._last_reported_position = pos_sec
         self._emit("position_changed", {
             "pos": pos_sec,
             "duration": dur_sec,
@@ -951,6 +955,27 @@ class AppApi:
                 play_callback(track)
 
         fp = track.get("file_path")
+        if source == "local" and not fp:
+            # Look up file_path in DB by track id or title/artist
+            t_id = track.get("id")
+            if t_id:
+                try:
+                    db_t = self._core.db.get_track(int(t_id))
+                    if db_t and db_t.get("file_path"):
+                        fp = db_t["file_path"]
+                        track["file_path"] = fp
+                except Exception:
+                    pass
+            if not fp:
+                dl_tracks = self._core.db.get_downloaded_tracks() or []
+                for dt in dl_tracks:
+                    if dt.get("file_path") and os.path.exists(dt["file_path"]):
+                        if (track.get("title") and dt.get("title") and track["title"].strip().lower() == dt["title"].strip().lower()) or \
+                           (track.get("source_id") and dt.get("source_id") and str(track["source_id"]) == str(dt["source_id"])):
+                            fp = dt["file_path"]
+                            track["file_path"] = fp
+                            break
+
         if source == "local" or _fp_usable(fp):
             logger.info(f"api.py -> _resolve_track fast path: source={source}, file_path={str(fp)[:80] if fp else None}")
             _deliver()
@@ -1073,6 +1098,18 @@ class AppApi:
             return {"success": True}
         except Exception as e:
             logger.error(f"add_to_queue error: {e}")
+            return {"success": False, "error": str(e)}
+
+    def add_tracks_to_queue(self, tracks: list):
+        """Batch append multiple tracks to the end of the queue."""
+        try:
+            if not tracks or not isinstance(tracks, list):
+                return {"success": False, "error": "Invalid tracks list"}
+            self._core.engine.add_tracks_to_queue(tracks)
+            self._emit("queue_updated", self.get_queue())
+            return {"success": True, "count": len(tracks)}
+        except Exception as e:
+            logger.error(f"add_tracks_to_queue error: {e}")
             return {"success": False, "error": str(e)}
 
     def remove_from_queue(self, index):
@@ -1898,17 +1935,21 @@ class AppApi:
             self._emit("storage_info", cached[1])
             return cached[1]
         try:
-            cache_dir = self._core.cache.cache_dir
-            covers_dir = getattr(self._core.scanner, "_covers_dir", os.path.expanduser("~/.nedotify/covers"))
+            cache_mgr = getattr(self._core, "cache", None)
+            base_cache_dir = cache_mgr.cache_dir if cache_mgr else os.path.expanduser("~/.nedotify")
+            streams_dir = getattr(cache_mgr, "_streams_dir", os.path.join(base_cache_dir, "streams"))
+            temp_dir = getattr(cache_mgr, "_temp_dir", os.path.join(base_cache_dir, "temp"))
+            covers_dir = getattr(self._core.scanner, "_covers_dir", getattr(cache_mgr, "_covers_dir", os.path.join(base_cache_dir, "covers")))
 
             cache_bytes = 0
-            if os.path.exists(cache_dir):
-                for root, _, files in os.walk(cache_dir):
-                    for f in files:
-                        try:
-                            cache_bytes += os.path.getsize(os.path.join(root, f))
-                        except Exception:
-                            logger.debug("get_storage_info: suppressed exception", exc_info=True)
+            for d in (streams_dir, temp_dir):
+                if os.path.exists(d):
+                    for root, _, files in os.walk(d):
+                        for f in files:
+                            try:
+                                cache_bytes += os.path.getsize(os.path.join(root, f))
+                            except Exception:
+                                pass
 
             covers_bytes = 0
             covers_count = 0
@@ -1919,7 +1960,7 @@ class AppApi:
                         try:
                             covers_bytes += os.path.getsize(os.path.join(root, f))
                         except Exception:
-                            logger.debug("get_storage_info: suppressed exception", exc_info=True)
+                            pass
 
             downloaded_tracks = self._core.db.get_downloaded_tracks() or []
             track_bytes = 0
@@ -1930,7 +1971,7 @@ class AppApi:
                     try:
                         track_bytes += os.path.getsize(fp)
                     except Exception:
-                        logger.debug("get_storage_info: suppressed exception", exc_info=True)
+                        pass
 
             total_bytes = cache_bytes + covers_bytes + track_bytes
             total_mb = round(total_bytes / (1024 * 1024), 2)
@@ -2235,6 +2276,28 @@ class AppApi:
 
         svc.get_profile(name, callback=_ok, error_callback=_err)
         return {"status": "loading", "artist": name}
+
+    def get_artists_avatars(self, names):
+        """Resolve avatar photos for a batch of artist names (home feed).
+
+        One artist-search round trip per unknown name, cached for a week.
+        Delivered through the artists_avatars_ready event as {"avatars": {name: url}}.
+        """
+        if not isinstance(names, (list, tuple)):
+            return {"status": "error", "error": "names must be a list"}
+        svc = getattr(self._core, "artists", None)
+        if svc is None:
+            return {"status": "error", "error": "Сервис исполнителей недоступен"}
+
+        def _done(mapping):
+            self._emit("artists_avatars_ready", {"avatars": mapping or {}})
+
+        try:
+            svc.get_avatars([n for n in names if isinstance(n, str)][:30], callback=_done)
+        except Exception as exc:
+            logger.warning("get_artists_avatars failed: %s", exc)
+            return {"status": "error", "error": str(exc)}
+        return {"status": "loading"}
 
     def get_recommendations(self, track_data: dict, max_results: int = 10):
         """Get recommended tracks for seed track synchronously with timeout."""

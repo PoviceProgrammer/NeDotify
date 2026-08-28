@@ -167,7 +167,7 @@ class BasePlaybackE2ETestCase(unittest.TestCase):
                 return False
             if os.path.exists(url) or os.path.isabs(url) or "127.0.0.1" in url or "localhost" in url:
                 return True
-            return _is_ssrf_safe_url(url)
+            return _is_safe_url(url)
 
         self.safe_url_patcher1 = patch('core.proxy._is_safe_url', side_effect=safe_url_test_patch)
         self.safe_url_patcher2 = patch('core.proxy._is_ssrf_safe_url', side_effect=safe_url_test_patch)

@@ -557,18 +557,24 @@ class SoundCloudService(BaseMusicService):
         import os, time
         if not HAS_YTDLP:
             raise Exception('yt-dlp is missing')
-            
+
+        sc_url_str = str(sc_url).strip()
+        if not sc_url_str.startswith('http'):
+            if sc_url_str.isdigit():
+                sc_url_str = f'https://api-v2.soundcloud.com/tracks/{sc_url_str}'
+            else:
+                sc_url_str = f'https://soundcloud.com/{sc_url_str}'
+
         file_name = f'sc_{int(time.time())}.mp3'
         output_path = os.path.join(output_dir, file_name)
 
-
-        ydl_opts = {'quiet': True, 'no_warnings': True, 'format': 'bestaudio'}
+        ydl_opts = {'quiet': True, 'no_warnings': True, 'format': 'bestaudio/best'}
         ydl = yt_dlp.YoutubeDL(ydl_opts)
         
         try:
-            info = ydl.extract_info(sc_url, download=False)
+            info = ydl.extract_info(sc_url_str, download=False)
         except Exception as e:
-            self.logger.debug(f'SoundCloud metadata probe failed for {sc_url}: {e}', exc_info=True)
+            self.logger.debug(f'SoundCloud metadata probe failed for {sc_url_str}: {e}', exc_info=True)
             info = None
             
         is_preview = False
@@ -578,37 +584,55 @@ class SoundCloudService(BaseMusicService):
                 is_preview = True
                 
         if not info or is_preview:
-
             from services.youtube_service import YouTubeService
             yt = YouTubeService(self.settings)
             title = info.get('title', 'Unknown') if info else 'Unknown'
             artist = info.get('uploader', 'Unknown') if info else 'Unknown'
             query = f'{artist} - {title}'.strip(' -')
             if not query or query == 'Unknown - Unknown':
-                raise Exception('Cannot extract metadata for YouTube fallback')
+                # Try getting cached metadata
+                cached = self.get_from_cache(sc_url) or self.get_from_cache(sc_url_str)
+                if cached:
+                    title = cached.get('title', 'Unknown')
+                    artist = cached.get('artist', 'Unknown')
+                    query = f'{artist} - {title}'.strip(' -')
+                if not query or query == 'Unknown - Unknown':
+                    raise Exception('Cannot extract metadata for YouTube fallback')
 
-
-            yt_dlp_opts = {
-                'quiet': True, 'no_warnings': True, 'format': 'bestaudio',
-                'outtmpl': output_path,
-                'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '320'}]
-            }
+            yt_dlp_opts = yt._get_ydl_opts('bestaudio/best', fallback=True)
+            yt_dlp_opts.update({
+                'outtmpl': os.path.join(output_dir, f'sc_yt_{int(time.time())}.%(ext)s'),
+                'skip_download': False,
+            })
             with yt_dlp.YoutubeDL(yt_dlp_opts) as yt_ydl:
                 search_res = yt_ydl.extract_info(f'ytsearch1:{query}', download=True)
                 if not search_res or not search_res.get('entries'):
                     raise Exception('YouTube fallback search failed')
+                entry = search_res['entries'][0]
+                dl_file = yt_ydl.prepare_filename(entry)
+                if os.path.exists(dl_file):
+                    return dl_file
             return output_path
                 
         else:
-
-
             dl_opts = {
-                'quiet': True, 'no_warnings': True, 'format': 'bestaudio',
-                'outtmpl': output_path,
-                'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '320'}]
+                'quiet': True,
+                'no_warnings': True,
+                'format': 'bestaudio/best',
+                'outtmpl': os.path.join(output_dir, f'sc_{int(time.time())}.%(ext)s'),
             }
             with yt_dlp.YoutubeDL(dl_opts) as sc_ydl:
-                sc_ydl.download([sc_url])
+                sc_info = sc_ydl.extract_info(sc_url_str, download=True)
+                if sc_info:
+                    sc_file = sc_ydl.prepare_filename(sc_info)
+                    if os.path.exists(sc_file):
+                        return sc_file
+            if os.path.exists(output_path):
+                return output_path
+            # Check directory for sc_ file
+            for f in os.listdir(output_dir):
+                if f.startswith('sc_') and not f.endswith('.part'):
+                    return os.path.join(output_dir, f)
             return output_path
 
     def get_related_tracks_sync(self, track_id_or_urn: str, limit: int = 15) -> list:

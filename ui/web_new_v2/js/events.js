@@ -110,6 +110,10 @@ export function initEvents() {
                 }
                 break;
 
+            case 'artists_avatars_ready':
+                window.dispatchEvent(new CustomEvent('app:artists_avatars_ready', { detail: data }));
+                break;
+
             case 'releases_ready':
                 clearFeedTimeout('home-releases');
                 if (data) {

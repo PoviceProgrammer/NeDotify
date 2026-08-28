@@ -229,21 +229,33 @@ class LastFMService(BaseMusicService):
             entry = self._cache.get(cache_key)
             if entry and time.time() - entry['ts'] <= entry['ttl']:
                 return entry['data']
+        conn = None
         try:
-            with sqlite3.connect(self._db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('SELECT json_data, timestamp, ttl FROM lastfm_response_cache WHERE cache_key = ?',
-                               (cache_key,))
-                row = cursor.fetchone()
-                if row:
-                    json_str, ts, ttl = row
-                    if time.time() - ts <= ttl:
-                        data = json.loads(json_str)
-                        with self._cache_lock:
-                            self._cache[cache_key] = {'data': data, 'ts': ts, 'ttl': ttl}
-                        return data
+            conn = sqlite3.connect(self._db_path, timeout=5.0)
+            cursor = conn.cursor()
+            cursor.execute('SELECT json_data, timestamp, ttl FROM lastfm_response_cache WHERE cache_key = ?',
+                           (cache_key,))
+            row = cursor.fetchone()
+            if row:
+                json_str, ts, ttl = row
+                if time.time() - ts <= ttl:
+                    data = json.loads(json_str)
+                    with self._cache_lock:
+                        if len(self._cache) >= 500:
+                            try:
+                                self._cache.pop(next(iter(self._cache)))
+                            except Exception:
+                                pass
+                        self._cache[cache_key] = {'data': data, 'ts': ts, 'ttl': ttl}
+                    return data
         except Exception as e:
             self.logger.debug(f'SQLite cache lookup error: {e}')
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
         return None
 
     def _get_stale_cache(self, cache_key: str) -> Optional[Any]:
@@ -251,29 +263,48 @@ class LastFMService(BaseMusicService):
             entry = self._cache.get(cache_key)
             if entry:
                 return entry['data']
+        conn = None
         try:
-            with sqlite3.connect(self._db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('SELECT json_data FROM lastfm_response_cache WHERE cache_key = ?',
-                               (cache_key,))
-                row = cursor.fetchone()
-                if row:
-                    return json.loads(row[0])
+            conn = sqlite3.connect(self._db_path, timeout=5.0)
+            cursor = conn.cursor()
+            cursor.execute('SELECT json_data FROM lastfm_response_cache WHERE cache_key = ?',
+                           (cache_key,))
+            row = cursor.fetchone()
+            if row:
+                return json.loads(row[0])
         except Exception as e:
             self.logger.debug(f'Stale SQLite cache lookup failed for {cache_key}: {e}', exc_info=True)
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
         return None
 
     def _set_cache(self, cache_key: str, data: Any, ttl: float):
         now = time.time()
         with self._cache_lock:
+            if len(self._cache) >= 500:
+                try:
+                    self._cache.pop(next(iter(self._cache)))
+                except Exception:
+                    pass
             self._cache[cache_key] = {'data': data, 'ts': now, 'ttl': ttl}
+        conn = None
         try:
-            with sqlite3.connect(self._db_path) as conn:
+            conn = sqlite3.connect(self._db_path, timeout=5.0)
+            with conn:
                 conn.execute('INSERT OR REPLACE INTO lastfm_response_cache (cache_key, json_data, timestamp, ttl) VALUES (?, ?, ?, ?)',
                              (cache_key, json.dumps(data), now, ttl))
-                conn.commit()
         except Exception as e:
             self.logger.debug(f'SQLite cache store error: {e}')
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     def _api_request(self, method: str, params: dict, ttl: float) -> Optional[dict]:
         cache_key = f'{method}:' + '&'.join(f'{k}={v}' for k, v in sorted(params.items()))

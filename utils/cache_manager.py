@@ -294,12 +294,25 @@ class CacheManager:
             import yt_dlp
             try:
                 out_template = os.path.join(self._streams_dir, f"{download_id}.%(ext)s")
-                ydl_opts = {
-                    'quiet': True,
-                    'no_warnings': True,
-                    'format': 'bestaudio/best',
-                    'outtmpl': out_template,
-                }
+                if source == "youtube":
+                    try:
+                        from services.youtube_service import YouTubeService
+                        yt_svc = YouTubeService(settings=getattr(self, 'settings', None))
+                        ydl_opts = yt_svc._get_ydl_opts('bestaudio/best', fallback=True)
+                    except Exception:
+                        ydl_opts = {
+                            'quiet': True,
+                            'no_warnings': True,
+                            'format': 'bestaudio/best',
+                        }
+                else:
+                    ydl_opts = {
+                        'quiet': True,
+                        'no_warnings': True,
+                        'format': 'bestaudio/best',
+                    }
+                ydl_opts['outtmpl'] = out_template
+                ydl_opts['skip_download'] = False
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=True)
@@ -327,6 +340,11 @@ class CacheManager:
         if not url.startswith(("http://", "https://")):
             return None
 
+        from core.proxy import _is_ssrf_safe_url
+        if not _is_ssrf_safe_url(url):
+            self.logger.warning(f"Blocked unsafe cover URL: {url[:100]}")
+            return None
+
         import urllib.request
         from urllib.parse import urlparse
 
@@ -341,7 +359,7 @@ class CacheManager:
 
         # Download to temp first: an interrupted transfer used to leave a torn
         # image cached forever (the exists() check above would keep serving it).
-        tmp_path = filepath + f".{os.getpid()}.part"
+        tmp_path = filepath + f".{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.part"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=10) as response, open(tmp_path, 'wb') as f:

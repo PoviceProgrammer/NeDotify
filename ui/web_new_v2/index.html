@@ -19,14 +19,14 @@
     <script src="js/lucide.min.js"></script>
     <script src="js/hls.min.js" defer></script>
     <link rel="icon" type="image/png" href="logo.png">
-    <link rel="stylesheet" href="css/tokens.css?v=20260826">
-    <link rel="stylesheet" href="css/components/base.css?v=20260826">
-    <link rel="stylesheet" href="css/components/player-bar.css?v=20260826">
-    <link rel="stylesheet" href="css/components/player-view.css?v=20260826">
-    <link rel="stylesheet" href="css/components/lyrics.css?v=20260826">
-    <link rel="stylesheet" href="css/components/home-view.css?v=20260826">
-    <link rel="stylesheet" href="css/components/track-table.css?v=20260826">
-    <link rel="stylesheet" href="css/themes.css?v=20260826">
+    <link rel="stylesheet" href="css/tokens.css?v=20260827_blur">
+    <link rel="stylesheet" href="css/components/base.css?v=20260828_settings">
+    <link rel="stylesheet" href="css/components/player-bar.css?v=20260828_queue4">
+    <link rel="stylesheet" href="css/components/player-view.css?v=20260827_blur">
+    <link rel="stylesheet" href="css/components/lyrics.css?v=20260827_blur">
+    <link rel="stylesheet" href="css/components/home-view.css?v=20260827_blur">
+    <link rel="stylesheet" href="css/components/track-table.css?v=20260827_blur">
+    <link rel="stylesheet" href="css/themes.css?v=20260827_blur">
 </head>
 <body>
 
@@ -44,15 +44,15 @@
 <div id="custom-bg-layer"></div>
 <div id="custom-bg-dim-layer"></div>
 
-<!-- Particles Background -->
-<div id="particles-bg"></div>
-
 <!-- Vision Pro Glass Aura Orbs -->
 <div id="aura-orbs-container" class="aura-orbs-container">
     <div class="aura-orb orb-1"></div>
     <div class="aura-orb orb-2"></div>
     <div class="aura-orb orb-3"></div>
 </div>
+
+<!-- Particles Background -->
+<div id="particles-bg"></div>
 
 <!-- Title Bar (Frameless window) -->
 <div id="title-bar">
@@ -679,8 +679,12 @@
 
         <div id="view-settings" class="view-page settings-overlay">
             <div class="settings-modal-card">
-                <div class="settings-header-bar">
+                <div class="settings-header-bar" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                     <h1 class="page-title" style="margin-bottom:0">Настройки</h1>
+                    <div class="settings-search-wrap">
+                        <i data-lucide="search"></i>
+                        <input type="text" id="settings-search" class="settings-search-input" placeholder="Поиск настроек..." autocomplete="off">
+                    </div>
                 </div>
 
                 <div class="settings-layout">
@@ -1453,13 +1457,13 @@
                             </div>
                             <div class="setting-row">
                                 <div>
-                                    <div class="setting-label"> : <span id="label-particles-size"></span></div>
+                                     <div class="setting-label">Размер: <span id="label-particles-size">Обычный</span></div>
                                 </div>
                                 <input type="range" class="slider-input" id="slider-particles-size" min="1" max="5" value="2" style="width:140px">
                             </div>
                             <div class="setting-row">
                                 <div>
-                                    <div class="setting-label">: <span id="label-particles-speed"></span></div>
+                                     <div class="setting-label">Скорость: <span id="label-particles-speed">Обычная</span></div>
                                 </div>
                                 <input type="range" class="slider-input" id="slider-particles-speed" min="1" max="3" value="2" style="width:140px">
                             </div>
@@ -1919,6 +1923,9 @@
 
     <!-- Right: Queue + Volume (compact) -->
     <div class="pb-right">
+        <button class="btn-ctrl" id="pb-btn-pip-lyrics" title="Плавающее караоке (PiP)" aria-label="PiP Lyrics">
+            <i data-lucide="subtitles" style="width:16px;height:16px"></i>
+        </button>
         <button class="btn-ctrl" id="pb-btn-queue" title="Очередь" aria-label="Queue">
             <i data-lucide="list-music" style="width:16px;height:16px"></i>
         </button>
@@ -2218,19 +2225,61 @@
         </div>
     </div>
 </div>
+
+<!-- ───── FLOATING MINI-KARAOKE WIDGET (PiP Lyrics) ───── -->
+<div id="mini-lyrics-widget" class="hidden" role="region" aria-label="Караоке виджет">
+    <div class="pip-lyrics-header">
+        <div class="pip-drag-handle">
+            <i data-lucide="grip-horizontal" style="width:14px;height:14px"></i>
+            <span>Караоке</span>
+        </div>
+        <button id="pip-lyrics-close" class="icon-btn" title="Закрыть караоке" style="width:22px;height:22px;background:transparent;border:none;color:var(--color-text-muted);cursor:pointer;">
+            <i data-lucide="x" style="width:14px;height:14px"></i>
+        </button>
+    </div>
+    <div class="pip-lyrics-body">
+        <div id="pip-lyric-current" class="pip-lyric-current">Слушайте музыку</div>
+        <div id="pip-lyric-translation" class="pip-lyric-translation" style="display:none;"></div>
+        <div id="pip-lyric-next" class="pip-lyric-next">Текст песни появится здесь</div>
+    </div>
+</div>
+
+<!-- ───── MULTI-SELECT BATCH ACTION BAR ───── -->
+<div id="batch-action-bar" class="hidden" role="toolbar" aria-label="Пакетные действия с треками">
+    <div class="batch-info">
+        <i data-lucide="check-square" style="width:16px;height:16px;color:var(--color-primary)"></i>
+        <span id="batch-selected-count">0 выбрано</span>
+    </div>
+    <div class="batch-actions">
+        <button id="batch-btn-playlist" class="batch-btn" title="Добавить в плейлист">
+            <i data-lucide="plus" style="width:14px;height:14px"></i>
+            <span>В плейлист</span>
+        </button>
+        <button id="batch-btn-queue" class="batch-btn" title="Добавить в очередь">
+            <i data-lucide="list-plus" style="width:14px;height:14px"></i>
+            <span>В очередь</span>
+        </button>
+        <button id="batch-btn-download" class="batch-btn" title="Скачать выбранные">
+            <i data-lucide="download" style="width:14px;height:14px"></i>
+            <span>Скачать</span>
+        </button>
+        <button id="batch-btn-clear" class="batch-btn-close" title="Снять выделение">
+            <i data-lucide="x" style="width:14px;height:14px"></i>
+        </button>
+    </div>
 </div>
 
 <!-- QUEUE DRAWER -->
 <div id="queue-drawer">
     <div id="queue-drawer-header">
-        <h2>Up Next</h2>
-        <button id="queue-drawer-close" class="icon-btn" style="color: white; border:none; background:transparent;"><i data-lucide="x"></i></button>
+        <h2>Очередь воспроизведения</h2>
+        <button id="queue-drawer-close" class="icon-btn" title="Закрыть"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
     </div>
     <div id="queue-drawer-content"></div>
 </div>
 
 <script src="js/boot.js?v=20260821"></script>
-<script type="module" src="js/main.js?v=20260821"></script>
+<script type="module" src="js/main.js?v=20260828_queue3"></script>
 </body>
 </html>
 

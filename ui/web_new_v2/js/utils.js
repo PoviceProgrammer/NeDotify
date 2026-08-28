@@ -153,8 +153,30 @@ export function coverImgHtml({ src, coverUrl, sourceId, source, alt = '', extraA
 // 'error' does not bubble, but is caught on document in the capture phase.
 document.addEventListener('error', (e) => {
     const target = e.target;
-    if (!target || target.tagName !== 'IMG' || !target.dataset.coverUrl) return;
+    if (!target || target.tagName !== 'IMG') return;
+    if (!target.dataset.coverUrl) {
+        // No remote fallback available: hide instead of showing the browser's
+        // broken-image icon (collage cells, avatars, ...).
+        target.style.display = 'none';
+        return;
+    }
     handleImageError(target, target.dataset.coverUrl, target.dataset.sourceId || '', target.dataset.source || '');
+}, true);
+
+// YouTube serves a gray "no thumbnail" placeholder WITH HTTP 200 for
+// hqdefault of videos whose artwork is unavailable - no error event fires,
+// so the cell used to stay as an ugly gray "..." tile. Detect it after load
+// by its exact 480x360 size and retry once with mqdefault (404s for such
+// videos, letting the normal error-fallback chain take over). Real
+// letterboxed 480x360 thumbs also benefit: mqdefault has no black bars.
+document.addEventListener('load', (e) => {
+    const target = e.target;
+    if (!target || target.tagName !== 'IMG' || target.dataset.placeholderRetried) return;
+    if (target.naturalWidth !== 480 || target.naturalHeight !== 360) return;
+    const m = (target.currentSrc || target.src || '').match(/ytimg\.com\/vi\/([^/]+)\//);
+    if (!m) return;
+    target.dataset.placeholderRetried = '1';
+    target.src = `https://i.ytimg.com/vi/${m[1]}/mqdefault.jpg`;
 }, true);
 
 // Artist avatar fallback: there is no artist-photo source in the local
@@ -174,10 +196,21 @@ export function artistAvatarHtml(artistName) {
 // skeleton placeholder).
 
 export function renderPlaylistCoverCollage(trackCovers) {
+    // Accepts either plain URL strings or {src, coverUrl, sourceId, source}
+    // objects; objects get data-attributes so the delegated img error
+    // listener can fall back to the remote cover when a local cover_path
+    // 404s (stale DB paths, frozen-mode _MEI dirs, ...).
     const covers = (Array.isArray(trackCovers) ? trackCovers : []).filter(Boolean).slice(0, 4);
     if (covers.length === 0) return '';
     const cells = covers
-        .map(src => `<div class="pl-collage-cell"><img src="${escapeHtml(src)}" loading="lazy" alt=""></div>`)
+        .map(c => {
+            const obj = (typeof c === 'string') ? { src: c } : c;
+            let dataAttrs = '';
+            if (obj.coverUrl) dataAttrs += ` data-cover-url="${escapeHtml(obj.coverUrl)}"`;
+            if (obj.sourceId) dataAttrs += ` data-source-id="${escapeHtml(obj.sourceId)}"`;
+            if (obj.source) dataAttrs += ` data-source="${escapeHtml(obj.source)}"`;
+            return `<div class="pl-collage-cell"><img src="${escapeHtml(obj.src || '')}"${dataAttrs} loading="lazy" alt=""></div>`;
+        })
         .join('');
     return `<div class="pl-collage pl-collage-${covers.length}" aria-hidden="true">${cells}</div>`;
 }
@@ -197,7 +230,11 @@ export function getCoverUrl(track) {
             const tokenQuery = window.PROXY_TOKEN ? `&k=${encodeURIComponent(window.PROXY_TOKEN)}` : '';
             return `http://127.0.0.1:${window.PROXY_PORT}/api/cover?path=${encodeURIComponent(track.cover_path)}${tokenQuery}`;
         }
-        return 'file:///' + path;
+        // No proxy port yet (cold start): CSP img-src forbids file:// on an
+        // http:// origin, so a file URL would only render a broken-image icon.
+        // Return '' so callers keep their fallbacks; the collage retry (3s)
+        // re-resolves once PROXY_PORT is known.
+        return '';
     }
     let url = track.cover_url || track.og_image || track.artwork_url || '';
     if (url && url.includes('%%')) {
@@ -221,9 +258,39 @@ export function formatArtistNames(artistStr) {
     return parts.map(p => `<span class="clickable-artist" data-artist="${escapeHtml(p)}">${escapeHtml(p)}</span>`).join(', ');
 }
 
+export function isSameTrack(t1, t2) {
+    if (!t1 || !t2) return false;
+    if (t1.id && t2.id && String(t1.id) === String(t2.id) && String(t1.id) !== '0') return true;
+    if (t1.source_id && t2.source_id && String(t1.source_id).trim() && String(t1.source_id) === String(t2.source_id)) return true;
+    if (t1.file_path && t2.file_path && t1.file_path === t2.file_path) return true;
+    if (t1.title && t2.title) {
+        const tit1 = String(t1.title).trim().toLowerCase();
+        const tit2 = String(t2.title).trim().toLowerCase();
+        if (tit1 && tit1 === tit2) {
+            const a1 = String(t1.artist || '').trim().toLowerCase();
+            const a2 = String(t2.artist || '').trim().toLowerCase();
+            if (!a1 || !a2 || a1 === a2) return true;
+        }
+    }
+    return false;
+}
+
+export function updatePlayingTrackInDOM(currentTrack) {
+    if (!currentTrack) {
+        document.querySelectorAll('.track-item.playing').forEach(el => el.classList.remove('playing'));
+        return;
+    }
+    document.querySelectorAll('.track-item').forEach(el => {
+        const trk = el._trackData;
+        const isMatch = trk && isSameTrack(trk, currentTrack);
+        el.classList.toggle('playing', !!isMatch);
+    });
+}
+
 export function createTrackElement(track, index, tracksArray, currentTrack) {
     const item = document.createElement('div');
-    const isCurrentlyPlaying = currentTrack && ((currentTrack.id && track.id && currentTrack.id === track.id) || currentTrack.source_id === track.source_id);
+    item._trackData = track;
+    const isCurrentlyPlaying = currentTrack && isSameTrack(track, currentTrack);
     item.className = `track-item${isCurrentlyPlaying ? ' playing' : ''}`;
     item.style.animationDelay = `${Math.min(index * 0.03, 0.5)}s`;
     item.dataset.trackSourceId = String(track.source_id || track.id || '');
@@ -284,6 +351,10 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
 
     // Play handler: Entire track row clickable except action buttons, more button and artist link
     item.addEventListener('click', (e) => {
+        const isHandledByMultiSelect = handleTrackMultiSelectClick(e, track, index, tracksArray, item);
+        if (isHandledByMultiSelect) {
+            return;
+        }
         if (e.target.closest('.like-btn') || e.target.closest('.add-btn') || e.target.closest('.download-btn') || e.target.closest('.track-more-btn') || e.target.closest('.clickable-artist')) {
             return;
         }
@@ -495,6 +566,12 @@ function getSourceIcon(source) {
         default: return '';
     }
 }
+
+document.addEventListener('nedotify:track_changed', (e) => {
+    if (e.detail) {
+        updatePlayingTrackInDOM(e.detail);
+    }
+});
 
 document.addEventListener('nedotify:track_downloaded', (e) => {
     const data = e.detail;
@@ -893,3 +970,174 @@ export function getSkeletonGrid(count = 10) {
     html += '</div>';
     return html;
 }
+
+// ==========================================================================
+// FEATURE 3: Desktop Multi-Select Engine (Ctrl+Click / Shift+Click)
+// ==========================================================================
+
+export const selectedTracksMap = new Map(); // key -> track object
+let lastSelectedTrackIndex = -1;
+
+/**
+ * Синхронизирует отображение плавающего тулбара групповых действий
+ */
+export function updateBatchActionBar() {
+    const bar = document.getElementById('batch-action-bar');
+    const countEl = document.getElementById('batch-selected-count');
+    if (!bar) return;
+
+    const count = selectedTracksMap.size;
+    if (count > 0) {
+        bar.classList.remove('hidden');
+        if (countEl) {
+            const mod10 = count % 10;
+            const mod100 = count % 100;
+            let word = 'треков';
+            if (mod10 === 1 && mod100 !== 11) word = 'трек';
+            else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) word = 'трека';
+            countEl.textContent = `${count} ${word} выбрано`;
+        }
+    } else {
+        bar.classList.add('hidden');
+    }
+}
+
+/**
+ * Сброс выделения со всех треков в DOM
+ */
+export function clearTrackSelection() {
+    selectedTracksMap.clear();
+    lastSelectedTrackIndex = -1;
+    document.querySelectorAll('.track-item.selected').forEach(el => el.classList.remove('selected'));
+    updateBatchActionBar();
+}
+
+/**
+ * Модифицированный обработчик клика для интеграции в createTrackElement
+ */
+export function handleTrackMultiSelectClick(e, track, index, tracksArray, trackElement) {
+    // Игнорируем функциональные кнопки действий внутри строки
+    if (e.target.closest('.like-btn, .add-btn, .download-btn, .track-more-btn, .clickable-artist')) {
+        return false;
+    }
+
+    const isCtrl = e.ctrlKey || e.metaKey;
+    const isShift = e.shiftKey;
+
+    if (!isCtrl && !isShift) {
+        // Обычный клик: если было выделено несколько треков, снимаем выделение
+        if (selectedTracksMap.size > 0) {
+            clearTrackSelection();
+        }
+        return false; // Передаем управление обычному запуску трека
+    }
+
+    // Блокируем запуск аудио при работе с мультиселектом
+    e.preventDefault();
+    e.stopPropagation();
+
+    const trackKey = String(track.source_id || track.id || `track_${index}`);
+
+    if (isCtrl) {
+        // Toggle одиночного элемента
+        if (selectedTracksMap.has(trackKey)) {
+            selectedTracksMap.delete(trackKey);
+            trackElement.classList.remove('selected');
+        } else {
+            selectedTracksMap.set(trackKey, track);
+            trackElement.classList.add('selected');
+        }
+        lastSelectedTrackIndex = index;
+    } else if (isShift) {
+        // Выделение диапазона от lastSelectedTrackIndex до текущего index
+        if (lastSelectedTrackIndex === -1) {
+            lastSelectedTrackIndex = index;
+            selectedTracksMap.set(trackKey, track);
+            trackElement.classList.add('selected');
+        } else {
+            const start = Math.min(lastSelectedTrackIndex, index);
+            const end = Math.max(lastSelectedTrackIndex, index);
+
+            const container = trackElement.parentElement;
+            const itemElements = container ? Array.from(container.querySelectorAll('.track-item')) : [];
+
+            for (let i = start; i <= end; i++) {
+                const curTrack = tracksArray ? tracksArray[i] : null;
+                if (curTrack) {
+                    const key = String(curTrack.source_id || curTrack.id || `track_${i}`);
+                    selectedTracksMap.set(key, curTrack);
+                    if (itemElements[i]) itemElements[i].classList.add('selected');
+                }
+            }
+        }
+    }
+
+    updateBatchActionBar();
+    return true; // Клик обработан мультиселектом
+}
+
+/**
+ * Инициализация кнопок тулбара пакетных действий
+ */
+export function initBatchActionBar() {
+    const bar = document.getElementById('batch-action-bar');
+    if (!bar) return;
+
+    // 1. Добавить выбранные в плейлист
+    document.getElementById('batch-btn-playlist')?.addEventListener('click', (e) => {
+        const tracks = Array.from(selectedTracksMap.values());
+        if (tracks.length === 0) return;
+        if (window.NeDotify?.openPlaylistMenu) {
+            window.NeDotify.openPlaylistMenu(tracks[0], e.clientX, e.clientY, tracks);
+        } else {
+            window.dispatchEvent(new CustomEvent('nedotify:toast', {
+                detail: { msg: `Добавление ${tracks.length} треков в плейлист...`, type: 'info' }
+            }));
+        }
+    });
+
+    // 2. Добавить выбранные в очередь
+    document.getElementById('batch-btn-queue')?.addEventListener('click', async () => {
+        const tracks = Array.from(selectedTracksMap.values());
+        if (tracks.length === 0) return;
+
+        if (window.pywebview?.api?.add_tracks_to_queue) {
+            await window.pywebview.api.add_tracks_to_queue(tracks);
+        } else if (window.pywebview?.api?.add_to_queue) {
+            for (const t of tracks) await window.pywebview.api.add_to_queue(t);
+        }
+
+        window.dispatchEvent(new CustomEvent('nedotify:toast', {
+            detail: { msg: `✅ Добавлено в очередь: ${tracks.length} треков`, type: 'success' }
+        }));
+        clearTrackSelection();
+    });
+
+    // 3. Скачать все выбранные
+    document.getElementById('batch-btn-download')?.addEventListener('click', async () => {
+        const tracks = Array.from(selectedTracksMap.values());
+        if (tracks.length === 0) return;
+
+        window.dispatchEvent(new CustomEvent('nedotify:toast', {
+            detail: { msg: `⏳ Запуск скачивания (${tracks.length} треков)...`, type: 'info' }
+        }));
+
+        for (const t of tracks) {
+            if (window.pywebview?.api?.download_track) {
+                window.pywebview.api.download_track(t);
+            }
+        }
+        clearTrackSelection();
+    });
+
+    // 4. Снять выделение
+    document.getElementById('batch-btn-clear')?.addEventListener('click', clearTrackSelection);
+
+    // Сброс выделения клавишей Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && selectedTracksMap.size > 0) {
+            clearTrackSelection();
+        }
+    });
+}
+

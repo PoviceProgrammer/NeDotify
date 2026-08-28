@@ -46,8 +46,54 @@ function toggleTranslation() {
     }
 }
 
-function adjustLyricsOffset(deltaMs) {
+export function updateOffsetBadges() {
+    const text = (currentOffsetMs === 0) ? '0.0s' : `${currentOffsetMs > 0 ? '+' : ''}${(currentOffsetMs / 1000).toFixed(1)}s`;
+    const badges = [
+        document.getElementById('btn-lyrics-offset-reset'),
+        document.getElementById('btn-lyrics-offset-reset-page')
+    ].filter(Boolean);
+    badges.forEach(b => {
+        b.textContent = text;
+        if (currentOffsetMs !== 0) {
+            b.style.borderColor = 'var(--color-primary, var(--primary, #f43f5e))';
+            b.style.color = 'var(--color-primary, var(--primary, #f43f5e))';
+            b.style.fontWeight = '700';
+        } else {
+            b.style.borderColor = '';
+            b.style.color = '';
+            b.style.fontWeight = '';
+        }
+    });
+}
+
+export function resetLyricsOffset() {
+    currentOffsetMs = 0;
+    updateOffsetBadges();
+    const track = getCurrentTrack();
+    if (track) {
+        const trackKey = String(track.source_id || track.id || track.title || '');
+        if (trackKey) {
+            try {
+                localStorage.removeItem(`nedotify_lyrics_offset_${trackKey}`);
+            } catch(e) {}
+            if (window.pywebview?.api?.save_setting) {
+                window.pywebview.api.save_setting(`lyrics_offset_${trackKey}`, 0, 'lyrics');
+            }
+        }
+    }
+    try {
+        localStorage.removeItem('nedotify_lyrics_offset_current');
+    } catch(e) {}
+    window.dispatchEvent(new CustomEvent('nedotify:toast', {
+        detail: { msg: 'Смещение текста сброшено на 0.0s', type: 'info' }
+    }));
+    currentLineIndex = -1;
+    updateLyricsPosition(lastPosMs);
+}
+
+export function adjustLyricsOffset(deltaMs) {
     currentOffsetMs += deltaMs;
+    updateOffsetBadges();
     window.dispatchEvent(new CustomEvent('nedotify:toast', {
         detail: {
             msg: `Смещение текста: ${currentOffsetMs > 0 ? '+' : ''}${(currentOffsetMs / 1000).toFixed(1)}s`,
@@ -56,13 +102,14 @@ function adjustLyricsOffset(deltaMs) {
     }));
     const track = getCurrentTrack();
     if (track) {
-        try {
-            // M-2: single key for the active track — no unbounded per-track localStorage growth
-            localStorage.setItem('nedotify_lyrics_offset_current', currentOffsetMs);
-        } catch(e) {}
         const trackKey = String(track.source_id || track.id || track.title || '');
-        if (trackKey && window.pywebview?.api?.save_setting) {
-            window.pywebview.api.save_setting(`lyrics_offset_${trackKey}`, currentOffsetMs, 'lyrics');
+        if (trackKey) {
+            try {
+                localStorage.setItem(`nedotify_lyrics_offset_${trackKey}`, String(currentOffsetMs));
+            } catch(e) {}
+            if (window.pywebview?.api?.save_setting) {
+                window.pywebview.api.save_setting(`lyrics_offset_${trackKey}`, currentOffsetMs, 'lyrics');
+            }
         }
     }
     currentLineIndex = -1;
@@ -92,19 +139,26 @@ export function initLyrics() {
         });
     }
 
+    // Purge stale unbounded global offset from previous buggy sessions
+    try { localStorage.removeItem('nedotify_lyrics_offset_current'); } catch(e) {}
+
     const btnMinus = document.getElementById('btn-lyrics-offset-minus');
+    const btnReset = document.getElementById('btn-lyrics-offset-reset');
     const btnPlus = document.getElementById('btn-lyrics-offset-plus');
     const btnTrans = document.getElementById('btn-toggle-lyrics-translation');
 
     const btnMinusPage = document.getElementById('btn-lyrics-offset-minus-page');
+    const btnResetPage = document.getElementById('btn-lyrics-offset-reset-page');
     const btnPlusPage = document.getElementById('btn-lyrics-offset-plus-page');
     const btnTransPage = document.getElementById('btn-toggle-lyrics-translation-page');
 
     if (btnMinus) btnMinus.addEventListener('click', () => adjustLyricsOffset(-500));
+    if (btnReset) btnReset.addEventListener('click', () => resetLyricsOffset());
     if (btnPlus) btnPlus.addEventListener('click', () => adjustLyricsOffset(500));
     if (btnTrans) btnTrans.addEventListener('click', () => toggleTranslation());
 
     if (btnMinusPage) btnMinusPage.addEventListener('click', () => adjustLyricsOffset(-500));
+    if (btnResetPage) btnResetPage.addEventListener('click', () => resetLyricsOffset());
     if (btnPlusPage) btnPlusPage.addEventListener('click', () => adjustLyricsOffset(500));
     if (btnTransPage) btnTransPage.addEventListener('click', () => toggleTranslation());
 
@@ -167,13 +221,18 @@ function loadCurrentTrackLyrics() {
     // O-12: bump generation — only the freshest request may render
     const loadGen = ++lyricsLoadGeneration;
 
-    // M-2: localStorage keeps only the active track's offset (no unbounded per-track keys)
-    try {
-        const saved = localStorage.getItem('nedotify_lyrics_offset_current');
-        if (saved) currentOffsetMs = parseInt(saved) || 0;
-    } catch(e) {
-        currentOffsetMs = 0;
+    const trackKey = track ? String(track.source_id || track.id || track.title || '') : '';
+    if (trackKey) {
+        try {
+            const saved = localStorage.getItem(`nedotify_lyrics_offset_${trackKey}`);
+            if (saved !== null) {
+                currentOffsetMs = parseInt(saved, 10) || 0;
+            }
+        } catch(e) {
+            currentOffsetMs = 0;
+        }
     }
+    updateOffsetBadges();
     
     if (window.pywebview?.api) {
         const durMs = track.duration ? (track.duration > 10000 ? track.duration : Math.round(track.duration * 1000)) : 0;
@@ -216,6 +275,7 @@ let lastLyricsData = null;
 function renderLyrics(data) {
     lastLyricsData = data;
     resetLyricsScroll();
+    updateOffsetBadges();
     const containers = getContainers();
     if (!data || (!data.syncedLyrics && !data.plainLyrics)) {
         containers.forEach(c => c.innerHTML = '<div class="empty-state">Текст песни не найден</div>');

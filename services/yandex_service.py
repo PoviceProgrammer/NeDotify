@@ -29,39 +29,41 @@ class YandexService(BaseMusicService):
         self._executor = ThreadPoolExecutor(max_workers=3)
         self.logger = logging.getLogger(__name__)
         self._client = None
+        self._client_lock = threading.Lock()
 
         if HAS_YANDEX:
             self._executor.submit(self._get_client)
 
     def _get_client(self):
-        if not self._client and HAS_YANDEX:
-            token = self.settings.get("auth", "yandex_token", "") if self.settings else ""
-            if token and len(token.strip()) > 5:
-                try:
-                    self._client = Client(token).init()
-                    self.logger.info("Yandex Music client initialized with token.")
+        with self._client_lock:
+            if not self._client and HAS_YANDEX:
+                token = self.settings.get("auth", "yandex_token", "") if self.settings else ""
+                if token and len(token.strip()) > 5:
+                    try:
+                        self._client = Client(token).init()
+                        self.logger.info("Yandex Music client initialized with token.")
+                        self.auth_error = False
+                        if self.on_auth_error:
+                            self.on_auth_error(False)
+                        self._check_subscription()
+                        return self._client
+                    except Exception as e:
+                        self.logger.error(f"Failed to initialize Yandex Music client with token: {e}")
+                        self.auth_error = True
+                        if self.on_auth_error:
+                            self.on_auth_error(True)
+                else:
                     self.auth_error = False
                     if self.on_auth_error:
                         self.on_auth_error(False)
-                    self._check_subscription()
-                    return self._client
+
+                try:
+                    self._client = Client().init()
+                    self.logger.info("Yandex Music client initialized (anonymous).")
                 except Exception as e:
-                    self.logger.error(f"Failed to initialize Yandex Music client with token: {e}")
-                    self.auth_error = True
-                    if self.on_auth_error:
-                        self.on_auth_error(True)
-            else:
-                self.auth_error = False
-                if self.on_auth_error:
-                    self.on_auth_error(False)
+                    self.logger.error(f"Failed to initialize Yandex Music client (anonymous): {e}")
 
-            try:
-                self._client = Client().init()
-                self.logger.info("Yandex Music client initialized (anonymous).")
-            except Exception as e:
-                self.logger.error(f"Failed to initialize Yandex Music client (anonymous): {e}")
-
-        return self._client
+            return self._client
 
     def _check_subscription(self):
         """Check if the user has an active Yandex Plus subscription."""
@@ -85,13 +87,15 @@ class YandexService(BaseMusicService):
 
     def reset_client(self):
         """Reset client and clear all yandex-related caches."""
-        self._client = None
-        keys_to_remove = [k for k in self._stream_cache if k.isdigit() or k.startswith("ya_")]
-        for k in keys_to_remove:
-            self._stream_cache.pop(k, None)
-        search_keys_to_remove = [k for k in self._search_cache if k.startswith("ya_")]
-        for k in search_keys_to_remove:
-            self._search_cache.pop(k, None)
+        with self._client_lock:
+            self._client = None
+        with self._cache_lock:
+            keys_to_remove = [k for k in self._stream_cache if k.isdigit() or k.startswith("ya_")]
+            for k in keys_to_remove:
+                self._stream_cache.pop(k, None)
+            search_keys_to_remove = [k for k in self._search_cache if k.startswith("ya_")]
+            for k in search_keys_to_remove:
+                self._search_cache.pop(k, None)
         if HAS_YANDEX:
             self._executor.submit(self._get_client)
 

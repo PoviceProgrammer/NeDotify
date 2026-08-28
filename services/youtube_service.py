@@ -30,6 +30,31 @@ except ImportError:
 
 
 
+_detected_working_browser = None
+_browser_detection_tried = False
+
+
+def _detect_browser_cookies():
+    global _detected_working_browser, _browser_detection_tried
+    if _browser_detection_tried:
+        return _detected_working_browser
+    _browser_detection_tried = True
+
+    for b in ("firefox", "chrome", "edge", "brave", "opera"):
+        try:
+            import yt_dlp.cookies
+            cj = yt_dlp.cookies.extract_cookies_from_browser(b)
+            if cj is not None:
+                cookie_count = len(list(cj))
+                if cookie_count > 0:
+                    logger.info(f"Auto-detected working browser cookies from '{b}' ({cookie_count} cookies)")
+                    _detected_working_browser = b
+                    return b
+        except Exception:
+            continue
+    return None
+
+
 class YouTubeService(BaseMusicService):
     """Client-side YouTube audio extraction using yt-dlp."""
 
@@ -141,13 +166,13 @@ class YouTubeService(BaseMusicService):
             "skip_download": True,
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["android", "ios", "mweb", "web_embedded"],
-                    "player_skip": ["configs", "webpage"]
+                    "player_client": ["ios", "web_safari", "android_music", "mweb"],
+                    "player_skip": ["configs"]
                 }
             },
-            "socket_timeout": 5,
-            "retries": 0,
-            "extractor_retries": 0,
+            "socket_timeout": 6,
+            "retries": 1,
+            "extractor_retries": 1,
             "source_address": "0.0.0.0",
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
@@ -157,7 +182,7 @@ class YouTubeService(BaseMusicService):
         if fallback:
             opts["extractor_args"] = {
                 "youtube": {
-                    "player_client": ["android", "ios", "mweb"],
+                    "player_client": ["ios", "web_safari", "mweb"],
                     "player_skip": ["configs"]
                 }
             }
@@ -165,16 +190,21 @@ class YouTubeService(BaseMusicService):
             opts["ignoreerrors"] = True
 
         if self.settings:
-            if not fallback:
-                cookies_file_path = self.settings.get("auth", "cookies_file_path", "")
-                if cookies_file_path and os.path.exists(cookies_file_path):
-                    opts["cookiefile"] = cookies_file_path
-                configured_browser = self.settings.get("auth", "browser_cookies", "none")
-                if configured_browser and configured_browser != "none":
-                    opts["cookiesfrombrowser"] = (configured_browser,)
-                proxy = self.settings.get("auth", "proxy_url", "")
-                if proxy:
-                    opts["proxy"] = proxy
+            cookies_file_path = self.settings.get("auth", "cookies_file_path", "")
+            if cookies_file_path and os.path.exists(cookies_file_path):
+                opts["cookiefile"] = cookies_file_path
+            configured_browser = self.settings.get("auth", "browser_cookies", "none")
+            if configured_browser and configured_browser != "none":
+                opts["cookiesfrombrowser"] = (configured_browser,)
+            proxy = self.settings.get("auth", "proxy_url", "")
+            if proxy:
+                opts["proxy"] = proxy
+
+        if "cookiefile" not in opts and "cookiesfrombrowser" not in opts:
+            auto_b = _detect_browser_cookies()
+            if auto_b:
+                opts["cookiesfrombrowser"] = (auto_b,)
+
         return opts
 
 
@@ -272,14 +302,19 @@ class YouTubeService(BaseMusicService):
                         if not artist:
                             artist = "Unknown Artist"
 
-                        duration_str = item.get("duration", "0:00")
+                        duration_val = item.get("duration", "0:00")
                         duration = 0
-                        if duration_str:
-                            parts = duration_str.split(":")
-                            if len(parts) == 2:
-                                duration = int(parts[0]) * 60 + int(parts[1])
-                            elif len(parts) == 3:
-                                duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                        if isinstance(duration_val, (int, float)):
+                            duration = int(duration_val)
+                        elif isinstance(duration_val, str) and duration_val:
+                            try:
+                                parts = duration_val.split(":")
+                                if len(parts) == 2:
+                                    duration = int(parts[0]) * 60 + int(parts[1])
+                                elif len(parts) == 3:
+                                    duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                            except (ValueError, TypeError):
+                                duration = 0
 
                         thumbnails = item.get("thumbnails", []) or []
                         cover_url = thumbnails[-1]["url"] if thumbnails else ""
@@ -490,22 +525,34 @@ class YouTubeService(BaseMusicService):
                         return ydl_clean.extract_info(video_url, download=False)
                 except Exception as e_clean:
                     err_msg = str(e_clean)
-                    err_lower = err_msg.lower()
-
-            if any(k in err_lower for k in ("confirm your age", "sign in", "inappropriate")):
+            if any(k in err_lower for k in ("confirm your age", "sign in", "inappropriate", "bot", "confirm you")):
                 configured_browser = "none"
                 if self.settings:
                     configured_browser = self.settings.get("auth", "browser_cookies", "none")
 
+                browsers_to_try = []
                 if configured_browser and configured_browser != "none":
-                    logger.info(f"Age gate bypass: trying cookies from configured browser: {configured_browser}")
-                    cookie_opts = opts.copy()
-                    cookie_opts["cookiesfrombrowser"] = (configured_browser,)
+                    browsers_to_try.append(configured_browser)
+                for b_cand in ("firefox", "edge", "chrome", "brave", "opera", "vivaldi", "yandex"):
+                    if b_cand not in browsers_to_try:
+                        browsers_to_try.append(b_cand)
+
+                for b_name in browsers_to_try:
                     try:
+                        logger.info(f"Trying YouTube cookies from browser: {b_name}")
+                        cookie_opts = opts.copy()
+                        cookie_opts["cookiesfrombrowser"] = (b_name,)
                         with yt_dlp.YoutubeDL(cookie_opts) as ydl_cookie:
-                            return ydl_cookie.extract_info(video_url, download=False)
+                            res = ydl_cookie.extract_info(video_url, download=False)
+                            if res:
+                                if self.settings and (configured_browser == "none" or not configured_browser):
+                                    try:
+                                        self.settings.set("auth", "browser_cookies", b_name)
+                                    except Exception:
+                                        pass
+                                return res
                     except Exception as cookie_err:
-                        logger.warning(f"Browser cookies extraction failed: {cookie_err}")
+                        logger.debug(f"Browser cookies extraction from {b_name} failed: {cookie_err}")
             raise e
 
     def get_stream_url(self, video_url: str, callback: Callable = None, error_callback: Callable = None, quality: str = "high"):
@@ -539,24 +586,29 @@ class YouTubeService(BaseMusicService):
 
                         if any(k in err_lower for k in ("bot", "sign in", "confirm you", "drm")):
                             logger.info("YouTube bot/auth challenge detected, triggering fast fallback.")
-                            if error_callback:
-                                error_callback(err_msg)
-                            return None
-
-                        logger.debug(f"First extraction failed: {err_msg}. Trying fallback...")
-                        try:
-                            info = self._extract_info_safe(video_url, quality, fallback=True)
-                        except Exception as exc2:
-                            err_msg2 = str(exc2)
-                            err_lower2 = err_msg2.lower()
-                            if any(k in err_lower2 for k in ("database", "locked", "sqlite", "profile")):
+                            try:
+                                info = self._extract_info_safe(video_url, quality, fallback=True)
+                            except Exception as exc_fb:
+                                logger.warning(f"YouTube bot challenge fallback failed: {exc_fb}")
                                 if error_callback:
-                                    error_callback("Не удалось прочитать куки браузера. Закройте браузер или используйте cookies.txt")
+                                    error_callback(str(exc_fb))
                                 return None
 
-                            if error_callback:
-                                error_callback(err_msg2)
-                            return None
+                        if not info:
+                            logger.debug(f"First extraction failed: {err_msg}. Trying fallback...")
+                            try:
+                                info = self._extract_info_safe(video_url, quality, fallback=True)
+                            except Exception as exc2:
+                                err_msg2 = str(exc2)
+                                err_lower2 = err_msg2.lower()
+                                if any(k in err_lower2 for k in ("database", "locked", "sqlite", "profile")):
+                                    if error_callback:
+                                        error_callback("Не удалось прочитать куки браузера. Закройте браузер или используйте cookies.txt")
+                                    return None
+
+                                if error_callback:
+                                    error_callback(err_msg2)
+                                return None
 
                     if info:
                         if info.get("_type") == "playlist" and "entries" in info and len(info["entries"]) > 0:
@@ -673,32 +725,45 @@ class YouTubeService(BaseMusicService):
             raise Exception("yt-dlp не установлен")
 
         clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id))
-        file_name = f"yt_{clean_id}_{int(time.time())}.mp3"
-        output_path = os.path.join(output_dir, file_name)
+        ts = int(time.time())
+        out_template = os.path.join(output_dir, f"yt_{clean_id}_{ts}.%(ext)s")
 
         url = source_id if str(source_id).startswith("http") or str(source_id).startswith("ytsearch") else f"https://www.youtube.com/watch?v={source_id}"
 
-        ydl_opts = {
+        ydl_opts = self._get_ydl_opts("bestaudio/best", fallback=True)
+        ydl_opts.update({
+            "outtmpl": out_template,
+            "skip_download": False,
             "quiet": True,
             "no_warnings": True,
-            "format": "bestaudio/best",
-            "outtmpl": output_path,
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "320",
-                }
-            ],
-        }
+        })
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+            info = ydl.extract_info(url, download=True)
+            if not info:
+                raise Exception("Не удалось извлечь информацию о треке YouTube")
 
-        if not os.path.exists(output_path):
-            base, _ = os.path.splitext(output_path)
-            for ext in (".mp3", ".m4a", ".webm", ".opus"):
-                if os.path.exists(base + ext):
-                    return base + ext
-            raise Exception("Файл не был создан после загрузки с YouTube")
+            # 1. Check prepare_filename
+            downloaded_file = ydl.prepare_filename(info)
+            if os.path.exists(downloaded_file):
+                return downloaded_file
 
-        return output_path
+            # 2. Check info ext
+            ext = info.get('ext', 'm4a')
+            cand = os.path.join(output_dir, f"yt_{clean_id}_{ts}.{ext}")
+            if os.path.exists(cand):
+                return cand
+
+            # 3. Check common audio extensions
+            for e in (".mp3", ".m4a", ".webm", ".opus", ".aac", ".ogg"):
+                cand = os.path.join(output_dir, f"yt_{clean_id}_{ts}{e}")
+                if os.path.exists(cand):
+                    return cand
+
+            # 4. Check directory for file starting with prefix
+            prefix = f"yt_{clean_id}_{ts}"
+            for fname in os.listdir(output_dir):
+                if fname.startswith(prefix) and not fname.endswith('.part'):
+                    return os.path.join(output_dir, fname)
+
+            raise Exception("Файл не был найден после загрузки с YouTube")

@@ -42,7 +42,7 @@ def get_system_region():
             region = loc.split('_')[-1].upper()
             if len(region) == 2:
                 return region
-    except:
+    except Exception:
         pass
 
     return "US"
@@ -157,6 +157,15 @@ DEFAULT_SETTINGS = {
         "glass_blur": 15,
         "glass_color_intensity": 0.5,
         "custom_themes": [],
+        "custom_bg_image": "",
+        "bg_blur": 0,
+        "bg_dim": 30,
+        "font_size": 14,
+        "font_family": "system",
+        "icon_pack": "default",
+        "theme_mode": "dark",
+        "custom_primary": "",
+        "custom_accent": "",
     },
     "interface": {
         "border_radius": 12,
@@ -269,16 +278,13 @@ class SettingsManager:
 
         with self._lock:
             for category, defaults in DEFAULT_SETTINGS.items():
-                stored = self.db.get_settings_by_category(category)
                 self._cache[category] = {}
                 for key, default_value in defaults.items():
                     full_key = f"{category}.{key}"
-                    if full_key in stored:
-                        self._cache[category][key] = stored[full_key]
-                    elif key in stored:
-                        self._cache[category][key] = stored[key]
-                    elif full_key in stored_all:
+                    if full_key in stored_all:
                         self._cache[category][key] = stored_all[full_key]
+                    elif key in stored_all:
+                        self._cache[category][key] = stored_all[key]
                     else:
                         self._cache[category][key] = default_value
 
@@ -457,7 +463,7 @@ class SettingsManager:
 
     @property
     def border_radius(self) -> int:
-        return self.get("interface", "border_radius", "medium")
+        return int(self.get("interface", "border_radius", 12))
     @property
     def crossfade_enabled(self) -> bool:
         return self.get("audio", "crossfade_enabled", False)

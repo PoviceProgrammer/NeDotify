@@ -13,6 +13,8 @@
     --bg-card: rgba(255, 255, 255, 0.03);
     --bg-hover: rgba(255, 255, 255, 0.08);
     --bg-active: rgba(255, 255, 255, 0.12);
+    --bg-main: #0a0a0f;
+    --bg-surface: #14141d;
 
     --primary: #a855f7;
     --primary-rgb: 168, 85, 247;
@@ -25,6 +27,17 @@
     --error: #ef4444;
     --warning: #f59e0b;
     --shadow-color: rgba(0, 0, 0, 0.6);
+
+    /* Dynamic Design-Token Bridge: Sync v2 tokens with active theme */
+    --color-primary: var(--primary);
+    --color-primary-rgb: var(--primary-rgb);
+    --color-primary-fg: var(--primary-fg);
+    --color-primary-glow: var(--accent-glow);
+    --color-border: var(--border-glow, rgba(var(--primary-rgb), 0.15));
+    --color-border-hover: rgba(var(--primary-rgb), 0.30);
+    --color-border-glow: rgba(var(--primary-rgb), 0.45);
+    --color-surface-hover: rgba(var(--primary-rgb), 0.08);
+    --color-surface-active: rgba(var(--primary-rgb), 0.14);
 }
 
 /* 1. AMOLED */
@@ -129,7 +142,7 @@
 }
 
 /* 9. Amber [Default/Active] */
-:root[data-theme="amber"], :root {
+:root[data-theme="amber"] {
     --bg-main: #1a120e;
     --bg-surface: #261a15;
     --accent: #ff9f1c;

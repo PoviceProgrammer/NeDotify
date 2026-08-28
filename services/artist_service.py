@@ -28,6 +28,10 @@ MAX_ALBUMS = 120
 #: full profile costs two to three YouTube Music round trips.
 PROFILE_TTL = 900
 
+#: Resolved avatar URLs live for a week: channel photos change rarely, and the
+#: home feed re-requests the same top artists on every load.
+AVATAR_TTL = 7 * 24 * 3600
+
 
 class ArtistService(BaseMusicService):
     """Resolves an artist name to a full profile using the YouTube Music catalogue."""
@@ -38,6 +42,8 @@ class ArtistService(BaseMusicService):
         self.settings = settings
         self._profiles: Dict[str, Any] = {}
         self._profiles_lock = threading.Lock()
+        self._avatars: Dict[str, Any] = {}
+        self._avatars_lock = threading.Lock()
 
     @property
     def available(self) -> bool:
@@ -327,6 +333,98 @@ class ArtistService(BaseMusicService):
 
     # --- public API ---
 
+    def get_avatars(self, names: List[str], callback: Optional[Callable] = None):
+        """Resolve avatar image URLs for a batch of artist names in the background.
+
+        Costs ONE YouTube Music artist-search round trip per unknown name (no
+        get_artist / discography walks). Results are delivered once via
+        ``callback({name: url_or_empty})``; resolved URLs and full profiles are
+        reused from cache without any network.
+        """
+        clean: List[str] = []
+        seen = set()
+        for n in names or []:
+            name = (n or "").strip()
+            if name and name.lower() not in seen:
+                seen.add(name.lower())
+                clean.append(name)
+        if not clean:
+            if callback:
+                callback({})
+            return None
+
+        result: Dict[str, str] = {}
+        missing: List[str] = []
+        now = time.time()
+        for name in clean:
+            key = name.lower()
+            with self._avatars_lock:
+                entry = self._avatars.get(key)
+                if entry:
+                    ts, url = entry
+                    if now - ts <= AVATAR_TTL:
+                        result[name] = url
+                        continue
+                    self._avatars.pop(key, None)
+            # A previously fetched full profile already contains the photo.
+            profile = self._cache_get(key)
+            if profile and profile.get("avatar_url"):
+                url = profile["avatar_url"]
+                with self._avatars_lock:
+                    self._avatars[key] = (now, url)
+                result[name] = url
+                continue
+            missing.append(name)
+
+        if not missing:
+            if callback:
+                callback(result)
+            return None
+
+        def _task():
+            yt = self._ytmusic()
+            if yt is None:
+                if callback:
+                    callback(result)
+                return
+            for name in missing:
+                url = ""
+                try:
+                    hits = yt.search(name, filter="artists", limit=3) or []
+                except Exception:
+                    logger.warning("Avatar search failed for %r", name, exc_info=True)
+                    hits = []
+                target = name.lower()
+                best_item = None
+                for hit in hits:
+                    if not isinstance(hit, dict) or not hit.get("thumbnails"):
+                        continue
+                    if (hit.get("artist") or "").strip().lower() == target:
+                        best_item = hit
+                        break
+                    if best_item is None:
+                        best_item = hit
+                if best_item is not None:
+                    url = self._best_thumbnail(best_item)
+                if url:
+                    with self._avatars_lock:
+                        if len(self._avatars) > 256:
+                            self._avatars.pop(next(iter(self._avatars)), None)
+                        self._avatars[name.lower()] = (time.time(), url)
+                result[name] = url
+            if callback:
+                callback(result)
+
+        submit = getattr(BaseMusicService, "submit", None)
+        if callable(submit):
+            if submit(_task) is None:
+                # Pools are shut down (app exiting).
+                if callback:
+                    callback(result)
+        else:
+            BaseMusicService._executor.submit(_task)
+        return None
+
     def get_profile(self, artist_name: str,
                     callback: Optional[Callable] = None,
                     error_callback: Optional[Callable] = None):
@@ -387,6 +485,9 @@ class ArtistService(BaseMusicService):
                 "source": "youtube",
             }
             self._cache_put(name.lower(), profile)
+            if profile.get("avatar_url"):
+                with self._avatars_lock:
+                    self._avatars[name.lower()] = (time.time(), profile["avatar_url"])
             logger.info(
                 "Artist profile for %r: %d albums, %d tracks, bio length %d",
                 profile["name"], len(profile["albums"]), len(profile["tracks"]), len(profile["bio"]),

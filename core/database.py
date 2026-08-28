@@ -82,6 +82,8 @@ class DatabaseManager:
         # connection the calling thread ever opened, i.e. the wrong database file.
         self._local = threading.local()
         self._write_lock = threading.RLock()
+        self._conns_lock = threading.Lock()
+        self._all_conns = set()
         if db_path is None:
             app_data = os.path.join(os.path.expanduser("~"), ".nedotify")
             os.makedirs(app_data, exist_ok=True)
@@ -119,6 +121,8 @@ class DatabaseManager:
                 except Exception as e:
                     logger.warning("Database PRAGMA %s failed: %s", pragma_name, e)
             self._local.connection = conn
+            with self._conns_lock:
+                self._all_conns.add(conn)
         return self._local.connection
 
     @property
@@ -625,15 +629,16 @@ class DatabaseManager:
         return [dict(row) for row in cursor.fetchall()]
 
     def toggle_favorite(self, track_id: int) -> bool:
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT is_favorite FROM tracks WHERE id = ?", (track_id,))
-        row = cursor.fetchone()
-        if not row:
-            return False
-        new_val = 0 if row["is_favorite"] else 1
-        cursor.execute("UPDATE tracks SET is_favorite = ? WHERE id = ?", (new_val, track_id))
-        self.conn.commit()
-        return bool(new_val)
+        with self._write_lock:
+            with self.conn:
+                cursor = self.conn.cursor()
+                cursor.execute("SELECT is_favorite FROM tracks WHERE id = ?", (track_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return False
+                new_val = 0 if row["is_favorite"] else 1
+                cursor.execute("UPDATE tracks SET is_favorite = ? WHERE id = ?", (new_val, track_id))
+                return bool(new_val)
 
     def ensure_track_exists(self, track_data: Dict[str, Any]) -> int:
         return self.add_track(
@@ -654,9 +659,10 @@ class DatabaseManager:
         )
 
     def mark_track_downloaded(self, track_id: int, file_path: str) -> None:
-        cursor = self.conn.cursor()
-        cursor.execute("UPDATE tracks SET is_downloaded = 1, file_path = ? WHERE id = ?", (file_path, track_id))
-        self.conn.commit()
+        with self._write_lock:
+            with self.conn:
+                cursor = self.conn.cursor()
+                cursor.execute("UPDATE tracks SET is_downloaded = 1, file_path = ? WHERE id = ?", (file_path, track_id))
 
     def get_downloaded_tracks(self) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
@@ -664,34 +670,36 @@ class DatabaseManager:
         return [dict(row) for row in cursor.fetchall()]
 
     def log_listening_history(self, track_id: int, duration_listened: float = 0, completed: bool = False) -> int:
-        cursor = self.conn.cursor()
-        if duration_listened <= 0:
-            cursor.execute("SELECT duration FROM tracks WHERE id = ?", (track_id,))
-            t_row = cursor.fetchone()
-            if t_row and t_row[0] and float(t_row[0]) > 0:
-                duration_listened = float(t_row[0])
-            else:
-                # Unknown length: record an honest 0 instead of a fabricated
-                # three-minute listen that skewed total-time statistics.
-                duration_listened = 0.0
-        cursor.execute(
-            "INSERT INTO history (track_id, duration_listened, completed) VALUES (?, ?, ?)",
-            (track_id, duration_listened, 1 if completed else 0),
-        )
-        cursor.execute(
-            "UPDATE tracks SET play_count = play_count + 1, last_played = CURRENT_TIMESTAMP WHERE id = ?",
-            (track_id,),
-        )
-        self.conn.commit()
-        return cursor.lastrowid
+        with self._write_lock:
+            with self.conn:
+                cursor = self.conn.cursor()
+                if duration_listened <= 0:
+                    cursor.execute("SELECT duration FROM tracks WHERE id = ?", (track_id,))
+                    t_row = cursor.fetchone()
+                    if t_row and t_row[0] and float(t_row[0]) > 0:
+                        duration_listened = float(t_row[0])
+                    else:
+                        # Unknown length: record an honest 0 instead of a fabricated
+                        # three-minute listen that skewed total-time statistics.
+                        duration_listened = 0.0
+                cursor.execute(
+                    "INSERT INTO history (track_id, duration_listened, completed) VALUES (?, ?, ?)",
+                    (track_id, duration_listened, 1 if completed else 0),
+                )
+                cursor.execute(
+                    "UPDATE tracks SET play_count = play_count + 1, last_played = CURRENT_TIMESTAMP WHERE id = ?",
+                    (track_id,),
+                )
+                return cursor.lastrowid
 
     def update_track_play(self, track_id: int) -> None:
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "UPDATE tracks SET play_count = play_count + 1, last_played = CURRENT_TIMESTAMP WHERE id = ?",
-            (track_id,),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            with self.conn:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    "UPDATE tracks SET play_count = play_count + 1, last_played = CURRENT_TIMESTAMP WHERE id = ?",
+                    (track_id,),
+                )
 
     def search_tracks(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
@@ -809,10 +817,11 @@ class DatabaseManager:
         return [dict(row) for row in cursor.fetchall()]
 
     def delete_track(self, track_id: int) -> bool:
-        cursor = self.conn.cursor()
-        cursor.execute("DELETE FROM tracks WHERE id = ?", (track_id,))
-        self.conn.commit()
-        return cursor.rowcount > 0
+        with self._write_lock:
+            with self.conn:
+                cursor = self.conn.cursor()
+                cursor.execute("DELETE FROM tracks WHERE id = ?", (track_id,))
+                return cursor.rowcount > 0
 
     def update_track(self, track_id: int, **kwargs: Any) -> bool:
         """Update whitelisted columns of one track. Unknown keys are dropped."""
@@ -833,10 +842,11 @@ class DatabaseManager:
             return False
 
         params.append(track_id)
-        cursor = self.conn.cursor()
-        cursor.execute(f"UPDATE tracks SET {', '.join(set_clauses)} WHERE id = ?", params)
-        self.conn.commit()
-        return cursor.rowcount > 0
+        with self._write_lock:
+            with self.conn:
+                cursor = self.conn.cursor()
+                cursor.execute(f"UPDATE tracks SET {', '.join(set_clauses)} WHERE id = ?", params)
+                return cursor.rowcount > 0
 
     def update_track_metadata(
         self,
@@ -854,24 +864,24 @@ class DatabaseManager:
             if not old:
                 return False
 
-            cursor = self.conn.cursor()
-            query = """
-                UPDATE tracks
-                SET title = ?,
-                    artist = ?,
-                    album = COALESCE(?, album),
-                    genre = COALESCE(?, genre),
-                    year = COALESCE(?, year),
-                    cover_path = COALESCE(?, cover_path)
-                WHERE id = ?
-            """
-            cursor.execute(
-                query,
-                (title, artist, album, genre, year, cover_path, track_id)
-            )
-
-            self.conn.commit()
-            return True
+            with self._write_lock:
+                with self.conn:
+                    cursor = self.conn.cursor()
+                    query = """
+                        UPDATE tracks
+                        SET title = ?,
+                            artist = ?,
+                            album = COALESCE(?, album),
+                            genre = COALESCE(?, genre),
+                            year = COALESCE(?, year),
+                            cover_path = COALESCE(?, cover_path)
+                        WHERE id = ?
+                    """
+                    cursor.execute(
+                        query,
+                        (title, artist, album, genre, year, cover_path, track_id)
+                    )
+                    return True
         except Exception as e:
             logger.error(f"Error in update_track_metadata for track {track_id}: {e}")
             return False
@@ -881,12 +891,13 @@ class DatabaseManager:
         return self.log_listening_history(track_id, duration_listened, completed)
 
     def update_history_duration(self, history_id: int, duration_sec: float, completed: bool = False) -> None:
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "UPDATE history SET duration_listened = ?, completed = ? WHERE id = ?",
-            (duration_sec, 1 if completed else 0, history_id),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            with self.conn:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    "UPDATE history SET duration_listened = ?, completed = ? WHERE id = ?",
+                    (duration_sec, 1 if completed else 0, history_id),
+                )
 
     def get_history(self, limit: int = 50) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
@@ -1070,17 +1081,18 @@ class DatabaseManager:
         }
 
     def create_playlist(self, name: str, description: str = "") -> int:
-        cursor = self.conn.cursor()
-        clean_name = (name or "").strip()
-        # If playlist with same name already exists (especially system names), reuse it
-        cursor.execute("SELECT id FROM playlists WHERE LOWER(name) = LOWER(?) LIMIT 1", (clean_name,))
-        row = cursor.fetchone()
-        if row:
-            return row["id"]
+        with self._write_lock:
+            with self.conn:
+                cursor = self.conn.cursor()
+                clean_name = (name or "").strip()
+                # If playlist with same name already exists (especially system names), reuse it
+                cursor.execute("SELECT id FROM playlists WHERE LOWER(name) = LOWER(?) LIMIT 1", (clean_name,))
+                row = cursor.fetchone()
+                if row:
+                    return row["id"]
 
-        cursor.execute("INSERT INTO playlists (name, description) VALUES (?, ?)", (clean_name, description))
-        self.conn.commit()
-        return cursor.lastrowid
+                cursor.execute("INSERT INTO playlists (name, description) VALUES (?, ?)", (clean_name, description))
+                return cursor.lastrowid
 
     def get_playlists(self) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
@@ -1432,9 +1444,10 @@ class DatabaseManager:
                 logger.error(f"update_scan_time failed: {e}")
 
     def add_listening_time(self, duration_ms: int) -> None:
-        cursor = self.conn.cursor()
-        cursor.execute("INSERT INTO listening_stats (duration_ms) VALUES (?)", (duration_ms,))
-        self.conn.commit()
+        with self._write_lock:
+            with self.conn:
+                cursor = self.conn.cursor()
+                cursor.execute("INSERT INTO listening_stats (duration_ms) VALUES (?)", (duration_ms,))
 
     def get_total_listening_time(self) -> int:
         cursor = self.conn.cursor()
@@ -1461,6 +1474,16 @@ class DatabaseManager:
                 setattr(self._local, attr, None)
             except Exception:
                 pass
+            with self._conns_lock:
+                self._all_conns.discard(existing)
 
     def close(self) -> None:
+        """Close all connections tracked by this database manager instance."""
         self.close_thread_connection()
+        with self._conns_lock:
+            for conn in list(self._all_conns):
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            self._all_conns.clear()

@@ -39,6 +39,7 @@ export function initSettings() {
     });
 
     setupEfficiencyPanel();
+    initSettingsSearchFilter();
 
     // Settings panel navigation
     document.querySelectorAll('.settings-nav-btn[data-panel]').forEach(btn => {
@@ -116,6 +117,14 @@ export function initSettings() {
         setElText('label-particles-speed', labels[v] || 'Обычная');
         initParticles();
     });
+
+    const initialSize = document.getElementById('slider-particles-size')?.value || 2;
+    const sizeLabels = { 1: 'Мелкий', 2: 'Обычный', 3: 'Средний', 4: 'Крупный', 5: 'Огромный' };
+    setElText('label-particles-size', sizeLabels[initialSize] || 'Обычный');
+
+    const initialSpeed = document.getElementById('slider-particles-speed')?.value || 2;
+    const speedLabels = { 1: 'Медленная', 2: 'Обычная', 3: 'Быстрая' };
+    setElText('label-particles-speed', speedLabels[initialSpeed] || 'Обычная');
     setupSlider('slider-glass-blur', 'glass_blur', 'theme', (v) => {
         const val = parseInt(v) || 0;
         setElText('label-glass-blur', `${val}px`);
@@ -575,6 +584,9 @@ function setupToggle(id, key, category, onChange) {
         // Apply immediately
         if (key === 'particles_enabled') {
             if (window.settings && window.settings.ui) window.settings.ui.particles_enabled = isOn;
+            saveSetting('resource_particles', isOn, 'optimization');
+            const optBtn = document.querySelector('#opt-active-resources [data-resource="particles"]');
+            if (optBtn) optBtn.classList.toggle('active', isOn);
             if (isOn) {
                 initParticles();
             } else {
@@ -658,6 +670,26 @@ export function applySettingsFromBackend(settings) {
                 btn.classList.toggle('active', btn.dataset.shape === settings.ui.particles_shape);
             });
         }
+        if (settings.ui.particles_size !== undefined) {
+            const slider = document.getElementById('slider-particles-size');
+            if (slider) {
+                slider.value = settings.ui.particles_size;
+                const pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
+                slider.style.setProperty('--value-percent', `${pct}%`);
+            }
+            const sizeLabels = { 1: 'Мелкий', 2: 'Обычный', 3: 'Средний', 4: 'Крупный', 5: 'Огромный' };
+            setElText('label-particles-size', sizeLabels[settings.ui.particles_size] || 'Обычный');
+        }
+        if (settings.ui.particles_speed !== undefined) {
+            const slider = document.getElementById('slider-particles-speed');
+            if (slider) {
+                slider.value = settings.ui.particles_speed;
+                const pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
+                slider.style.setProperty('--value-percent', `${pct}%`);
+            }
+            const speedLabels = { 1: 'Медленная', 2: 'Обычная', 3: 'Быстрая' };
+            setElText('label-particles-speed', speedLabels[settings.ui.particles_speed] || 'Обычная');
+        }
     }
 
         if (settings.theme && settings.theme.glass_blur !== undefined) {
@@ -712,16 +744,6 @@ export function applySettingsFromBackend(settings) {
             }
         }
 
-    if (settings.ui && settings.ui.particles_size !== undefined) {
-        const slider = document.getElementById('slider-particles-size');
-        if (slider) {
-            slider.value = settings.ui.particles_size;
-            const pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
-            slider.style.setProperty('--value-percent', `${pct}%`);
-        }
-        const labels = { 1: 'Мелкий', 2: 'Обычный', 3: 'Средний', 4: 'Крупный', 5: 'Огромный' };
-        setElText('label-particles-size', labels[settings.ui.particles_size] || 'Обычный');
-    }
 
     if (settings.audio) {
         const toggleCF = document.getElementById('toggle-crossfade');
@@ -1212,11 +1234,7 @@ export function applyResourceToggle(res, isActive) {
     const root = document.documentElement;
     if (res === 'bg') {
         root.classList.toggle('resource-bg-disabled', !isActive);
-        const bgLayer = document.getElementById('custom-bg-layer');
-        const dimLayer = document.getElementById('custom-bg-dim-layer');
         const orbs = document.getElementById('aura-orbs-container');
-        if (bgLayer) bgLayer.style.display = isActive ? '' : 'none';
-        if (dimLayer) dimLayer.style.display = isActive ? '' : 'none';
         if (orbs) orbs.style.display = isActive ? '' : 'none';
     } else if (res === 'particles') {
         if (isActive) initParticles(); else stopParticles();
@@ -1683,6 +1701,9 @@ export function applyCustomBg(bgDataUrl, blurPx = 0, dimPct = 30) {
         if (bgLayer) bgLayer.style.display = 'none';
         if (dimLayer) dimLayer.style.display = 'none';
         if (previewRow) previewRow.style.display = 'none';
+        try {
+            localStorage.removeItem('nedotify_theme_custom_bg_image');
+        } catch(e) {}
         return;
     }
 
@@ -1690,6 +1711,13 @@ export function applyCustomBg(bgDataUrl, blurPx = 0, dimPct = 30) {
     document.body.classList.add('has-custom-bg');
     const appCont = document.getElementById('app-container');
     if (appCont) appCont.classList.add('has-custom-bg');
+    document.documentElement.classList.remove('resource-bg-disabled');
+
+    try {
+        localStorage.setItem('nedotify_theme_custom_bg_image', JSON.stringify(bgDataUrl));
+        localStorage.setItem('nedotify_theme_bg_blur', JSON.stringify(blurPx || 0));
+        localStorage.setItem('nedotify_theme_bg_dim', JSON.stringify(dimPct !== undefined ? dimPct : 30));
+    } catch(e) {}
 
     if (!bgLayer) {
         bgLayer = document.createElement('div');
@@ -1732,6 +1760,10 @@ function setupBackgroundPanel() {
                         saveSetting('custom_bg_image', compressed, 'theme');
                         const blurVal = parseInt(document.getElementById('slider-bg-blur')?.value || 0);
                         const dimVal = parseInt(document.getElementById('slider-bg-dim')?.value || 30);
+                        saveSetting('resource_bg', true, 'optimization');
+                        const btnBg = document.querySelector('#opt-active-resources [data-resource="bg"]');
+                        if (btnBg) btnBg.classList.add('active');
+                        applyResourceToggle('bg', true);
                         applyCustomBg(compressed, blurVal, dimVal);
                     });
                 };
@@ -2774,6 +2806,10 @@ export function setupWorkshopPanel() {
                 saveSetting('custom_bg_image', item.url, 'theme');
                 saveSetting('bg_blur', blurVal, 'theme');
                 saveSetting('bg_dim', dimVal, 'theme');
+                saveSetting('resource_bg', true, 'optimization');
+                const btnBg = document.querySelector('#opt-active-resources [data-resource="bg"]');
+                if (btnBg) btnBg.classList.add('active');
+                applyResourceToggle('bg', true);
                 applyCustomBg(item.url, blurVal, dimVal);
 
                 showToast(`Обои "${item.title}" применены!`, 'success');
@@ -2861,6 +2897,113 @@ function renderDuplicateGroups(groups, container) {
         });
 
         container.appendChild(groupEl);
+    });
+}
+
+// ==========================================================================
+// FEATURE 4: Settings Live Search Filter Engine
+// ==========================================================================
+
+export function initSettingsSearchFilter() {
+    const searchInput = document.getElementById('settings-search');
+    if (!searchInput) return;
+
+    searchInput.addEventListener('input', (e) => {
+        const query = (e.target.value || '').trim().toLowerCase();
+
+        const panels = document.querySelectorAll('.settings-panel');
+        const navBtns = document.querySelectorAll('.settings-nav-btn[data-panel]');
+        const allSections = document.querySelectorAll('.settings-section');
+        const allRows = document.querySelectorAll('.setting-row, .setting-card-group, .custom-theme-box, .setting-item');
+
+        // Сброс фильтрации при пустой строке
+        if (!query) {
+            allRows.forEach(row => {
+                row.style.display = '';
+                row.classList.remove('highlight-match');
+            });
+            allSections.forEach(sec => sec.style.display = '');
+            navBtns.forEach(btn => btn.style.display = '');
+
+            // Восстанавливаем отображение только активной панели
+            const activeBtn = document.querySelector('.settings-nav-btn.active');
+            const activePanelId = activeBtn ? `settings-${activeBtn.dataset.panel}` : 'settings-appearance';
+            panels.forEach(p => {
+                p.style.display = p.id === activePanelId ? 'block' : 'none';
+            });
+            return;
+        }
+
+        let firstMatchingPanelId = null;
+
+        // Поиск по каждой панели
+        panels.forEach(panel => {
+            const panelName = panel.id.replace('settings-', '');
+            const matchingNavBtn = document.querySelector(`.settings-nav-btn[data-panel="${panelName}"]`);
+            let panelHasMatches = false;
+
+            const sections = panel.querySelectorAll('.settings-section');
+
+            sections.forEach(section => {
+                const rows = section.querySelectorAll('.setting-row, .setting-card-group, .custom-theme-box, .setting-item');
+                let sectionHasMatches = false;
+
+                rows.forEach(row => {
+                    // Ищем текст в подписях, тултипах, инпутах и заголовках строки
+                    const rowText = (row.textContent || '').toLowerCase();
+                    const inputPlaceholders = Array.from(row.querySelectorAll('input, select'))
+                        .map(i => `${i.placeholder || ''} ${i.getAttribute('aria-label') || ''} ${i.title || ''}`)
+                        .join(' ')
+                        .toLowerCase();
+
+                    const isMatch = rowText.includes(query) || inputPlaceholders.includes(query);
+
+                    if (isMatch) {
+                        row.style.display = '';
+                        row.classList.remove('highlight-match');
+                        // Перезапуск анимации импульса через Reflow
+                        void row.offsetWidth;
+                        row.classList.add('highlight-match');
+                        sectionHasMatches = true;
+                        panelHasMatches = true;
+                    } else {
+                        row.style.display = 'none';
+                        row.classList.remove('highlight-match');
+                    }
+                });
+
+                // Скрываем пустую секцию
+                section.style.display = sectionHasMatches ? '' : 'none';
+            });
+
+            // Скрываем кнопку таба в левой колонке настроек, если в нем нет совпадений
+            if (matchingNavBtn) {
+                matchingNavBtn.style.display = panelHasMatches ? '' : 'none';
+            }
+
+            if (panelHasMatches && !firstMatchingPanelId) {
+                firstMatchingPanelId = panel.id;
+            }
+        });
+
+        // Автоматически переключаем на первую панель с совпадениями, если в текущей ничего не найдено
+        const currentActivePanel = document.querySelector('.settings-panel.active');
+        const currentPanelHasVisibleRows = currentActivePanel?.querySelector('.setting-row:not([style*="display: none"]), .setting-card-group:not([style*="display: none"])');
+
+        if (!currentPanelHasVisibleRows && firstMatchingPanelId) {
+            const targetPanelName = firstMatchingPanelId.replace('settings-', '');
+            const targetBtn = document.querySelector(`.settings-nav-btn[data-panel="${targetPanelName}"]`);
+            if (targetBtn) targetBtn.click();
+        }
+    });
+
+    // Очистка поиска по Escape
+    searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && searchInput.value) {
+            e.stopPropagation();
+            searchInput.value = '';
+            searchInput.dispatchEvent(new Event('input'));
+        }
     });
 }
 

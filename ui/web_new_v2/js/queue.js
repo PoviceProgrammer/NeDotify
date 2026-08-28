@@ -11,40 +11,40 @@ export function initQueue() {
     const closeBtn = document.getElementById('queue-drawer-close');
     const drawer = document.getElementById('queue-drawer');
 
-    // Create a transparent backdrop for clicking outside
-    let backdrop = document.getElementById('queue-backdrop');
-    if (!backdrop) {
-        backdrop = document.createElement('div');
-        backdrop.id = 'queue-backdrop';
-        backdrop.style.cssText = `
-            position: fixed; inset: 0;
-            z-index: 999;
-            background: rgba(0, 0, 0, 0.4);
-            backdrop-filter: blur(2px);
-            display: none;
-            cursor: default;
-        `;
-        document.body.appendChild(backdrop);
-    }
+    // Clean up any legacy backdrop if present
+    const oldBackdrop = document.getElementById('queue-backdrop');
+    if (oldBackdrop) oldBackdrop.remove();
 
     const closeQueue = () => {
         isQueueVisible = false;
         if (drawer) drawer.classList.remove('open');
-        backdrop.style.display = 'none';
     };
 
     const openQueue = () => {
         isQueueVisible = true;
         if (drawer) drawer.classList.add('open');
-        backdrop.style.display = 'block';
         loadQueue();
     };
 
-    backdrop.addEventListener('click', closeQueue);
+    const toggleQueue = () => {
+        if (isQueueVisible) {
+            closeQueue();
+        } else {
+            openQueue();
+        }
+    };
 
-    if (btnPP) btnPP.addEventListener('click', openQueue);
-    if (btnPB) btnPB.addEventListener('click', openQueue);
-    if (closeBtn) closeBtn.addEventListener('click', closeQueue);
+    if (btnPP) btnPP.addEventListener('click', (e) => { e.stopPropagation(); toggleQueue(); });
+    if (btnPB) btnPB.addEventListener('click', (e) => { e.stopPropagation(); toggleQueue(); });
+    if (closeBtn) closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeQueue(); });
+
+    // Close on click outside WITHOUT blocking underlying clicks
+    document.addEventListener('pointerdown', (e) => {
+        if (!isQueueVisible) return;
+        if (drawer && !drawer.contains(e.target) && !e.target.closest('#pb-btn-queue, #pp-btn-queue')) {
+            closeQueue();
+        }
+    });
 
     // Close on Escape key
     document.addEventListener('keydown', (e) => {
@@ -85,17 +85,19 @@ function renderQueue(tracks, currentIndex) {
     
     tracks.forEach((track, index) => {
         const item = document.createElement('div');
+        item._trackData = track;
         item.className = 'track-item' + (index === currentIndex ? ' playing' : '');
-        item.draggable = true;
+        item.draggable = false;
         item.dataset.index = index;
         item.style.cursor = 'pointer';
         
         // We'll style it similarly to library tracks but with a drag handle
+        const coverUrl = getCoverUrl(track);
         item.innerHTML = `
-            <div style="display:flex; align-items:center; color:var(--text-dim); cursor:grab; padding:0 8px;" class="drag-handle" title="Зажмите чтобы перетащить">
-                <i data-lucide="grip-vertical" style="width:16px;height:16px"></i>
+            <div style="display:flex; align-items:center; color:var(--text-dim); cursor:grab; padding:0 6px; flex-shrink:0;" class="drag-handle" title="Зажмите чтобы перетащить">
+                <i data-lucide="grip-vertical" style="width:14px;height:14px"></i>
             </div>
-            ${getCoverUrl(track) ? `<img class="track-item-cover" src="${escapeHtml(getCoverUrl(track))}" alt="" onerror="this.onerror=null;this.style.display=\'none\';" loading="lazy">` : `<div class="track-item-cover fallback-note-cover" style="display:flex;align-items:center;justify-content:center;background:#18181f;border-radius:4px;"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#555" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`}
+            ${coverUrl ? `<img class="track-item-cover" src="${escapeHtml(coverUrl)}" alt="" width="42" height="42" style="width:42px;height:42px;min-width:42px;max-width:42px;border-radius:8px;object-fit:cover;flex-shrink:0;display:block;" onerror="this.onerror=null;this.style.display=\'none\';" loading="lazy">` : `<div class="track-item-cover fallback-note-cover" style="width:42px;height:42px;min-width:42px;max-width:42px;display:flex;align-items:center;justify-content:center;background:#18181f;border-radius:8px;flex-shrink:0;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#555" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`}
             <div class="track-item-info">
                 <div class="track-item-title" style="${index === currentIndex ? 'color:var(--primary)' : ''}">${escapeHtml(track.title || 'Unknown')}</div>
                 <div class="track-item-artist">${escapeHtml(track.artist || 'Unknown Artist')}</div>
@@ -103,36 +105,36 @@ function renderQueue(tracks, currentIndex) {
             <div class="track-item-duration">${formatTime(track.duration || 0)}</div>
         `;
 
-        let isDraggingThis = false;
+        const handle = item.querySelector('.drag-handle');
+        if (handle) {
+            handle.addEventListener('mousedown', () => { item.draggable = true; });
+            handle.addEventListener('mouseup', () => { item.draggable = false; });
+            handle.addEventListener('mouseleave', () => { if (draggedItemIndex === null) item.draggable = false; });
+        }
 
         // Click to play track instantly
         item.addEventListener('click', (e) => {
             if (e.target.closest('.drag-handle')) return;
-            if (isDraggingThis) {
-                isDraggingThis = false;
-                return;
-            }
-            if (item.classList.contains('playing')) {
-                return; // Already playing
-            }
+            e.stopPropagation();
 
             if (window.pywebview?.api?.play_track) {
                 window.pywebview.api.play_track(track, currentQueue, index);
+            } else if (window.NeDotify?.playTrack) {
+                window.NeDotify.playTrack(track);
             }
         });
 
         // Drag & Drop Events
         item.addEventListener('dragstart', (e) => {
             draggedItemIndex = index;
-            isDraggingThis = true;
             item.style.opacity = '0.5';
             e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', index);
+            e.dataTransfer.setData('text/plain', String(index));
         });
 
         item.addEventListener('dragend', () => {
             draggedItemIndex = null;
-            setTimeout(() => { isDraggingThis = false; }, 50);
+            item.draggable = false;
             item.style.opacity = '1';
             document.querySelectorAll('.track-item').forEach(el => {
                 el.classList.remove('drag-over-top');

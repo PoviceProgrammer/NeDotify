@@ -8,7 +8,7 @@ import { initSettings, applySettingsFromBackend, loadSettings } from './settings
 import { initParticles } from './particles.js';
 import { initVisualizer } from './visualizer.js';
 import { initEvents } from './events.js';
-import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota, showToast } from './utils.js';
+import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota, showToast, initBatchActionBar } from './utils.js';
 import { initLyrics } from './lyrics.js';
 import { initEqualizer } from './equalizer.js';
 import { initQueue } from './queue.js';
@@ -280,6 +280,7 @@ window.toggleMiniPlayerMode = toggleMiniPlayerMode;
                 const dim = JSON.parse(localStorage.getItem('nedotify_theme_bg_dim') || '30');
                 document.documentElement.classList.add('has-custom-bg');
                 document.body.classList.add('has-custom-bg');
+                document.documentElement.classList.remove('resource-bg-disabled');
                 let bgLayer = document.getElementById('custom-bg-layer');
                 let dimLayer = document.getElementById('custom-bg-dim-layer');
                 if (!bgLayer) {
@@ -456,6 +457,7 @@ async function init() {
         await safeInit('Lyrics', () => initLyrics());
         await safeInit('Equalizer', () => initEqualizer());
         await safeInit('Queue', () => initQueue());
+        await safeInit('BatchActionBar', () => initBatchActionBar());
         
         // Sync lyrics overlay title with current track
         try {

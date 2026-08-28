@@ -1,5 +1,4 @@
-// NeDotify — Player Module
-import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml } from './utils.js';
+import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml, updatePlayingTrackInDOM } from './utils.js';
 
 let currentTrack = null;
 let isPlaying = false;
@@ -272,8 +271,10 @@ function handleStreamError(audio, reason) {
             streamRetryTimer = null;
             if (audio === activeAudio && currentTrack && String(currentTrack.id || currentTrack.source_id || currentTrack.title || '') === trackIdKey) {
                 if (window.pywebview?.api?.play_track) {
-                    // Force full re-resolution: drop cached stream/file urls so backend re-resolves
-                    const cleanTrack = { ...currentTrack, file_path: undefined, stream_url: undefined };
+                    // Force full re-resolution: drop cached stream/file urls for online tracks, preserve local file path
+                    const cleanTrack = (currentTrack.source === 'local' && currentTrack.file_path)
+                        ? { ...currentTrack }
+                        : { ...currentTrack, file_path: undefined, stream_url: undefined };
                     window.pywebview.api.play_track(cleanTrack);
                 }
             }
@@ -497,8 +498,11 @@ export function playTrack(track, streamUrl) {
     currentDuration = normalizeDurationMs(dur);
 
     let finalSrc = streamUrl;
-    if (finalSrc && finalSrc.match(/^[a-zA-Z]:\\/)) {
-        finalSrc = 'file:///' + finalSrc.replace(/\\/g, '/');
+    if (finalSrc && (finalSrc.match(/^[a-zA-Z]:[\\/]/) || finalSrc.startsWith('file://'))) {
+        if (window.PROXY_PORT) {
+            const tokenQuery = window.PROXY_TOKEN ? `&k=${encodeURIComponent(window.PROXY_TOKEN)}` : '';
+            finalSrc = `http://127.0.0.1:${window.PROXY_PORT}/api/stream?url=${encodeURIComponent(finalSrc)}${tokenQuery}`;
+        }
     }
     
     loadAudioSource(newAudio, finalSrc);
@@ -1236,6 +1240,7 @@ export function onTrackChanged(track) {
     if (!track) return;
     
     currentTrack = track;
+    updatePlayingTrackInDOM(currentTrack);
     currentPosMs = 0;
     targetPosMs = 0;
 

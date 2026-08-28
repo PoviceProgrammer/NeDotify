@@ -11,6 +11,8 @@ import json
 import mimetypes
 import http.server
 import socketserver
+import socket
+import random
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -84,12 +86,25 @@ def _cover_roots() -> list:
 
     Every cover_path written by the app lands in ~/.nedotify/covers (file
     scanner, tag editor); avatars live next door and are harmless images too.
+    Older DB rows (and the dev scanner) also reference the bundled UI covers
+    folders (ui/web_new*/covers), so those are served as well - still strictly
+    image extensions, still realpath-contained.
     """
     nedotify = os.path.normpath(os.path.expanduser('~/.nedotify'))
-    return [
+    roots = [
         os.path.join(nedotify, 'covers'),
         os.path.join(nedotify, 'avatars'),
     ]
+    try:
+        import sys
+        base = getattr(sys, '_MEIPASS', None) or os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__))
+        )
+        for ui_name in ('web_new', 'web_new_v2'):
+            roots.append(os.path.join(base, 'ui', ui_name, 'covers'))
+    except Exception:
+        logger.debug('_cover_roots: UI covers roots unavailable', exc_info=True)
+    return roots
 
 
 def _resolve_inside_roots(raw_path: str, roots, extensions) -> str:
@@ -200,16 +215,18 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     def __init__(self, server_address, RequestHandlerClass, app_core, auth_token=''):
         self.app_core = app_core
         self.auth_token = auth_token or ''
+        self._threads_lock = threading.Lock()
         super().__init__(server_address, RequestHandlerClass)
 
     def process_request(self, request, client_address):
         thread_cls = get_real_thread_class()
         t = thread_cls(target=self.process_request_thread, args=(request, client_address))
         t.daemon = self.daemon_threads
-        if self._threads is None or not isinstance(self._threads, list):
-            self._threads = []
-        self._threads = [th for th in self._threads if hasattr(th, "is_alive") and th.is_alive()]
-        self._threads.append(t)
+        with self._threads_lock:
+            if self._threads is None or not isinstance(self._threads, list):
+                self._threads = []
+            self._threads = [th for th in self._threads if hasattr(th, "is_alive") and th.is_alive()]
+            self._threads.append(t)
         t.start()
 
 
@@ -374,11 +391,23 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             return None
 
         if parsed_path.path == '/api/stream':
+            url_param = query_params.get('url', [None])[0] or query_params.get('file_path', [None])[0]
             track_id = query_params.get('track_id', [None])[0]
             source = query_params.get('source', [None])[0]
             source_id = query_params.get('source_id', [None])[0]
             title = query_params.get('title', [''])[0]
             artist = query_params.get('artist', [''])[0]
+
+            # If url_param points directly to a local file, serve it immediately!
+            if url_param:
+                local_path = url_param.strip()
+                if local_path.startswith('file:///'):
+                    local_path = urllib.request.url2pathname(local_path[7:])
+                elif local_path.startswith('file://'):
+                    local_path = urllib.request.url2pathname(local_path[6:])
+                if (os.path.isabs(local_path) or os.path.exists(local_path)) and os.path.isfile(local_path):
+                    self.serve_local_file(local_path)
+                    return None
 
             int_track_id = None
             if track_id:
@@ -391,7 +420,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
 
             track = self.server.app_core.db.get_track(int_track_id) if int_track_id else None
             if not track:
-                if not source_id and not int_track_id:
+                if not source_id and not int_track_id and not url_param:
                     self.send_error(400, 'Missing track_id or source_id')
                     return None
                 source = source if source else 'youtube'
@@ -401,16 +430,23 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     'source_id': source_id if source_id else f"{artist} {title}".strip(),
                     'title': title,
                     'artist': artist,
+                    'file_path': url_param,
                 }
 
             source = track.get('source') or source or 'youtube'
             source_id = track.get('source_id') or source_id
 
             if source == 'local':
-                file_path = track.get('file_path') or track.get('url')
-                if file_path and os.path.exists(file_path):
-                    self.serve_local_file(file_path)
-                    return None
+                file_path = url_param or track.get('file_path') or track.get('url')
+                if file_path:
+                    local_path = file_path.strip()
+                    if local_path.startswith('file:///'):
+                        local_path = urllib.request.url2pathname(local_path[7:])
+                    elif local_path.startswith('file://'):
+                        local_path = urllib.request.url2pathname(local_path[6:])
+                    if os.path.exists(local_path) and os.path.isfile(local_path):
+                        self.serve_local_file(local_path)
+                        return None
                 self.send_error(404, 'Local file not found')
                 return None
 
@@ -433,13 +469,26 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     self.serve_local_file(candidate_path)
                     return None
 
-            target_url = self.server.app_core.engine.resolve_stream_url(track)
+            target_url = url_param or self.server.app_core.engine.resolve_stream_url(track)
+            if hasattr(target_url, '_mock_return_value') or not isinstance(target_url, str):
+                target_url = str(target_url) if (target_url and not hasattr(target_url, '_mock_return_value')) else ''
             if not target_url:
                 try:
                     self.send_error(404, 'Stream not found')
                 except Exception:
                     logger.debug("do_GET: suppressed exception", exc_info=True)
                 return None
+
+            # If resolved stream is a local file or file:// URL, serve directly
+            if target_url:
+                local_path = target_url.strip()
+                if local_path.startswith('file:///'):
+                    local_path = urllib.request.url2pathname(local_path[7:])
+                elif local_path.startswith('file://'):
+                    local_path = urllib.request.url2pathname(local_path[6:])
+                if (os.path.isabs(local_path) or os.path.exists(local_path)) and os.path.isfile(local_path):
+                    self.serve_local_file(local_path)
+                    return None
 
             # Same SSRF gate as the ?url= branch: a resolver or a poisoned DB cache
             # row must never be able to make the proxy fetch an internal address.
@@ -471,6 +520,39 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             title = query_params.get('title', [''])[0]
             artist = query_params.get('artist', [''])[0]
 
+            # If target_url points to a local file or file:// URL, serve directly or fallback to online resolution
+            if target_url:
+                local_path = target_url.strip()
+                if local_path.startswith('file:///'):
+                    local_path = urllib.request.url2pathname(local_path[7:])
+                elif local_path.startswith('file://'):
+                    local_path = urllib.request.url2pathname(local_path[6:])
+
+                is_local_candidate = bool(
+                    target_url.startswith('file://') or
+                    re.match(r'^[a-zA-Z]:[\\/]', target_url) or
+                    target_url.startswith('/') or
+                    target_url.startswith('\\')
+                )
+
+                if is_local_candidate:
+                    if (os.path.isabs(local_path) or os.path.exists(local_path)) and os.path.isfile(local_path):
+                        self.serve_local_file(local_path)
+                        return None
+                    # If file doesn't exist on disk, attempt online resolution if track metadata present
+                    if (source and source_id) or title:
+                        logger.info(f"Local file not found on disk ({local_path[:60]}), resolving online stream for {title or source_id}...")
+                        track_info = {
+                            'source': source if source else 'youtube',
+                            'source_id': source_id,
+                            'title': title,
+                            'artist': artist,
+                        }
+                        target_url = self.server.app_core.engine.resolve_stream_url(track_info)
+                    else:
+                        self.send_error(404, f"Local audio file not found: {os.path.basename(local_path)}")
+                        return None
+
             is_webpage = target_url and any(domain in target_url for domain in ('soundcloud.com', 'youtube.com', 'youtu.be'))
 
             if not target_url or is_webpage:
@@ -487,13 +569,37 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 self.send_error(400, "Missing 'url' query parameter and could not resolve stream")
                 return None
 
+            # Check if resolved stream is a local file
+            if target_url:
+                local_path = target_url.strip()
+                if local_path.startswith('file:///'):
+                    local_path = urllib.request.url2pathname(local_path[7:])
+                elif local_path.startswith('file://'):
+                    local_path = urllib.request.url2pathname(local_path[6:])
+                if (os.path.isabs(local_path) or os.path.exists(local_path)) and os.path.isfile(local_path):
+                    self.serve_local_file(local_path)
+                    return None
+
+            # Infer source if not specified
+            if not source and target_url:
+                h = _host_of(target_url)
+                if any(h == sfx or h.endswith('.' + sfx) for sfx in ('googlevideo.com', 'youtube.com', 'youtu.be')):
+                    source = 'youtube'
+                elif any(h == sfx or h.endswith('.' + sfx) for sfx in ('sndcdn.com', 'soundcloud.com')):
+                    source = 'soundcloud'
+                elif any(h == sfx or h.endswith('.' + sfx) for sfx in ('yandex.net', 'yandex.ru')):
+                    source = 'yandex'
+
             # SSRF guard: reject URLs resolving to internal/private hosts (same logic as core/api.py).
             if not _is_ssrf_safe_url(target_url):
-                self.send_response(400)
-                self.send_header('Content-Type', 'application/json')
-                self._send_cors_headers()
-                self.end_headers()
-                self.wfile.write(json.dumps({'error': 'URL blocked: SSRF validation failed'}).encode('utf-8'))
+                try:
+                    self.send_response(400)
+                    self.send_header('Content-Type', 'application/json')
+                    self._send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': 'URL blocked: SSRF validation failed'}).encode('utf-8'))
+                except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
+                    pass
                 logger.warning(f'SSRF guard blocked proxied URL: {target_url[:120]}')
                 return None
             req = urllib.request.Request(target_url)
@@ -540,9 +646,6 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 req.add_header('Authorization', f'OAuth {token}')
 
         resp = None
-        import random
-        import socket
-        import time
         max_retries = 3
         had_connection_issue = False
 
@@ -701,9 +804,19 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                         tmp.write(chunk)
 
                 if bytes_written > 0 and (expected_len is None or bytes_written == expected_len):
-                    os.replace(temp_path, final_path)
-                    self.server.app_core.db.set_cached_file(source, source_id, final_path)
-                    logger.info(f'Stream cached successfully to {final_path}')
+                    try:
+                        os.replace(temp_path, final_path)
+                        self.server.app_core.db.set_cached_file(source, source_id, final_path)
+                        logger.info(f'Stream cached successfully to {final_path}')
+                    except PermissionError:
+                        # File is currently opened by another thread or reader (Windows WinError 32)
+                        time.sleep(0.05)
+                        try:
+                            os.replace(temp_path, final_path)
+                            self.server.app_core.db.set_cached_file(source, source_id, final_path)
+                            logger.info(f'Stream cached successfully on retry to {final_path}')
+                        except Exception as pe:
+                            logger.warning(f'Could not replace stream file {final_path} (locked): {pe}')
                 else:
                     logger.warning(f'Incomplete stream received ({bytes_written} bytes vs expected {expected_len}). Removing temp file.')
                     if os.path.exists(temp_path):

@@ -89,6 +89,8 @@ atexit.register(_lyrics_pool.shutdown, wait=False, cancel_futures=True)
 class LyricsService:
     def __init__(self, settings=None):
         self.settings = settings
+        self._cache = {}
+        self._cache_lock = threading.Lock()
 
     @classmethod
     def submit(cls, fn: Callable, *args, **kwargs) -> Optional[concurrent.futures.Future]:
@@ -99,6 +101,41 @@ class LyricsService:
     def shutdown_executor(cls, wait: bool = False, cancel_futures: bool = True) -> None:
         """Shut down the shared bounded lyrics thread pool."""
         _lyrics_pool.shutdown(wait=wait, cancel_futures=cancel_futures)
+
+    def _clean_track_and_artist(self, track_name: str, artist_name: str):
+        track = track_name.strip() if track_name else ""
+        artist = artist_name.strip() if artist_name else ""
+
+        # Remove video/audio suffixes and junk common in streaming and YouTube titles
+        junk_patterns = [
+            r'\s*[\(\[](official\s*(music\s*)?(video|audio|lyrics?|visualizer|track)?|lyric\s*video|audio|video|visualizer|clip|клип|премьера(\s*трека|\s*клипа)?)[\)\]]',
+            r'\s*[\(\[](feat|ft)\.?\s+[^\)\]]+[\)\]]',
+            r'\s*[\(\[](prod|produced)\.?\s+by\s+[^\)\]]+[\)\]]',
+            r'\s*[\(\[](remix|slowed(\s*\+\s*reverb)?|speed\s*up|sped\s*up)[\)\]]',
+            r'\s*[\(\[]\d{4}[\)\]]',
+            r'\s*[\(\[](hd|hq|4k|1080p)[\)\]]',
+            r'\s*\|\s*.*$',
+        ]
+        for p in junk_patterns:
+            track = re.sub(p, '', track, flags=re.IGNORECASE)
+
+        track = track.replace('"', '').replace("'", "").strip()
+
+        # If artist is provided and is inside track title, remove it from track
+        if artist:
+            art_esc = re.escape(artist)
+            track = re.sub(rf'^{art_esc}\s*[\-—–:]\s*', '', track, flags=re.IGNORECASE).strip()
+            track = re.sub(rf'\s*[\-—–:]\s*{art_esc}$', '', track, flags=re.IGNORECASE).strip()
+        elif not artist:
+            # Try splitting "Artist - Title" or "Title — Artist"
+            parts = re.split(r'\s*[\-—–]\s*', track, maxsplit=1)
+            if len(parts) == 2 and parts[0] and parts[1]:
+                artist = parts[0].strip()
+                track = parts[1].strip()
+
+        track = track.strip(' -—–:;.,|')
+        artist = artist.strip(' -—–:;.,|')
+        return track or track_name.strip(), artist or (artist_name.strip() if artist_name else "")
 
     def _open_url(self, req_or_url, headers=None, timeout=3.5):
         if isinstance(req_or_url, str):
@@ -136,8 +173,15 @@ class LyricsService:
         if not track_name:
             return {"syncedLyrics": None, "plainLyrics": None, "instrumental": False, "weight": 3}
 
-        track = track_name.strip()
-        artist = artist_name.strip() if artist_name else ""
+        track, artist = self._clean_track_and_artist(track_name, artist_name)
+
+        # Check in-memory lyrics cache
+        cache_key = (track.lower(), artist.lower())
+        with self._cache_lock:
+            if cache_key in self._cache:
+                hit = self._cache[cache_key]
+                if hit.get("weight", 3) < 3:
+                    return hit
 
         # Define 6 fetcher methods to run concurrently in the shared bounded pool
         fetchers = [
@@ -149,59 +193,73 @@ class LyricsService:
             self._fetch_duckduckgo,
         ]
 
-        futures = {}
-        for f in fetchers:
-            future = _lyrics_pool.submit(f, track, artist)
-            if future is not None:
-                futures[future] = getattr(f, '__name__', str(f))
-        if not futures:
-            logger.debug('Lyrics lookup skipped: shared executor unavailable')
-            return {"syncedLyrics": None, "plainLyrics": None, "instrumental": False, "weight": 3}
-        not_done = set(futures.keys())
+        def _execute_cascade(t, a, max_timeout=3.5):
+            futures = {}
+            for f in fetchers:
+                future = _lyrics_pool.submit(f, t, a)
+                if future is not None:
+                    futures[future] = getattr(f, '__name__', str(f))
+            if not futures:
+                return None
 
-        best_weight_2 = None
-        weight2_found_time = None
-        timeout = 2.5
-        start_time = time.time()
+            not_done = set(futures.keys())
+            best_weight_2 = None
+            weight2_found_time = None
+            start_time = time.time()
 
-        while not_done:
-            elapsed = time.time() - start_time
-            if elapsed >= timeout:
-                break
+            while not_done:
+                elapsed = time.time() - start_time
+                if elapsed >= max_timeout:
+                    break
 
-            # Fast exit: If plain lyrics found (weight 2) and 0.6s passed with no synced lyrics, return immediately
-            if best_weight_2 and weight2_found_time:
-                fast_exit_remaining = 0.6 - (time.time() - weight2_found_time)
-                if fast_exit_remaining <= 0:
-                    return best_weight_2
-                time_left = min(0.2, timeout - elapsed, max(0.01, fast_exit_remaining))
-            else:
-                time_left = min(0.2, timeout - elapsed)
+                if best_weight_2 and weight2_found_time:
+                    fast_exit_remaining = 0.6 - (time.time() - weight2_found_time)
+                    if fast_exit_remaining <= 0:
+                        return best_weight_2
+                    time_left = min(0.2, max_timeout - elapsed, max(0.01, fast_exit_remaining))
+                else:
+                    time_left = min(0.2, max_timeout - elapsed)
 
-            if time_left <= 0:
-                break
+                if time_left <= 0:
+                    break
 
-            done, not_done = concurrent.futures.wait(
-                not_done,
-                timeout=time_left,
-                return_when=concurrent.futures.FIRST_COMPLETED,
-            )
+                done, not_done = concurrent.futures.wait(
+                    not_done,
+                    timeout=time_left,
+                    return_when=concurrent.futures.FIRST_COMPLETED,
+                )
 
-            for fut in done:
-                try:
-                    res = fut.result()
-                    if res and isinstance(res, dict):
-                        w = res.get('weight', 3)
-                        if w == 1:
-                            return res  # Immediate WIN
-                        elif w == 2 and not best_weight_2:
-                            best_weight_2 = res
-                            weight2_found_time = time.time()
-                except Exception as e:
-                    logger.debug(f"Lyrics fetcher {futures.get(fut, '?')} failed: {e}", exc_info=True)
+                for fut in done:
+                    try:
+                        res = fut.result()
+                        if res and isinstance(res, dict):
+                            w = res.get('weight', 3)
+                            if w == 1:
+                                return res  # Immediate WIN
+                            elif w == 2 and not best_weight_2:
+                                best_weight_2 = res
+                                weight2_found_time = time.time()
+                    except Exception as e:
+                        logger.debug(f"Lyrics fetcher {futures.get(fut, '?')} failed: {e}", exc_info=True)
 
-        if best_weight_2:
             return best_weight_2
+
+        result = _execute_cascade(track, artist, max_timeout=3.5)
+
+        # If not found and artist was inferred from track title, try flipped (artist, track)
+        if (not result or result.get("weight", 3) >= 3) and not artist_name and artist and track != artist:
+            alt_res = _execute_cascade(artist, track, max_timeout=2.0)
+            if alt_res and alt_res.get("weight", 3) < 3:
+                result = alt_res
+
+        if result and result.get("weight", 3) < 3:
+            with self._cache_lock:
+                if len(self._cache) > 500:
+                    self._cache.clear()
+                self._cache[cache_key] = result
+                if track_name and (track_name.lower(), (artist_name or "").lower()) != cache_key:
+                    self._cache[(track_name.lower(), (artist_name or "").lower())] = result
+            return result
 
         return {"syncedLyrics": None, "plainLyrics": None, "instrumental": False, "weight": 3}
 

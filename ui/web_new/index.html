@@ -581,8 +581,9 @@
                         <span style="font-size:13px; font-weight:600; color:var(--text-dim);">Текст песни</span>
                         <div class="lyrics-offset-controls" style="display:flex; align-items:center; gap:6px;">
                             <button id="btn-toggle-lyrics-translation-page" class="btn-sm text-xs" style="padding:4px 10px; border-radius:6px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:var(--text-sec); cursor:pointer;" title="Включить двуязычный режим (Перевод)">🌐 Перевод</button>
-                            <button id="btn-lyrics-offset-minus-page" class="btn-sm text-xs" style="padding:4px 8px; border-radius:6px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:var(--text-sec); cursor:pointer;" title="Задержать текст на 0.5s">-0.5s</button>
-                            <button id="btn-lyrics-offset-plus-page" class="btn-sm text-xs" style="padding:4px 8px; border-radius:6px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:var(--text-sec); cursor:pointer;" title="Ускорить текст на 0.5s">+0.5s</button>
+                            <button id="btn-lyrics-offset-minus-page" class="btn-sm text-xs" style="padding:4px 8px; border-radius:6px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:var(--text-sec); cursor:pointer;" title="Задержать текст на 0.5s (назад)">-0.5s</button>
+                            <button id="btn-lyrics-offset-reset-page" class="btn-sm text-xs" style="padding:4px 8px; border-radius:6px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:var(--text-sec); cursor:pointer; font-size:11px; min-width:38px;" title="Сбросить смещение в 0.0s">0.0s</button>
+                            <button id="btn-lyrics-offset-plus-page" class="btn-sm text-xs" style="padding:4px 8px; border-radius:6px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15); color:var(--text-sec); cursor:pointer;" title="Ускорить текст на 0.5s (вперёд)">+0.5s</button>
                         </div>
                     </div>
                     <div class="player-lyrics-container" id="player-lyrics-scroll">
@@ -601,8 +602,9 @@
                 <div class="lyrics-title" id="lyrics-title">Текст песни</div>
                 <div class="lyrics-offset-controls" style="display:flex;align-items:center;gap:6px;margin-left:auto;margin-right:16px;">
                     <button id="btn-toggle-lyrics-translation" class="btn-sm text-xs" style="padding:4px 10px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Включить двуязычный режим (Перевод)">🌐 Перевод</button>
-                    <button id="btn-lyrics-offset-minus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Задержать текст на 0.5s">-0.5s</button>
-                    <button id="btn-lyrics-offset-plus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Ускорить текст на 0.5s">+0.5s</button>
+                    <button id="btn-lyrics-offset-minus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Задержать текст на 0.5s (назад)">-0.5s</button>
+                    <button id="btn-lyrics-offset-reset" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;font-size:11px;min-width:38px;" title="Сбросить смещение в 0.0s">0.0s</button>
+                    <button id="btn-lyrics-offset-plus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Ускорить текст на 0.5s (вперёд)">+0.5s</button>
                 </div>
             </div>
             <div class="lyrics-scroll-container" id="lyrics-container">

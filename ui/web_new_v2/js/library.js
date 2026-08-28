@@ -1,4 +1,4 @@
-// NeDotify вЂ” Library Module (Favorites, Playlists, Local Files)
+// NeDotify — Library Module (Favorites, Playlists, Local Files)
 import { createTrackElement, renderIcons, escapeHtml } from './utils.js';
 import { getCurrentTrack } from './player.js';
 
@@ -666,12 +666,23 @@ export async function loadPlaylists() {
                                 item.style.overflow = 'hidden';
                             }, 50);
                             setTimeout(async () => {
-                                await window.pywebview.api.delete_playlist(id);
-                                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Плейлист "${pl.name}" удалён`, type: 'info' } }));
-                                if (currentSelectedPlaylistData?.id === id) {
-                                    selectSection('favorites');
+                                try {
+                                    const res = await window.pywebview.api.delete_playlist(id);
+                                    if (res && res.success !== false) {
+                                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Плейлист "${pl.name}" удалён`, type: 'info' } }));
+                                        if (currentSelectedPlaylistData?.id === id) {
+                                            selectSection('favorites');
+                                        }
+                                        loadPlaylists();
+                                    } else {
+                                        throw new Error(res?.error || 'Failed to delete playlist');
+                                    }
+                                } catch(err) {
+                                    item.style.opacity = '1';
+                                    item.style.transform = 'none';
+                                    item.style.maxHeight = '';
+                                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка при удалении плейлиста', type: 'error' } }));
                                 }
-                                loadPlaylists();
                             }, 320);
                         }
                     }

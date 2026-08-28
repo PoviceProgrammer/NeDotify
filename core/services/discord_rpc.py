@@ -88,13 +88,13 @@ class DiscordRPCService:
         current_pos_sec: float = 0
     ):
         """Update Discord user presence status with current track details."""
-        if not self.is_enabled():
-            if self.connected:
-                self.clear_presence()
-            return
+        with self._lock:
+            if not self.is_enabled():
+                if self.connected:
+                    self.clear_presence()
+                return
 
-        if not self.connected:
-            with self._lock:
+            if not self.connected:
                 self._pending_update = {
                     "track_title": track_title,
                     "track_artist": track_artist,
@@ -102,68 +102,69 @@ class DiscordRPCService:
                     "duration_sec": duration_sec,
                     "current_pos_sec": current_pos_sec
                 }
-            self.start()
-            return
+                self.start()
+                return
 
-        try:
-            title = (track_title or "Неизвестный трек").strip()
-            artist = (track_artist or "AURA Music").strip()
-            now = int(time.time())
+            try:
+                title = (track_title or "Неизвестный трек").strip()
+                artist = (track_artist or "AURA Music").strip()
+                now = int(time.time())
 
-            # Track change reset
-            if self.current_track != title or self.current_artist != artist:
-                self.current_track = title
-                self.current_artist = artist
-                self.start_time = now - int(current_pos_sec if current_pos_sec > 0 else 0)
+                # Track change reset
+                if self.current_track != title or self.current_artist != artist:
+                    self.current_track = title
+                    self.current_artist = artist
+                    self.start_time = now - int(current_pos_sec if current_pos_sec > 0 else 0)
 
-            if is_playing:
-                # Construct Rich Presence payload
-                payload = {
-                    "details": title[:128],
-                    "state": f"от {artist}"[:128] if artist else "AURA Music Player",
-                    "large_image": "aura_logo",
-                    "large_text": "AURA Music Player",
-                    "small_image": "play",
-                    "small_text": "Воспроизводится",
-                    "buttons": [
-                        {"label": "AURA Music", "url": "https://github.com/PoviceProgrammer/NeDotify"}
-                    ]
-                }
+                if is_playing:
+                    # Construct Rich Presence payload
+                    payload = {
+                        "details": title[:128],
+                        "state": f"от {artist}"[:128] if artist else "AURA Music Player",
+                        "large_image": "aura_logo",
+                        "large_text": "AURA Music Player",
+                        "small_image": "play",
+                        "small_text": "Воспроизводится",
+                        "buttons": [
+                            {"label": "AURA Music", "url": "https://github.com/PoviceProgrammer/NeDotify"}
+                        ]
+                    }
 
-                # Add progress timestamps if duration is known
-                if duration_sec and duration_sec > 0:
-                    start_ts = now - int(current_pos_sec if current_pos_sec > 0 else 0)
-                    end_ts = start_ts + int(duration_sec)
-                    payload["start"] = start_ts
-                    payload["end"] = end_ts
-                elif self.start_time:
-                    payload["start"] = self.start_time
+                    # Add progress timestamps if duration is known
+                    if duration_sec and duration_sec > 0:
+                        start_ts = now - int(current_pos_sec if current_pos_sec > 0 else 0)
+                        end_ts = start_ts + int(duration_sec)
+                        payload["start"] = start_ts
+                        payload["end"] = end_ts
+                    elif self.start_time:
+                        payload["start"] = self.start_time
 
-                self.rpc.update(**payload)
-            else:
-                self.rpc.update(
-                    details=title[:128],
-                    state=f"от {artist} (На паузе)"[:128],
-                    large_image="aura_logo",
-                    large_text="AURA Music Player",
-                    small_image="pause",
-                    small_text="На паузе",
-                    buttons=[
-                        {"label": "AURA Music", "url": "https://github.com/PoviceProgrammer/NeDotify"}
-                    ]
-                )
-        except Exception as e:
-            logger.debug(f"Failed to update Discord RPC: {e}")
-            self.connected = False
+                    self.rpc.update(**payload)
+                else:
+                    self.rpc.update(
+                        details=title[:128],
+                        state=f"от {artist} (На паузе)"[:128],
+                        large_image="aura_logo",
+                        large_text="AURA Music Player",
+                        small_image="pause",
+                        small_text="На паузе",
+                        buttons=[
+                            {"label": "AURA Music", "url": "https://github.com/PoviceProgrammer/NeDotify"}
+                        ]
+                    )
+            except Exception as e:
+                logger.debug(f"Failed to update Discord RPC: {e}")
+                self.connected = False
 
     def clear_presence(self):
         """Clear presence status from Discord profile."""
-        if not self.connected or not self.rpc:
-            return
-        try:
-            self.rpc.clear()
-        except Exception:
-            pass
+        with self._lock:
+            if not self.connected or not self.rpc:
+                return
+            try:
+                self.rpc.clear()
+            except Exception:
+                pass
 
     def stop(self):
         """Disconnect Discord RPC."""

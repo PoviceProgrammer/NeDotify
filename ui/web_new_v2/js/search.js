@@ -40,12 +40,18 @@ export function initSearch() {
                 input.blur();
                 const query = e.target.value.trim();
                 if (query.length > 0) {
+                    saveSearchQuery(query);
+                    const dropdown = document.getElementById('search-suggestions-dropdown');
+                    if (dropdown) dropdown.classList.add('hidden');
                     clearTimeout(searchDebounce);
                     showLoading();
                     allResults = [];
                     currentSearchQuery = query;
                     api('search', query, currentSource, currentType === 'all' ? null : currentType);
                 }
+            } else if (e.key === 'Escape') {
+                const dropdown = document.getElementById('search-suggestions-dropdown');
+                if (dropdown) dropdown.classList.add('hidden');
             }
         });
 
@@ -96,36 +102,62 @@ export function initSearch() {
         });
     }
 
-    // Platform Dropdown Selection (YouTube, SoundCloud, Spotify ONLY)
+    // Platform Dropdown Selection (YouTube, SoundCloud, Spotify, All)
+    function onSelectPlatform(selectedSource, targetBtn) {
+        if (!selectedSource || !PLATFORM_SVGS[selectedSource]) return;
+
+        currentSource = selectedSource;
+
+        // Update active icon on platform button
+        if (activeIconSpan) {
+            activeIconSpan.innerHTML = PLATFORM_SVGS[selectedSource];
+        }
+
+        // Update active state in dropdown
+        document.querySelectorAll('.platform-item').forEach(b => {
+            b.classList.toggle('active', b.dataset.source === selectedSource);
+        });
+
+        // Hide dropdown
+        if (platformDropdown) platformDropdown.classList.add('hidden');
+
+        // Update input placeholder for the selected source
+        if (input) {
+            const placeholders = {
+                all: 'Поиск...',
+                youtube: 'Поиск в YouTube Music...',
+                soundcloud: 'Поиск в SoundCloud...',
+                spotify: 'Поиск в Spotify...'
+            };
+            input.placeholder = placeholders[selectedSource] || 'Поиск...';
+        }
+
+        // Re-trigger search if query exists
+        const query = input?.value.trim();
+        if (query && query.length > 0) {
+            isViewingArtistProfile = false;
+            allResults = [];
+            currentSearchQuery = query;
+            showLoading();
+            api('search', query, currentSource, currentType === 'all' ? null : currentType);
+        }
+    }
+
+    if (platformDropdown) {
+        platformDropdown.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const btn = e.target.closest('.platform-item');
+            if (btn) {
+                onSelectPlatform(btn.dataset.source, btn);
+            }
+        });
+    }
+
     document.querySelectorAll('.platform-item').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const selectedSource = btn.dataset.source;
-            if (!selectedSource || !PLATFORM_SVGS[selectedSource]) return;
-
-            currentSource = selectedSource;
-
-            // Update active icon on platform button
-            if (activeIconSpan) {
-                activeIconSpan.innerHTML = PLATFORM_SVGS[selectedSource];
-            }
-
-            // Update active state in dropdown
-            document.querySelectorAll('.platform-item').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            // Hide dropdown
-            if (platformDropdown) platformDropdown.classList.add('hidden');
-
-            // Re-trigger search if query exists
-            const query = input?.value.trim();
-            if (query && query.length > 0) {
-                isViewingArtistProfile = false;
-                allResults = [];
-                currentSearchQuery = query;
-                showLoading();
-                api('search', query, currentSource, currentType === 'all' ? null : currentType);
-            }
+            const targetBtn = e.currentTarget || btn;
+            onSelectPlatform(targetBtn.dataset.source, targetBtn);
         });
     });
 
@@ -164,6 +196,7 @@ export function initSearch() {
         });
     });
 
+    setupSmartSearchSuggestions();
     renderIcons();
 }
 
@@ -878,6 +911,159 @@ function api(method, ...args) {
     if (window.pywebview && window.pywebview.api) {
         return window.pywebview.api[method](...args);
     }
+}
+
+// ==========================================================================
+// FEATURE 2: Smart Search (Search History & Genre Chips)
+// ==========================================================================
+
+const SEARCH_HISTORY_KEY = 'nedotify_search_history';
+const MAX_SEARCH_HISTORY = 8;
+const POPULAR_GENRES = [
+    { label: 'Lo-Fi', query: 'Lo-Fi Chill Beats', icon: '🎧' },
+    { label: 'Rock', query: 'Classic Rock Hits', icon: '🎸' },
+    { label: 'Electronic', query: 'Electronic Dance', icon: '⚡' },
+    { label: 'Podcast', query: 'Подкасты', icon: '🎙️' }
+];
+
+export function getSearchHistory() {
+    try {
+        const raw = localStorage.getItem(SEARCH_HISTORY_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+export function saveSearchQuery(query) {
+    if (!query || !query.trim()) return;
+    const clean = query.trim();
+    let history = getSearchHistory().filter(q => q.toLowerCase() !== clean.toLowerCase());
+    history.unshift(clean);
+    if (history.length > MAX_SEARCH_HISTORY) {
+        history = history.slice(0, MAX_SEARCH_HISTORY);
+    }
+    try {
+        localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+    } catch (e) {}
+}
+
+export function removeSearchQuery(queryToDelete) {
+    let history = getSearchHistory().filter(q => q !== queryToDelete);
+    try {
+        localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+    } catch (e) {}
+}
+
+/**
+ * Инициализирует выпадающее меню с чипсами и историей запросов
+ */
+export function setupSmartSearchSuggestions() {
+    const searchHeader = document.querySelector('.search-header-container');
+    const input = document.getElementById('search-input');
+    if (!searchHeader || !input) return;
+
+    // Создаем контейнер дропдауна, если его еще нет
+    let dropdown = document.getElementById('search-suggestions-dropdown');
+    if (!dropdown) {
+        dropdown = document.createElement('div');
+        dropdown.id = 'search-suggestions-dropdown';
+        dropdown.className = 'search-suggestions-dropdown hidden';
+        searchHeader.appendChild(dropdown);
+    }
+
+    const renderSuggestions = () => {
+        const history = getSearchHistory();
+
+        // 1. Рендерим жанровые чипсы
+        const chipsHtml = POPULAR_GENRES.map(g => `
+            <button class="search-chip" data-query="${escapeHtml(g.query)}">
+                <span>${g.icon}</span>
+                <span>${escapeHtml(g.label)}</span>
+            </button>
+        `).join('');
+
+        // 2. Рендерим элементы истории
+        const historyHtml = history.length > 0 ? history.map(item => `
+            <div class="search-history-item" data-query="${escapeHtml(item)}">
+                <div class="search-history-query">
+                    <i data-lucide="history" style="width:14px;height:14px;opacity:0.6;"></i>
+                    <span>${escapeHtml(item)}</span>
+                </div>
+                <button class="search-history-delete-btn" data-delete-query="${escapeHtml(item)}" title="Удалить из истории">
+                    <i data-lucide="x" style="width:12px;height:12px"></i>
+                </button>
+            </div>
+        `).join('') : '<div style="font-size:12px;color:var(--color-text-dim);padding:4px 0;">История поиска пуста</div>';
+
+        dropdown.innerHTML = `
+            <div class="search-chips-row">
+                <span class="search-chips-label">Быстрые жанры</span>
+                <div class="search-chips-list">${chipsHtml}</div>
+            </div>
+            <div class="search-history-section">
+                <div class="search-history-header">
+                    <span>Недавние поиски</span>
+                    ${history.length > 0 ? '<button class="search-history-clear-all" id="btn-clear-all-history">Очистить</button>' : ''}
+                </div>
+                <div class="search-history-list">${historyHtml}</div>
+            </div>
+        `;
+
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+            window.lucide.createIcons({ root: dropdown });
+        }
+    };
+
+    // Фокус в инпут: показать историю
+    input.addEventListener('focus', () => {
+        renderSuggestions();
+        dropdown.classList.remove('hidden');
+    });
+
+    // Обработка кликов внутри выпадающего списка через Event Delegation
+    dropdown.addEventListener('click', (e) => {
+        // Удаление конкретной записи истории
+        const deleteBtn = e.target.closest('[data-delete-query]');
+        if (deleteBtn) {
+            e.stopPropagation();
+            const queryToDelete = deleteBtn.dataset.deleteQuery;
+            removeSearchQuery(queryToDelete);
+            renderSuggestions();
+            return;
+        }
+
+        // Очистить всю историю
+        if (e.target.closest('#btn-clear-all-history')) {
+            e.stopPropagation();
+            localStorage.removeItem(SEARCH_HISTORY_KEY);
+            renderSuggestions();
+            return;
+        }
+
+        // Клик по чипсу или элементу истории -> запуск поиска
+        const triggerEl = e.target.closest('.search-chip, .search-history-item');
+        if (triggerEl) {
+            const query = triggerEl.dataset.query;
+            if (query) {
+                input.value = query;
+                saveSearchQuery(query);
+                dropdown.classList.add('hidden');
+                isViewingArtistProfile = false;
+                allResults = [];
+                currentSearchQuery = query;
+                showLoading();
+                api('search', query, currentSource, currentType === 'all' ? null : currentType);
+            }
+        }
+    });
+
+    // Клик вне поиска закрывает подсказки
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.search-header-container')) {
+            dropdown.classList.add('hidden');
+        }
+    });
 }
 
 

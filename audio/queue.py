@@ -54,6 +54,12 @@ class PlaybackQueue:
         with self._lock:
             return len(self._tracks) == 0
 
+    @staticmethod
+    def _track_key(track: dict) -> tuple:
+        if not isinstance(track, dict):
+            return (None, None)
+        return (track.get("source"), str(track.get("source_id") or track.get("id") or track.get("url") or ""))
+
     @property
     def shuffle(self) -> bool:
         with self._lock:
@@ -66,6 +72,7 @@ class PlaybackQueue:
                 # Save original order and shuffle
                 self._original_order = self._tracks.copy()
                 current = self.current_track
+                current_key = self._track_key(current) if current else None
                 remaining = [t for i, t in enumerate(self._tracks) if i != self._current_index]
                 random.shuffle(remaining)
                 if current:
@@ -76,16 +83,22 @@ class PlaybackQueue:
             elif not enabled and self._shuffle:
                 # Restore original order without losing newly added tracks
                 current = self.current_track
-                restored = [t for t in self._original_order if t in self._tracks]
+                current_key = self._track_key(current) if current else None
+                current_keys = {self._track_key(t) for t in self._tracks}
+                restored = [t for t in self._original_order if self._track_key(t) in current_keys]
+                restored_keys = {self._track_key(t) for t in restored}
                 for t in self._tracks:
-                    if t not in restored:
+                    if self._track_key(t) not in restored_keys:
                         restored.append(t)
+                        restored_keys.add(self._track_key(t))
                 self._tracks = restored
-                if current:
-                    try:
-                        self._current_index = self._tracks.index(current)
-                    except ValueError:
-                        self._current_index = 0 if self._tracks else -1
+                if current_key:
+                    found_idx = -1
+                    for idx, t in enumerate(self._tracks):
+                        if self._track_key(t) == current_key:
+                            found_idx = idx
+                            break
+                    self._current_index = found_idx if found_idx >= 0 else (0 if self._tracks else -1)
                 else:
                     self._current_index = 0 if self._tracks else -1
             self._shuffle = enabled
@@ -123,9 +136,15 @@ class PlaybackQueue:
                 self._tracks.insert(self._current_index + 1, track)
                 if self._original_order:
                     orig_curr = self.current_track
-                    if orig_curr and orig_curr in self._original_order:
-                        orig_idx = self._original_order.index(orig_curr)
-                        self._original_order.insert(orig_idx + 1, track)
+                    orig_curr_key = self._track_key(orig_curr) if orig_curr else None
+                    found_orig_idx = -1
+                    if orig_curr_key:
+                        for idx, t in enumerate(self._original_order):
+                            if self._track_key(t) == orig_curr_key:
+                                found_orig_idx = idx
+                                break
+                    if found_orig_idx >= 0:
+                        self._original_order.insert(found_orig_idx + 1, track)
                     else:
                         self._original_order.append(track)
             else:
@@ -135,16 +154,28 @@ class PlaybackQueue:
             if self._current_index < 0 and len(self._tracks) == 1:
                 self._current_index = 0
 
+    def add_tracks(self, tracks: list):
+        """Batch add multiple tracks to the queue under a single lock."""
+        if not tracks or not isinstance(tracks, list):
+            return
+        with self._lock:
+            for track in tracks:
+                if not isinstance(track, dict):
+                    continue
+                self._tracks.append(track)
+                if self._original_order:
+                    self._original_order.append(track)
+            if self._current_index < 0 and len(self._tracks) > 0:
+                self._current_index = 0
+
     def remove_track(self, index: int):
         """Remove a track from the queue by index."""
         with self._lock:
             if 0 <= index < len(self._tracks):
                 track = self._tracks.pop(index)
-                if self._original_order and track in self._original_order:
-                    try:
-                        self._original_order.remove(track)
-                    except ValueError:
-                        pass
+                if self._original_order:
+                    target_key = self._track_key(track)
+                    self._original_order = [t for t in self._original_order if self._track_key(t) != target_key]
                 if len(self._tracks) == 0:
                     self._current_index = -1
                 elif index < self._current_index:

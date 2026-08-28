@@ -58,6 +58,9 @@ class AudioEngine:
     def add_to_queue(self, track: dict, play_next: bool = False) -> None:
         self.queue.add_track(track, play_next=play_next)
 
+    def add_tracks_to_queue(self, tracks: list) -> None:
+        self.queue.add_tracks(tracks)
+
     def next_track(self):
         """Advance the queue and notify the UI. Returns the new track or None at the end."""
         track = self.queue.next_track()
@@ -115,13 +118,14 @@ class AudioEngine:
                     # Local cached file: always serve through proxy - browsers cannot play raw fs paths
                     if self.proxy and getattr(self.proxy, "port", None):
                         t_id = track.get("id") or 0
-                        src = track.get("source") or "youtube"
+                        src = track.get("source") or "local"
                         src_id = urllib_parse.quote(str(track.get("source_id") or ""))
                         title = urllib_parse.quote(str(track.get("title") or ""))
                         artist = urllib_parse.quote(str(track.get("artist") or ""))
-                        track["stream_url"] = (f"http://127.0.0.1:{self.proxy.port}/api/stream?track_id={t_id}&source={src}"
-                                               f"&source_id={src_id}&title={title}&artist={artist}"
-                                               f"{self.proxy.auth_query()}")
+                        quoted_fp = urllib_parse.quote(str(fp))
+                        track["stream_url"] = (f"http://127.0.0.1:{self.proxy.port}/api/stream?url={quoted_fp}"
+                                               f"&track_id={t_id}&source={src}&source_id={src_id}"
+                                               f"&title={title}&artist={artist}{self.proxy.auth_query()}")
                 # else: stream not resolved yet - leave stream_url empty; frontend shows loading state
             self._on_track_changed(track)
 

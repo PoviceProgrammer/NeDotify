@@ -48,13 +48,11 @@ export async function loadHome(isTrackChange = false) {
 
     try {
         // Step 1: Core home stats & history
-        const data = await window.pywebview.api.get_home_data();
+        const data = await window.pywebview.api.get_home_data() || {};
         if (currentGen !== homeLoadGeneration) return;
 
-        setElText('stat-tracks', data.total_tracks || 0);
-        setElText('stat-time', formatListeningTime(data.total_listening_ms || 0));
-        setElText('stat-playlists', data.playlists?.length || 0);
-        setElText('stat-favorites', data.favorites_count || 0);
+        // Render Quick Access Grid (2x3 modern Spotify-style grid)
+        renderQuickAccess(data, data.playlists || []);
 
         // History
         if (data.history && data.history.length > 0) {
@@ -63,7 +61,6 @@ export async function loadHome(isTrackChange = false) {
 
         // Analytics (Local Last.fm)
         if (data.analytics) {
-            setElText('stat-time', formatListeningTime((data.analytics.total_time_seconds || 0) * 1000));
             renderTopTracks(data.analytics.top_tracks || []);
             renderTopArtists(data.analytics.top_artists || []);
         }
@@ -73,7 +70,10 @@ export async function loadHome(isTrackChange = false) {
             try {
                 const playlists = await window.pywebview.api.get_playlists();
                 if (currentGen !== homeLoadGeneration) return;
-                if (playlists && playlists.length > 0) renderHomePlaylists(playlists);
+                if (playlists && playlists.length > 0) {
+                    renderHomePlaylists(playlists);
+                    renderQuickAccess(data, playlists);
+                }
             } catch (err) {
                 console.warn('Failed to load playlists on home:', err);
             }
@@ -152,6 +152,258 @@ export async function loadHome(isTrackChange = false) {
     } catch (e) {
         console.error('Error loading home:', e);
     }
+}
+// ─── Quick Access Grid (2x3 Modern Matrix) ───────────────────────────────────
+function formatTracksCount(n) {
+    const count = Number(n) || 0;
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    if (mod100 >= 11 && mod100 <= 19) return `${count} треков`;
+    if (mod10 === 1) return `${count} трек`;
+    if (mod10 >= 2 && mod10 <= 4) return `${count} трека`;
+    return `${count} треков`;
+}
+
+export function renderQuickAccess(data = {}, playlists = []) {
+    const container = document.getElementById('home-quick-access');
+    if (!container) return;
+
+    const items = [];
+    const favCount = data?.favorites_count || 0;
+
+    // 1. Pinned Favorites Slot
+    items.push({
+        id: 'favorites',
+        type: 'favorites',
+        title: 'Любимые треки',
+        subtitle: formatTracksCount(favCount),
+        action: async () => {
+            if (window.pywebview?.api?.get_favorites) {
+                try {
+                    const favs = await window.pywebview.api.get_favorites();
+                    const tracks = Array.isArray(favs) ? favs : (favs?.tracks || []);
+                    if (tracks && tracks.length > 0 && window.pywebview.api.play_track) {
+                        window.pywebview.api.play_track(tracks[0], tracks, 0);
+                    } else if (window.showPage) {
+                        window.showPage('library');
+                    } else if (window.NeDotify?.showPage) {
+                        window.NeDotify.showPage('library');
+                    }
+                } catch (e) {
+                    if (window.showPage) window.showPage('library');
+                    else if (window.NeDotify?.showPage) window.NeDotify.showPage('library');
+                }
+            } else if (window.showPage) {
+                window.showPage('library');
+            } else if (window.NeDotify?.showPage) {
+                window.NeDotify.showPage('library');
+            }
+        }
+    });
+
+    // 2. Playlists (up to 2 recent/user playlists)
+    const effectivePlaylists = (playlists && playlists.length > 0)
+        ? playlists
+        : (data?.playlists && data.playlists.length > 0 ? data.playlists : []);
+
+    effectivePlaylists.slice(0, 2).forEach(pl => {
+        if (!pl) return;
+        const pid = pl.id !== undefined ? pl.id : pl.ID;
+        items.push({
+            id: `playlist-${pid}`,
+            type: 'playlist',
+            playlist: pl,
+            title: pl.name || 'Плейлист',
+            subtitle: formatTracksCount(pl.track_count || 0),
+            action: async () => {
+                if (window.pywebview?.api?.get_playlist_tracks) {
+                    try {
+                        const res = await window.pywebview.api.get_playlist_tracks(pid);
+                        const tracks = Array.isArray(res) ? res : (res && Array.isArray(res.tracks) ? res.tracks : []);
+                        if (tracks && tracks.length > 0 && window.pywebview.api.play_track) {
+                            window.pywebview.api.play_track(tracks[0], tracks, 0);
+                        } else if (window.showPage) {
+                            window.showPage('library');
+                        } else if (window.NeDotify?.showPage) {
+                            window.NeDotify.showPage('library');
+                        }
+                    } catch (e) {
+                        console.warn('Quick access playlist error:', e);
+                    }
+                }
+            }
+        });
+    });
+
+    // 3. History Tracks or Top Tracks to fill remaining slots
+    const historyList = (data?.history && data.history.length > 0)
+        ? data.history
+        : (data?.analytics?.top_tracks || []);
+
+    const seenTrackKeys = new Set();
+    historyList.forEach((track, idx) => {
+        if (items.length >= 6) return;
+        if (!track || !track.title) return;
+        const trackKey = `${track.source || 'src'}_${track.source_id || track.id || track.title}`;
+        if (!seenTrackKeys.has(trackKey)) {
+            seenTrackKeys.add(trackKey);
+            items.push({
+                id: `track-${trackKey}`,
+                type: 'track',
+                track: track,
+                title: track.title || 'Unknown',
+                subtitle: track.artist || 'Трек',
+                cover_url: getCoverUrl(track),
+                action: () => {
+                    if (window.pywebview?.api?.play_track) {
+                        const trackObj = { ...track };
+                        if (trackObj.track_id) trackObj.id = trackObj.track_id;
+                        const trackList = historyList.filter(x => x && (x.title || x.source_id));
+                        window.pywebview.api.play_track(trackObj, trackList.length > 0 ? trackList : [trackObj], idx);
+                    }
+                }
+            });
+        }
+    });
+
+    // 4. Cold-Start / Fallback Fillers if fewer than 6 items exist
+    const fallbacks = [
+        {
+            id: 'fallback-flow',
+            type: 'fallback',
+            icon: 'radio',
+            title: 'Бесконечная волна',
+            subtitle: 'Умный радиопоток',
+            gradient: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
+            action: () => {
+                const flowBtn = document.getElementById('pb-btn-flow');
+                if (flowBtn) flowBtn.click();
+            }
+        },
+        {
+            id: 'fallback-library',
+            type: 'fallback',
+            icon: 'library',
+            title: 'Моя медиатека',
+            subtitle: 'Все треки и коллекции',
+            gradient: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+            action: () => {
+                if (window.showPage) window.showPage('library');
+                else if (window.NeDotify?.showPage) window.NeDotify.showPage('library');
+            }
+        },
+        {
+            id: 'fallback-popular',
+            type: 'fallback',
+            icon: 'flame',
+            title: 'Популярное',
+            subtitle: 'Тренды и чарты',
+            gradient: 'linear-gradient(135deg, #f59e0b, #ef4444)',
+            action: () => {
+                const popSec = document.getElementById('home-popular');
+                if (popSec) popSec.scrollIntoView({ behavior: 'smooth' });
+                else if (window.showPage) window.showPage('search');
+            }
+        },
+        {
+            id: 'fallback-search',
+            type: 'fallback',
+            icon: 'compass',
+            title: 'Обзор и поиск',
+            subtitle: 'Миллионы треков',
+            gradient: 'linear-gradient(135deg, #10b981, #06b6d4)',
+            action: () => {
+                if (window.showPage) window.showPage('search');
+                else if (window.NeDotify?.showPage) window.NeDotify.showPage('search');
+            }
+        },
+        {
+            id: 'fallback-releases',
+            type: 'fallback',
+            icon: 'sparkles',
+            title: 'Новые релизы',
+            subtitle: 'Свежая музыка недели',
+            gradient: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+            action: () => {
+                const relSec = document.getElementById('home-releases');
+                if (relSec) relSec.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+    ];
+
+    let fbIdx = 0;
+    while (items.length < 6 && fbIdx < fallbacks.length) {
+        items.push(fallbacks[fbIdx++]);
+    }
+
+    container.innerHTML = '';
+
+    items.slice(0, 6).forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'quick-access-card';
+        card.setAttribute('data-qa-id', item.id);
+
+        let coverHtml = '';
+        if (item.type === 'favorites') {
+            coverHtml = `
+                <div class="qa-cover" style="background: linear-gradient(135deg, #f43f5e, #ec4899);">
+                    <i data-lucide="heart" class="qa-fav-icon" style="width:26px;height:26px;fill:currentColor"></i>
+                </div>
+            `;
+        } else if (item.type === 'playlist') {
+            const pid = item.playlist?.id !== undefined ? item.playlist.id : item.playlist?.ID;
+            card.setAttribute('data-pl-id', String(pid));
+            coverHtml = `
+                <div class="qa-cover">
+                    <i data-lucide="list-music" class="pl-cover-skeleton" style="width:24px;height:24px;color:var(--color-text-muted, rgba(255,255,255,0.5))"></i>
+                </div>
+            `;
+        } else if (item.type === 'track') {
+            coverHtml = `
+                <div class="qa-cover">
+                    ${coverImgHtml({ src: item.cover_url || '', coverUrl: item.cover_url || '', sourceId: item.track?.source_id || '', source: item.track?.source || 'youtube' })}
+                </div>
+            `;
+        } else if (item.type === 'fallback') {
+            coverHtml = `
+                <div class="qa-cover" style="background: ${item.gradient};">
+                    <i data-lucide="${item.icon}" style="width:24px;height:24px;color:#ffffff"></i>
+                </div>
+            `;
+        }
+
+        card.innerHTML = `
+            ${coverHtml}
+            <div class="qa-info">
+                <div class="qa-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
+                <div class="qa-sub" title="${escapeHtml(item.subtitle)}">${escapeHtml(item.subtitle)}</div>
+            </div>
+            <button class="qa-play-btn" title="Воспроизвести" aria-label="Play">
+                <i data-lucide="play" style="width:16px;height:16px;fill:currentColor"></i>
+            </button>
+        `;
+
+        if (item.type === 'playlist' && item.playlist) {
+            attachPlaylistCollage(item.playlist, card.querySelector('.qa-cover'));
+        }
+
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('.qa-play-btn')) return;
+            item.action();
+        });
+
+        const playBtn = card.querySelector('.qa-play-btn');
+        if (playBtn) {
+            playBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                item.action();
+            });
+        }
+
+        container.appendChild(card);
+    });
+
+    renderIcons(container);
 }
 
 function renderHistory(tracks) {
@@ -349,6 +601,9 @@ window.addEventListener('nedotify:app_ready', async () => {
 
 export async function attachPlaylistCollage(pl, coverEl) {
     if (!coverEl || !window.pywebview?.api?.get_playlist_tracks) return;
+    // Bridge first: PROXY_PORT must be known before cover URLs are mapped,
+    // otherwise local covers resolve to unusable URLs on cold start.
+    await window.awaitBridge();
     const pid = pl.id !== undefined ? pl.id : pl.ID;
     let covers = _plCollageCache.get(pid);
     if (!covers) {
@@ -356,7 +611,10 @@ export async function attachPlaylistCollage(pl, coverEl) {
         try {
             const res = await window.pywebview.api.get_playlist_tracks(pid);
             const tracks = Array.isArray(res) ? res : (res && Array.isArray(res.tracks) ? res.tracks : []);
-            covers = tracks.map(t => getCoverUrl(t)).filter(Boolean).slice(0, 4);
+            covers = tracks
+                .map(t => ({ src: getCoverUrl(t), coverUrl: t.cover_url || '', sourceId: t.source_id || '', source: t.source || '' }))
+                .filter(c => c.src || c.coverUrl)
+                .slice(0, 4);
         } catch (e) {
             covers = [];
         }
@@ -379,7 +637,7 @@ export async function attachPlaylistCollage(pl, coverEl) {
     // card by its playlist id - otherwise the collage is lost to a re-render.
     if (!coverEl.isConnected) {
         const fresh = document.querySelector(
-            `#home-playlists .feed-card[data-pl-id="${String(pid)}"] .feed-card-cover`);
+            `#home-playlists .feed-card[data-pl-id="${String(pid)}"] .feed-card-cover, #home-quick-access .quick-access-card[data-pl-id="${String(pid)}"] .qa-cover`);
         if (!fresh) return;
         coverEl = fresh;
     }
@@ -427,6 +685,79 @@ export function renderHomePlaylists(playlists) {
     renderIcons(container);
 }
 
+// ─── Real artist avatars (photo upgrade over the letter discs) ─────────────
+// The DB stores artist names only, so cards first paint the deterministic
+// letter disc; this block then swaps in the real channel photo resolved by
+// the backend (one YT Music search per unknown artist, cached a week in
+// localStorage so subsequent launches paint photos instantly).
+const AVATAR_LS_KEY = 'nedotify_artist_avatars_v1';
+const AVATAR_TTL_MS = 7 * 24 * 3600 * 1000;
+const _avatarInflight = new Set();
+
+function loadAvatarStore() {
+    try { return JSON.parse(localStorage.getItem(AVATAR_LS_KEY) || '{}'); } catch (e) { return {}; }
+}
+function saveAvatarStore(store) {
+    try { localStorage.setItem(AVATAR_LS_KEY, JSON.stringify(store)); } catch (e) {}
+}
+
+function applyArtistAvatar(name, url) {
+    if (!name || !url) return;
+    document.querySelectorAll('.artist-card').forEach(card => {
+        const titleEl = card.querySelector('.feed-card-title');
+        if (!titleEl || titleEl.textContent.trim() !== name) return;
+        const coverEl = card.querySelector('.feed-card-cover');
+        if (!coverEl || coverEl.querySelector('img')) return;
+        const img = document.createElement('img');
+        img.alt = name;
+        img.loading = 'lazy';
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+        // On failure the letter disc stays: just remove the broken img.
+        img.addEventListener('error', () => img.remove());
+        img.src = url;
+        coverEl.appendChild(img);
+    });
+}
+
+function requestArtistAvatars(names) {
+    const unique = [...new Set((names || []).map(n => (n || '').trim()).filter(Boolean))];
+    if (unique.length === 0) return;
+    const store = loadAvatarStore();
+    const now = Date.now();
+    const missing = [];
+    unique.forEach(name => {
+        const entry = store[name];
+        if (entry && entry.url && now - (entry.ts || 0) < AVATAR_TTL_MS) {
+            applyArtistAvatar(name, entry.url);
+        } else if (!_avatarInflight.has(name)) {
+            missing.push(name);
+        }
+    });
+    if (missing.length === 0) return;
+    missing.forEach(n => _avatarInflight.add(n));
+    const bridgeWait = window.awaitBridge ? window.awaitBridge() : Promise.resolve();
+    bridgeWait.then(() => {
+        if (window.pywebview?.api?.get_artists_avatars) {
+            window.pywebview.api.get_artists_avatars(missing);
+        }
+        // Allow a retry on the next render if the backend never answered.
+        setTimeout(() => missing.forEach(n => _avatarInflight.delete(n)), 15000);
+    });
+}
+
+window.addEventListener('app:artists_avatars_ready', (e) => {
+    const avatars = (e.detail && e.detail.avatars) || {};
+    const store = loadAvatarStore();
+    const now = Date.now();
+    Object.entries(avatars).forEach(([name, url]) => {
+        _avatarInflight.delete(name);
+        if (!url) return;
+        store[name] = { url, ts: now };
+        applyArtistAvatar(name, url);
+    });
+    saveAvatarStore(store);
+});
+
 export function renderArtists(artists) {
     const container = document.getElementById('home-artists');
     if (!container) return;
@@ -469,6 +800,7 @@ export function renderArtists(artists) {
         container.appendChild(card);
     });
     renderIcons(container);
+    requestArtistAvatars(artists.map(a => a.artist || a.name));
 }
 
 function renderFeedSection(containerId, tracks) {
@@ -636,9 +968,7 @@ export function renderTopArtists(artists) {
         const artistName = artist.artist || artist.name || 'Unknown';
         const playsCount = artist.total_plays || artist.play_count || artist.plays || 0;
         card.innerHTML = `
-            <div class="feed-card-cover" style="border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, var(--accent), var(--bg-surface)); display: flex; align-items: center; justify-content: center;">
-                <i data-lucide="user" style="width:48px;height:48px;color:rgba(255,255,255,0.5)"></i>
-            </div>
+            <div class="feed-card-cover">${artistAvatarHtml(artistName)}</div>
             <div class="feed-card-title" style="text-align: center;">${escapeHtml(artistName)}</div>
             <div class="feed-card-sub" style="text-align: center;">${playsCount} раз</div>
         `;
@@ -658,6 +988,7 @@ export function renderTopArtists(artists) {
         container.appendChild(card);
     });
     renderIcons(container);
+    requestArtistAvatars(artists.map(a => a.artist || a.name));
 }
 
 let currentWrappedPeriod = 'week';
