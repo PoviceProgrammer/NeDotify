@@ -46,15 +46,17 @@ def main():
     )
     run_cmd(installer_cmd)
 
-    # Also create NeDotify_beta5_Setup.exe copy for backward compatibility if needed by vk_bot.py
+    # Also create NeDotify_v2.exe and NeDotify_beta5_Setup.exe copies
     setup_exe = os.path.join("dist", "NeDotify_Setup.exe")
+    setup_v2 = os.path.join("dist", "NeDotify_v2.exe")
     setup_b5 = os.path.join("dist", "NeDotify_beta5_Setup.exe")
     if os.path.exists(setup_exe):
+        shutil.copyfile(setup_exe, setup_v2)
         shutil.copyfile(setup_exe, setup_b5)
-        print(f"Copied {setup_exe} to {setup_b5}")
+        print(f"Copied {setup_exe} to {setup_v2} and {setup_b5}")
     
     print("\n=== BUILD SUCCESSFUL! ===")
-    print("Installer created at: dist/NeDotify_Setup.exe")
+    print("Installer created at: dist/NeDotify_v2.exe (and dist/NeDotify_Setup.exe)")
 
 if __name__ == "__main__":
     main()
