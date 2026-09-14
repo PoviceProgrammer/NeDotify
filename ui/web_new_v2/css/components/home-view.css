@@ -1,0 +1,514 @@
+/* ==========================================================================
+   NeDotify v2 — Component: Home View & Feeds
+   Isolated styles for Home view, Quick Access Grid, feeds, and Wrapped analytics.
+   ========================================================================== */
+
+/* ─── 1. Home View Container & Visualizer ─── */
+#view-home {
+    position: relative;
+    padding: var(--space-lg, 24px) var(--space-xl, 32px);
+}
+
+#home-visualizer-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 300px;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.3;
+}
+
+#home-greeting {
+    margin-bottom: var(--space-lg, 24px);
+}
+
+/* ─── 2. 2x3 Quick Access Grid (Modern Spotify-style Layout) ─── */
+.quick-access-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-auto-rows: 64px;
+    gap: 12px;
+    margin-bottom: var(--space-xl, 32px);
+    position: relative;
+    z-index: 1;
+}
+
+@media (max-width: 900px) {
+    .quick-access-grid {
+        grid-template-columns: repeat(2, 1fr);
+        grid-auto-rows: 64px;
+    }
+}
+
+@media (max-width: 600px) {
+    .quick-access-grid {
+        grid-template-columns: 1fr;
+        grid-auto-rows: 64px;
+    }
+}
+
+.quick-access-card {
+    display: flex;
+    align-items: center;
+    background: color-mix(in srgb, var(--color-surface, rgba(255, 255, 255, 0.035)) calc(var(--app-bg-opacity, 1) * 85%), transparent);
+    border: 1px solid var(--color-border, rgba(244, 63, 94, 0.12));
+    border-radius: var(--radius-sm, 8px);
+    overflow: hidden;
+    cursor: pointer;
+    position: relative;
+    height: 64px;
+    padding-right: 14px;
+    box-shadow: 0 4px 16px var(--color-shadow, rgba(0, 0, 0, 0.65));
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    user-select: none;
+}
+
+.quick-access-card:hover {
+    background: var(--color-surface-hover, rgba(244, 63, 94, 0.08));
+    border-color: var(--color-border-hover, rgba(244, 63, 94, 0.30));
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px var(--color-primary-glow, rgba(244, 63, 94, 0.35));
+}
+
+.quick-access-card .qa-cover {
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+    margin-right: 12px;
+    position: relative;
+    background: linear-gradient(135deg, rgba(244, 63, 94, 0.15), rgba(255, 255, 255, 0.03));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.quick-access-card .qa-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.quick-access-card .qa-fav-icon {
+    width: 28px;
+    height: 28px;
+    color: var(--color-primary-fg, #ffffff);
+}
+
+.quick-access-card .qa-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+}
+
+.quick-access-card .qa-title {
+    font-family: var(--font-display, 'Sora', sans-serif);
+    font-size: var(--font-size-sm, 13px);
+    font-weight: 700;
+    color: var(--color-text-main, #ffffff);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.quick-access-card .qa-sub {
+    font-family: var(--font-body, 'DM Sans', sans-serif);
+    font-size: var(--font-size-xs, 11px);
+    color: var(--color-text-muted, rgba(255, 245, 247, 0.65));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.quick-access-card .qa-play-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--color-primary, var(--primary, #f43f5e));
+    color: var(--color-primary-fg, #ffffff);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px var(--color-primary-glow, rgba(244, 63, 94, 0.35));
+    opacity: 0;
+    transform: scale(0.8) translateY(4px);
+    transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+.quick-access-card:hover .qa-play-btn {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+.quick-access-card .qa-play-btn:hover {
+    transform: scale(1.12);
+    box-shadow: 0 6px 20px rgba(var(--color-primary-rgb, 244, 63, 94), 0.6);
+}
+
+.skeleton-qa-card {
+    height: 64px;
+    border-radius: var(--radius-sm, 8px);
+}
+
+/* ─── 3. Horizontal Scroll Feeds & Cards ─── */
+.feed-section {
+    margin-bottom: var(--space-2xl, 48px);
+    position: relative;
+}
+
+.feed-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-md, 16px);
+}
+
+.feed-title {
+    font-family: var(--font-display, 'Sora', sans-serif);
+    font-size: var(--font-size-lg, 20px);
+    font-weight: 700;
+    color: var(--color-text-main, #ffffff);
+}
+
+.feed-scroll-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.feed-scroll {
+    display: flex;
+    gap: var(--space-md, 16px);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    padding: var(--space-xs, 4px) var(--space-xs, 4px) var(--space-md, 16px) var(--space-xs, 4px);
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.feed-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.feed-card {
+    flex: 0 0 170px;
+    width: 170px;
+    background: color-mix(in srgb, var(--color-surface, rgba(255, 255, 255, 0.035)) calc(var(--app-bg-opacity, 1) * 80%), transparent);
+    border: 1px solid var(--color-border, rgba(244, 63, 94, 0.12));
+    border-radius: var(--radius-md, 12px);
+    padding: 12px;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.25s ease;
+    box-sizing: border-box;
+    user-select: none;
+}
+
+.feed-card:hover {
+    transform: translateY(-4px);
+    background: var(--color-surface-hover, rgba(244, 63, 94, 0.08));
+    border-color: var(--color-border-glow, rgba(244, 63, 94, 0.45));
+    box-shadow: 0 12px 28px var(--color-primary-glow, rgba(244, 63, 94, 0.35));
+}
+
+.feed-card-cover {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: var(--radius-sm, 8px);
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 10px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.feed-card-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.feed-card:hover .feed-card-cover img {
+    transform: scale(1.05);
+}
+
+.feed-play-btn {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--color-primary, var(--primary, #f43f5e));
+    color: var(--color-primary-fg, #ffffff);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px var(--color-primary-glow, rgba(244, 63, 94, 0.35));
+    opacity: 0;
+    transform: scale(0.8) translateY(6px);
+    transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease;
+    z-index: 2;
+}
+
+.feed-card:hover .feed-play-btn {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+.feed-play-btn:hover {
+    transform: scale(1.12);
+    box-shadow: 0 6px 20px rgba(var(--color-primary-rgb, 244, 63, 94), 0.6);
+}
+
+.feed-card-title {
+    font-family: var(--font-display, 'Sora', sans-serif);
+    font-size: var(--font-size-sm, 13px);
+    font-weight: 700;
+    color: var(--color-text-main, #ffffff);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+
+.feed-card-sub {
+    font-family: var(--font-body, 'DM Sans', sans-serif);
+    font-size: var(--font-size-xs, 11px);
+    color: var(--color-text-muted, rgba(255, 245, 247, 0.65));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ─── 5. Artist Fallback Disc & Round Cards ─── */
+.feed-card.artist-card .feed-card-cover {
+    border-radius: var(--radius-full, 9999px);
+}
+
+/* Artist avatar fallback: deterministic gradient disc + first letter
+   (no artist-photo source exists in the local database).
+   Restored: lost in the CSS component split (styles.old.css:798-816). */
+.artist-avatar-fallback {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-full, 9999px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+}
+.artist-avatar-fallback span {
+    font-size: 42px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.92);
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    letter-spacing: 0.02em;
+    line-height: 1;
+}
+
+/* ─── Playlist cover collage (home tab cards) ───
+   Restored: lost in the CSS component split (styles.old.css:778-796). */
+.pl-collage {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.25);
+}
+.pl-collage-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.pl-collage-2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+.pl-collage-3, .pl-collage-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.pl-collage-3 .pl-collage-cell:first-child { grid-column: 1 / -1; }
+.pl-collage-cell { overflow: hidden; }
+.pl-collage-cell img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.artist-fallback-disc {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius-full, 9999px);
+    background: radial-gradient(circle, #2a1527 0%, #120815 70%, #080309 100%);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.8);
+}
+
+.artist-disc-grooves {
+    position: absolute;
+    inset: 6px;
+    border-radius: 50%;
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    pointer-events: none;
+}
+
+.artist-disc-center {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--color-primary, var(--primary, #f43f5e));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-primary-fg, #ffffff);
+    font-family: var(--font-display, 'Sora', sans-serif);
+    font-weight: 700;
+    font-size: var(--font-size-sm, 13px);
+    box-shadow: 0 0 10px var(--color-primary-glow, rgba(244, 63, 94, 0.35));
+}
+
+/* ─── 6. Playlist Cover Collage Grid (2x2) ─── */
+.playlist-collage-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    width: 100%;
+    height: 100%;
+}
+
+.playlist-collage-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* ─── 7. NeDotify Wrapped Analytics Dashboard ─── */
+.wrapped-dashboard {
+    background: linear-gradient(135deg, rgba(var(--color-primary-rgb, 244, 63, 94), 0.12), rgba(168, 85, 247, 0.08), rgba(0, 0, 0, 0.3));
+    border: 1px solid var(--color-border-glow, rgba(var(--color-primary-rgb, 244, 63, 94), 0.45));
+    border-radius: var(--radius-lg, 16px);
+    padding: var(--space-xl, 32px);
+    margin-bottom: var(--space-2xl, 48px);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 16px 40px var(--color-shadow, rgba(0, 0, 0, 0.65));
+}
+
+.wrapped-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-lg, 24px);
+}
+
+.wrapped-hero-title {
+    font-family: var(--font-display, 'Sora', sans-serif);
+    font-size: var(--font-size-2xl, 34px);
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--color-primary, #f43f5e), var(--color-accent-amber, #fb923c));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0;
+}
+
+.wrapped-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-md, 16px);
+    margin-bottom: var(--space-lg, 24px);
+}
+
+.wrapped-card {
+    background: color-mix(in srgb, var(--color-surface, rgba(255, 255, 255, 0.035)) calc(var(--app-bg-opacity, 1) * 90%), transparent);
+    border: 1px solid var(--color-border, rgba(244, 63, 94, 0.12));
+    border-radius: var(--radius-md, 12px);
+    padding: var(--space-md, 16px);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.wrapped-card-title {
+    font-family: var(--font-body, 'DM Sans', sans-serif);
+    font-size: var(--font-size-xs, 11px);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted, rgba(255, 245, 247, 0.65));
+}
+
+.wrapped-stat-big {
+    font-family: var(--font-display, 'Sora', sans-serif);
+    font-size: var(--font-size-xl, 26px);
+    font-weight: 700;
+    color: var(--color-text-main, #ffffff);
+}
+
+.wrapped-chart-container {
+    width: 100%;
+    height: 180px;
+    margin-top: var(--space-md, 16px);
+}
+
+#wrapped-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+/* ─── 8. Skeleton Loaders & Error/Retry States ─── */
+.skeleton-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-md, 12px);
+    position: relative;
+    overflow: hidden;
+}
+
+.skeleton-feed-card {
+    flex: 0 0 170px;
+    width: 170px;
+    height: 220px;
+}
+
+.skeleton-shimmer {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+    background-size: 200% 100%;
+    animation: ui-shimmer 1.8s infinite linear;
+}
+
+.feed-error-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xl, 32px);
+    gap: var(--space-md, 16px);
+    color: var(--color-text-muted, rgba(255, 245, 247, 0.65));
+}
+
+.feed-retry-btn {
+    padding: 8px 20px;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--color-primary, var(--primary, #f43f5e));
+    color: var(--color-primary-fg, #ffffff);
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: var(--font-size-sm, 13px);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.feed-retry-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px var(--color-primary-glow, rgba(244, 63, 94, 0.35));
+}

@@ -1,0 +1,73 @@
+# Secrets & Env
+.env
+*.env.local
+secrets/
+
+# Python & Virtual Environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Builds & Binaries
+dist/
+build/
+*.exe
+*.zip
+*.pkg
+*.msi
+*.spec
+
+# Database & Runtime files
+*.db
+*.db-shm
+*.db-wal
+scratch/
+restored_sources/
+backups/
+
+# Tests, Audits, Benchmarks & Reports
+tests/
+run_tests.py
+.test_runs/
+.jscheck/
+.audit/
+.audit_test_out.txt
+benchmarks/
+reports/
+scripts/
+.vite/
+user_prompts*.md
+out*.txt
+prompt*.txt
+*.log
+
+# Extraction artifacts (DO NOT COMMIT)
+NeDotify.exe_extracted/
+AURA_Music.exe_extracted/
+pyinstxtractor.py
+search_transcript.py
+extract_license.py
+api_dis.txt
+transcript_output.txt
+transcript_search.txt
+git_phase0.py
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Agent internal files
+.agents/
+
+# Cached album art (generated at runtime)
+ui/web_new/covers/
+ui/web_new_v2/covers/
+*.old.*
+*.old

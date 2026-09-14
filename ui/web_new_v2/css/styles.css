@@ -1,0 +1,13 @@
+/* ==========================================================================
+   NeDotify v2 — Modular CSS Architecture Index
+   Original monolithic stylesheet has been partitioned into isolated components.
+   Backup of original monolithic file preserved at: css/styles.old.css
+   ========================================================================== */
+
+@import "tokens.css";
+@import "components/base.css";
+@import "components/player-bar.css";
+@import "components/lyrics.css";
+@import "components/home-view.css";
+@import "components/track-table.css";
+@import "themes.css";

@@ -1,0 +1,614 @@
+"""
+NeDotify / AURA Music - Last.fm Service Wrapper
+Provides Last.fm open API querying with API key rotation, multi-TTL caching,
+SQLite response caching, rate-limiting resilience, and graceful offline/error handling.
+"""
+
+import os
+import json
+import time
+import sqlite3
+import logging
+import threading
+import requests
+from typing import Callable, Optional, List, Dict, Any
+from services.base_service import BaseMusicService
+
+logger = logging.getLogger(__name__)
+
+# No API key ships with the application. Keys are resolved at runtime from
+# (1) the LASTFM_API_KEY environment variable, then (2) settings 'auth'/'lastfm_api_key'.
+# Both accept several comma/semicolon separated keys, which keeps the rotation and
+# _mark_bad_key machinery useful for users who supply more than one.
+API_KEYS: List[str] = []
+
+RECOMMENDATION_TTL = 604800
+CHART_TTL = 86400
+
+
+def _split_keys(raw: Any) -> List[str]:
+    """Split a raw env/settings value into a list of non-empty API keys."""
+    if not raw:
+        return []
+    if isinstance(raw, (list, tuple, set)):
+        candidates = [str(item) for item in raw]
+    else:
+        candidates = str(raw).replace(';', ',').split(',')
+    return [c.strip() for c in candidates if c and c.strip()]
+
+
+class LastFmArtistHandler:
+    """Namespace wrapper for artist queries."""
+
+    def __init__(self, service: 'LastFMService'):
+        self._service = service
+
+    def getSimilar(self, artist: str, limit: int = 10) -> List[Dict]:
+        return self._service.artist_get_similar(artist, limit=limit)
+
+    def getTopTracks(self, artist: str, limit: int = 10) -> List[Dict]:
+        return self._service.artist_get_top_tracks(artist, limit=limit)
+
+    def getTopTags(self, artist: str) -> List[Dict]:
+        return self._service.artist_get_top_tags(artist)
+
+
+class LastFmTrackHandler:
+    """Namespace wrapper for track queries."""
+
+    def __init__(self, service: 'LastFMService'):
+        self._service = service
+
+    def getSimilar(self, artist: str, track: str, limit: int = 10) -> List[Dict]:
+        return self._service.track_get_similar(artist, track, limit=limit)
+
+
+class LastFmChartHandler:
+    """Namespace wrapper for chart queries."""
+
+    def __init__(self, service: 'LastFMService'):
+        self._service = service
+
+    def getTopTracks(self, limit: int = 20) -> List[Dict]:
+        return self._service.chart_get_top_tracks(limit=limit)
+
+    def getTopArtists(self, limit: int = 20) -> List[Dict]:
+        return self._service.chart_get_top_artists(limit=limit)
+
+
+class LastFmUserHandler:
+    """Namespace wrapper for user scrobble queries."""
+
+    def __init__(self, service: 'LastFMService'):
+        self._service = service
+
+    def getRecentTracks(self, user: str, limit: int = 10) -> List[Dict]:
+        return self._service.user_get_recent_tracks(user, limit=limit)
+
+    def getTopArtists(self, user: str, limit: int = 10) -> List[Dict]:
+        return self._service.user_get_top_artists(user, limit=limit)
+
+
+class LastFMService(BaseMusicService):
+    """Last.fm API Client with key rotation, SQLite caching, and rate limiting resilience."""
+
+    BASE_URL = 'https://ws.audioscrobbler.com/2.0/'
+
+    def __init__(self, settings=None):
+        super().__init__()
+        self.settings = settings
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self._key_index = 0
+        self._key_lock = threading.Lock()
+        self._bad_keys = set()
+
+        for key in self._resolve_api_keys():
+            if key not in API_KEYS:
+                API_KEYS.append(key)
+
+        if not API_KEYS:
+            self.logger.info(
+                'Last.fm API key not configured — set the LASTFM_API_KEY environment '
+                'variable or auth.lastfm_api_key in settings. Last.fm features are disabled.'
+            )
+
+        self._cache = {}
+        self._cache_lock = threading.Lock()
+
+        self._db_path = self._init_sqlite_cache_path()
+        self._init_sqlite_cache_db()
+
+        self.artist = LastFmArtistHandler(self)
+        self.track = LastFmTrackHandler(self)
+        self.chart = LastFmChartHandler(self)
+        self.user = LastFmUserHandler(self)
+
+        self._session_local = threading.local()
+
+        # M-7: token-bucket rate limiter (Condition-based, never time.sleep in the sync path)
+        self._rate_capacity = 5.0
+        self._rate_tokens = self._rate_capacity
+        self._rate_last_refill = time.time()
+        self._rate_lock = threading.Condition()
+
+    def _resolve_api_keys(self) -> List[str]:
+        """Collect API keys at runtime: env var first, then user settings. Never raises."""
+        keys: List[str] = []
+        try:
+            keys.extend(_split_keys(os.getenv('LASTFM_API_KEY')))
+        except Exception as e:
+            self.logger.debug(f'Could not read LASTFM_API_KEY from the environment: {e}', exc_info=True)
+        if self.settings is not None:
+            try:
+                keys.extend(_split_keys(self.settings.get('auth', 'lastfm_api_key', '')))
+            except Exception as e:
+                self.logger.debug(f'Could not read auth.lastfm_api_key from settings: {e}', exc_info=True)
+        unique: List[str] = []
+        for key in keys:
+            if key not in unique:
+                unique.append(key)
+        return unique
+
+    def _get_session(self) -> requests.Session:
+        """Per-thread requests.Session (M-7): Sessions are not thread-safe."""
+        session = getattr(self._session_local, 'session', None)
+        if session is None:
+            session = requests.Session()
+            session.headers.update({'User-Agent': 'AURA-Music/1.0 (RecommendationEngine)'})
+            self._session_local.session = session
+        return session
+
+    @property
+    def _session(self) -> requests.Session:
+        """Backward-compatible alias: the calling thread's session (M-7)."""
+        return self._get_session()
+
+    def _acquire_token(self) -> None:
+        """Token-bucket rate limiter: waits via Condition, never time.sleep (M-7)."""
+        with self._rate_lock:
+            while True:
+                now = time.time()
+                elapsed = now - self._rate_last_refill
+                self._rate_tokens = min(self._rate_capacity, self._rate_tokens + elapsed * 2.0)
+                self._rate_last_refill = now
+                if self._rate_tokens >= 1.0:
+                    self._rate_tokens -= 1.0
+                    return
+                wait_for = (1.0 - self._rate_tokens) / 2.0
+                self._rate_lock.wait(timeout=min(wait_for, 2.0))
+
+    def _init_sqlite_cache_path(self) -> str:
+        base_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'cache')
+        try:
+            os.makedirs(base_dir, exist_ok=True)
+            return os.path.join(base_dir, 'lastfm_cache.db')
+        except Exception as e:
+            self.logger.warning(f'Cannot create Last.fm cache dir {base_dir} ({e}); using an in-memory cache')
+            return ':memory:'
+
+    def _init_sqlite_cache_db(self):
+        try:
+            with sqlite3.connect(self._db_path) as conn:
+                conn.execute('''
+                    CREATE TABLE IF NOT EXISTS lastfm_response_cache (
+                        cache_key TEXT PRIMARY KEY,
+                        json_data TEXT,
+                        timestamp REAL,
+                        ttl REAL
+                    )
+                ''')
+                conn.commit()
+        except Exception as e:
+            self.logger.warning(f'Failed to initialize Last.fm SQLite cache DB: {e}')
+
+    @property
+    def available(self) -> bool:
+        """True only when at least one usable (non-blocked) API key is configured."""
+        with self._key_lock:
+            return any(k not in self._bad_keys for k in API_KEYS)
+
+    def _mark_bad_key(self, api_key: str):
+        with self._key_lock:
+            if api_key and api_key not in self._bad_keys:
+                self._bad_keys.add(api_key)
+                self.logger.warning(f'Disabling invalid/blocked Last.fm API key: {api_key[:6]}...')
+
+    def _get_next_api_key(self) -> str:
+        with self._key_lock:
+            valid_keys = [k for k in API_KEYS if k not in self._bad_keys]
+            if valid_keys:
+                key = valid_keys[self._key_index % len(valid_keys)]
+                self._key_index = (self._key_index + 1) % len(valid_keys)
+                return key
+            if API_KEYS:
+                return API_KEYS[0]
+            return ''
+
+    def _get_cached(self, cache_key: str) -> Optional[Any]:
+        with self._cache_lock:
+            entry = self._cache.get(cache_key)
+            if entry and time.time() - entry['ts'] <= entry['ttl']:
+                return entry['data']
+        conn = None
+        try:
+            conn = sqlite3.connect(self._db_path, timeout=5.0)
+            cursor = conn.cursor()
+            cursor.execute('SELECT json_data, timestamp, ttl FROM lastfm_response_cache WHERE cache_key = ?',
+                           (cache_key,))
+            row = cursor.fetchone()
+            if row:
+                json_str, ts, ttl = row
+                if time.time() - ts <= ttl:
+                    data = json.loads(json_str)
+                    with self._cache_lock:
+                        if len(self._cache) >= 500:
+                            try:
+                                self._cache.pop(next(iter(self._cache)))
+                            except Exception:
+                                pass
+                        self._cache[cache_key] = {'data': data, 'ts': ts, 'ttl': ttl}
+                    return data
+        except Exception as e:
+            self.logger.debug(f'SQLite cache lookup error: {e}')
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        return None
+
+    def _get_stale_cache(self, cache_key: str) -> Optional[Any]:
+        with self._cache_lock:
+            entry = self._cache.get(cache_key)
+            if entry:
+                return entry['data']
+        conn = None
+        try:
+            conn = sqlite3.connect(self._db_path, timeout=5.0)
+            cursor = conn.cursor()
+            cursor.execute('SELECT json_data FROM lastfm_response_cache WHERE cache_key = ?',
+                           (cache_key,))
+            row = cursor.fetchone()
+            if row:
+                return json.loads(row[0])
+        except Exception as e:
+            self.logger.debug(f'Stale SQLite cache lookup failed for {cache_key}: {e}', exc_info=True)
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        return None
+
+    def _set_cache(self, cache_key: str, data: Any, ttl: float):
+        now = time.time()
+        with self._cache_lock:
+            if len(self._cache) >= 500:
+                try:
+                    self._cache.pop(next(iter(self._cache)))
+                except Exception:
+                    pass
+            self._cache[cache_key] = {'data': data, 'ts': now, 'ttl': ttl}
+        conn = None
+        try:
+            conn = sqlite3.connect(self._db_path, timeout=5.0)
+            with conn:
+                conn.execute('INSERT OR REPLACE INTO lastfm_response_cache (cache_key, json_data, timestamp, ttl) VALUES (?, ?, ?, ?)',
+                             (cache_key, json.dumps(data), now, ttl))
+        except Exception as e:
+            self.logger.debug(f'SQLite cache store error: {e}')
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def _api_request(self, method: str, params: dict, ttl: float) -> Optional[dict]:
+        cache_key = f'{method}:' + '&'.join(f'{k}={v}' for k, v in sorted(params.items()))
+        cached = self._get_cached(cache_key)
+        if cached is not None:
+            return cached
+
+        if not self.available:
+            # No key configured: skip the network entirely (init already logged this once).
+            self.logger.debug(f'Skipping Last.fm {method}: no usable API key configured')
+            return self._get_stale_cache(cache_key)
+
+        attempts = len(API_KEYS)
+        for _ in range(attempts):
+            api_key = self._get_next_api_key()
+            if not api_key or api_key in self._bad_keys:
+                continue
+
+            req_params = {'method': method, 'api_key': api_key, 'format': 'json'}
+            req_params.update(params)
+            self._acquire_token()
+            try:
+                resp = self._get_session().get(self.BASE_URL, params=req_params, timeout=5.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if 'error' in data:
+                        err_code = data.get('error')
+                        if err_code in (10, 26):
+                            self.logger.warning(f'Last.fm API key rejected (code {err_code}): {data.get("message")}')
+                            self._mark_bad_key(api_key)
+                            continue
+                        self.logger.warning(f'Last.fm API error {err_code}: {data.get("message")}. Rotating key.')
+                        continue
+                    self._set_cache(cache_key, data, ttl)
+                    return data
+                if resp.status_code in (401, 403):
+                    self.logger.warning(f'Last.fm HTTP {resp.status_code} (Forbidden/Unauthorized). Disabling key.')
+                    self._mark_bad_key(api_key)
+                    continue
+                if resp.status_code in (429, 503):
+                    self.logger.warning(f'Last.fm HTTP {resp.status_code}. Rate limit backoff & rotating API key.')
+                    continue
+                self.logger.warning(f'Last.fm HTTP {resp.status_code}: {resp.text}')
+                continue
+            except Exception as e:
+                self.logger.warning(f'Last.fm request failed: {e}')
+                break
+
+        stale = self._get_stale_cache(cache_key)
+        if stale is not None:
+            self.logger.info(f'Using stale cached response for {method}')
+            return stale
+        return None
+
+    def artist_get_similar(self, artist: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
+        def _task():
+            data = self._api_request('artist.getsimilar', {'artist': artist, 'limit': limit}, RECOMMENDATION_TTL)
+            results = []
+            if data and 'similarartists' in data:
+                artists_raw = data['similarartists'].get('artist', [])
+                if isinstance(artists_raw, dict):
+                    artists_raw = [artists_raw]
+                for a in artists_raw[:limit]:
+                    images = a.get('image', [])
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
+                    match_val = float(a.get('match', 0)) if a.get('match') else 0.0
+                    results.append({
+                        'name': a.get('name', ''),
+                        'match': match_val,
+                        'url': a.get('url', ''),
+                        'image': img_url,
+                        'mbid': a.get('mbid', ''),
+                    })
+            if callback:
+                callback(results)
+            return results
+
+        if callback:
+            self._executor.submit(_task)
+            return []
+        return _task()
+
+    def artist_get_top_tracks(self, artist: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
+        def _task():
+            data = self._api_request('artist.gettoptracks', {'artist': artist, 'limit': limit}, RECOMMENDATION_TTL)
+            results = []
+            if data and 'toptracks' in data:
+                tracks_raw = data['toptracks'].get('track', [])
+                if isinstance(tracks_raw, dict):
+                    tracks_raw = [tracks_raw]
+                for t in tracks_raw[:limit]:
+                    images = t.get('image', [])
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
+                    if isinstance(t.get('artist'), dict):
+                        artist_name = t.get('artist', {}).get('name', artist)
+                    else:
+                        artist_name = artist
+                    results.append({
+                        'name': t.get('name', ''),
+                        'artist': artist_name,
+                        'playcount': int(t.get('playcount', 0)) if t.get('playcount') else 0,
+                        'listeners': int(t.get('listeners', 0)) if t.get('listeners') else 0,
+                        'url': t.get('url', ''),
+                        'image': img_url,
+                    })
+            if callback:
+                callback(results)
+            return results
+
+        if callback:
+            self._executor.submit(_task)
+            return []
+        return _task()
+
+    def artist_get_top_tags(self, artist: str, callback: Callable = None) -> List[Dict]:
+        def _task():
+            data = self._api_request('artist.gettoptags', {'artist': artist}, RECOMMENDATION_TTL)
+            results = []
+            if data and 'toptags' in data:
+                tags_raw = data['toptags'].get('tag', [])
+                if isinstance(tags_raw, dict):
+                    tags_raw = [tags_raw]
+                for tag in tags_raw:
+                    results.append({
+                        'name': tag.get('name', ''),
+                        'count': int(tag.get('count', 0)) if tag.get('count') else 0,
+                        'url': tag.get('url', ''),
+                    })
+            if callback:
+                callback(results)
+            return results
+
+        if callback:
+            self._executor.submit(_task)
+            return []
+        return _task()
+
+    def track_get_similar(self, artist: str, track: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
+        def _task():
+            data = self._api_request('track.getsimilar', {'artist': artist, 'track': track, 'limit': limit},
+                                     RECOMMENDATION_TTL)
+            results = []
+            if data and 'similartracks' in data:
+                tracks_raw = data['similartracks'].get('track', [])
+                if isinstance(tracks_raw, dict):
+                    tracks_raw = [tracks_raw]
+                for t in tracks_raw[:limit]:
+                    images = t.get('image', [])
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
+                    if isinstance(t.get('artist'), dict):
+                        artist_name = t.get('artist', {}).get('name', '')
+                    else:
+                        artist_name = ''
+                    match_val = float(t.get('match', 0)) if t.get('match') else 0.0
+                    duration = int(t.get('duration', 0)) if t.get('duration') else 0
+                    results.append({
+                        'name': t.get('name', ''),
+                        'artist': artist_name,
+                        'match': match_val,
+                        'duration': duration,
+                        'url': t.get('url', ''),
+                        'image': img_url,
+                    })
+            if callback:
+                callback(results)
+            return results
+
+        if callback:
+            self._executor.submit(_task)
+            return []
+        return _task()
+
+    def chart_get_top_tracks(self, limit: int = 20, callback: Callable = None) -> List[Dict]:
+        def _task():
+            data = self._api_request('chart.gettoptracks', {'limit': limit}, CHART_TTL)
+            results = []
+            if data and 'tracks' in data:
+                tracks_raw = data['tracks'].get('track', [])
+                if isinstance(tracks_raw, dict):
+                    tracks_raw = [tracks_raw]
+                for t in tracks_raw[:limit]:
+                    images = t.get('image', [])
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
+                    if isinstance(t.get('artist'), dict):
+                        artist_name = t.get('artist', {}).get('name', '')
+                    else:
+                        artist_name = ''
+                    results.append({
+                        'name': t.get('name', ''),
+                        'artist': artist_name,
+                        'playcount': int(t.get('playcount', 0)) if t.get('playcount') else 0,
+                        'listeners': int(t.get('listeners', 0)) if t.get('listeners') else 0,
+                        'url': t.get('url', ''),
+                        'image': img_url,
+                    })
+            if callback:
+                callback(results)
+            return results
+
+        if callback:
+            self._executor.submit(_task)
+            return []
+        return _task()
+
+    def chart_get_top_artists(self, limit: int = 20, callback: Callable = None) -> List[Dict]:
+        def _task():
+            data = self._api_request('chart.gettopartists', {'limit': limit}, CHART_TTL)
+            results = []
+            if data and 'artists' in data:
+                artists_raw = data['artists'].get('artist', [])
+                if isinstance(artists_raw, dict):
+                    artists_raw = [artists_raw]
+                for a in artists_raw[:limit]:
+                    images = a.get('image', [])
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
+                    results.append({
+                        'name': a.get('name', ''),
+                        'playcount': int(a.get('playcount', 0)) if a.get('playcount') else 0,
+                        'listeners': int(a.get('listeners', 0)) if a.get('listeners') else 0,
+                        'url': a.get('url', ''),
+                        'image': img_url,
+                    })
+            if callback:
+                callback(results)
+            return results
+
+        if callback:
+            self._executor.submit(_task)
+            return []
+        return _task()
+
+    def user_get_recent_tracks(self, user: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
+        def _task():
+            data = self._api_request('user.getrecenttracks', {'user': user, 'limit': limit}, CHART_TTL)
+            results = []
+            if data and 'recenttracks' in data:
+                tracks_raw = data['recenttracks'].get('track', [])
+                if isinstance(tracks_raw, dict):
+                    tracks_raw = [tracks_raw]
+                for t in tracks_raw[:limit]:
+                    images = t.get('image', [])
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
+                    if isinstance(t.get('artist'), dict):
+                        artist_name = t.get('artist', {}).get('#text', '')
+                    else:
+                        artist_name = str(t.get('artist', ''))
+                    results.append({
+                        'name': t.get('name', ''),
+                        'artist': artist_name,
+                        'url': t.get('url', ''),
+                        'image': img_url,
+                    })
+            if callback:
+                callback(results)
+            return results
+
+        if callback:
+            self._executor.submit(_task)
+            return []
+        return _task()
+
+    def user_get_top_artists(self, user: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
+        def _task():
+            data = self._api_request('user.gettopartists', {'user': user, 'limit': limit}, RECOMMENDATION_TTL)
+            results = []
+            if data and 'topartists' in data:
+                artists_raw = data['topartists'].get('artist', [])
+                if isinstance(artists_raw, dict):
+                    artists_raw = [artists_raw]
+                for a in artists_raw[:limit]:
+                    images = a.get('image', [])
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
+                    results.append({
+                        'name': a.get('name', ''),
+                        'playcount': int(a.get('playcount', 0)) if a.get('playcount') else 0,
+                        'url': a.get('url', ''),
+                        'image': img_url,
+                    })
+            if callback:
+                callback(results)
+            return results
+
+        if callback:
+            self._executor.submit(_task)
+            return []
+        return _task()
