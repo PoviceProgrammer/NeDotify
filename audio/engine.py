@@ -165,6 +165,7 @@ class AudioEngine:
         """Full network resolution cascade: source service -> search fallbacks (C-3)."""
         if not track:
             return None
+        track = track.copy()
         source = track.get("source")
         source_id = track.get("source_id") or track.get("id")
         if not source:
@@ -191,8 +192,10 @@ class AudioEngine:
                             dur = info.get("duration", 0)
                             if dur > 0 and track.get("duration", 0) <= 0:
                                 try:
-                                    self.app_core.db.update_track(track["id"], duration=dur)
-                                    track["duration"] = dur
+                                    if self.queue.current_track and self.queue.current_track.get("id") == track.get("id"):
+                                        self.app_core.db.update_track(track["id"], duration=dur)
+                                        self.queue.current_track["duration"] = dur
+                                        track["duration"] = dur
                                 except Exception as dbe:
                                     logger.error(f"Failed to update duration in resolve: {dbe}")
                     finally:
@@ -416,8 +419,10 @@ class AudioEngine:
                         dur = int(info.get("duration", 0) / 1000) if info.get("duration") else 0
                         if dur > 0 and track.get("duration", 0) <= 0:
                             try:
-                                self.app_core.db.update_track(track["id"], duration=dur)
-                                track["duration"] = dur
+                                if self.queue.current_track and self.queue.current_track.get("id") == track.get("id"):
+                                    self.app_core.db.update_track(track["id"], duration=dur)
+                                    self.queue.current_track["duration"] = dur
+                                    track["duration"] = dur
                             except Exception as dbe:
                                 logger.error(f"Failed to update duration in resolve: {dbe}")
                 finally:
