@@ -291,11 +291,13 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         """
         expected = getattr(self.server, 'auth_token', '') or ''
         if not expected:
-            return True  # token generation failed; fail open rather than break playback
+            return False
         supplied = (query_params.get(AUTH_PARAM) or [''])[0]
         # Legacy alias some frontend helpers still send.
         if not supplied:
             supplied = (query_params.get('auth_token') or [''])[0]
+        if not supplied:
+            return False
         return hmac.compare_digest(str(supplied), str(expected))
 
     def _reject_unauthorized(self):
@@ -395,6 +397,12 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             return None
 
         if parsed_path.path in ('/__aura_eval', '/api/control/eval'):
+            is_debug = os.environ.get('NEDOTIFY_DEBUG') == '1'
+            if not is_debug and hasattr(self.server.app_core, 'settings'):
+                is_debug = self.server.app_core.settings.get('debug')
+            if not is_debug:
+                self.send_error(403, "Endpoint disabled")
+                return None
             try:
                 length = int(self.headers.get('Content-Length', 0))
                 code = self.rfile.read(length).decode('utf-8')
@@ -761,67 +769,8 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         status_code = getattr(resp, 'status', getattr(resp, 'code', 200))
         resp_headers = resp.getheaders() if hasattr(resp, 'getheaders') else resp.info().items()
 
-        # Emulate 206 Partial Content if upstream gave 200 OK when range_start > 0 was requested
-        emulate_206 = (status_code == 200 and has_range_request and range_start > 0)
-
-        if emulate_206:
-            upstream_cl = None
-            upstream_ct = 'audio/mpeg'
-            for h_name, h_val in resp_headers:
-                if h_name.lower() == 'content-length':
-                    try:
-                        upstream_cl = int(h_val)
-                    except (ValueError, TypeError):
-                        pass
-                elif h_name.lower() == 'content-type':
-                    upstream_ct = h_val
-
-            total_len = upstream_cl
-            end_byte = min(range_end, total_len - 1) if (range_end is not None and total_len is not None) else (total_len - 1 if total_len is not None else None)
-            part_len = (end_byte - range_start + 1) if end_byte is not None else (total_len - range_start if total_len is not None else None)
-
-            self.send_response(206)
-            self.send_header('Content-Type', upstream_ct)
-            if end_byte is not None and total_len is not None:
-                self.send_header('Content-Range', f'bytes {range_start}-{end_byte}/{total_len}')
-            elif total_len is not None:
-                self.send_header('Content-Range', f'bytes {range_start}-{total_len - 1}/{total_len}')
-            if part_len is not None:
-                self.send_header('Content-Length', str(part_len))
-            self.send_header('Accept-Ranges', 'bytes')
-            self._send_cors_headers()
-            self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization, X-Requested-With')
-            self.send_header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges')
-            self.end_headers()
-
-            try:
-                # Discard bytes before range_start
-                bytes_to_skip = range_start
-                while bytes_to_skip > 0:
-                    skip_chunk = resp.read(min(bytes_to_skip, 65536))
-                    if not skip_chunk:
-                        break
-                    bytes_to_skip -= len(skip_chunk)
-
-                # Stream remainder
-                bytes_sent = 0
-                while part_len is None or bytes_sent < part_len:
-                    read_size = 32768 if part_len is None else min(32768, part_len - bytes_sent)
-                    chunk = resp.read(read_size)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
-                    bytes_sent += len(chunk)
-            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
-                pass
-            finally:
-                if hasattr(resp, 'close'):
-                    try:
-                        resp.close()
-                    except Exception:
-                        pass
-            return None
+        # Upstream gave 200 OK instead of 206 Partial Content.
+        # We pass it through directly without emulating Range to avoid tight loop CPU burns.
 
         # Standard 200 / 206 response
         self.send_response(status_code)
