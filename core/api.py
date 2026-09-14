@@ -821,11 +821,6 @@ class AppApi:
         """Report playback state update (playing, paused, stopped)."""
         if state == "playing":
             self.maybe_log_history()
-            try:
-                import threading
-                threading.Thread(target=self._ensure_sink_inputs_unmuted, daemon=True).start()
-            except Exception:
-                pass
         elif state == "stopped":
             # A manual stop ends the playback session: replaying the same track
             # afterwards counts as a new play.
@@ -891,14 +886,6 @@ class AppApi:
                     if t.get("track_id"):
                         t["id"] = t["track_id"]
                     self._enrich_track_lufs(t)
-
-        try:
-            import threading
-            threading.Timer(0.1, self._ensure_sink_inputs_unmuted).start()
-            threading.Timer(0.4, self._ensure_sink_inputs_unmuted).start()
-            threading.Timer(1.0, self._ensure_sink_inputs_unmuted).start()
-        except Exception:
-            pass
 
         # NOTE: listening history is intentionally NOT written here. play_track()
         # is also invoked by frontend stream-error retries and background
@@ -1413,13 +1400,6 @@ class AppApi:
                 except Exception:
                     pass
 
-            if device_name:
-                try:
-                    subprocess.run(["pactl", "set-sink-mute", device_name, "0"], timeout=1)
-                    subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"], timeout=1)
-                except Exception:
-                    pass
-
             inputs_res = subprocess.run(["pactl", "list", "sink-inputs"], capture_output=True, text=True, timeout=2)
             if inputs_res.returncode == 0:
                 current_id = None
@@ -1430,8 +1410,6 @@ class AppApi:
                         if current_id and is_target_stream:
                             if device_name:
                                 subprocess.run(["pactl", "move-sink-input", current_id, device_name], timeout=1)
-                            subprocess.run(["pactl", "set-sink-input-mute", current_id, "0"], timeout=1)
-                            subprocess.run(["pactl", "set-sink-input-volume", current_id, "100%"], timeout=1)
                         current_id = line.split("#")[1].strip()
                         is_target_stream = False
                     elif current_id:
@@ -1445,8 +1423,6 @@ class AppApi:
                 if current_id and is_target_stream:
                     if device_name:
                         subprocess.run(["pactl", "move-sink-input", current_id, device_name], timeout=1)
-                    subprocess.run(["pactl", "set-sink-input-mute", current_id, "0"], timeout=1)
-                    subprocess.run(["pactl", "set-sink-input-volume", current_id, "100%"], timeout=1)
         except Exception:
             pass
 
