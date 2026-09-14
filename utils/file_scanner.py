@@ -61,44 +61,52 @@ class FileScanner:
 
         def _scan():
             self._scanning = True
-            files = []
-
-            # Collect all audio files
-            if recursive:
-                for root, dirs, filenames in os.walk(folder_path):
-                    for fname in filenames:
-                        fpath = os.path.join(root, fname)
-                        if is_audio_file(fpath):
+            try:
+                files = []
+    
+                # Collect all audio files
+                if recursive:
+                    for root, dirs, filenames in os.walk(folder_path):
+                        for fname in filenames:
+                            fpath = os.path.join(root, fname)
+                            if is_audio_file(fpath):
+                                files.append(fpath)
+                else:
+                    for fname in os.listdir(folder_path):
+                        fpath = os.path.join(folder_path, fname)
+                        if os.path.isfile(fpath) and is_audio_file(fpath):
                             files.append(fpath)
-            else:
-                for fname in os.listdir(folder_path):
-                    fpath = os.path.join(folder_path, fname)
-                    if os.path.isfile(fpath) and is_audio_file(fpath):
-                        files.append(fpath)
-
-            total = len(files)
-            added = []
-
-            for i, filepath in enumerate(files):
-                if not self._scanning:
-                    break
-
-                track = self._import_file(filepath)
-                if track:
-                    added.append(track)
-                    if self._on_file_found:
-                        self._on_file_found(track)
-
-                if self._on_progress:
-                    self._on_progress(i + 1, total, filepath)
-
-            # Update scan folder record
-            self.db.add_scan_folder(folder_path)
-            self.db.update_scan_time(folder_path)
-
-            self._scanning = False
-            if self._on_complete:
-                self._on_complete(added)
+    
+                total = len(files)
+                added = []
+    
+                for i, filepath in enumerate(files):
+                    if not self._scanning:
+                        break
+    
+                    track = self._import_file(filepath)
+                    if track:
+                        added.append(track)
+                        if self._on_file_found:
+                            self._on_file_found(track)
+    
+                    if self._on_progress:
+                        self._on_progress(i + 1, total, filepath)
+    
+                # Update scan folder record
+                if getattr(self, "db", None) is not None:
+                    self.db.add_scan_folder(folder_path)
+                    self.db.update_scan_time(folder_path)
+    
+                self._scanning = False
+                if self._on_complete:
+                    self._on_complete(added)
+            finally:
+                if getattr(self, "db", None) is not None:
+                    try:
+                        self.db.close_thread_connection()
+                    except Exception:
+                        pass
 
         self._scan_thread = threading.Thread(target=_scan, daemon=True)
         self._scan_thread.start()

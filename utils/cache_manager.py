@@ -328,6 +328,11 @@ class CacheManager:
             finally:
                 with self._active_downloads_lock:
                     self._active_downloads.discard(download_id)
+                if getattr(self, "db", None) is not None:
+                    try:
+                        self.db.close_thread_connection()
+                    except Exception:
+                        pass
 
         self._executor.submit(_download_task)
 
