@@ -72,12 +72,11 @@ let audioB = new Audio();
 audioB.crossOrigin = "anonymous";
 let activeAudio = audioA;
 window._getActiveAudio = () => activeAudio;
-let hlsInstance = null;
 
 function loadAudioSource(audioEl, src) {
-    if (hlsInstance) {
-        try { hlsInstance.destroy(); } catch(e) {}
-        hlsInstance = null;
+    if (audioEl._hlsInstance) {
+        try { audioEl._hlsInstance.destroy(); } catch(e) {}
+        audioEl._hlsInstance = null;
     }
 
     // Local file sources must not have crossOrigin attribute in WebKitGTK
@@ -90,12 +89,12 @@ function loadAudioSource(audioEl, src) {
     const isHls = typeof src === 'string' && (src.includes('.m3u8') || src.includes('playlist') || src.includes('hls') || src.includes('format=m3u8'));
     if (isHls && window.Hls && window.Hls.isSupported()) {
         try {
-            hlsInstance = new window.Hls({
+            audioEl._hlsInstance = new window.Hls({
                 enableWorker: true,
                 lowLatencyMode: false
             });
-            hlsInstance.loadSource(src);
-            hlsInstance.attachMedia(audioEl);
+            audioEl._hlsInstance.loadSource(src);
+            audioEl._hlsInstance.attachMedia(audioEl);
             return;
         } catch(he) {
             console.warn('HLS.js initialization error, falling back to direct src:', he);
@@ -175,9 +174,9 @@ export function syncVolume() {
             try { gainNodeB.gain.value = gateB; gainNodeB.gain.setValueAtTime(gateB, now); } catch(e) {}
         }
         try {
-            // Keep masterGainNode output silent so Web Audio does NOT duplicate the native GStreamer stream
-            masterGainNode.gain.value = 0;
-            masterGainNode.gain.setValueAtTime(0, now);
+            const mTargetVol = isMuted ? 0 : (currentVolume / 100);
+            masterGainNode.gain.value = mTargetVol;
+            masterGainNode.gain.setValueAtTime(mTargetVol, now);
         } catch(e) {}
     }
 }
@@ -264,8 +263,7 @@ function initAudioContext() {
         masterGainNode.gain.setValueAtTime(0, audioCtx.currentTime);
 
         analyserNode.connect(masterGainNode);
-        // Do NOT connect masterGainNode to audioCtx.destination: native <audio> outputs via GStreamer,
-        // avoiding duplicate PulseAudio streams, Bluetooth packet collisions, and comb filtering.
+        masterGainNode.connect(audioCtx.destination);
         
         // Connect both audio elements safely with individual gain gates to prevent bleed/phase cancellation
         gainNodeA = audioCtx.createGain();
