@@ -18,6 +18,7 @@ import urllib.parse
 import urllib.error
 import threading
 import logging
+import sys
 
 from core.api import _is_ssrf_safe_url  # mirrors core/api.py:_is_ssrf_safe_url; imported (not copied) — core.api does not import core.proxy, so no import cycle
 _is_safe_url = _is_ssrf_safe_url
@@ -397,9 +398,19 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             return None
 
         if parsed_path.path in ('/__aura_eval', '/api/control/eval'):
-            is_debug = os.environ.get('NEDOTIFY_DEBUG') == '1'
-            if not is_debug and hasattr(self.server.app_core, 'settings'):
-                is_debug = self.server.app_core.settings.get('debug')
+            is_debug = (
+                os.environ.get('AURA_DEBUG') == '1'
+                or os.environ.get('NEDOTIFY_DEBUG') == '1'
+                or any(arg in sys.argv for arg in ('--debug', '--dev'))
+            )
+            if not is_debug and hasattr(self.server.app_core, 'settings') and self.server.app_core.settings:
+                try:
+                    is_debug = bool(
+                        self.server.app_core.settings.get('general', 'debug', False)
+                        or self.server.app_core.settings.get('debug', False)
+                    )
+                except Exception:
+                    is_debug = False
             if not is_debug:
                 self.send_error(403, "Endpoint disabled")
                 return None
@@ -780,7 +791,10 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 self.send_header(header, val)
 
         self._send_cors_headers()
-        self.send_header('Accept-Ranges', 'bytes')
+        if status_code == 206 or any(h.lower() == 'accept-ranges' and v.lower() == 'bytes' for h, v in resp_headers):
+            self.send_header('Accept-Ranges', 'bytes')
+        else:
+            self.send_header('Accept-Ranges', 'none')
         self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization, X-Requested-With')
         self.send_header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges')
