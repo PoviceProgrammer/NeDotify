@@ -138,6 +138,26 @@ class TestPlaylistImports(unittest.TestCase):
             self.assertTrue(res["success"])
             self.assertEqual(res["imported_count"], 1)
 
+    def test_resolve_rejects_ssrf_and_private_network(self):
+        with self.assertRaises(PlaylistImportError):
+            self.service.resolve("http://127.0.0.1:8080/evil.m3u")
+
+        with self.assertRaises(PlaylistImportError):
+            self.service.resolve("http://192.168.1.1/spotify.com/playlist/12345")
+
+        with self.assertRaises(PlaylistImportError):
+            self.service.resolve("http://169.254.169.254/latest/meta-data/playlist/12345")
+
+    def test_safe_redirect_handler_blocks_ssrf(self):
+        from services.playlist_import_service import SafeRedirectHandler
+        handler = SafeRedirectHandler()
+        req = MagicMock()
+        fp = MagicMock()
+        headers = {}
+        with self.assertRaises(PlaylistImportError) as ctx:
+            handler.redirect_request(req, fp, 302, "Found", headers, "http://127.0.0.1:8080/admin")
+        self.assertIn("SSRF Protection", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

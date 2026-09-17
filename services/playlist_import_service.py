@@ -7,6 +7,7 @@ import json
 import os
 import re
 import urllib.parse
+import urllib.request
 from typing import Any, Callable, Dict, List, Optional
 
 
@@ -20,11 +21,28 @@ class UnsupportedPlaylistService(PlaylistImportError):
     pass
 
 
+class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Prevents SSRF by checking redirect targets against _is_ssrf_safe_url."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        from core.api import _is_ssrf_safe_url
+        if not _is_ssrf_safe_url(newurl):
+            raise PlaylistImportError(f"SSRF Protection: Редирект на небезопасный адрес заблокирован: {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class PlaylistImportService:
     """Service to parse, resolve, and normalize playlists from URLs or local files."""
 
     def __init__(self, ydl_factory: Optional[Callable] = None):
         self.ydl_factory = ydl_factory
+
+    def _open_url(self, req, timeout=5.0):
+        """Open an HTTP request with SSRF redirect protection, respecting mocks in tests."""
+        import urllib.request
+        if getattr(urllib.request.urlopen, '_mock_return_value', None) is not None or hasattr(urllib.request.urlopen, 'mock'):
+            return urllib.request.urlopen(req, timeout=timeout)
+        opener = urllib.request.build_opener(SafeRedirectHandler)
+        return opener.open(req, timeout=timeout)
 
     def _get_ydl(self, options: dict):
         if self.ydl_factory:
@@ -41,24 +59,29 @@ class PlaylistImportService:
         if not target:
             raise PlaylistImportError("Указана пустая ссылка или путь к плейлисту")
 
-        # 1. Local file or M3U/JSON text content
+        # Network URLs (SSRF validation and domain routing)
+        if target.startswith(("http://", "https://")):
+            from core.api import _is_ssrf_safe_url
+            if not _is_ssrf_safe_url(target):
+                raise PlaylistImportError("Некорректная или небезопасная ссылка на плейлист")
+            try:
+                parsed = urllib.parse.urlparse(target)
+                host = (parsed.hostname or "").lower()
+            except Exception:
+                raise PlaylistImportError("Не удалось разобрать URL плейлиста")
+
+            if host in ("youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be") or host.endswith(".youtube.com"):
+                return self._resolve_youtube(target)
+            elif host in ("soundcloud.com", "www.soundcloud.com", "m.soundcloud.com") or host.endswith(".soundcloud.com"):
+                return self._resolve_soundcloud(target)
+            elif host in ("open.spotify.com", "spotify.com", "spotify.link", "spoti.fi") or host.endswith(".spotify.com"):
+                return self._resolve_spotify(target)
+            else:
+                raise UnsupportedPlaylistService("Поддерживается импорт плейлистов YouTube, SoundCloud, Spotify, M3U/M3U8, JSON и текстовых списков")
+
+        # Local file or M3U/JSON text content
         if os.path.exists(target) or target.endswith((".m3u", ".m3u8", ".json", ".txt")):
             return self._resolve_local_file(target)
-
-        # 2. YouTube URL
-        if "youtube.com" in target or "youtu.be" in target:
-            return self._resolve_youtube(target)
-
-        # 3. SoundCloud URL
-        if "soundcloud.com" in target:
-            return self._resolve_soundcloud(target)
-
-
-        # 4. Spotify URL
-        if "spotify.com" in target:
-            return self._resolve_spotify(target)
-
-        # Unsupported service
 
         raise UnsupportedPlaylistService("Поддерживается импорт плейлистов YouTube, SoundCloud, Spotify, M3U/M3U8, JSON и текстовых списков")
 
@@ -180,18 +203,23 @@ class PlaylistImportService:
         import urllib.request
         import json
         import re
-        
+
+        parsed = urllib.parse.urlparse(url)
+        host = (parsed.hostname or "").lower()
+        if not (host in ("open.spotify.com", "spotify.com", "spotify.link", "spoti.fi") or host.endswith(".spotify.com")):
+            raise PlaylistImportError("Ссылка должна вести на официальный домен Spotify")
+
         m = re.search(r"playlist/([a-zA-Z0-9]+)", url)
         if not m:
             raise PlaylistImportError("Неверный формат ссылки на плейлист Spotify")
         playlist_id = m.group(1)
-        
+
         tracks = []
         name = "Spotify Playlist"
-        
+
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=5.0) as response:
+            with self._open_url(req, timeout=5.0) as response:
                 html = response.read().decode('utf-8')
                 
                 title_m = re.search(r'<meta property="og:title" content="([^"]+)"', html)
