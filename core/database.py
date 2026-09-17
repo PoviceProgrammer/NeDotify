@@ -10,6 +10,7 @@ import time
 import json
 import logging
 import threading
+import weakref
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -85,7 +86,7 @@ class DatabaseManager:
         self._local = threading.local()
         self._write_lock = threading.RLock()
         self._conns_lock = threading.Lock()
-        self._all_conns = set()
+        self._all_conns = weakref.WeakKeyDictionary()
         if db_path is None:
             app_data = os.path.join(os.path.expanduser("~"), ".nedotify")
             os.makedirs(app_data, exist_ok=True)
@@ -124,7 +125,7 @@ class DatabaseManager:
                     logger.warning("Database PRAGMA %s failed: %s", pragma_name, e)
             self._local.connection = conn
             with self._conns_lock:
-                self._all_conns.add(conn)
+                self._all_conns[threading.current_thread()] = conn
         return self._local.connection
 
     @property
@@ -1545,13 +1546,13 @@ class DatabaseManager:
             except Exception:
                 pass
             with self._conns_lock:
-                self._all_conns.discard(existing)
+                self._all_conns.pop(threading.current_thread(), None)
 
     def close(self) -> None:
         """Close all connections tracked by this database manager instance."""
         self.close_thread_connection()
         with self._conns_lock:
-            for conn in list(self._all_conns):
+            for conn in list(self._all_conns.values()):
                 try:
                     conn.close()
                 except Exception:

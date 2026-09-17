@@ -162,7 +162,7 @@ DEFAULT_SETTINGS = {
         "bg_blur": 0,
         "bg_dim": 30,
         "font_size": 14,
-        "font_family": "system",
+        "font_family": "default",
         "icon_pack": "default",
         "theme_mode": "dark",
         "custom_primary": "",
@@ -200,7 +200,7 @@ DEFAULT_SETTINGS = {
         "particles_count": 30,
         "particles_speed": 1.0,
         "particles_size": 2.0,
-        "particles_shape": "circle",
+        "particles_shape": "dot",
         "cover_visualizer": False,
     },
     "equalizer": {

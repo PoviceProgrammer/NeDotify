@@ -34,34 +34,22 @@ class TestAuditRegressions(unittest.TestCase):
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            # 1. masterGainNode must be connected to audioCtx.destination
-            self.assertIn(
+            # 1. masterGainNode must NOT be connected to audioCtx.destination to avoid duplicates
+            self.assertNotIn(
                 "masterGainNode.connect(audioCtx.destination)",
                 content,
-                f"Missing masterGainNode.connect(audioCtx.destination) in {path}"
+                f"masterGainNode must not be connected to audioCtx.destination in {path}"
             )
-            # Ensure it is not commented out
-            for line in content.splitlines():
-                if "masterGainNode.connect(audioCtx.destination)" in line:
-                    self.assertFalse(
-                        line.strip().startswith("//"),
-                        f"masterGainNode.connect(audioCtx.destination) must not be commented out in {path}"
-                    )
 
-            # 2. syncVolume must NOT hardcode masterGainNode.gain.value = 0
+            # 2. syncVolume must hardcode masterGainNode.gain.value = 0 to avoid duplicates
             sync_vol_match = re.search(r"export function syncVolume\(\)\s*\{(.*?)\n\}", content, re.DOTALL)
             self.assertIsNotNone(sync_vol_match, f"syncVolume() not found in {path}")
             sync_vol_body = sync_vol_match.group(1)
 
-            self.assertNotIn(
+            self.assertIn(
                 "masterGainNode.gain.value = 0",
                 sync_vol_body,
-                f"syncVolume() must not hardcode masterGainNode.gain.value = 0 in {path}"
-            )
-            self.assertIn(
-                "masterGainNode.gain.setValueAtTime(mTargetVol",
-                sync_vol_body,
-                f"syncVolume() must set target volume on masterGainNode in {path}"
+                f"syncVolume() must hardcode masterGainNode.gain.value = 0 in {path}"
             )
 
             # 3. HLS race fix: must NOT have module-global `let hlsInstance = null;`

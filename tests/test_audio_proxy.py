@@ -85,7 +85,7 @@ Sink Input #303
 """
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout=fake_pactl_output)
-            api._ensure_sink_inputs_unmuted("bluez_output.test.1")
+            api._migrate_streams_to_sink("bluez_output.test.1")
 
             commands = [c[0][0] for c in mock_run.call_args_list]
             # Should have moved target streams to device

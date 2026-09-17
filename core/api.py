@@ -374,6 +374,13 @@ class AppApi:
         call deadlocks the WinForms UI thread (app freezes with "wait for
         response"). Running the op deferred on a daemon thread prevents that.
         """
+        if sys.platform != "win32":
+            try:
+                fn()
+            except Exception as e:
+                logger.debug(f"Deferred window op failed: {e}")
+            return
+
         def _run():
             time.sleep(delay)
             try:
@@ -1387,59 +1394,90 @@ class AppApi:
             "devices": devices
         }
 
-    def _ensure_sink_inputs_unmuted(self, device_name: str = None):
-        """Migrate WebKit/app streams to target sink and ensure all playback streams are unmuted at full volume."""
+    def _migrate_streams_to_sink(self, target_sink: str):
+        """Move all app streams to target sink."""
         try:
             import subprocess
-            if not device_name:
-                try:
-                    dev_info = self.get_audio_devices()
-                    curr_default = dev_info.get("current", "")
-                    if curr_default:
-                        device_name = curr_default
-                except Exception:
-                    pass
-
             inputs_res = subprocess.run(["pactl", "list", "sink-inputs"], capture_output=True, text=True, timeout=2)
-            if inputs_res.returncode == 0:
-                current_id = None
-                is_target_stream = False
-                for line in inputs_res.stdout.splitlines():
-                    line_s = line.strip()
-                    if line.startswith("Sink Input #"):
-                        if current_id and is_target_stream:
-                            if device_name:
-                                subprocess.run(["pactl", "move-sink-input", current_id, device_name], timeout=1)
-                        current_id = line.split("#")[1].strip()
-                        is_target_stream = False
-                    elif current_id:
-                        line_lower = line_s.lower()
-                        if any(key in line_lower for key in ("webkitwebprocess", "webkit", "aura", "nedotify", "python")):
-                            is_target_stream = True
-                        if f'application.process.id = "{os.getpid()}"' in line_lower:
-                            is_target_stream = True
-                        if 'media.role = "music"' in line_lower or 'media.role = "webaudio"' in line_lower:
-                            is_target_stream = True
-                if current_id and is_target_stream:
-                    if device_name:
-                        subprocess.run(["pactl", "move-sink-input", current_id, device_name], timeout=1)
-        except Exception:
-            pass
+            if inputs_res.returncode != 0:
+                return
+            current_id = None
+            is_target_stream = False
+            target_ids = []
+            for line in inputs_res.stdout.splitlines():
+                line_s = line.strip()
+                if line.startswith("Sink Input #"):
+                    if current_id and is_target_stream:
+                        target_ids.append(current_id)
+                    current_id = line.split("#")[1].strip()
+                    is_target_stream = False
+                elif current_id:
+                    line_lower = line_s.lower()
+                    if any(key in line_lower for key in ("webkitwebprocess", "webkit", "aura", "nedotify", "python")):
+                        is_target_stream = True
+                    if f'application.process.id = "{os.getpid()}"' in line_lower:
+                        is_target_stream = True
+                    if 'media.role = "music"' in line_lower or 'media.role = "webaudio"' in line_lower:
+                        is_target_stream = True
+            if current_id and is_target_stream:
+                target_ids.append(current_id)
+
+            for tid in target_ids:
+                subprocess.run(["pactl", "move-sink-input", tid, target_sink], timeout=1)
+        except Exception as e:
+            logger.debug(f"_migrate_streams_to_sink error: {e}")
+
+    def _ensure_sink_inputs_unmuted(self):
+        """Ensure all playback streams belonging to the app are unmuted without moving them."""
+        try:
+            import subprocess
+            inputs_res = subprocess.run(["pactl", "list", "sink-inputs"], capture_output=True, text=True, timeout=2)
+            if inputs_res.returncode != 0:
+                return
+            current_id = None
+            is_target_stream = False
+            is_muted = False
+            for line in inputs_res.stdout.splitlines():
+                line_s = line.strip()
+                if line.startswith("Sink Input #"):
+                    if current_id and is_target_stream and is_muted:
+                        subprocess.run(["pactl", "set-sink-input-mute", current_id, "0"], timeout=1)
+                    current_id = line.split("#")[1].strip()
+                    is_target_stream = False
+                    is_muted = False
+                elif current_id:
+                    if line_s.startswith("Mute:") and "yes" in line_s.lower():
+                        is_muted = True
+                    line_lower = line_s.lower()
+                    if any(key in line_lower for key in ("webkitwebprocess", "webkit", "aura", "nedotify", "python")):
+                        is_target_stream = True
+                    if f'application.process.id = "{os.getpid()}"' in line_lower:
+                        is_target_stream = True
+                    if 'media.role = "music"' in line_lower or 'media.role = "webaudio"' in line_lower:
+                        is_target_stream = True
+            if current_id and is_target_stream and is_muted:
+                subprocess.run(["pactl", "set-sink-input-mute", current_id, "0"], timeout=1)
+        except Exception as e:
+            logger.debug(f"_ensure_sink_inputs_unmuted error: {e}")
 
     def set_audio_device(self, device_name: str) -> bool:
         """Set default audio output sink, unmute, and migrate active playback streams."""
         try:
             import subprocess
-            subprocess.run(["pactl", "set-default-sink", device_name], check=True, timeout=2)
-            subprocess.run(["pactl", "set-sink-mute", device_name, "0"], timeout=1)
-            subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"], timeout=1)
             if device_name.startswith("bluez_output"):
+                # Always enforce high-stability SBC-XQ codec if available to avoid AAC sep2/fd0 crashes
+                card_suffix = device_name.split("bluez_output.")[1].rsplit(".", 1)[0]
+                card_name = f"bluez_card.{card_suffix}"
+                subprocess.run(["pactl", "set-card-profile", card_name, "a2dp-sink-sbc_xq"], timeout=1)
                 subprocess.run(["pactl", "set-sink-volume", device_name, "80%"], timeout=1)
                 subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0.80"], timeout=1)
 
-            self._ensure_sink_inputs_unmuted(device_name)
-            import threading
-            threading.Timer(0.3, lambda: self._ensure_sink_inputs_unmuted(device_name)).start()
+            subprocess.run(["pactl", "set-default-sink", device_name], check=True, timeout=2)
+            subprocess.run(["pactl", "set-sink-mute", device_name, "0"], timeout=1)
+            subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"], timeout=1)
+
+            self._migrate_streams_to_sink(device_name)
+            self._ensure_sink_inputs_unmuted()
 
             self._core.settings.set("audio", "output_device", device_name)
             logger.info(f"Audio device switched to: {device_name}")
@@ -1458,7 +1496,7 @@ class AppApi:
             import subprocess
             import time
 
-            # Initial startup check: if Bluetooth headphones are connected, automatically activate them or ensure volume/unmute
+            # Initial startup check: if Bluetooth headphones are connected, ensure SBC-XQ profile and 80% volume
             try:
                 initial_info = self.get_audio_devices()
                 curr_devs = initial_info.get("devices", [])
@@ -1466,6 +1504,9 @@ class AppApi:
                 bt_devs = [d for d in curr_devs if d["name"].startswith("bluez_output")]
                 if bt_devs:
                     bt_sink = bt_devs[0]["name"]
+                    card_suffix = bt_sink.split("bluez_output.")[1].rsplit(".", 1)[0]
+                    card_name = f"bluez_card.{card_suffix}"
+                    subprocess.run(["pactl", "set-card-profile", card_name, "a2dp-sink-sbc_xq"], timeout=1)
                     if not curr_default.startswith("bluez_output"):
                         logger.info(f"Initial audio setup: activating connected Bluetooth sink {bt_sink}")
                         self.set_audio_device(bt_sink)
@@ -1477,14 +1518,7 @@ class AppApi:
                         subprocess.run(["pactl", "set-sink-volume", bt_sink, "80%"], timeout=1)
                         subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"], timeout=1)
                         subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0.80"], timeout=1)
-                        self._ensure_sink_inputs_unmuted(bt_sink)
-                elif curr_default.startswith("bluez_output"):
-                    logger.info(f"Initial audio setup: Bluetooth sink {curr_default} already default, unmuting and ensuring volume >= 80%")
-                    subprocess.run(["pactl", "set-sink-mute", curr_default, "0"], timeout=1)
-                    subprocess.run(["pactl", "set-sink-volume", curr_default, "80%"], timeout=1)
-                    subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"], timeout=1)
-                    subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0.80"], timeout=1)
-                    self._ensure_sink_inputs_unmuted(curr_default)
+                        self._ensure_sink_inputs_unmuted()
             except Exception as e:
                 logger.debug(f"Initial audio check error: {e}")
 
@@ -1502,49 +1536,56 @@ class AppApi:
                     
                     initial_info = self.get_audio_devices()
                     last_known_devices = {d["name"] for d in initial_info.get("devices", [])}
+                    last_known_default = initial_info.get("current", "")
                     
                     for line in proc.stdout:
                         if getattr(self, "_is_shutting_down", False):
                             break
                         line_str = line.strip()
-                        if "on sink-input" in line_str and ("'new'" in line_str or "'change'" in line_str):
-                            self._ensure_sink_inputs_unmuted()
-                        elif "on sink " in line_str or "on server " in line_str:
-                            time.sleep(0.4)  # Give PipeWire time to register profiles
-                            curr_info = self.get_audio_devices()
-                            curr_devices = {d["name"] for d in curr_info.get("devices", [])}
-                            
-                            new_devs = curr_devices - last_known_devices
-                            removed_devs = last_known_devices - curr_devices
-                            last_known_devices = curr_devices
-                            
-                            auto_switched = False
-                            auto_desc = ""
-                            
-                            if new_devs:
-                                # Look for newly connected Bluetooth or USB or physical devices
-                                bt_new = [d for d in curr_info.get("devices", []) if d["name"] in new_devs and d["name"].startswith("bluez_output")]
-                                if not bt_new:
-                                    bt_new = [d for d in curr_info.get("devices", []) if d["name"] in new_devs]
-                                
-                                if bt_new:
-                                    target_sink = bt_new[0]["name"]
-                                    auto_desc = bt_new[0].get("description", target_sink)
-                                    logger.info(f"Auto-switching playback to newly connected device: {target_sink} ({auto_desc})")
-                                    self.set_audio_device(target_sink)
-                                    auto_switched = True
-                                    curr_info["current"] = target_sink
-                            
-                            if removed_devs and curr_info.get("current") in removed_devs:
-                                if curr_info.get("devices"):
-                                    fallback_sink = curr_info["devices"][-1]["name"]
-                                    logger.info(f"Active audio device disconnected, falling back to: {fallback_sink}")
-                                    self.set_audio_device(fallback_sink)
-                                    curr_info["current"] = fallback_sink
-                            
-                            curr_info["auto_switched"] = auto_switched
-                            curr_info["device_label"] = auto_desc
-                            self._emit("audio_devices_changed", curr_info)
+                        # Only react to card or sink plug/unplug events, NEVER on sink-input to avoid feedback loops
+                        if not ("on card " in line_str or "on sink " in line_str):
+                            continue
+
+                        time.sleep(0.5)  # Debounce
+                        curr_info = self.get_audio_devices()
+                        curr_devices = {d["name"] for d in curr_info.get("devices", [])}
+                        curr_default = curr_info.get("current", "")
+
+                        new_devs = curr_devices - last_known_devices
+                        removed_devs = last_known_devices - curr_devices
+
+                        # Skip emitting if device list and default sink didn't change
+                        if not new_devs and not removed_devs and curr_default == last_known_default:
+                            continue
+
+                        last_known_devices = curr_devices
+                        last_known_default = curr_default
+
+                        auto_switched = False
+                        auto_desc = ""
+
+                        if new_devs:
+                            bt_new = [d for d in curr_info.get("devices", []) if d["name"] in new_devs and d["name"].startswith("bluez_output")]
+                            if bt_new:
+                                target_sink = bt_new[0]["name"]
+                                auto_desc = bt_new[0].get("description", target_sink)
+                                logger.info(f"Auto-switching playback to newly connected device: {target_sink} ({auto_desc})")
+                                self.set_audio_device(target_sink)
+                                auto_switched = True
+                                curr_info["current"] = target_sink
+                                last_known_default = target_sink
+
+                        if removed_devs and curr_default in removed_devs:
+                            if curr_info.get("devices"):
+                                fallback_sink = curr_info["devices"][-1]["name"]
+                                logger.info(f"Active audio device disconnected, falling back to: {fallback_sink}")
+                                self.set_audio_device(fallback_sink)
+                                curr_info["current"] = fallback_sink
+                                last_known_default = fallback_sink
+
+                        curr_info["auto_switched"] = auto_switched
+                        curr_info["device_label"] = auto_desc
+                        self._emit("audio_devices_changed", curr_info)
 
                 except Exception as e:
                     logger.debug(f"Audio device monitor loop error: {e}")
@@ -1859,7 +1900,7 @@ class AppApi:
                 duration=track_data.get("duration", 0)
             )
 
-        return self._core.downloader.queue_download(track_id, source, source_id)
+        return bool(self._core.downloader.queue_download(track_id, source, source_id))
 
     def import_external_playlist(self, url: str, name: str | None = None):
         """Resolve a supported external playlist and persist its tracks locally."""
@@ -2342,7 +2383,7 @@ class AppApi:
                 "total_mb": total_mb,
                 "tracks": {"count": track_count, "size": f"{track_mb} MB"},
                 "covers": {"count": covers_count, "size": f"{cover_mb} MB"},
-                "cache_dir": cache_dir
+                "cache_dir": base_cache_dir
             }
             self._storage_info_cache = (time.monotonic(), res)
             self._emit("storage_info", res)

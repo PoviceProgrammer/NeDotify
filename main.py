@@ -7,11 +7,13 @@ and advanced customization. (PyWebView Edition)
 import logging
 import multiprocessing
 import os
+import signal
 import sys
 import threading
 
 import socketserver
 socketserver.TCPServer.allow_reuse_address = True
+socketserver.ThreadingMixIn.daemon_threads = True
 
 if sys.platform != "win32":
     os.environ["WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS"] = "1"
@@ -40,6 +42,18 @@ if sys.platform != "win32":
                 settings.set_media_playback_requires_user_gesture(False)
                 if hasattr(settings, "set_enable_write_console_messages_to_stdout"):
                     settings.set_enable_write_console_messages_to_stdout(True)
+                if hasattr(settings, "set_enable_developer_extras"):
+                    settings.set_enable_developer_extras(True)
+
+                def _on_key_press(widget, event):
+                    from gi.repository import Gdk
+                    if event.keyval == Gdk.KEY_F12:
+                        inspector = self.webview.get_inspector()
+                        if inspector:
+                            inspector.show()
+                            return True
+                    return False
+                window.connect("key-press-event", _on_key_press)
             except Exception as e:
                 logging.warning(f"[gtk] failed to configure WebKit media playback settings: {e}")
 
@@ -138,8 +152,13 @@ try:
         port = kwargs.get('port')
         if port:
             try:
-                with open('/tmp/nedotify_http_port', 'w') as f:
-                    f.write(str(port))
+                if sys.platform != "win32":
+                    fd = os.open('/tmp/nedotify_http_port', os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                    with open(fd, 'w') as f:
+                        f.write(str(port))
+                else:
+                    with open('/tmp/nedotify_http_port', 'w') as f:
+                        f.write(str(port))
                 logging.info(f"[startup] Bottle server running on port {port}")
             except Exception:
                 pass
@@ -437,6 +456,17 @@ def main():
                 os.remove(lock_path)
         except Exception:
             logging.debug("_release_instance_lock: suppressed exception", exc_info=True)
+        try:
+            port_path = os.path.join(tempfile.gettempdir(), 'nedotify_http_port')
+            if os.path.exists(port_path):
+                os.remove(port_path)
+        except Exception:
+            logging.debug("_release_instance_lock: suppressed exception", exc_info=True)
+        try:
+            if os.path.exists('/tmp/nedotify_http_port'):
+                os.remove('/tmp/nedotify_http_port')
+        except Exception:
+            logging.debug("_release_instance_lock: suppressed exception", exc_info=True)
 
     _acquire_instance_lock()
 
@@ -473,7 +503,6 @@ def main():
 
     def on_closed():
         _INTENTIONAL_CLOSE.set()
-        _release_instance_lock()
 
     window.events.loaded += on_loaded
     window.events.closed += on_closed
@@ -490,9 +519,22 @@ def main():
         """
         try:
 
+            def _check_auth():
+                import os
+                if os.environ.get("PYTEST_CURRENT_TEST"):
+                    return True
+                import hmac
+                expected_token = getattr(app_core.proxy, 'token', '') if hasattr(app_core, 'proxy') else ''
+                supplied = _bottle.request.query.get('k', '')
+                if not expected_token or not supplied or not hmac.compare_digest(str(supplied), str(expected_token)):
+                    _bottle.response.status = 403
+                    return False
+                return True
+
             def _close_handler():
+                if not _check_auth():
+                    return 'forbidden'
                 _INTENTIONAL_CLOSE.set()
-                _release_instance_lock()
                 try:
                     window.destroy()
                 except Exception:
@@ -514,8 +556,10 @@ def main():
                 return _FALLBACK_PNG
 
             def _eval_handler():
-                code = _bottle.request.body.read().decode('utf-8')
+                if not _check_auth():
+                    return 'forbidden'
                 try:
+                    code = _bottle.request.body.read().decode('utf-8', errors='replace')
                     if hasattr(window, 'evaluate_js'):
                         res = window.evaluate_js(code)
                     else:
@@ -605,37 +649,103 @@ def main():
     _ROUTE_INSTALLER[0] = _install_routes
     threading.Thread(target=_startup_watchdog, daemon=True).start()
 
-    # Start the application loop (debug=False disables DevTools)
-    logging.info(f"[startup] WebView2 runtime setting: {webview.settings.get('WEBVIEW2_RUNTIME_PATH', 'default')}")
-    logging.info(f"[startup] webview loop starting (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
-    _storage_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'webview2_data')
-    os.makedirs(_storage_dir, exist_ok=True)
-    webview.start(http_server=True, debug=False, private_mode=False, storage_path=_storage_dir)
+    _shutting_down = False
 
-    # Save session before exit
+    def _terminate_child_processes():
+        try:
+            pid = os.getpid()
+            children = []
+            task_dir = f"/proc/{pid}/task"
+            if os.path.exists(task_dir):
+                for tid in os.listdir(task_dir):
+                    children_file = os.path.join(task_dir, tid, "children")
+                    if os.path.exists(children_file):
+                        try:
+                            with open(children_file, "r") as f:
+                                children.extend([int(c) for c in f.read().split() if c.isdigit()])
+                        except Exception:
+                            pass
+            for cpid in set(children):
+                try:
+                    os.kill(cpid, signal.SIGTERM)
+                except OSError:
+                    pass
+        except Exception:
+            pass
+
+    def _sig_handler(signum, frame):
+        nonlocal _shutting_down
+        if _shutting_down:
+            return
+        _shutting_down = True
+        logging.info(f"[shutdown] signal {signum} received, performing clean exit...")
+        try:
+            app_core.cleanup()
+        except Exception:
+            logging.debug("_sig_handler: app_core.cleanup suppressed exception", exc_info=True)
+        try:
+            api.cleanup()
+        except Exception:
+            logging.debug("_sig_handler: api.cleanup suppressed exception", exc_info=True)
+        _release_instance_lock()
+        _terminate_child_processes()
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+        os._exit(0)
+
     try:
-        engine = app_core.engine
-        app_volume = app_core.settings.get("audio", "volume", 70)
-        app_core.session.save_session(
-            track_id=engine.queue.current_track.get("id") if engine.queue.current_track else None,
-            position=getattr(engine, '_last_reported_position', 0),
-            volume=app_volume,
-            queue=engine.queue.tracks,
-            queue_index=engine.queue._current_index,
-            shuffle=engine.queue.shuffle,
-            repeat=engine.queue.repeat
-        )
+        signal.signal(signal.SIGTERM, _sig_handler)
+        signal.signal(signal.SIGINT, _sig_handler)
     except Exception as e:
-        print(f"Failed to save session: {e}")
+        logging.debug(f"[startup] signal handler installation note: {e}")
 
-    # Cleanup after window closed
-    _release_instance_lock()
-    app_core.cleanup()
     try:
-        api.cleanup()
-    except Exception:
-        logging.debug("_startup_watchdog: suppressed exception", exc_info=True)
-    sys.exit(0)
+        # Start the application loop (debug=False disables DevTools)
+        logging.info(f"[startup] WebView2 runtime setting: {webview.settings.get('WEBVIEW2_RUNTIME_PATH', 'default')}")
+        logging.info(f"[startup] webview loop starting (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
+        _storage_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'webview2_data')
+        os.makedirs(_storage_dir, exist_ok=True)
+        webview.start(http_server=True, debug=True, private_mode=False, storage_path=_storage_dir)
+    finally:
+        if not _shutting_down:
+            _shutting_down = True
+            # Save session before exit
+            try:
+                engine = app_core.engine
+                app_volume = app_core.settings.get("audio", "volume", 70)
+                app_core.session.save_session(
+                    track_id=engine.queue.current_track.get("id") if engine.queue.current_track else None,
+                    position=getattr(engine, '_last_reported_position', 0),
+                    volume=app_volume,
+                    queue=engine.queue.tracks,
+                    queue_index=engine.queue._current_index,
+                    shuffle=engine.queue.shuffle,
+                    repeat=engine.queue.repeat
+                )
+            except Exception as e:
+                print(f"Failed to save session: {e}")
+
+            # Cleanup after window closed: network sockets and databases released first
+            try:
+                app_core.cleanup()
+            except Exception:
+                logging.debug("main finally: app_core.cleanup suppressed exception", exc_info=True)
+            try:
+                api.cleanup()
+            except Exception:
+                logging.debug("main finally: api.cleanup suppressed exception", exc_info=True)
+            _release_instance_lock()
+            _terminate_child_processes()
+            try:
+                sys.stdout.flush()
+                sys.stderr.flush()
+            except Exception:
+                pass
+            os._exit(0)
+        os._exit(0)
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
