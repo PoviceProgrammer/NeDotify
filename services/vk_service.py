@@ -66,6 +66,16 @@ class VKService(BaseMusicService):
 
         BaseMusicService.submit(_search)
 
+    @staticmethod
+    def _normalize_url(url_or_id: str) -> str:
+        """Normalize URL or raw audio ID into a full VK URL."""
+        s = str(url_or_id).strip()
+        if s.startswith(('http://', 'https://')):
+            return s
+        if s.startswith('audio') or s.startswith('video'):
+            return f"https://vk.com/{s}"
+        return f"https://vk.com/audio?id={s}"
+
     def get_stream_url(self, vk_url: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, quality: str = "high", **kwargs):
         """Extract audio from a VK Music URL with caching and error handling."""
         if not vk_url or not str(vk_url).strip():
@@ -78,7 +88,8 @@ class VKService(BaseMusicService):
                 error_callback("yt-dlp не установлен")
             return
 
-        cached = self.get_from_cache(str(vk_url).strip())
+        target_url = self._normalize_url(vk_url)
+        cached = self.get_from_cache(str(vk_url).strip()) or self.get_from_cache(target_url)
         if cached and cached.get("stream_url"):
             if callback:
                 callback(cached.get("stream_url"), cached)
@@ -86,7 +97,6 @@ class VKService(BaseMusicService):
 
         def _extract():
             try:
-                target_url = str(vk_url).strip()
                 ydl_opts = {
                     'quiet': True,
                     'no_warnings': True,
@@ -130,6 +140,11 @@ class VKService(BaseMusicService):
                         'stream_url': stream_url
                     }
                     self.set_to_cache(target_url, metadata)
+                    if source_id and source_id != target_url:
+                        self.set_to_cache(source_id, metadata)
+                    raw_in = str(vk_url).strip()
+                    if raw_in not in (target_url, source_id):
+                        self.set_to_cache(raw_in, metadata)
                     if callback:
                         callback(stream_url, metadata)
                 else:
@@ -164,7 +179,9 @@ class VKService(BaseMusicService):
             raise Exception("yt-dlp не установлен")
 
         os.makedirs(output_dir, exist_ok=True)
-        clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id))
+        target_url = self._normalize_url(source_id)
+        raw_token = str(source_id).strip().split('/')[-1].split('?')[0]
+        clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', raw_token) or "track"
         ts = int(time.time())
         out_template = os.path.join(output_dir, f"vk_{clean_id}_{ts}.%(ext)s")
 
@@ -186,28 +203,41 @@ class VKService(BaseMusicService):
             if cookies and os.path.exists(cookies):
                 ydl_opts["cookiefile"] = cookies
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(source_id, download=True)
-            if not info:
-                raise Exception("Не удалось извлечь информацию о треке VK")
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(target_url, download=True)
+                if not info:
+                    raise Exception("Не удалось извлечь информацию о треке VK")
 
-            file_path = ydl.prepare_filename(info)
-            if os.path.exists(file_path):
-                return file_path
+                file_path = ydl.prepare_filename(info)
+                if os.path.exists(file_path):
+                    return file_path
 
-            ext = info.get('ext', 'mp3')
-            cand = os.path.join(output_dir, f"vk_{clean_id}_{ts}.{ext}")
-            if os.path.exists(cand):
-                return cand
-
-            for e in (".mp3", ".m4a", ".webm", ".opus", ".aac", ".ogg"):
-                cand = os.path.join(output_dir, f"vk_{clean_id}_{ts}{e}")
+                ext = info.get('ext', 'mp3')
+                cand = os.path.join(output_dir, f"vk_{clean_id}_{ts}.{ext}")
                 if os.path.exists(cand):
                     return cand
 
-            prefix = f"vk_{clean_id}_{ts}"
-            for fname in os.listdir(output_dir):
-                if fname.startswith(prefix) and not fname.endswith('.part'):
-                    return os.path.join(output_dir, fname)
+                for e in (".mp3", ".m4a", ".webm", ".opus", ".aac", ".ogg"):
+                    cand = os.path.join(output_dir, f"vk_{clean_id}_{ts}{e}")
+                    if os.path.exists(cand):
+                        return cand
 
-            raise Exception("Файл не был найден после загрузки из VK")
+                prefix = f"vk_{clean_id}_{ts}"
+                for fname in os.listdir(output_dir):
+                    if fname.startswith(prefix) and not (fname.endswith('.part') or fname.endswith('.ytdl')):
+                        return os.path.join(output_dir, fname)
+
+                raise Exception("Файл не был найден после загрузки из VK")
+        except Exception:
+            try:
+                prefix = f"vk_{clean_id}_{ts}"
+                for fname in os.listdir(output_dir):
+                    if fname.startswith(prefix) and (fname.endswith('.part') or fname.endswith('.ytdl')):
+                        try:
+                            os.remove(os.path.join(output_dir, fname))
+                        except OSError:
+                            pass
+            except Exception:
+                pass
+            raise

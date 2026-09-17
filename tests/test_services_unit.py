@@ -741,6 +741,61 @@ class TestVKServiceUnit(unittest.TestCase):
             out = self.vk.download_audio_sync("vk_dl_1", "/tmp/vk_test")
             self.assertEqual(out, "/tmp/vk_test/vk_dl_1.mp3")
 
+    def test_vk_service_normalizes_raw_id_to_url(self):
+        fake_info = {"id": "vk_id_100", "ext": "mp3"}
+        with patch("yt_dlp.YoutubeDL") as mock_ydl_cls, \
+             patch("os.path.exists", return_value=True), \
+             patch("os.makedirs"):
+            mock_ydl = MagicMock()
+            mock_ydl_cls.return_value.__enter__.return_value = mock_ydl
+            mock_ydl.extract_info.return_value = fake_info
+            mock_ydl.prepare_filename.return_value = "/tmp/vk_test/vk_track.mp3"
+
+            self.vk.download_audio_sync("2000000001_456240001", "/tmp/vk_test")
+            mock_ydl.extract_info.assert_called_once_with("https://vk.com/audio?id=2000000001_456240001", download=True)
+
+            mock_ydl.extract_info.reset_mock()
+            self.vk.download_audio_sync("audio2000000001_456240001", "/tmp/vk_test")
+            mock_ydl.extract_info.assert_called_once_with("https://vk.com/audio2000000001_456240001", download=True)
+
+    def test_vk_service_download_cleans_up_part_files_on_failure(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            part_file = os.path.join(tmpdir, "vk_badtrack_777.part")
+            with open(part_file, "w") as f:
+                f.write("partial vk data")
+
+            with patch("yt_dlp.YoutubeDL") as mock_ydl_cls, \
+                 patch("time.time", return_value=777):
+                mock_ydl = MagicMock()
+                mock_ydl_cls.return_value.__enter__.return_value = mock_ydl
+                mock_ydl.extract_info.side_effect = Exception("VK captcha or network error")
+
+                with self.assertRaises(Exception):
+                    self.vk.download_audio_sync("badtrack", tmpdir)
+
+                self.assertFalse(os.path.exists(part_file))
+
+    def test_vk_service_caches_by_both_url_and_source_id(self):
+        fake_info = {
+            "id": "vk_dual_id",
+            "title": "Dual Cache",
+            "url": "https://vk.com/stream_dual.mp3"
+        }
+        with patch("yt_dlp.YoutubeDL") as mock_ydl_cls:
+            mock_ydl = MagicMock()
+            mock_ydl_cls.return_value.__enter__.return_value = mock_ydl
+            mock_ydl.extract_info.return_value = fake_info
+
+            event = threading.Event()
+            self.vk.get_stream_url("https://vk.com/audio111_222", callback=lambda u, m: event.set())
+            event.wait(timeout=2.0)
+
+            # Check cached by source_id as well
+            cached_by_id = self.vk.get_from_cache("vk_dual_id")
+            self.assertIsNotNone(cached_by_id)
+            self.assertEqual(cached_by_id.get("stream_url"), "https://vk.com/stream_dual.mp3")
+
 
 class TestYandexServiceUnit(unittest.TestCase):
     def setUp(self):

@@ -182,7 +182,10 @@ class DownloadManager:
             elif source == 'yandex':
                 file_path = self._core.yandex.download_audio_sync(source_id, download_dir)
             elif source == 'vk':
-                file_path = self._core.vk.download_audio_sync(source_id, download_dir)
+                vk_service = getattr(self._core, 'vk', None)
+                if not vk_service:
+                    raise Exception("VK сервис не инициализирован")
+                file_path = vk_service.download_audio_sync(source_id, download_dir)
             elif source == 'spotify':
                 target = source_id
                 if not str(target).startswith("http") and not str(target).startswith("ytsearch"):

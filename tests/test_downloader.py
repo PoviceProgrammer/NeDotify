@@ -94,6 +94,14 @@ class TestDownloader(unittest.TestCase):
 
             self.mock_core.vk.download_audio_sync.assert_called_once_with("https://vk.com/audio123", self.dm.download_dir)
 
+    def test_download_worker_vk_missing_service_marks_failed(self):
+        item = {"track_id": 506, "source": "vk", "source_id": "https://vk.com/audio999"}
+        self.mock_db.conn.cursor.return_value.fetchone.return_value = {"status": "pending"}
+        self.mock_core.vk = None
+
+        self.dm._download_worker(item)
+        self.mock_db.conn.execute.assert_called_with("UPDATE download_queue SET status = 'failed' WHERE track_id = ?", (506,))
+
 
 if __name__ == "__main__":
     unittest.main()
