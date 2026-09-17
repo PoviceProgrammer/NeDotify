@@ -56,4 +56,20 @@
   - Tests: 85 -> 127 passed (+42 new tests, 0 regressions).
   - Backlog items BUG-014, BUG-015, DEBT-016, BUG-017, BUG-018, TEST-019, TEST-020, BUG-021, BUG-022, BUG-023, BUG-024, DEBT-025 resolved and verified.
 
+## Cycle 4
+- **Started**: 2026-09-17 22:02
+- **Initial Baseline**: 127 tests passing (pytest).
+- **Goals**:
+  1. Глубокий аудит и юнит-тестирование `services/youtube_service.py`: отказоустойчивость к null-значениям артистов/альбомов, генераторам entries, невалидным строкам длительности и thumbnails, fast-fail на пустых query/URL.
+  2. Глубокий аудит и интеграция `services/vk_service.py`: стандартизация на BaseMusicService (кэширование, thread pool), исправление инвертированного пути `file_path`, исправление fallback артиста при `artist: None`, добавление `download_audio_sync` и поддержка в `core/downloader.py` и `core/app.py`.
+  3. Глубокий аудит и юнит-тестирование `services/yandex_service.py`: исправление `TypeError` при сравнении `bitrate_in_kbps: None`, join артистов при null, извлечение ID трека из URL в `download_audio_sync`, автосоздание каталогов загрузки, устранение неуправляемого ThreadPoolExecutor.
+- **Commits**:
+  - `579aea3`: fix(services): harden YouTubeService against malformed metadata, generator entries, and empty queries
+  - `982fd4a`: fix(services, core): standardize VKService on BaseMusicService, fix direct URL paths, and add VK download support
+  - `7f23095`: fix(services): resolve YandexService None bitrate comparison, null artist crash, and download URL extraction
+- **Final Result**:
+  - Tests: 127 -> 146 passed (+19 new unit tests, 0 regressions).
+  - Backlog items BUG-026, BUG-027, BUG-028 resolved and verified.
+
+
 

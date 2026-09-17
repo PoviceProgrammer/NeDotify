@@ -11,11 +11,11 @@
 | `core/downloader.py` | Фоновый загрузчик и очередь yt-dlp | `test_downloader.py` |
 | `core/proxy.py` | HTTP стрим-прокси, Range 206, кэш, офлайн-треки | `test_audio_proxy.py`, `test_audit_regressions.py` |
 | `core/settings.py` | Менеджер настроек JSON | `test_fonts_m2.py`, `test_particles_m1.py` |
-| `services/youtube_service.py` | YouTube поиск, стриминг и yt-dlp загрузка | Косвенно |
+| `services/youtube_service.py` | YouTube поиск, стриминг и yt-dlp загрузка | `test_services_unit.py`, `test_downloader.py` |
 | `services/soundcloud_service.py` | SoundCloud поиск, REST API v2, стриминг, waveform, кеширование | `test_services_unit.py` |
 | `services/spotify_service.py` | Spotify метаданные iTunes, альбомы, плейлисты, LRU кеш | `test_services_unit.py`, `test_playlist_imports.py` |
-| `services/yandex_service.py` | Yandex Music сервис | Косвенно |
-| `services/vk_service.py` | VK сервис | Косвенно |
+| `services/yandex_service.py` | Yandex Music сервис | `test_services_unit.py` |
+| `services/vk_service.py` | VK сервис | `test_services_unit.py`, `test_downloader.py` |
 | `services/playlist_import_service.py` | Импорт плейлистов YouTube, SC, Spotify, M3U | `test_playlist_imports.py` |
 | `utils/cache_manager.py` | LRU дисковый кэш треков и обложек | `test_audit_regressions.py` |
 | `utils/file_scanner.py` | Сканер локальных аудиофайлов | `test_audit_regressions.py` |
