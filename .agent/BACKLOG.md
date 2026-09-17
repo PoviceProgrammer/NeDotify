@@ -21,5 +21,9 @@
 | BUG-017 | BUG | P1 | `services/soundcloud_service.py` | `AttributeError` при null-значениях user/media объектов в ответах API SoundCloud (`search`, `get_stream_url`, `get_playlist_tracks`) | done |
 | BUG-018 | BUG | P1 | `services/spotify_service.py` | `TypeError` / `AttributeError` при `trackTimeMillis: null` и `artworkUrl100: null` в `_cached_spotify_search` и `get_album_tracks` | done |
 | TEST-019 | TEST | P1 | `tests/test_audio_queue.py` | Отсутствует изолированный набор юнит-тестов для `PlaybackQueue` (concurrency, repeat/shuffle, history, edge cases) | done |
-| TEST-020 | TEST | P1 | `tests/test_services_unit.py` | Отсутствует изолированный набор юнит-тестов для `SoundCloudService` и `SpotifyService` (bad payloads, null checks, waveform) | done |
+| BUG-021 | BUG | P1 | `audio/queue.py` | Рассинхронизация `_history_stack` при `add_track(play_next=True)` и переключении shuffle | done |
+| BUG-022 | BUG | P1 | `audio/queue.py` | Залипание первого трека при `repeat=all` + shuffle и невозможность старта очереди при `repeat=one` | done |
+| BUG-023 | BUG | P1 | `audio/queue.py` | `update_current` не обновляет `_original_order` в режиме shuffle и неограниченный рост `_history_stack` | done |
+| BUG-024 | BUG | P1 | `services/soundcloud_service.py` | Пустые/None аргументы в `get_stream_url` и `get_playlist_tracks` вызывали скрейпинг корня через yt-dlp | done |
+| DEBT-025 | DEBT | P1 | `services/spotify_service.py` | Отсутствие управления токенами доступа, интеграции со Spotify Web API и резолва ссылок плейлистов | done |
 

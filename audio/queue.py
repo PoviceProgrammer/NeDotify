@@ -28,11 +28,26 @@ class PlaybackQueue:
                 return self._tracks[self._current_index]
             return None
 
+    def _append_history(self, index: int):
+        """Append an index to history stack with a maximum depth limit."""
+        if 0 <= index < len(self._tracks):
+            self._history_stack.append(index)
+            if len(self._history_stack) > 100:
+                self._history_stack = self._history_stack[-100:]
+
     def update_current(self, track: dict):
         """Update the currently playing track."""
+        if not isinstance(track, dict):
+            return
         with self._lock:
             if 0 <= self._current_index < len(self._tracks):
+                old_track = self._tracks[self._current_index]
                 self._tracks[self._current_index] = track
+                if self._original_order:
+                    for idx, t in enumerate(self._original_order):
+                        if t is old_track or self._track_key(t) == self._track_key(old_track):
+                            self._original_order[idx] = track
+                            break
 
     @property
     def current_index(self) -> int:
@@ -68,11 +83,11 @@ class PlaybackQueue:
     @shuffle.setter
     def shuffle(self, enabled: bool):
         with self._lock:
+            old_tracks = self._tracks.copy()
             if enabled and not self._shuffle:
                 # Save original order and shuffle
                 self._original_order = self._tracks.copy()
                 current = self.current_track
-                current_key = self._track_key(current) if current else None
                 remaining = [t for i, t in enumerate(self._tracks) if i != self._current_index]
                 random.shuffle(remaining)
                 if current:
@@ -92,15 +107,42 @@ class PlaybackQueue:
                         restored.append(t)
                         restored_keys.add(self._track_key(t))
                 self._tracks = restored
-                if current_key:
+                if current:
                     found_idx = -1
                     for idx, t in enumerate(self._tracks):
-                        if self._track_key(t) == current_key:
+                        if t is current:
                             found_idx = idx
                             break
+                    if found_idx < 0 and current_key:
+                        for idx, t in enumerate(self._tracks):
+                            if self._track_key(t) == current_key:
+                                found_idx = idx
+                                break
                     self._current_index = found_idx if found_idx >= 0 else (0 if self._tracks else -1)
                 else:
                     self._current_index = 0 if self._tracks else -1
+
+            # Remap history stack so previous_track navigates to the actual tracks played
+            if self._tracks != old_tracks:
+                new_history = []
+                for h_idx in self._history_stack:
+                    if 0 <= h_idx < len(old_tracks):
+                        old_t = old_tracks[h_idx]
+                        found_new_idx = -1
+                        for idx, t in enumerate(self._tracks):
+                            if t is old_t:
+                                found_new_idx = idx
+                                break
+                        if found_new_idx < 0:
+                            old_key = self._track_key(old_t)
+                            for idx, t in enumerate(self._tracks):
+                                if self._track_key(t) == old_key:
+                                    found_new_idx = idx
+                                    break
+                        if found_new_idx >= 0:
+                            new_history.append(found_new_idx)
+                self._history_stack = new_history
+
             self._shuffle = enabled
 
     @property
@@ -167,7 +209,9 @@ class PlaybackQueue:
             return False
         with self._lock:
             if play_next and self._current_index >= 0:
-                self._tracks.insert(self._current_index + 1, track)
+                insert_idx = self._current_index + 1
+                self._tracks.insert(insert_idx, track)
+                self._history_stack = [(h + 1 if h >= insert_idx else h) for h in self._history_stack]
                 if self._original_order is not None:
                     orig_curr = self.current_track
                     orig_curr_key = self._track_key(orig_curr) if orig_curr else None
@@ -303,6 +347,10 @@ class PlaybackQueue:
             if self.is_empty:
                 return None
 
+            if self._current_index < 0:
+                self._current_index = 0
+                return self.current_track
+
             if self._repeat == "one":
                 return self.current_track
 
@@ -313,21 +361,18 @@ class PlaybackQueue:
                 if self._repeat != "all":
                     return None
                 if self.current_track:
-                    self._history_stack.append(self._current_index)
+                    self._append_history(self._current_index)
                 if self._shuffle:
-                    current = self._tracks[0] if self._tracks else None
+                    last_track = self.current_track
                     random.shuffle(self._tracks)
-                    if current:
-                        try:
-                            idx = self._tracks.index(current)
-                            self._tracks[0], self._tracks[idx] = self._tracks[idx], self._tracks[0]
-                        except ValueError:
-                            pass
+                    if len(self._tracks) > 1 and self._tracks[0] is last_track:
+                        swap_idx = random.randint(1, len(self._tracks) - 1)
+                        self._tracks[0], self._tracks[swap_idx] = self._tracks[swap_idx], self._tracks[0]
                 self._current_index = 0
                 return self.current_track
 
             if self.current_track:
-                self._history_stack.append(self._current_index)
+                self._append_history(self._current_index)
 
             self._current_index += 1
             return self.current_track
@@ -354,7 +399,7 @@ class PlaybackQueue:
     def previous_track(self) -> Optional[dict]:
         """Move to the previous track. Returns the track or None."""
         with self._lock:
-            if self.is_empty:
+            if self.is_empty or self._current_index < 0:
                 return None
 
             if self._history_stack:
@@ -387,7 +432,7 @@ class PlaybackQueue:
                 index = n + index
             if 0 <= index < n:
                 if self.current_track:
-                    self._history_stack.append(self._current_index)
+                    self._append_history(self._current_index)
                 self._current_index = index
                 return self.current_track
             return None
@@ -410,7 +455,7 @@ class PlaybackQueue:
         """Serialize queue state for session persistence."""
         with self._lock:
             return {
-                "track_ids": [t.get("id") for t in self._tracks if isinstance(t, dict) and t.get("id")],
+                "track_ids": [t.get("id") or t.get("source_id") for t in self._tracks if isinstance(t, dict) and (t.get("id") or t.get("source_id"))],
                 "current_index": self._current_index,
                 "shuffle": self._shuffle,
                 "repeat": self._repeat,
@@ -419,5 +464,5 @@ class PlaybackQueue:
     def get_queue_track_ids(self) -> list:
         """Get list of track IDs in queue."""
         with self._lock:
-            return [t.get("id") for t in self._tracks if isinstance(t, dict) and t.get("id")]
+            return [t.get("id") or t.get("source_id") for t in self._tracks if isinstance(t, dict) and (t.get("id") or t.get("source_id"))]
 

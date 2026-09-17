@@ -207,7 +207,7 @@ class SoundCloudService(BaseMusicService):
         
         def _search():
             try:
-                if not query or not str(query).strip():
+                if not query or not str(query).strip() or str(query).strip().lower() in ("none", "null"):
                     if callback:
                         callback([])
                     return
@@ -318,6 +318,12 @@ class SoundCloudService(BaseMusicService):
                         callback(cached)
                     return
 
+                if not playlist_id or not str(playlist_id).strip() or str(playlist_id).strip().lower() in ("none", "null"):
+                    if error_callback:
+                        error_callback("Неверный ID плейлиста")
+                    if callback:
+                        callback([])
+                    return
                 raw = str(playlist_id).strip()
                 cid = self._get_client_id()
                 if cid:
@@ -403,7 +409,11 @@ class SoundCloudService(BaseMusicService):
         """Extract direct audio stream URL from a SoundCloud track."""
         if isinstance(track_url, dict):
             track_url = track_url.get('source_url') or track_url.get('url') or str(track_url.get('source_id') or track_url.get('id') or '')
-        track_url = str(track_url or '')
+        track_url = str(track_url or '').strip()
+        if not track_url or track_url.lower() in ('none', 'null'):
+            if error_callback:
+                error_callback("Неверный URL или ID трека")
+            return
 
         info = self.get_from_cache(track_url)
         if info:

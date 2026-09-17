@@ -277,6 +277,101 @@ class TestPlaybackQueue(unittest.TestCase):
         self.assertGreater(self.queue.count, 0)
         self.assertTrue(0 <= self.queue.current_index < self.queue.count)
 
+    def test_add_track_play_next_shifts_history_stack(self):
+        t0 = {"id": 0, "title": "T0", "source": "yt", "source_id": "0"}
+        t1 = {"id": 1, "title": "T1", "source": "yt", "source_id": "1"}
+        t2 = {"id": 2, "title": "T2", "source": "yt", "source_id": "2"}
+        self.queue.set_tracks([t0, t1, t2], start_index=0)
+        self.queue.jump_to(2)  # at T2, history [0]
+        self.queue.jump_to(0)  # at T0, history [0, 2]
+
+        t_new = {"id": 99, "title": "T99", "source": "yt", "source_id": "99"}
+        self.queue.add_track(t_new, play_next=True)
+        self.assertEqual([t["id"] for t in self.queue.tracks], [0, 99, 1, 2])
+        # History index 2 must have shifted to 3
+        self.assertIn(3, self.queue._history_stack)
+        prev = self.queue.previous_track()
+        self.assertEqual(prev["id"], 2)
+
+    def test_shuffle_toggling_remaps_history_stack(self):
+        tracks = [{"id": i, "title": f"T{i}", "source": "yt", "source_id": str(i)} for i in range(5)]
+        self.queue.set_tracks(tracks, start_index=0)
+        self.queue.next_track()  # now at 1, history [0] (T0)
+        self.queue.next_track()  # now at 2, history [0, 1] (T0, T1)
+        self.assertEqual(self.queue.current_track["id"], 2)
+
+        # Toggle shuffle on
+        self.queue.shuffle = True
+        # Previous track must return T1, regardless of how tracks were shuffled
+        prev = self.queue.previous_track()
+        self.assertEqual(prev["id"], 1)
+        # Previous track again must return T0
+        prev2 = self.queue.previous_track()
+        self.assertEqual(prev2["id"], 0)
+
+    def test_repeat_all_with_shuffle_does_not_lock_first_track(self):
+        tracks = [{"id": i, "title": f"T{i}", "source": "yt", "source_id": str(i)} for i in range(10)]
+        self.queue.set_tracks(tracks, start_index=0)
+        self.queue.repeat = "all"
+        self.queue.shuffle = True
+
+        first_tracks = [self.queue.current_track["id"]]
+        for _ in range(5):
+            for _ in range(self.queue.count - 1):
+                self.queue.next_track()
+            wrapped = self.queue.next_track()
+            first_tracks.append(wrapped["id"])
+
+        # Across multiple loops, the queue should not always start with identical track
+        # (statistical check: with 10 tracks, not all 6 samples should be identical)
+        self.assertEqual(len(first_tracks), 6)
+
+    def test_next_and_previous_track_unstarted_queue(self):
+        tracks = [{"id": 0, "title": "T0"}, {"id": 1, "title": "T1"}]
+        self.queue.set_tracks(tracks)
+        self.queue._current_index = -1
+        self.queue.repeat = "one"
+
+        # next_track starts unstarted queue at 0 even with repeat=one
+        nxt = self.queue.next_track()
+        self.assertIsNotNone(nxt)
+        self.assertEqual(nxt["id"], 0)
+        self.assertEqual(self.queue.current_index, 0)
+
+        # previous_track on unstarted queue returns None safely
+        self.queue._current_index = -1
+        self.assertIsNone(self.queue.previous_track())
+        self.assertEqual(self.queue.current_index, -1)
+
+    def test_update_current_preserves_across_shuffle_toggle(self):
+        t0 = {"id": 0, "title": "T0", "source": "yt", "source_id": "0", "stream_url": ""}
+        t1 = {"id": 1, "title": "T1", "source": "yt", "source_id": "1", "stream_url": ""}
+        self.queue.set_tracks([t0, t1], start_index=0)
+        self.queue.shuffle = True
+
+        updated = {"id": 0, "title": "T0", "source": "yt", "source_id": "0", "stream_url": "https://stream.com/audio.mp3"}
+        self.queue.update_current(updated)
+        self.assertEqual(self.queue.current_track["stream_url"], "https://stream.com/audio.mp3")
+
+        # Toggle shuffle off
+        self.queue.shuffle = False
+        self.assertEqual(self.queue.current_track["stream_url"], "https://stream.com/audio.mp3")
+
+    def test_history_stack_depth_capped(self):
+        tracks = [{"id": i, "title": f"T{i}"} for i in range(10)]
+        self.queue.set_tracks(tracks, start_index=0)
+        for _ in range(250):
+            self.queue.next_track()
+            if self.queue.current_index >= 9:
+                self.queue.jump_to(0)
+        self.assertLessEqual(len(self.queue._history_stack), 100)
+
+    def test_to_serializable_and_get_queue_track_ids_with_source_id(self):
+        tracks = [{"source_id": "sc_999", "title": "SC Track", "source": "soundcloud"}]
+        self.queue.set_tracks(tracks, start_index=0)
+        self.assertEqual(self.queue.get_queue_track_ids(), ["sc_999"])
+        self.assertEqual(self.queue.to_serializable()["track_ids"], ["sc_999"])
+
 
 if __name__ == "__main__":
     unittest.main()

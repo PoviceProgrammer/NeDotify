@@ -203,6 +203,21 @@ class TestSoundCloudServiceUnit(unittest.TestCase):
             self.assertEqual(len(wave), 100)
             self.assertTrue(all(0.0 <= v <= 1.0 for v in wave))
 
+    def test_soundcloud_empty_and_none_guards(self):
+        # Empty track_url must call error_callback immediately without throwing or calling yt-dlp
+        event = threading.Event()
+        errs = []
+        self.sc.get_stream_url("", error_callback=lambda e: (errs.append(e), event.set()))
+        event.wait(timeout=1.0)
+        self.assertTrue(len(errs) > 0)
+
+        # None playlist_id must call error_callback and return empty without hang
+        event2 = threading.Event()
+        errs2 = []
+        self.sc.get_playlist_tracks(None, error_callback=lambda e: (errs2.append(e), event2.set()))
+        event2.wait(timeout=1.0)
+        self.assertTrue(len(errs2) > 0)
+
 
 class TestSpotifyServiceUnit(unittest.TestCase):
     def setUp(self):
@@ -331,6 +346,73 @@ class TestSpotifyServiceUnit(unittest.TestCase):
         self.spotify.get_stream_url("spotify_123", error_callback=err_cb)
         event.wait(timeout=2.0)
         self.assertTrue(len(err_msg) > 0)
+
+    def test_spotify_token_management(self):
+        # Initial access token is None
+        self.spotify._access_token = None
+        self.spotify._token_expires_at = 0.0
+
+        # Programmatically set token
+        self.spotify.set_access_token("test_token_abc", expires_in=3600)
+        self.assertEqual(self.spotify.get_access_token(), "test_token_abc")
+
+        # Configured token from settings takes precedence
+        mock_settings = MagicMock()
+        mock_settings.get.side_effect = lambda cat, key, default="": "cfg_secret_token" if key == "spotify_token" else default
+        sp_with_settings = SpotifyService(settings=mock_settings)
+        self.assertEqual(sp_with_settings.get_access_token(), "cfg_secret_token")
+
+    def test_spotify_web_api_album_and_playlist_resolution(self):
+        self.spotify.set_access_token("valid_token", expires_in=3600)
+
+        fake_sp_album = {
+            "items": [
+                {
+                    "id": "sp_t1",
+                    "name": "Web Track 1",
+                    "artists": [{"name": "Web Artist"}],
+                    "duration_ms": 200000,
+                    "external_urls": {"spotify": "https://open.spotify.com/track/sp_t1"}
+                }
+            ]
+        }
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = fake_sp_album
+
+        with patch("services.spotify_service._session.get", return_value=mock_resp):
+            event = threading.Event()
+            res_tracks = []
+            self.spotify.get_album_tracks("4aawyAB9vmqN3uQ7FjRGTy", callback=lambda t: (res_tracks.extend(t), event.set()))
+            event.wait(timeout=2.0)
+
+            self.assertEqual(len(res_tracks), 1)
+            self.assertEqual(res_tracks[0]["id"], "spotify_sp_t1")
+            self.assertEqual(res_tracks[0]["title"], "Web Track 1")
+            self.assertEqual(res_tracks[0]["artist"], "Web Artist")
+            self.assertEqual(res_tracks[0]["duration"], 200)
+
+    def test_spotify_playlist_url_fallback(self):
+        # When token is None and Spotify URL is passed, fallback should be triggered
+        self.spotify._access_token = None
+        self.spotify._token_expires_at = 0.0
+
+        fake_resolved = {
+            "name": "Imported Playlist",
+            "source": "spotify",
+            "tracks": [
+                {"title": "Fallback Track", "artist": "Fallback Artist", "duration": 210.0, "source": "spotify", "source_id": "ytsearch1: Fallback"}
+            ]
+        }
+
+        with patch("services.playlist_import_service.PlaylistImportService._resolve_spotify", return_value=fake_resolved):
+            event = threading.Event()
+            res_tracks = []
+            self.spotify.get_playlist_tracks("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", callback=lambda t: (res_tracks.extend(t), event.set()))
+            event.wait(timeout=2.0)
+
+            self.assertEqual(len(res_tracks), 1)
+            self.assertEqual(res_tracks[0]["title"], "Fallback Track")
 
 
 if __name__ == "__main__":

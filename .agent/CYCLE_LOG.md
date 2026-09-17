@@ -51,8 +51,9 @@
 - **Commits**:
   - `4ae8a5f`: fix(audio): strengthen queue with negative indexing, peek_next, duplicate preservation, and history tracking
   - `6d6d1ce`: fix(services): harden SoundCloud and Spotify parsing against null attributes and missing payloads
+  - `e279b9a`: fix(audio, services): resolve history stack desync, repeat-all shuffle lock, and Spotify token/Web API integration
 - **Final Result**:
-  - Tests: 85 -> 116 passed (+31 new tests, 0 regressions).
-  - Backlog items BUG-014, BUG-015, DEBT-016, BUG-017, BUG-018, TEST-019, TEST-020 resolved and verified.
+  - Tests: 85 -> 127 passed (+42 new tests, 0 regressions).
+  - Backlog items BUG-014, BUG-015, DEBT-016, BUG-017, BUG-018, TEST-019, TEST-020, BUG-021, BUG-022, BUG-023, BUG-024, DEBT-025 resolved and verified.
 
 
