@@ -100,7 +100,7 @@ class DownloadManager:
         except Exception as e:
             logger.error(f'Failed to resume downloads: {e}')
 
-    def queue_download(self, track_id, source, source_id, from_db=False):
+    def queue_download(self, track_id, source, source_id, from_db=False) -> bool:
         """Queue a track for download (at most one row per track)."""
         if not from_db:
             try:
@@ -112,7 +112,7 @@ class DownloadManager:
             except Exception as e:
                 # Unique index: the track already has a queue row - nothing to add.
                 logger.debug(f'Download queue insert skipped for track {track_id}: {e}')
-                return
+                return False
 
         with self._queue_lock:
             if not any(item['track_id'] == track_id for item in self._queue):
@@ -123,6 +123,7 @@ class DownloadManager:
                 })
                 self._queue_event.set()
         logger.info(f'Queued download for track {track_id} from {source}:{source_id}')
+        return True
 
     def _process_queue(self):
         """Background thread checking the queue."""
@@ -169,13 +170,21 @@ class DownloadManager:
             file_path = None
 
             if source == 'youtube':
-
                 file_path = self._core.youtube.download_audio_sync(source_id, download_dir)
             elif source == 'soundcloud':
                 sc_url = f'https://soundcloud.com/{source_id}' if not str(source_id).isdigit() else str(source_id)
                 file_path = self._core.soundcloud.download_audio_sync(sc_url, download_dir)
             elif source == 'yandex':
                 file_path = self._core.yandex.download_audio_sync(source_id, download_dir)
+            elif source == 'spotify':
+                target = source_id
+                if not str(target).startswith("http") and not str(target).startswith("ytsearch"):
+                    track = self._core.db.get_track(track_id) if hasattr(self._core.db, 'get_track') else None
+                    if track:
+                        target = f"ytsearch1: {track.get('artist', '')} - {track.get('title', '')}".strip()
+                    else:
+                        target = f"ytsearch1: {source_id}"
+                file_path = self._core.youtube.download_audio_sync(target, download_dir)
 
             if file_path and os.path.exists(file_path):
                 logger.info(f'Download complete: {file_path}')
@@ -217,6 +226,11 @@ class DownloadManager:
                                 'total': self._batch_total,
                                 'completed': self._batch_completed
                             })
+            if hasattr(self._core, 'db') and hasattr(self._core.db, 'close_thread_connection'):
+                try:
+                    self._core.db.close_thread_connection()
+                except Exception:
+                    pass
 
     def stop(self):
         self._running = False
