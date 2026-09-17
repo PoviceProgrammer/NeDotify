@@ -3,9 +3,11 @@ import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
+from services.base_service import BaseMusicService
 from services.soundcloud_service import SoundCloudService, _TTLCache
 from services.spotify_service import SpotifyService, _cached_spotify_search, _cached_spotify_album_search
 from services.youtube_service import YouTubeService
+from services.vk_service import VKService
 
 
 class TestTTLCache(unittest.TestCase):
@@ -553,6 +555,115 @@ class TestYouTubeServiceUnit(unittest.TestCase):
             self.yt.download_audio_sync("", "/tmp/somedir")
 
 
+class TestVKServiceUnit(unittest.TestCase):
+    def setUp(self):
+        self.vk = VKService()
+
+    def test_vk_service_inherits_base_music_service(self):
+        self.assertTrue(issubclass(VKService, BaseMusicService))
+
+    def test_vk_service_empty_or_none_url_guard(self):
+        event = threading.Event()
+        err = []
+        self.vk.get_stream_url("", error_callback=lambda e: (err.append(e), event.set()))
+        event.wait(timeout=1.0)
+        self.assertTrue(len(err) > 0)
+
+        event2 = threading.Event()
+        err2 = []
+        self.vk.get_stream_url(None, error_callback=lambda e: (err2.append(e), event2.set()))
+        event2.wait(timeout=1.0)
+        self.assertTrue(len(err2) > 0)
+
+    def test_vk_service_play_direct_url_file_path_logic(self):
+        # Web URL must not be set as file_path
+        res_web = self.vk.play_direct_url("https://vk.com/audio/song.mp3")
+        self.assertEqual(res_web["source_url"], "https://vk.com/audio/song.mp3")
+        self.assertEqual(res_web["stream_url"], "https://vk.com/audio/song.mp3")
+        self.assertIsNone(res_web["file_path"])
+
+        # Local file path must be set as file_path and not source_url
+        res_local = self.vk.play_direct_url("/home/user/Music/track.mp3")
+        self.assertEqual(res_local["file_path"], "/home/user/Music/track.mp3")
+        self.assertEqual(res_local["source_url"], "")
+
+    def test_vk_service_artist_fallback_when_artist_key_is_none(self):
+        fake_info = {
+            "id": "vk_song_1",
+            "title": "VK Hit",
+            "artist": None,  # Bug BUG-027: info.get('artist', info.get('uploader')) returned None
+            "uploader": "Cool Channel",
+            "duration": 210,
+            "thumbnail": "https://vk.com/thumb.jpg",
+            "url": "https://vk.com/stream.mp3"
+        }
+
+        with patch("yt_dlp.YoutubeDL") as mock_ydl_cls:
+            mock_ydl = MagicMock()
+            mock_ydl_cls.return_value.__enter__.return_value = mock_ydl
+            mock_ydl.extract_info.return_value = fake_info
+
+            event = threading.Event()
+            res_meta = {}
+
+            def cb(url, meta):
+                res_meta.update(meta)
+                event.set()
+
+            self.vk.get_stream_url("https://vk.com/audio123", callback=cb)
+            event.wait(timeout=2.0)
+
+            self.assertEqual(res_meta.get("artist"), "Cool Channel")
+            self.assertEqual(res_meta.get("title"), "VK Hit")
+            self.assertEqual(res_meta.get("stream_url"), "https://vk.com/stream.mp3")
+
+    def test_vk_service_caches_stream_url(self):
+        fake_info = {
+            "id": "vk_cached",
+            "title": "Cached Track",
+            "url": "https://vk.com/stream_cached.mp3"
+        }
+        with patch("yt_dlp.YoutubeDL") as mock_ydl_cls:
+            mock_ydl = MagicMock()
+            mock_ydl_cls.return_value.__enter__.return_value = mock_ydl
+            mock_ydl.extract_info.return_value = fake_info
+
+            event = threading.Event()
+            self.vk.get_stream_url("https://vk.com/audio_cache_test", callback=lambda u, m: event.set())
+            event.wait(timeout=2.0)
+
+            # Second call should hit cache without calling yt-dlp again
+            mock_ydl.extract_info.reset_mock()
+            event2 = threading.Event()
+            resolved = []
+            self.vk.get_stream_url("https://vk.com/audio_cache_test", callback=lambda u, m: (resolved.append(u), event2.set()))
+            event2.wait(timeout=2.0)
+
+            mock_ydl.extract_info.assert_not_called()
+            self.assertEqual(resolved, ["https://vk.com/stream_cached.mp3"])
+
+    def test_vk_service_download_audio_sync(self):
+        # Empty source_id raises ValueError
+        with self.assertRaises(ValueError):
+            self.vk.download_audio_sync("", "/tmp/vk_test")
+
+        fake_info = {
+            "id": "vk_dl_1",
+            "ext": "mp3"
+        }
+        with patch("yt_dlp.YoutubeDL") as mock_ydl_cls, \
+             patch("os.path.exists", return_value=True), \
+             patch("os.makedirs"):
+            mock_ydl = MagicMock()
+            mock_ydl_cls.return_value.__enter__.return_value = mock_ydl
+            mock_ydl.extract_info.return_value = fake_info
+            mock_ydl.prepare_filename.return_value = "/tmp/vk_test/vk_dl_1.mp3"
+
+            out = self.vk.download_audio_sync("vk_dl_1", "/tmp/vk_test")
+            self.assertEqual(out, "/tmp/vk_test/vk_dl_1.mp3")
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

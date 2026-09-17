@@ -252,6 +252,9 @@ class AppCore:
             elif source == "yandex":
                 url = f"https://music.yandex.ru/track/{source_id}"
                 service = self.yandex
+            elif source == "vk":
+                url = str(source_id).strip() if str(source_id).strip().startswith(("http://", "https://")) else f"https://vk.com/audio?id={source_id}"
+                service = getattr(self, "vk", None)
             else:
                 if on_error:
                     on_error(f"Unsupported source: {source}")

@@ -84,6 +84,17 @@ class TestDownloader(unittest.TestCase):
         self.assertFalse(self.dm._batch_active)
         self.assertEqual(len(self.dm._queue), 0)
 
+    def test_download_worker_vk_download_support(self):
+        item = {"track_id": 505, "source": "vk", "source_id": "https://vk.com/audio123"}
+        self.mock_db.conn.cursor.return_value.fetchone.return_value = {"status": "pending"}
+
+        with patch("os.path.exists", return_value=True):
+            self.mock_core.vk.download_audio_sync.return_value = "/tmp/fake_vk.mp3"
+            self.dm._download_worker(item)
+
+            self.mock_core.vk.download_audio_sync.assert_called_once_with("https://vk.com/audio123", self.dm.download_dir)
+
 
 if __name__ == "__main__":
     unittest.main()
+
