@@ -207,6 +207,11 @@ class SoundCloudService(BaseMusicService):
         
         def _search():
             try:
+                if not query or not str(query).strip():
+                    if callback:
+                        callback([])
+                    return
+
                 cache_key = f"sc_search:{query}"
                 cached = self.get_search_cache(cache_key)
                 if cached is not None:
@@ -214,30 +219,32 @@ class SoundCloudService(BaseMusicService):
                         callback(cached)
                     return
                 
-                
                 cid = self._get_client_id()
                 if cid:
                     try:
-                        encoded = urllib_parse.quote(query)
+                        encoded = urllib_parse.quote(str(query).strip())
                         url = f"https://api-v2.soundcloud.com/search/tracks?q={encoded}&client_id={cid}&limit={max_results}"
                         r = self._session.get(url, timeout=3.0)
                         if r.status_code == 200:
                             data = r.json()
                             tracks = []
-                            for item in data.get('collection', []):
-                                if not item or not item.get('id'):
+                            for item in (data.get('collection') or []):
+                                if not item or not isinstance(item, dict) or not item.get('id'):
                                     continue
                                 artwork = item.get('artwork_url') or ''
-                                if artwork and 'large.jpg' in artwork:
+                                if artwork and isinstance(artwork, str) and 'large.jpg' in artwork:
                                     artwork = artwork.replace('large.jpg', 't500x500.jpg')
                                 
-                                user_info = item.get('user', {})
+                                user_info = item.get('user')
+                                if not isinstance(user_info, dict):
+                                    user_info = {}
                                 artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
-                                duration = int(item.get('duration', 0) / 1000)
+                                raw_dur = item.get('duration')
+                                duration = int(raw_dur / 1000) if raw_dur and isinstance(raw_dur, (int, float)) else 0
                                 waveform_url = item.get('waveform_url') or ''
                                 
                                 track = {
-                                    'title': item.get('title', 'Unknown Title'),
+                                    'title': item.get('title') or 'Unknown Title',
                                     'artist': artist,
                                     'duration': duration,
                                     'source': 'soundcloud',
@@ -323,17 +330,20 @@ class SoundCloudService(BaseMusicService):
                         if r.status_code == 200:
                             data = r.json()
                             tracks = []
-                            for item in data.get('tracks') or []:
-                                if not item or not item.get('id') or not item.get('title'):
+                            for item in (data.get('tracks') or []):
+                                if not item or not isinstance(item, dict) or not item.get('id'):
                                     continue
                                 artwork = item.get('artwork_url') or ''
-                                if artwork and 'large.jpg' in artwork:
+                                if artwork and isinstance(artwork, str) and 'large.jpg' in artwork:
                                     artwork = artwork.replace('large.jpg', 't500x500.jpg')
-                                user_info = item.get('user', {})
+                                user_info = item.get('user')
+                                if not isinstance(user_info, dict):
+                                    user_info = {}
                                 artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
-                                duration = int(item.get('duration', 0) / 1000)
+                                raw_dur = item.get('duration')
+                                duration = int(raw_dur / 1000) if raw_dur and isinstance(raw_dur, (int, float)) else 0
                                 track = {
-                                    'title': item.get('title', 'Unknown Title'),
+                                    'title': item.get('title') or 'Unknown Title',
                                     'artist': artist,
                                     'duration': duration,
                                     'source': 'soundcloud',
@@ -429,31 +439,49 @@ class SoundCloudService(BaseMusicService):
                         r = self._session.get(t_url, timeout=3.5)
                         if r.status_code == 200:
                             t_data = r.json()
-                            media = t_data.get('media', {})
-                            transcodings = media.get('transcodings', [])
+                            if not isinstance(t_data, dict):
+                                t_data = {}
+                            media = t_data.get('media')
+                            if not isinstance(media, dict):
+                                media = {}
+                            transcodings = media.get('transcodings') or []
                             stream_url = None
 
-                            sorted_tc = sorted(transcodings, key=lambda x: 0 if x.get('format', {}).get('protocol') == 'progressive' else 1)
+                            valid_tc = [tc for tc in transcodings if isinstance(tc, dict)]
+                            sorted_tc = sorted(
+                                valid_tc,
+                                key=lambda x: 0 if isinstance(x.get('format'), dict) and x.get('format', {}).get('protocol') == 'progressive' else 1
+                            )
 
                             for tc in sorted_tc:
-                                tc_url = f"{tc['url']}?client_id={cid}"
+                                tc_url_base = tc.get('url')
+                                if not tc_url_base:
+                                    continue
+                                tc_url = f"{tc_url_base}?client_id={cid}"
                                 tc_resp = self._session.get(tc_url, timeout=2.5)
                                 if tc_resp.status_code == 200:
-                                    s_candidate = tc_resp.json().get('url')
-                                    if s_candidate and 'preview' not in s_candidate:
-                                        stream_url = s_candidate
-                                        break
+                                    tc_json = tc_resp.json()
+                                    if isinstance(tc_json, dict):
+                                        s_candidate = tc_json.get('url')
+                                        if s_candidate and 'preview' not in s_candidate:
+                                            stream_url = s_candidate
+                                            break
 
                             if stream_url:
                                 artwork = t_data.get('artwork_url') or ''
-                                if artwork and 'large.jpg' in artwork:
+                                if artwork and isinstance(artwork, str) and 'large.jpg' in artwork:
                                     artwork = artwork.replace('large.jpg', 't500x500.jpg')
+                                u_info = t_data.get('user')
+                                if not isinstance(u_info, dict):
+                                    u_info = {}
+                                raw_dur = t_data.get('duration')
+                                duration = int(raw_dur / 1000) if raw_dur and isinstance(raw_dur, (int, float)) else 0
                                 metadata = {
-                                    'title': t_data.get('title', 'Unknown'),
-                                    'artist': t_data.get('user', {}).get('username', 'Unknown'),
-                                    'duration': int(t_data.get('duration', 0) / 1000),
+                                    'title': t_data.get('title') or 'Unknown',
+                                    'artist': u_info.get('username') or 'Unknown',
+                                    'duration': duration,
                                     'cover_url': artwork,
-                                    'source_id': str(t_data.get('id')),
+                                    'source_id': str(t_data.get('id') or ''),
                                     'stream_url': stream_url
                                 }
                                 self.set_to_cache(track_url, metadata)
@@ -666,18 +694,21 @@ class SoundCloudService(BaseMusicService):
             if r.status_code == 200:
                 data = r.json()
                 tracks = []
-                for item in data.get('collection', []):
-                    if not item or not item.get('id'):
+                for item in (data.get('collection') or []):
+                    if not item or not isinstance(item, dict) or not item.get('id'):
                         continue
                     artwork = item.get('artwork_url') or ''
-                    if artwork and 'large.jpg' in artwork:
+                    if artwork and isinstance(artwork, str) and 'large.jpg' in artwork:
                         artwork = artwork.replace('large.jpg', 't500x500.jpg')
-                    user_info = item.get('user', {})
+                    user_info = item.get('user')
+                    if not isinstance(user_info, dict):
+                        user_info = {}
                     artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
-                    duration = int(item.get('duration', 0) / 1000)
+                    raw_dur = item.get('duration')
+                    duration = int(raw_dur / 1000) if raw_dur and isinstance(raw_dur, (int, float)) else 0
                     waveform_url = item.get('waveform_url') or ''
                     track = {
-                        'title': item.get('title', 'Unknown Title'),
+                        'title': item.get('title') or 'Unknown Title',
                         'artist': artist,
                         'duration': duration,
                         'source': 'soundcloud',
@@ -698,7 +729,7 @@ class SoundCloudService(BaseMusicService):
 
     def get_waveform_data_sync(self, waveform_url: str) -> list:
         """Fetch and normalize audio waveform peaks (samples) to an array of 0.0..1.0 values."""
-        if not waveform_url:
+        if not waveform_url or not isinstance(waveform_url, str):
             return []
 
         json_url = waveform_url
@@ -713,23 +744,42 @@ class SoundCloudService(BaseMusicService):
             r = self._session.get(json_url, timeout=4.0)
             if r.status_code == 200:
                 data = r.json()
+                if not isinstance(data, dict):
+                    return []
                 samples = data.get('samples', [])
-                height = float(data.get('height') or max(samples or [1]) or 1)
+                if not isinstance(samples, list) or not samples:
+                    return []
+                valid_samples = []
+                for s in samples:
+                    try:
+                        valid_samples.append(float(s))
+                    except (TypeError, ValueError):
+                        continue
+                if not valid_samples:
+                    return []
 
-                if samples:
-                    normalized = [round(min(1.0, max(0.05, s / height)), 3) for s in samples]
-                    target_len = 100
-                    if len(normalized) > target_len:
-                        step = len(normalized) / float(target_len)
-                        resampled = []
-                        for i in range(target_len):
-                            idx = int(i * step)
-                            chunk = normalized[idx : idx + max(1, int(step))]
-                            resampled.append(round(max(chunk) if chunk else 0.1, 3))
-                        normalized = resampled
+                max_sample = max(valid_samples) if valid_samples else 1.0
+                raw_height = data.get('height')
+                try:
+                    height = float(raw_height) if raw_height is not None else max_sample
+                except (TypeError, ValueError):
+                    height = max_sample
+                if height <= 0:
+                    height = 1.0
 
-                    self._waveform_cache.set(json_url, normalized)
-                    return normalized
+                normalized = [round(min(1.0, max(0.05, s / height)), 3) for s in valid_samples]
+                target_len = 100
+                if len(normalized) > target_len:
+                    step = len(normalized) / float(target_len)
+                    resampled = []
+                    for i in range(target_len):
+                        idx = int(i * step)
+                        chunk = normalized[idx : idx + max(1, int(step))]
+                        resampled.append(round(max(chunk) if chunk else 0.1, 3))
+                    normalized = resampled
+
+                self._waveform_cache.set(json_url, normalized)
+                return normalized
         except Exception as e:
             self.logger.warning(f"Failed to fetch waveform JSON from {json_url}: {e}")
 
