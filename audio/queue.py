@@ -111,16 +111,48 @@ class PlaybackQueue:
     @repeat.setter
     def repeat(self, mode: str):
         with self._lock:
-            if mode in ("off", "one", "all"):
-                self._repeat = mode
+            if isinstance(mode, str):
+                cleaned = mode.strip().lower()
+                if cleaned in ("off", "one", "all"):
+                    self._repeat = cleaned
 
     def set_tracks(self, tracks: list, start_index: int = 0):
         """Set the queue with a list of tracks."""
         with self._lock:
-            self._tracks = tracks.copy()
-            self._original_order = tracks.copy()
-            self._current_index = min(start_index, len(tracks) - 1) if tracks else -1
+            if not tracks or not isinstance(tracks, (list, tuple)):
+                self._tracks = []
+                self._original_order = []
+                self._current_index = -1
+                self._history_stack.clear()
+                return
+
+            valid_tracks = [t for t in tracks if isinstance(t, dict)]
+            self._tracks = valid_tracks.copy()
+            self._original_order = valid_tracks.copy()
             self._history_stack.clear()
+
+            if not valid_tracks:
+                self._current_index = -1
+                return
+
+            if isinstance(start_index, bool):
+                start_index = 0
+            else:
+                try:
+                    start_index = int(start_index)
+                except (TypeError, ValueError):
+                    start_index = 0
+
+            n = len(valid_tracks)
+            if -n <= start_index < 0:
+                start_index = n + start_index
+            elif start_index < -n:
+                start_index = 0
+            elif start_index >= n:
+                start_index = n - 1
+
+            self._current_index = start_index
+
             if self._shuffle:
                 current = self.current_track
                 remaining = [t for i, t in enumerate(self._tracks) if i != self._current_index]
@@ -129,12 +161,14 @@ class PlaybackQueue:
                     self._tracks = [current] + remaining
                     self._current_index = 0
 
-    def add_track(self, track: dict, play_next: bool = False):
+    def add_track(self, track: dict, play_next: bool = False) -> bool:
         """Add a track to the queue."""
+        if not isinstance(track, dict):
+            return False
         with self._lock:
             if play_next and self._current_index >= 0:
                 self._tracks.insert(self._current_index + 1, track)
-                if self._original_order:
+                if self._original_order is not None:
                     orig_curr = self.current_track
                     orig_curr_key = self._track_key(orig_curr) if orig_curr else None
                     found_orig_idx = -1
@@ -149,60 +183,119 @@ class PlaybackQueue:
                         self._original_order.append(track)
             else:
                 self._tracks.append(track)
-                if self._original_order:
+                if self._original_order is not None:
                     self._original_order.append(track)
-            if self._current_index < 0 and len(self._tracks) == 1:
+            if self._current_index < 0 and len(self._tracks) >= 1:
                 self._current_index = 0
+            return True
 
     def add_tracks(self, tracks: list):
         """Batch add multiple tracks to the queue under a single lock."""
-        if not tracks or not isinstance(tracks, list):
+        if not tracks or not isinstance(tracks, (list, tuple)):
             return
         with self._lock:
             for track in tracks:
                 if not isinstance(track, dict):
                     continue
                 self._tracks.append(track)
-                if self._original_order:
+                if self._original_order is not None:
                     self._original_order.append(track)
             if self._current_index < 0 and len(self._tracks) > 0:
                 self._current_index = 0
 
-    def remove_track(self, index: int):
-        """Remove a track from the queue by index."""
+    def remove_track(self, index: int) -> Optional[dict]:
+        """Remove a track from the queue by index. Supports negative indexing."""
         with self._lock:
-            if 0 <= index < len(self._tracks):
+            if isinstance(index, bool):
+                return None
+            try:
+                index = int(index)
+            except (TypeError, ValueError):
+                return None
+            n = len(self._tracks)
+            if n == 0:
+                return None
+            if -n <= index < 0:
+                index = n + index
+            if 0 <= index < n:
                 track = self._tracks.pop(index)
                 if self._original_order:
                     target_key = self._track_key(track)
-                    self._original_order = [t for t in self._original_order if self._track_key(t) != target_key]
+                    for i, t in enumerate(self._original_order):
+                        if self._track_key(t) == target_key:
+                            self._original_order.pop(i)
+                            break
+
+                new_history = []
+                for h_idx in self._history_stack:
+                    if h_idx == index:
+                        continue
+                    elif h_idx > index:
+                        new_history.append(h_idx - 1)
+                    else:
+                        new_history.append(h_idx)
+                self._history_stack = new_history
+
                 if len(self._tracks) == 0:
                     self._current_index = -1
                 elif index < self._current_index:
                     self._current_index -= 1
                 elif index == self._current_index:
                     self._current_index = min(self._current_index, len(self._tracks) - 1)
+                return track
+            return None
 
-    def move_track(self, old_index: int, new_index: int):
-        """Move a track in the queue from old_index to new_index."""
+    def move_track(self, old_index: int, new_index: int) -> bool:
+        """Move a track in the queue from old_index to new_index. Supports negative indexing."""
         with self._lock:
-            if 0 <= old_index < len(self._tracks) and 0 <= new_index < len(self._tracks):
-                if old_index == new_index:
-                    return
-                
-                # Handle current_index shifting
-                track = self._tracks.pop(old_index)
-                self._tracks.insert(new_index, track)
-                
-                # Update current_index if we moved the currently playing track
-                if old_index == self._current_index:
-                    self._current_index = new_index
-                # Update current_index if we moved a track from before the current track to after it
-                elif old_index < self._current_index and new_index >= self._current_index:
-                    self._current_index -= 1
-                # Update current_index if we moved a track from after the current track to before it
-                elif old_index > self._current_index and new_index <= self._current_index:
-                    self._current_index += 1
+            if isinstance(old_index, bool) or isinstance(new_index, bool):
+                return False
+            try:
+                old_index = int(old_index)
+                new_index = int(new_index)
+            except (TypeError, ValueError):
+                return False
+            n = len(self._tracks)
+            if n == 0:
+                return False
+            if -n <= old_index < 0:
+                old_index = n + old_index
+            if -n <= new_index < 0:
+                new_index = n + new_index
+            if not (0 <= old_index < n and 0 <= new_index < n):
+                return False
+            if old_index == new_index:
+                return True
+            
+            # Handle current_index shifting
+            track = self._tracks.pop(old_index)
+            self._tracks.insert(new_index, track)
+
+            if not self._shuffle:
+                self._original_order = self._tracks.copy()
+
+            new_history = []
+            for h_idx in self._history_stack:
+                if h_idx == old_index:
+                    new_history.append(new_index)
+                elif old_index < h_idx <= new_index:
+                    new_history.append(h_idx - 1)
+                elif new_index <= h_idx < old_index:
+                    new_history.append(h_idx + 1)
+                else:
+                    new_history.append(h_idx)
+            self._history_stack = new_history
+            
+            # Update current_index if we moved the currently playing track
+            if old_index == self._current_index:
+                self._current_index = new_index
+            # Update current_index if we moved a track from before the current track to after it
+            elif old_index < self._current_index and new_index >= self._current_index:
+                self._current_index -= 1
+            # Update current_index if we moved a track from after the current track to before it
+            elif old_index > self._current_index and new_index <= self._current_index:
+                self._current_index += 1
+            return True
 
     def next_track(self) -> Optional[dict]:
         """Move to the next track. Returns the track or None."""
@@ -239,6 +332,25 @@ class PlaybackQueue:
             self._current_index += 1
             return self.current_track
 
+    def peek_next(self) -> Optional[dict]:
+        """Peek at the next track that would play without advancing the queue."""
+        with self._lock:
+            if self.is_empty:
+                return None
+
+            if self._repeat == "one":
+                return self.current_track
+
+            if self._current_index < len(self._tracks) - 1:
+                next_idx = max(0, self._current_index + 1)
+                return self._tracks[next_idx]
+
+            # At the end of the queue
+            if self._repeat == "all":
+                return self._tracks[0] if self._tracks else None
+
+            return None
+
     def previous_track(self) -> Optional[dict]:
         """Move to the previous track. Returns the track or None."""
         with self._lock:
@@ -246,7 +358,11 @@ class PlaybackQueue:
                 return None
 
             if self._history_stack:
-                self._current_index = self._history_stack.pop()
+                target_idx = self._history_stack.pop()
+                if 0 <= target_idx < len(self._tracks):
+                    self._current_index = target_idx
+                else:
+                    self._current_index = max(0, min(self._current_index - 1, len(self._tracks) - 1))
             else:
                 self._current_index = max(0, self._current_index - 1)
 
@@ -256,9 +372,20 @@ class PlaybackQueue:
     prev_track = previous_track
 
     def jump_to(self, index: int) -> Optional[dict]:
-        """Jump to a specific track in the queue."""
+        """Jump to a specific track in the queue. Supports negative indexing."""
         with self._lock:
-            if 0 <= index < len(self._tracks):
+            if isinstance(index, bool):
+                return None
+            try:
+                index = int(index)
+            except (TypeError, ValueError):
+                return None
+            n = len(self._tracks)
+            if n == 0:
+                return None
+            if -n <= index < 0:
+                index = n + index
+            if 0 <= index < n:
                 if self.current_track:
                     self._history_stack.append(self._current_index)
                 self._current_index = index
@@ -283,7 +410,7 @@ class PlaybackQueue:
         """Serialize queue state for session persistence."""
         with self._lock:
             return {
-                "track_ids": [t.get("id") for t in self._tracks if t.get("id")],
+                "track_ids": [t.get("id") for t in self._tracks if isinstance(t, dict) and t.get("id")],
                 "current_index": self._current_index,
                 "shuffle": self._shuffle,
                 "repeat": self._repeat,
@@ -292,4 +419,5 @@ class PlaybackQueue:
     def get_queue_track_ids(self) -> list:
         """Get list of track IDs in queue."""
         with self._lock:
-            return [t.get("id") for t in self._tracks if t.get("id")]
+            return [t.get("id") for t in self._tracks if isinstance(t, dict) and t.get("id")]
+
