@@ -31,8 +31,6 @@ restored_sources/
 backups/
 
 # Tests, Audits, Benchmarks & Reports
-tests/
-run_tests.py
 .test_runs/
 .jscheck/
 .audit/
