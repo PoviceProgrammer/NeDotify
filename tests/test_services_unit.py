@@ -1,3 +1,4 @@
+import os
 import time
 import threading
 import unittest
@@ -554,6 +555,83 @@ class TestYouTubeServiceUnit(unittest.TestCase):
     def test_youtube_download_audio_sync_empty_guard(self):
         with self.assertRaises(ValueError):
             self.yt.download_audio_sync("", "/tmp/somedir")
+
+    def test_youtube_search_duration_seconds_string(self):
+        fake_results = [
+            {
+                "resultType": "song",
+                "videoId": "vid_sec_str",
+                "title": "Song In Seconds",
+                "artists": [{"name": "Artist"}],
+                "duration": "145",
+                "thumbnails": []
+            }
+        ]
+        self.yt._ytmusic.search.return_value = fake_results
+
+        event = threading.Event()
+        res_tracks = []
+        self.yt.search("seconds test", callback=lambda t: (res_tracks.extend(t), event.set()))
+        event.wait(timeout=2.0)
+
+        self.assertEqual(len(res_tracks), 1)
+        self.assertEqual(res_tracks[0]["duration"], 145)
+
+    def test_youtube_get_stream_url_artist_fallback_when_uploader_and_channel_are_none(self):
+        fake_info = {
+            "id": "vid_no_artist",
+            "title": "Solo Track",
+            "uploader": None,
+            "channel": None,
+            "url": "https://stream.youtube.com/audio.m4a",
+            "formats": []
+        }
+        with patch.object(self.yt, "_extract_info_safe", return_value=fake_info):
+            event = threading.Event()
+            res_meta = {}
+
+            def cb(url, meta):
+                res_meta.update(meta)
+                event.set()
+
+            self.yt.get_stream_url("https://youtube.com/watch?v=vid_no_artist", callback=cb)
+            event.wait(timeout=2.0)
+
+            self.assertEqual(res_meta.get("artist"), "Unknown")
+
+    def test_youtube_get_stream_url_caches_by_both_url_and_video_id(self):
+        fake_info = {
+            "id": "vid_cache_both",
+            "title": "Cache Track",
+            "uploader": "Uploader",
+            "url": "https://stream.youtube.com/cached.m4a"
+        }
+        with patch.object(self.yt, "_extract_info_safe", return_value=fake_info):
+            event = threading.Event()
+            self.yt.get_stream_url("https://youtube.com/watch?v=vid_cache_both", callback=lambda u, m: event.set())
+            event.wait(timeout=2.0)
+
+            cached_by_id = self.yt.get_from_cache("vid_cache_both")
+            self.assertIsNotNone(cached_by_id)
+            self.assertEqual(cached_by_id.get("stream_url"), "https://stream.youtube.com/cached.m4a")
+
+    def test_youtube_download_audio_sync_cleans_up_part_files_on_failure(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            part_file = os.path.join(tmpdir, "yt_failtrack_555.part")
+            with open(part_file, "w") as f:
+                f.write("partial yt data")
+
+            with patch("yt_dlp.YoutubeDL") as mock_ydl_cls, \
+                 patch("time.time", return_value=555):
+                mock_ydl = MagicMock()
+                mock_ydl_cls.return_value.__enter__.return_value = mock_ydl
+                mock_ydl.extract_info.side_effect = Exception("YouTube connection reset")
+
+                with self.assertRaises(Exception):
+                    self.yt.download_audio_sync("failtrack", tmpdir)
+
+                self.assertFalse(os.path.exists(part_file))
 
 
 class TestVKServiceUnit(unittest.TestCase):

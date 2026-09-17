@@ -339,6 +339,8 @@ class YouTubeService(BaseMusicService):
                                     duration = int(parts[0]) * 60 + int(parts[1])
                                 elif len(parts) == 3:
                                     duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                                else:
+                                    duration = int(duration_val)
                             except (ValueError, TypeError):
                                 duration = 0
 
@@ -700,7 +702,13 @@ class YouTubeService(BaseMusicService):
                         if not stream_url and info.get("formats"):
                             audio_fmts = [f for f in info["formats"] if f.get("acodec") != "none" and f.get("url")]
                             if audio_fmts:
-                                audio_fmts.sort(key=lambda f: f.get("abr") or f.get("tbr") or 0, reverse=True)
+                                def _fmt_br(f):
+                                    b = f.get("abr") or f.get("tbr") or 0
+                                    try:
+                                        return float(b)
+                                    except (ValueError, TypeError):
+                                        return 0.0
+                                audio_fmts.sort(key=_fmt_br, reverse=True)
                                 stream_url = audio_fmts[0].get("url")
                             elif len(info["formats"]) > 0:
                                 stream_url = info["formats"][-1].get("url")
@@ -712,17 +720,20 @@ class YouTubeService(BaseMusicService):
                             return None
 
                         metadata = {
-                            "title": info.get("title", "Unknown"),
-                            "artist": info.get("uploader") or info.get("channel", "Unknown"),
-                            "duration": info.get("duration", 0),
-                            "cover_url": info.get("thumbnail", ""),
-                            "source_id": info.get("id", ""),
+                            "title": info.get("title") or "Unknown",
+                            "artist": info.get("uploader") or info.get("channel") or "Unknown",
+                            "duration": info.get("duration") or 0,
+                            "cover_url": info.get("thumbnail") or "",
+                            "source_id": info.get("id") or "",
                             "stream_url": stream_url,
-                            "format": info.get("ext", "unknown"),
-                            "bitrate": info.get("abr", 0),
+                            "format": info.get("ext") or "unknown",
+                            "bitrate": info.get("abr") or 0,
                         }
 
                         self.set_to_cache(video_url, metadata)
+                        sid = info.get("id")
+                        if sid and sid != video_url:
+                            self.set_to_cache(sid, metadata)
 
                         if callback:
                             callback(stream_url, metadata)
@@ -815,7 +826,8 @@ class YouTubeService(BaseMusicService):
 
         os.makedirs(output_dir, exist_ok=True)
 
-        clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id))
+        raw_token = str(source_id).strip().split('/')[-1].split('?')[0]
+        clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', raw_token) or "track"
         ts = int(time.time())
         out_template = os.path.join(output_dir, f"yt_{clean_id}_{ts}.%(ext)s")
 
@@ -829,32 +841,45 @@ class YouTubeService(BaseMusicService):
             "no_warnings": True,
         })
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            if not info:
-                raise Exception("Не удалось извлечь информацию о треке YouTube")
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                if not info:
+                    raise Exception("Не удалось извлечь информацию о треке YouTube")
 
-            # 1. Check prepare_filename
-            downloaded_file = ydl.prepare_filename(info)
-            if os.path.exists(downloaded_file):
-                return downloaded_file
+                # 1. Check prepare_filename
+                downloaded_file = ydl.prepare_filename(info)
+                if os.path.exists(downloaded_file):
+                    return downloaded_file
 
-            # 2. Check info ext
-            ext = info.get('ext', 'm4a')
-            cand = os.path.join(output_dir, f"yt_{clean_id}_{ts}.{ext}")
-            if os.path.exists(cand):
-                return cand
-
-            # 3. Check common audio extensions
-            for e in (".mp3", ".m4a", ".webm", ".opus", ".aac", ".ogg"):
-                cand = os.path.join(output_dir, f"yt_{clean_id}_{ts}{e}")
+                # 2. Check info ext
+                ext = info.get('ext', 'm4a')
+                cand = os.path.join(output_dir, f"yt_{clean_id}_{ts}.{ext}")
                 if os.path.exists(cand):
                     return cand
 
-            # 4. Check directory for file starting with prefix
-            prefix = f"yt_{clean_id}_{ts}"
-            for fname in os.listdir(output_dir):
-                if fname.startswith(prefix) and not fname.endswith('.part'):
-                    return os.path.join(output_dir, fname)
+                # 3. Check common audio extensions
+                for e in (".mp3", ".m4a", ".webm", ".opus", ".aac", ".ogg"):
+                    cand = os.path.join(output_dir, f"yt_{clean_id}_{ts}{e}")
+                    if os.path.exists(cand):
+                        return cand
 
-            raise Exception("Файл не был найден после загрузки с YouTube")
+                # 4. Check directory for file starting with prefix
+                prefix = f"yt_{clean_id}_{ts}"
+                for fname in os.listdir(output_dir):
+                    if fname.startswith(prefix) and not (fname.endswith('.part') or fname.endswith('.ytdl')):
+                        return os.path.join(output_dir, fname)
+
+                raise Exception("Файл не был найден после загрузки с YouTube")
+        except Exception:
+            try:
+                prefix = f"yt_{clean_id}_{ts}"
+                for fname in os.listdir(output_dir):
+                    if fname.startswith(prefix) and (fname.endswith('.part') or fname.endswith('.ytdl')):
+                        try:
+                            os.remove(os.path.join(output_dir, fname))
+                        except OSError:
+                            pass
+            except Exception:
+                pass
+            raise
