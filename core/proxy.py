@@ -528,11 +528,37 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 p = urllib.request.url2pathname(p[6:])
             return p
 
-        # 1. If url_param points directly to a local file, serve it immediately!
+        def _is_safe_local_audio(file_path):
+            if not file_path or not os.path.isfile(file_path):
+                return False
+            # Allow if it's in the DB tracks
+            if hasattr(self.server.app_core, 'db'):
+                if self.server.app_core.db.get_track_by_path(file_path):
+                    return True
+            # Allow if it's in the streams cache directory
+            streams_dir = getattr(self.server.app_core.cache, '_streams_dir', None)
+            if streams_dir:
+                try:
+                    if os.path.commonpath([os.path.realpath(file_path), os.path.realpath(streams_dir)]) == os.path.realpath(streams_dir):
+                        return True
+                except ValueError:
+                    pass
+            # Allow if it's in the downloads directory
+            downloads_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'downloads')
+            if downloads_dir and os.path.isdir(downloads_dir):
+                try:
+                    if os.path.commonpath([os.path.realpath(file_path), os.path.realpath(downloads_dir)]) == os.path.realpath(downloads_dir):
+                        return True
+                except ValueError:
+                    pass
+            return False
+
+        # 1. If url_param points directly to a local file, verify it's safe!
         cleaned_url = _clean_local_path(url_param)
-        if cleaned_url and (os.path.isabs(cleaned_url) or os.path.exists(cleaned_url)) and os.path.isfile(cleaned_url):
-            self.serve_local_file(cleaned_url)
-            return None
+        if cleaned_url and os.path.isfile(cleaned_url):
+            if _is_safe_local_audio(cleaned_url):
+                self.serve_local_file(cleaned_url)
+                return None
 
         int_track_id = None
         if track_id:
@@ -563,10 +589,11 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         # 2. Local source check
         if source == 'local':
             fp = _clean_local_path(url_param or track.get('file_path') or track.get('url'))
-            if fp and os.path.exists(fp) and os.path.isfile(fp):
-                self.serve_local_file(fp)
-                return None
-            self.send_error(404, 'Local file not found')
+            if fp and os.path.isfile(fp):
+                if _is_safe_local_audio(fp):
+                    self.serve_local_file(fp)
+                    return None
+            self.send_error(404, 'Local file not found or access denied')
             return None
 
         # 3. Check DB stream cache for local cached file
@@ -616,9 +643,10 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
 
         # If target_url resolved to a local file
         target_local = _clean_local_path(target_url)
-        if target_local and (os.path.isabs(target_local) or os.path.exists(target_local)) and os.path.isfile(target_local):
-            self.serve_local_file(target_local)
-            return None
+        if target_local and os.path.isfile(target_local):
+            if _is_safe_local_audio(target_local):
+                self.serve_local_file(target_local)
+                return None
 
         # Infer source if not specified
         if not source:
