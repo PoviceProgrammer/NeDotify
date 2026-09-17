@@ -174,9 +174,9 @@ export function syncVolume() {
             try { gainNodeB.gain.value = gateB; gainNodeB.gain.setValueAtTime(gateB, now); } catch(e) {}
         }
         try {
-            const mTargetVol = isMuted ? 0 : (currentVolume / 100);
-            masterGainNode.gain.value = mTargetVol;
-            masterGainNode.gain.setValueAtTime(mTargetVol, now);
+            // Keep masterGainNode output silent so Web Audio does NOT duplicate the native GStreamer stream
+            masterGainNode.gain.value = 0;
+            masterGainNode.gain.setValueAtTime(0, now);
         } catch(e) {}
     }
 }
@@ -263,7 +263,8 @@ function initAudioContext() {
         masterGainNode.gain.setValueAtTime(0, audioCtx.currentTime);
 
         analyserNode.connect(masterGainNode);
-        masterGainNode.connect(audioCtx.destination);
+        // Do NOT connect masterGainNode to audioCtx.destination: native <audio> outputs via GStreamer,
+        // avoiding duplicate PulseAudio streams, Bluetooth packet collisions, and comb filtering.
         
         // Connect both audio elements safely with individual gain gates to prevent bleed/phase cancellation
         gainNodeA = audioCtx.createGain();
@@ -272,8 +273,10 @@ function initAudioContext() {
         gainNodeB.gain.setValueAtTime(activeAudio === audioB ? 1.0 : 0.0, audioCtx.currentTime);
 
         if (!mediaSourcesCreated) {
-            srcA = audioCtx.createMediaElementSource(audioA);
-            srcB = audioCtx.createMediaElementSource(audioB);
+            // WebKitGTK Bug Workaround: createMediaElementSource mutes the native <audio> element
+            // and often fails to output to audioCtx.destination. We skip it to restore physical sound.
+            // srcA = audioCtx.createMediaElementSource(audioA);
+            // srcB = audioCtx.createMediaElementSource(audioB);
             mediaSourcesCreated = true;
         }
         
@@ -785,11 +788,8 @@ export function initPlayer() {
     if (pbFlow) pbFlow.addEventListener('click', toggleFlow);
     updateFlowButtons();
 
-    const ppQueue = document.getElementById('pp-btn-queue');
-    if (ppQueue) ppQueue.addEventListener('click', () => {
-        const queueDrawer = document.getElementById('queue-drawer');
-        if (queueDrawer) queueDrawer.classList.toggle('open');
-    });
+    // Note: #pp-btn-queue click listener is handled exclusively by queue.js
+    // to prevent competing drawer state toggles.
 
     // Tray Context Menu Action Listener (Phase 5)
     window.addEventListener('nedotify:tray_action', (evt) => {
@@ -947,33 +947,48 @@ export function initPlayer() {
     const syncVolumeAria = () => {
         const vt = document.getElementById('pb-volume-track');
         if (vt) vt.setAttribute('aria-valuenow', String(currentVolume));
+        const ppVt = document.getElementById('pp-volume-track');
+        if (ppVt) ppVt.setAttribute('aria-valuenow', String(currentVolume));
+    };
+    const updateVolumeUI = (pct) => {
+        const pctStr = `${pct * 100}%`;
+        setEl('pb-volume-fill', 'width', pctStr);
+        setEl('pp-volume-fill', 'width', pctStr);
+        updateVolumeIcon(currentVolume, isMuted);
+    };
+    const onVolumeDrag = (pct) => {
+        isDraggingVolume = true;
+        currentVolume = Math.round(pct * 100);
+        updateVolumeUI(pct);
+        syncVolume();
+        // M-1: throttle RPC while dragging — last value wins
+        syncVolumeAria();
+        scheduleVolumeRpc(currentVolume, false);
+    };
+    const onVolumeRelease = (pct) => {
+        isDraggingVolume = false;
+        currentVolume = Math.round(pct * 100);
+        updateVolumeUI(pct);
+        syncVolume();
+        // M-1: flush the final value immediately
+        syncVolumeAria();
+        scheduleVolumeRpc(currentVolume, true);
     };
     setupDragBar('pb-volume-track', {
-        onDrag: (pct) => {
-            isDraggingVolume = true;
-            currentVolume = Math.round(pct * 100);
-            setEl('pb-volume-fill', 'width', `${pct * 100}%`);
-            updateVolumeIcon(currentVolume);
-            syncVolume();
-            // M-1: throttle RPC while dragging — last value wins
-            syncVolumeAria();
-            scheduleVolumeRpc(currentVolume, false);
-        },
-        onRelease: (pct) => {
-            isDraggingVolume = false;
-            currentVolume = Math.round(pct * 100);
-            syncVolume();
-            // M-1: flush the final value immediately
-            syncVolumeAria();
-            scheduleVolumeRpc(currentVolume, true);
-        }
+        onDrag: onVolumeDrag,
+        onRelease: onVolumeRelease
+    });
+    setupDragBar('pp-volume-track', {
+        onDrag: onVolumeDrag,
+        onRelease: onVolumeRelease
     });
 
     window.NeDotify = window.NeDotify || {};
     window.NeDotify.adjustVolume = (delta) => {
         currentVolume = Math.max(0, Math.min(100, currentVolume + delta));
         setEl('pb-volume-fill', 'width', `${currentVolume}%`);
-        updateVolumeIcon(currentVolume);
+        setEl('pp-volume-fill', 'width', `${currentVolume}%`);
+        updateVolumeIcon(currentVolume, isMuted);
         syncVolume();
         // M-1: discrete event — send immediately
         syncVolumeAria();
@@ -981,14 +996,19 @@ export function initPlayer() {
     };
 
     // Volume icon mute toggle
-    const volBtn = document.getElementById('pb-volume-btn');
-    if (volBtn) volBtn.addEventListener('click', () => {
+    const toggleMute = () => {
         isMuted = !isMuted;
         syncVolume();
         const vfill = document.getElementById('pb-volume-fill');
         if (vfill) vfill.style.opacity = isMuted ? '0.3' : '1';
+        const ppVfill = document.getElementById('pp-volume-fill');
+        if (ppVfill) ppVfill.style.opacity = isMuted ? '0.3' : '1';
         updateVolumeIcon(currentVolume, isMuted);
-    });
+    };
+    const volBtn = document.getElementById('pb-volume-btn');
+    if (volBtn) volBtn.addEventListener('click', toggleMute);
+    const ppVolBtn = document.getElementById('pp-volume-btn');
+    if (ppVolBtn) ppVolBtn.addEventListener('click', toggleMute);
 
     // Three-dot track options menu
     const optBtn = document.getElementById('pb-btn-options');
@@ -1485,8 +1505,30 @@ export function onTrackChanged(track) {
     const headerTitle = (track?.title || 'Трек не выбран') + (hasArtist ? ' — ' + track.artist : '');
     const headerEl = document.getElementById('pp-header-title');
     if (headerEl) {
-        headerEl.textContent = headerTitle;
         headerEl.title = headerTitle;
+        // Do NOT overwrite headerEl.textContent as that destroys child <span id="pp-title"> and <span id="pp-artist">
+        let ppTitle = document.getElementById('pp-title');
+        let ppArtist = document.getElementById('pp-artist');
+        if (!ppTitle || !ppArtist) {
+            headerEl.innerHTML = '<span id="pp-title"></span> — <span id="pp-artist"></span>';
+            ppTitle = document.getElementById('pp-title');
+            ppArtist = document.getElementById('pp-artist');
+            if (ppArtist) {
+                ppArtist.classList.add('clickable-artist');
+                ppArtist.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (currentTrack && currentTrack.artist && currentTrack.artist !== 'Unknown' && currentTrack.artist !== 'Выберите трек') {
+                        if (window.searchArtistProfile) {
+                            window.searchArtistProfile(currentTrack.artist);
+                        } else if (window.NeDotify?.searchArtistProfile) {
+                            window.NeDotify.searchArtistProfile(currentTrack.artist);
+                        }
+                    }
+                });
+            }
+        }
+        if (ppTitle) ppTitle.textContent = track?.title || 'Трек не выбран';
+        if (ppArtist) ppArtist.textContent = hasArtist ? track.artist : (track?.artist || 'Выберите трек для воспроизведения');
     }
     // Atomically reset progress bar and position tracking to prevent 100% / ended flicker
     currentPosMs = 0;
@@ -1504,7 +1546,7 @@ export function onTrackChanged(track) {
     setElText('mp-time-total', formatTime(currentDuration / 1000));
 
     setElText('pp-title', track?.title || 'Трек не выбран');
-    setElText('pp-artist', track?.artist || 'Выберите трек для воспроизведения');
+    setElText('pp-artist', hasArtist ? track.artist : (track?.artist || 'Выберите трек для воспроизведения'));
     setElSrc('pp-cover', coverUrl);
 
     // Update Mini Player widget
@@ -1697,6 +1739,7 @@ export function applySettings(settings) {
     const ppShuffle = document.getElementById('pp-btn-shuffle');
     const ppRepeat = document.getElementById('pp-btn-repeat');
     const volFill = document.getElementById('pb-volume-fill');
+    const ppVolFill = document.getElementById('pp-volume-fill');
 
     if (btnShuffle) btnShuffle.classList.toggle('active', settings.shuffle);
     if (ppShuffle) ppShuffle.classList.toggle('active', settings.shuffle);
@@ -1708,7 +1751,8 @@ export function applySettings(settings) {
     }
     
     if (volFill) volFill.style.width = `${currentVolume}%`;
-    updateVolumeIcon(currentVolume);
+    if (ppVolFill) ppVolFill.style.width = `${currentVolume}%`;
+    updateVolumeIcon(currentVolume, isMuted);
     syncVolume();
 }
 
@@ -1751,12 +1795,14 @@ function updateRepeatIcon(btn, mode) {
 }
 
 function updateVolumeIcon(volume, isMuted) {
-    const btn = document.getElementById('pb-volume-btn');
-    if (!btn) return;
     let icon = 'volume-2';
     if (isMuted || volume === 0) icon = 'volume-x';
     else if (volume <= 50) icon = 'volume-1';
-    btn.innerHTML = `<i data-lucide="${icon}" style="width:16px;height:16px"></i>`;
+    ['pb-volume-btn', 'pp-volume-btn'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.innerHTML = `<i data-lucide="${icon}" style="width:16px;height:16px"></i>`;
+    });
     renderIcons();
 }
 
@@ -2200,6 +2246,9 @@ if (document.readyState === 'loading') {
 } else {
     setupMagneticWaveformListeners();
 }
+
+window.NeDotify = window.NeDotify || {};
+window.NeDotify.renderWaveforms = renderWaveforms;
 
 
 

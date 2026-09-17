@@ -176,9 +176,9 @@ export function syncVolume() {
             try { gainNodeB.gain.value = gateB; gainNodeB.gain.setValueAtTime(gateB, now); } catch(e) {}
         }
         try {
-            const mTargetVol = isMuted ? 0 : (currentVolume / 100);
-            masterGainNode.gain.value = mTargetVol;
-            masterGainNode.gain.setValueAtTime(mTargetVol, now);
+            // Keep masterGainNode output silent so Web Audio does NOT duplicate the native GStreamer stream
+            masterGainNode.gain.value = 0;
+            masterGainNode.gain.setValueAtTime(0, now);
         } catch(e) {}
     }
 }
@@ -265,7 +265,8 @@ function initAudioContext() {
         masterGainNode.gain.setValueAtTime(0, audioCtx.currentTime);
 
         analyserNode.connect(masterGainNode);
-        masterGainNode.connect(audioCtx.destination);
+        // Do NOT connect masterGainNode to audioCtx.destination: native <audio> outputs via GStreamer,
+        // avoiding duplicate PulseAudio streams, Bluetooth packet collisions, and comb filtering.
         
         // Connect both audio elements safely with individual gain gates to prevent bleed/phase cancellation
         gainNodeA = audioCtx.createGain();
@@ -274,8 +275,10 @@ function initAudioContext() {
         gainNodeB.gain.setValueAtTime(activeAudio === audioB ? 1.0 : 0.0, audioCtx.currentTime);
 
         if (!mediaSourcesCreated) {
-            srcA = audioCtx.createMediaElementSource(audioA);
-            srcB = audioCtx.createMediaElementSource(audioB);
+            // WebKitGTK Bug Workaround: createMediaElementSource mutes the native <audio> element
+            // and often fails to output to audioCtx.destination. We skip it to restore physical sound.
+            // srcA = audioCtx.createMediaElementSource(audioA);
+            // srcB = audioCtx.createMediaElementSource(audioB);
             mediaSourcesCreated = true;
         }
         

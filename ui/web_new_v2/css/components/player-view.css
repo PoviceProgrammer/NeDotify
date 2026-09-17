@@ -6,9 +6,18 @@
    Lyrics CONTENT styles live in lyrics.css; the bottom bar in player-bar.css.
    ========================================================================== */
 
+#view-player {
+    position: relative;
+    padding: 0;
+    min-height: 0;
+    height: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
 .player-2col-layout {
     display: grid;
-    grid-template-columns: minmax(340px, 380px) 1fr;
+    grid-template-columns: minmax(390px, 440px) 1fr;
     gap: var(--space-md);
     height: 100%;
     width: 100%;
@@ -82,10 +91,12 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-start;
-    gap: 12px;
+    justify-content: space-between;
+    gap: 10px;
     overflow-y: auto;
     overflow-x: hidden;
+    box-sizing: border-box;
+    height: 100%;
 }
 
 .player-header-title {
@@ -109,14 +120,14 @@
     justify-content: center;
     align-items: center;
     width: 100%;
-    flex-shrink: 1;
+    flex: 1;
     min-height: 0;
 }
 
 .player-cover-wrapper {
     position: relative;
     width: 100%;
-    max-width: min(260px, 34vh);
+    max-width: min(280px, 36vh);
     aspect-ratio: 1 / 1;
     border-radius: var(--radius-md);
     box-shadow: 0 16px 40px var(--color-shadow);
@@ -145,18 +156,47 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 4px;
     width: 100%;
     max-width: 100%;
-    flex-wrap: wrap;
-    row-gap: 6px;
+    flex-wrap: nowrap;
     margin-top: var(--space-xs);
 }
 
 .player-card-controls .btn-ctrl {
     width: 34px;
     height: 34px;
-    min-width: 34px;
+    min-width: 30px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    flex-shrink: 1;
+}
+
+.player-card-controls .btn-ctrl i,
+.player-card-controls .btn-ctrl svg {
+    width: 16px !important;
+    height: 16px !important;
+}
+
+.player-card-volume {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    max-width: 280px;
+    margin-top: 4px;
+    padding: 0 8px;
+    box-sizing: border-box;
+}
+
+.player-card-volume .btn-ctrl {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
     padding: 0;
     display: flex;
     align-items: center;
@@ -165,10 +205,15 @@
     flex-shrink: 0;
 }
 
-.player-card-controls .btn-ctrl i,
-.player-card-controls .btn-ctrl svg {
+.player-card-volume .btn-ctrl i,
+.player-card-volume .btn-ctrl svg {
     width: 16px !important;
     height: 16px !important;
+}
+
+.player-card-volume .volume-track {
+    flex: 1;
+    min-width: 80px;
 }
 
 .btn-play-large {
@@ -203,6 +248,10 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 .lyrics-sparkle-deco {
@@ -210,4 +259,23 @@
     bottom: var(--space-lg);
     right: var(--space-xl);
     pointer-events: none;
+}
+
+/* ─── Responsive Breakpoints for Player View ─── */
+@media (max-width: 900px) {
+    .player-2col-layout {
+        grid-template-columns: 1fr;
+        gap: var(--space-md);
+        overflow-y: auto;
+    }
+
+    .player-left-col {
+        height: auto;
+        min-height: auto;
+    }
+
+    .player-right-col {
+        height: auto;
+        min-height: 360px;
+    }
 }

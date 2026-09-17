@@ -521,8 +521,11 @@
 /* ─── 7. Fullscreen Player Page (#view-player) ─── */
 #view-player {
     position: relative;
-    padding: var(--space-xl, 32px);
-    min-height: calc(100vh - 140px);
+    padding: 0;
+    min-height: 0;
+    height: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .player-page-container {
@@ -564,7 +567,7 @@
         padding: 0 var(--space-md, 16px);
     }
 
-    .player-page-container {
+    .player-2col-layout {
         grid-template-columns: 1fr;
         gap: var(--space-xl, 32px);
     }

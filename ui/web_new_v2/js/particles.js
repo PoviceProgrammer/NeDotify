@@ -100,7 +100,7 @@ function getCoatRfSprite(w, h) {
 
         // Golden double-headed eagle emblem
         const eagleFontPx = Math.max(9, Math.round(w * 0.58));
-        c.font = `${eagleFontPx}px "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+        c.font = `${eagleFontPx}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
         c.fillStyle = '#ffd700';
         c.textAlign = 'center';
         c.textBaseline = 'middle';
@@ -182,12 +182,73 @@ function getBlurredDotSprite(radius) {
     return sprite;
 }
 
+// Persistent event handlers to prevent memory leaks across re-inits
+let resizeTimeout = null;
+function performResize() {
+    if (!canvas) return;
+    const oldW = canvas.width || window.innerWidth;
+    const oldH = canvas.height || window.innerHeight;
+    const newW = window.innerWidth;
+    const newH = window.innerHeight;
+
+    canvas.width = newW;
+    canvas.height = newH;
+
+    if (oldW > 0 && oldH > 0 && (oldW !== newW || oldH !== newH) && particles.length > 0) {
+        const scaleX = newW / oldW;
+        const scaleY = newH / oldH;
+        particles.forEach(p => {
+            p.x = p.x * scaleX;
+            p.y = p.y * scaleY;
+        });
+    }
+}
+
+function onResize() {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(performResize, 100);
+}
+
+function onMiniPlayerToggled() {
+    if (document.body.classList.contains('mini-player-active')) {
+        if (animFrameId) {
+            cancelAnimationFrame(animFrameId);
+            animFrameId = null;
+        }
+    } else if (isParticlesRunning && !animFrameId && animateFn) {
+        lastFrameTime = 0;
+        animFrameId = requestAnimationFrame(animateFn);
+    }
+    setTimeout(performResize, 100);
+}
+
+let mouseThrottleId = null;
+function onMouseMove(e) {
+    if (!mouseThrottleId) {
+        mouseThrottleId = setTimeout(() => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+            mouse.active = true;
+            mouseThrottleId = null;
+        }, 32);
+    }
+}
+
+function onMouseLeave() {
+    mouse.active = false;
+}
+
 export function stopParticles() {
     isParticlesRunning = false;
     if (animFrameId) {
         cancelAnimationFrame(animFrameId);
         animFrameId = null;
     }
+    window.removeEventListener('resize', onResize);
+    window.removeEventListener('nedotify:mini_player_toggled', onMiniPlayerToggled);
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseleave', onMouseLeave);
+
     const container = document.getElementById('particles-bg');
     if (container) {
         container.style.display = 'none';
@@ -235,69 +296,15 @@ export function initParticles() {
     canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none !important;display:block;';
 
     container.appendChild(canvas);
-    ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
-
-    // Debounced resize with coordinate rescaling
-    const performResize = () => {
-        if (!canvas) return;
-        const oldW = canvas.width || window.innerWidth;
-        const oldH = canvas.height || window.innerHeight;
-        const newW = window.innerWidth;
-        const newH = window.innerHeight;
-
-        canvas.width = newW;
-        canvas.height = newH;
-
-        if (oldW > 0 && oldH > 0 && (oldW !== newW || oldH !== newH) && particles.length > 0) {
-            const scaleX = newW / oldW;
-            const scaleY = newH / oldH;
-            particles.forEach(p => {
-                p.x = p.x * scaleX;
-                p.y = p.y * scaleY;
-            });
-        }
-    };
+    ctx = canvas.getContext('2d', { alpha: true });
 
     performResize();
-
-    let resizeTimeout = null;
-    const onResize = () => {
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(performResize, 100);
-    };
 
     window.removeEventListener('resize', onResize);
     window.addEventListener('resize', onResize);
 
-    const onMiniPlayerToggled = () => {
-        if (document.body.classList.contains('mini-player-active')) {
-            if (animFrameId) {
-                cancelAnimationFrame(animFrameId);
-                animFrameId = null;
-            }
-        } else if (isParticlesRunning && !animFrameId && animateFn) {
-            lastFrameTime = 0;
-            animFrameId = requestAnimationFrame(animateFn);
-        }
-        setTimeout(performResize, 100);
-    };
     window.removeEventListener('nedotify:mini_player_toggled', onMiniPlayerToggled);
     window.addEventListener('nedotify:mini_player_toggled', onMiniPlayerToggled);
-
-    let mouseThrottleId = null;
-    const onMouseMove = (e) => {
-        if (!mouseThrottleId) {
-            mouseThrottleId = setTimeout(() => {
-                mouse.x = e.clientX;
-                mouse.y = e.clientY;
-                mouse.active = true;
-                mouseThrottleId = null;
-            }, 32);
-        }
-    };
-    const onMouseLeave = () => {
-        mouse.active = false;
-    };
 
     window.removeEventListener('mousemove', onMouseMove);
     window.addEventListener('mousemove', onMouseMove, { passive: true });
@@ -326,7 +333,9 @@ export function initParticles() {
         if (rawLocal) localShape = JSON.parse(rawLocal);
     } catch(e) {}
 
-    particleShape = (activeShape?.dataset?.shape) || savedShape || localShape || 'dot';
+    let resolvedShape = (activeShape?.dataset?.shape) || savedShape || localShape || 'dot';
+    if (resolvedShape === 'circle') resolvedShape = 'dot';
+    particleShape = resolvedShape;
 
     const baseSpeed = particleSpeed === 1 ? 0.35 : (particleSpeed === 3 ? 1.3 : 0.75);
 
@@ -365,7 +374,7 @@ export function initParticles() {
     function drawParticle(p) {
         ctx.globalAlpha = p.opacity;
 
-        if (p.shape === 'dot') {
+        if (p.shape === 'dot' || p.shape === 'circle') {
             const sprite = getBlurredDotSprite(p.radius);
             ctx.drawImage(sprite.canvas, p.x - sprite.offset, p.y - sprite.offset);
         } else if (p.shape === 'flag_rf') {

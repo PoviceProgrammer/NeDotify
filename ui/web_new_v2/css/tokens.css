@@ -67,12 +67,13 @@
     --app-bg-opacity: 1;
 
     /* ----------------------------------------------------------------------
-       5. Typography Scale & Fonts: «Sora + DM Sans»
+       5. Typography Scale & Fonts: «Inter + Sora»
        ---------------------------------------------------------------------- */
-    --font-display: 'Sora', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    --font-body: 'DM Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
-    --font-family: var(--font-body);
-    --font-mono: 'Consolas', 'Courier New', monospace;
+    --font-sans-fallback: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Ubuntu', 'Cantarell', 'Noto Sans', 'Liberation Sans', sans-serif;
+    --font-family: 'Inter', var(--font-sans-fallback);
+    --font-body: var(--font-family);
+    --font-display: 'Sora', var(--font-family);
+    --font-mono: 'Consolas', 'Adwaita Mono', 'Liberation Mono', 'Ubuntu Mono', monospace;
     
     --font-size-xs: 11px;
     --font-size-sm: 13px;

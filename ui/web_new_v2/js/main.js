@@ -203,6 +203,8 @@ window.toggleMiniPlayerMode = toggleMiniPlayerMode;
         const particlesEnabled = JSON.parse(localStorage.getItem('nedotify_ui_particles_enabled') ?? 'true');
         const bg = document.getElementById('particles-bg');
         if (bg) bg.style.display = particlesEnabled ? 'block' : 'none';
+        const togglePart = document.getElementById('toggle-particles');
+        if (togglePart) togglePart.classList.toggle('on', particlesEnabled);
 
         const glassBlur = JSON.parse(localStorage.getItem('nedotify_theme_glass_blur') ?? '20');
         document.documentElement.style.setProperty('--glass-blur', `${glassBlur}px`);

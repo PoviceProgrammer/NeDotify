@@ -145,8 +145,7 @@ export function initSettings() {
     if (selectFont) {
         selectFont.addEventListener('change', (e) => {
             const fontVal = e.target.value;
-            document.documentElement.style.setProperty('--font-family', fontVal);
-            saveSetting('font_family', fontVal, 'theme');
+            applyFontFamily(fontVal, null, true);
         });
     }
 
@@ -456,51 +455,98 @@ const PRESET_THEMES = [
     { id: 'ocean', name: 'Ocean', colors: ['#06141a', '#06b6d4', '#0284c7'] }
 ];
 
-const FONTS_LIST = [
-    // System
-    { id: 'default', name: 'Default', family: "'Inter', sans-serif", cat: 'system' },
+export const FONTS_LIST = [
+    // System / Linux
+    { id: 'default', name: 'По умолчанию', family: "'Inter', system-ui, -apple-system, sans-serif", cat: 'system' },
+    { id: 'ubuntu', name: 'Ubuntu', family: "'Ubuntu', 'Ubuntu Sans', sans-serif", cat: 'system' },
+    { id: 'cantarell', name: 'Cantarell (GNOME)', family: "'Cantarell', 'Adwaita Sans', sans-serif", cat: 'system' },
+    { id: 'liberation', name: 'Liberation Sans', family: "'Liberation Sans', 'DejaVu Sans', sans-serif", cat: 'system' },
+    { id: 'noto', name: 'Noto Sans', family: "'Noto Sans', sans-serif", cat: 'system' },
     { id: 'inter', name: 'Inter', family: "'Inter', sans-serif", cat: 'system' },
-    { id: 'arial', name: 'Arial', family: "Arial, sans-serif", cat: 'system' },
-    { id: 'segoe_ui', name: 'Segoe UI', family: "'Segoe UI', sans-serif", cat: 'system' },
     { id: 'roboto', name: 'Roboto', family: "'Roboto', sans-serif", cat: 'system' },
-    { id: 'helvetica', name: 'Helvetica Neue', family: "'Helvetica Neue', Arial, sans-serif", cat: 'system' },
-    { id: 'tahoma', name: 'Tahoma', family: "Tahoma, sans-serif", cat: 'system' },
-    { id: 'verdana', name: 'Verdana', family: "Verdana, sans-serif", cat: 'system' },
-    { id: 'san_francisco', name: 'San Francisco', family: "-apple-system, BlinkMacSystemFont, sans-serif", cat: 'system' },
-    { id: 'calibri', name: 'Calibri', family: "Calibri, sans-serif", cat: 'system' },
-    { id: 'lucida', name: 'Lucida Sans', family: "'Lucida Sans', sans-serif", cat: 'system' },
-    { id: 'arial_black', name: 'Arial Black', family: "'Arial Black', sans-serif", cat: 'system' },
-    { id: 'arial_narrow', name: 'Arial Narrow', family: "'Arial Narrow', sans-serif", cat: 'system' },
-    { id: 'segoe_light', name: 'Segoe UI Light', family: "'Segoe UI Light', 'Segoe UI', sans-serif", cat: 'system' },
-    { id: 'segoe_semibold', name: 'Segoe UI Semibold', family: "'Segoe UI Semibold', 'Segoe UI', sans-serif", cat: 'system' },
+    { id: 'segoe_ui', name: 'Segoe UI', family: "'Segoe UI', 'Ubuntu', 'Liberation Sans', sans-serif", cat: 'system' },
+    { id: 'arial', name: 'Arial', family: "Arial, 'Liberation Sans', sans-serif", cat: 'system' },
+    { id: 'san_francisco', name: 'San Francisco', family: "-apple-system, BlinkMacSystemFont, 'Cantarell', sans-serif", cat: 'system' },
+    { id: 'calibri', name: 'Calibri', family: "Calibri, 'Liberation Sans', sans-serif", cat: 'system' },
 
     // Modern
-    { id: 'outfit', name: 'Outfit', family: "'Outfit', sans-serif", cat: 'modern' },
+    { id: 'outfit', name: 'Outfit', family: "'Outfit', 'Ubuntu', sans-serif", cat: 'modern' },
     { id: 'montserrat', name: 'Montserrat', family: "'Montserrat', sans-serif", cat: 'modern' },
     { id: 'plus_jakarta', name: 'Plus Jakarta', family: "'Plus Jakarta Sans', sans-serif", cat: 'modern' },
 
     // Serif
-    { id: 'georgia', name: 'Georgia', family: "Georgia, serif", cat: 'serif' },
-    { id: 'times', name: 'Times New Roman', family: "'Times New Roman', serif", cat: 'serif' },
-    { id: 'garamond', name: 'Garamond', family: "Garamond, serif", cat: 'serif' },
+    { id: 'georgia', name: 'Georgia', family: "Georgia, 'Liberation Serif', serif", cat: 'serif' },
+    { id: 'times', name: 'Times New Roman', family: "'Times New Roman', 'Liberation Serif', serif", cat: 'serif' },
+    { id: 'garamond', name: 'Garamond', family: "Garamond, 'Liberation Serif', serif", cat: 'serif' },
 
     // Mono
-    { id: 'consolas', name: 'Consolas', family: "Consolas, monospace", cat: 'mono' },
-    { id: 'courier', name: 'Courier New', family: "'Courier New', monospace", cat: 'mono' },
-    { id: 'monaco', name: 'Monaco', family: "Monaco, monospace", cat: 'mono' },
+    { id: 'consolas', name: 'Consolas', family: "Consolas, 'Liberation Mono', 'Adwaita Mono', monospace", cat: 'mono' },
+    { id: 'courier', name: 'Courier New', family: "'Courier New', 'Liberation Mono', monospace", cat: 'mono' },
+    { id: 'monaco', name: 'Monaco', family: "Monaco, 'Liberation Mono', monospace", cat: 'mono' },
 
     // Hand
     { id: 'cursive', name: 'Cursive', family: "cursive", cat: 'hand' },
-    { id: 'comic_sans', name: 'Comic Sans', family: "'Comic Sans MS', cursive", cat: 'hand' },
+    { id: 'comic_sans', name: 'Comic Sans', family: "'Comic Sans MS', 'Comic Neue', cursive, sans-serif", cat: 'hand' },
 
     // Deco
-    { id: 'impact', name: 'Impact', family: "Impact, fantasy", cat: 'deco' },
-    { id: 'trebuchet', name: 'Trebuchet MS', family: "'Trebuchet MS', sans-serif", cat: 'deco' },
+    { id: 'impact', name: 'Impact', family: "Impact, 'Liberation Sans', fantasy", cat: 'deco' },
+    { id: 'trebuchet', name: 'Trebuchet MS', family: "'Trebuchet MS', 'Ubuntu', sans-serif", cat: 'deco' },
 
     // Game
-    { id: 'press_start', name: '8-Bit Retro', family: "'Courier New', monospace", cat: 'game' },
-    { id: 'copperplate', name: 'Copperplate', family: "Copperplate, fantasy", cat: 'game' }
+    { id: 'press_start', name: '8-Bit Retro', family: "'Courier New', 'Liberation Mono', monospace", cat: 'game' },
+    { id: 'copperplate', name: 'Copperplate', family: "Copperplate, 'Liberation Serif', fantasy", cat: 'game' }
 ];
+
+let currentActiveFontId = getLocalSetting('nedotify_theme_font_id', 'default');
+
+export function highlightActiveFontCard(activeIdentifier) {
+    const container = document.getElementById('font-cards-grid');
+    if (!container) return;
+    container.querySelectorAll('.font-card').forEach(card => {
+        const isMatch = (card.dataset.fontId && card.dataset.fontId === activeIdentifier)
+            || (card.dataset.font && card.dataset.font === activeIdentifier);
+        card.classList.toggle('active', !!isMatch);
+    });
+}
+
+export function applyFontFamily(fontFamily, fontId = null, save = true) {
+    let targetFamily = fontFamily;
+    let targetId = fontId;
+
+    if (!targetFamily || targetFamily === 'system' || targetFamily === 'default') {
+        const defaultFont = FONTS_LIST.find(f => f.id === 'default');
+        targetFamily = defaultFont ? defaultFont.family : "'Inter', system-ui, -apple-system, 'Ubuntu', 'Liberation Sans', sans-serif";
+        if (!targetId) targetId = 'default';
+    } else if (!targetId) {
+        const match = FONTS_LIST.find(f => f.id === targetFamily || f.family === targetFamily);
+        if (match) {
+            targetId = match.id;
+            targetFamily = match.family;
+        }
+    } else if (targetId && !targetFamily) {
+        const match = FONTS_LIST.find(f => f.id === targetId);
+        if (match) targetFamily = match.family;
+    }
+
+    currentActiveFontId = targetId || 'default';
+
+    // Update all typographic variables so player, lyrics, and cards all react
+    document.documentElement.style.setProperty('--font-family', targetFamily);
+    document.documentElement.style.setProperty('--font-body', targetFamily);
+    document.documentElement.style.setProperty('--font-display', targetFamily);
+
+    const selectFont = document.getElementById('select-font-family');
+    if (selectFont) {
+        selectFont.value = targetFamily;
+    }
+
+    if (save) {
+        saveSetting('font_family', targetId === 'default' ? 'default' : targetFamily, 'theme');
+        if (targetId) saveSetting('font_id', targetId, 'theme');
+    }
+
+    highlightActiveFontCard(targetId || targetFamily);
+}
 
 function renderThemePresets() {
     const container = document.getElementById('theme-presets-grid');
@@ -542,28 +588,30 @@ function renderThemePresets() {
     });
 }
 
-function renderFontCards(activeCat = 'system') {
+export function renderFontCards(activeCat = 'system') {
     const container = document.getElementById('font-cards-grid');
     if (!container) return;
 
-    const currentFont = getComputedStyle(document.documentElement).getPropertyValue('--font-family').trim() || "'Inter', sans-serif";
+    const currentFont = getComputedStyle(document.documentElement).getPropertyValue('--font-family').trim();
 
     container.innerHTML = '';
     const filteredFonts = FONTS_LIST.filter(f => f.cat === activeCat || activeCat === 'all');
     filteredFonts.forEach(f => {
         const card = document.createElement('div');
-        const isActive = currentFont.includes(f.name) || (f.id === 'default' && (currentFont.includes('Inter') || currentFont === ''));
+        const isActive = currentActiveFontId
+            ? (f.id === currentActiveFontId || (f.id === 'default' && currentActiveFontId === 'default'))
+            : ((f.id === 'default' && (!currentFont || currentFont === 'default' || currentFont === 'system' || currentFont.includes('Inter')))
+               || (currentFont && (currentFont === f.family || currentFont.includes(f.name))));
+
         card.className = `font-card${isActive ? ' active' : ''}`;
+        card.dataset.fontId = f.id;
         card.dataset.font = f.family;
         card.innerHTML = `
             <div class="font-preview-letters" style="font-family:${f.family}">Aa</div>
             <span class="font-card-name">${f.name}</span>
         `;
         card.addEventListener('click', () => {
-            container.querySelectorAll('.font-card').forEach(c => c.classList.remove('active'));
-            card.classList.add('active');
-            document.documentElement.style.setProperty('--font-family', f.family);
-            saveSetting('font_family', f.family, 'theme');
+            applyFontFamily(f.family, f.id, true);
         });
         container.appendChild(card);
     });
@@ -709,8 +757,7 @@ export function applySettingsFromBackend(settings) {
         }
 
         if (settings.theme && settings.theme.font_family !== undefined) {
-            const selectFont = document.getElementById('select-font-family');
-            document.documentElement.style.setProperty('--font-family', settings.theme.font_family);
+            applyFontFamily(settings.theme.font_family, settings.theme.font_id, false);
         }
 
         if (settings.theme) {

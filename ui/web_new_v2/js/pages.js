@@ -93,8 +93,21 @@ export function showPage(pageId) {
         if (pageId === 'profile' && window.NeDotify.loadProfile) window.NeDotify.loadProfile();
         if (pageId === 'library' && window.NeDotify.loadLibrary) window.NeDotify.loadLibrary();
     }
-    if (pageId === 'player' && window.NeDotify?.loadCurrentTrackLyrics) {
-        window.NeDotify.loadCurrentTrackLyrics();
+    if (pageId === 'player') {
+        if (window.NeDotify?.loadCurrentTrackLyrics) {
+            window.NeDotify.loadCurrentTrackLyrics();
+        }
+        // Invalidate waveform cached sizes & trigger canvas resize so waveform and visualizer compute actual rendered widths
+        requestAnimationFrame(() => {
+            document.querySelectorAll('.waveform-canvas').forEach(cv => {
+                cv._wfW = undefined;
+                cv._wfH = undefined;
+            });
+            window.dispatchEvent(new Event('resize'));
+            if (window.NeDotify?.renderWaveforms) {
+                window.NeDotify.renderWaveforms();
+            }
+        });
     }
 
     renderIcons();
