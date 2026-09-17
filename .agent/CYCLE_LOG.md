@@ -67,9 +67,12 @@
   - `579aea3`: fix(services): harden YouTubeService against malformed metadata, generator entries, and empty queries
   - `982fd4a`: fix(services, core): standardize VKService on BaseMusicService, fix direct URL paths, and add VK download support
   - `7f23095`: fix(services): resolve YandexService None bitrate comparison, null artist crash, and download URL extraction
+  - `9c64762`: fix(services): harden YouTubeService artist fallback, duration parsing, dual caching, and download cleanup
+  - `58bb252`: fix(services, core): normalize VKService track IDs, prevent download corruption, and harden VK downloader worker
+  - `f868dc0`: fix(services): implement atomic downloads and prefix normalization for YandexService
 - **Final Result**:
-  - Tests: 127 -> 146 passed (+19 new unit tests, 0 regressions).
-  - Backlog items BUG-026, BUG-027, BUG-028 resolved and verified.
+  - Tests: 127 -> 156 passed (+29 new unit tests, 0 regressions).
+  - Backlog items BUG-026, BUG-027, BUG-028, BUG-029, BUG-030, BUG-031 resolved and verified.
 
 
 

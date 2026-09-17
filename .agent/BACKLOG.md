@@ -29,5 +29,9 @@
 | BUG-026 | BUG | P1 | `services/youtube_service.py` | Падения (TypeError/ValueError) при пустых/null артистах, некорректной длительности, генераторах entries и отсутствие fast-fail валидации | done |
 | BUG-027 | BUG | P1 | `services/vk_service.py` | Отсутствие наследования от BaseMusicService (кэш, пул потоков), инвертированный путь file_path, сбой fallback артиста и отсутствие поддержки в downloader | done |
 | BUG-028 | BUG | P1 | `services/yandex_service.py` | TypeError при сравнении bitrate None, сбой join артиста при None, отсутствие извлечения ID из URL в download_audio_sync и неуправляемый ThreadPoolExecutor | done |
+| BUG-029 | BUG | P1 | `services/youtube_service.py` | Артист возвращает None при uploader/channel=None в стриме, сбой парсинга duration в search на строках секунд, промах кэша по video_id и утечка .part файлов | done |
+| BUG-030 | BUG | P1 | `services/vk_service.py`, `core/downloader.py` | Отсутствие нормализации raw ID треков в download_audio_sync/get_stream_url приводит к ошибкам yt-dlp, утечка .part файлов и отсутствие проверки сервиса vk в downloader | done |
+| BUG-031 | BUG | P1 | `services/yandex_service.py` | Неатомарная загрузка повреждает конечный mp3 файл при обрыве сети и парсинг префиксов ya:, yandex:, track: ломает запросы к API | done |
+
 
 
