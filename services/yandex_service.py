@@ -7,7 +7,8 @@ from typing import Callable, Optional
 import threading
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
+import os
+import re
 from services.base_service import BaseMusicService
 
 try:
@@ -26,13 +27,28 @@ class YandexService(BaseMusicService):
         self.on_auth_error = None
         self.on_subscription_status = None
         self.auth_error = False
-        self._executor = ThreadPoolExecutor(max_workers=3)
         self.logger = logging.getLogger(__name__)
         self._client = None
         self._client_lock = threading.Lock()
 
         if HAS_YANDEX:
-            self._executor.submit(self._get_client)
+            BaseMusicService.submit(self._get_client)
+
+    @staticmethod
+    def _extract_artists(artists_list, fallback="Unknown Artist") -> str:
+        """Safely extract and join artist names."""
+        if not artists_list:
+            return fallback
+        names = []
+        for a in artists_list:
+            name = getattr(a, "name", None)
+            if isinstance(name, str) and name.strip():
+                names.append(name.strip())
+            elif isinstance(a, dict):
+                n = a.get("name")
+                if isinstance(n, str) and n.strip():
+                    names.append(n.strip())
+        return ", ".join(names) or fallback
 
     def _get_client(self):
         with self._client_lock:
@@ -97,13 +113,19 @@ class YandexService(BaseMusicService):
             for k in search_keys_to_remove:
                 self._search_cache.pop(k, None)
         if HAS_YANDEX:
-            self._executor.submit(self._get_client)
+            BaseMusicService.submit(self._get_client)
 
     @property
     def available(self) -> bool:
         return HAS_YANDEX
+
     def search(self, query: str, max_results: int = 20, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None):
         """Search Yandex Music for tracks."""
+        if not query or not str(query).strip():
+            if callback:
+                callback([])
+            return
+
         if not HAS_YANDEX:
             if error_callback:
                 error_callback("Yandex Music client not initialized")
@@ -126,22 +148,29 @@ class YandexService(BaseMusicService):
 
                 search_result = client.search(query, type_="track")
                 tracks = []
-                if search_result and search_result.tracks:
-                    for t in search_result.tracks.results[:max_results]:
+                if search_result and getattr(search_result, "tracks", None):
+                    results_list = getattr(search_result.tracks, "results", None) or []
+                    for t in results_list[:max_results]:
                         cover_url = ""
-                        if t.cover_uri:
-                            cover_url = f'https://{t.cover_uri.replace("%%", "400x400")}'
+                        cover_uri = getattr(t, "cover_uri", None)
+                        if cover_uri:
+                            if str(cover_uri).startswith(("http://", "https://")):
+                                cover_url = str(cover_uri)
+                            else:
+                                cover_url = f'https://{str(cover_uri).replace("%%", "400x400")}'
 
-                        artist_name = 'Unknown Artist'
-                        if t.artists:
-                            artist_name = ", ".join(a.name for a in t.artists)
+                        artist_name = self._extract_artists(getattr(t, "artists", None))
+                        title = getattr(t, "title", None) or "Unknown Title"
+                        track_id = getattr(t, "id", "")
+                        duration_ms = getattr(t, "duration_ms", 0) or 0
+
                         track = {
-                            "title": t.title,
+                            "title": title,
                             "artist": artist_name,
-                            "duration": t.duration_ms / 1000.0 if t.duration_ms else 0,
+                            "duration": duration_ms / 1000.0 if duration_ms else 0,
                             "source": "yandex",
-                            "source_id": str(t.id),
-                            "source_url": f"https://music.yandex.ru/track/{t.id}",
+                            "source_id": str(track_id),
+                            "source_url": f"https://music.yandex.ru/track/{track_id}",
                             "cover_url": cover_url
                         }
                         tracks.append(track)
@@ -154,33 +183,41 @@ class YandexService(BaseMusicService):
                 if error_callback:
                     error_callback(f'Произошла ошибка: {type(e).__name__} - {str(e)}')
 
-        self._executor.submit(_search)
+        BaseMusicService.submit(_search)
 
     def get_stream_url(self, track_id: str, callback: Callable = None, error_callback: Callable = None, **kwargs):
         """Extract direct audio stream URL from a Yandex Music track."""
+        if not track_id or not str(track_id).strip() or str(track_id).strip().lower() == "none":
+            if error_callback:
+                error_callback("Неверный ID трека")
+            return None
+
         if not HAS_YANDEX:
             if error_callback:
                 error_callback('Функция yandex-music отключена')
-            return
+            return None
 
-        raw_id = str(track_id)
+        raw_id = str(track_id).strip()
         if raw_id.startswith("http"):
-            import re
             m = re.search(r"/track/(\d+)", raw_id)
             if m:
                 raw_id = m.group(1)
             else:
                 if error_callback:
                     error_callback('Не удалось извлечь ID трека из URL')
-                return
+                return None
 
         raw_id = raw_id.split(":")[0].strip()
+        if not raw_id or raw_id.lower() == "none":
+            if error_callback:
+                error_callback("Неверный ID трека")
+            return None
 
         info = self.get_from_cache(raw_id)
         if info:
             if callback:
                 callback(info.get("stream_url"), info)
-            return
+            return None
 
         def _extract():
             try:
@@ -205,27 +242,39 @@ class YandexService(BaseMusicService):
 
                 best_info = download_infos[0]
                 for info in download_infos:
-                    if info.codec == 'mp3' and info.bitrate_in_kbps > best_info.bitrate_in_kbps:
+                    b_bitrate = getattr(best_info, "bitrate_in_kbps", 0) or 0
+                    i_bitrate = getattr(info, "bitrate_in_kbps", 0) or 0
+                    if getattr(info, "codec", "") == 'mp3' and i_bitrate > b_bitrate:
                         best_info = info
 
-                stream_url = best_info.direct_link
-                cover_url = ""
-                if track.cover_uri:
-                    cover_url = f'https://{track.cover_uri.replace("%%", "400x400")}'
+                stream_url = getattr(best_info, "direct_link", None)
+                if not stream_url and callable(getattr(best_info, "get_direct_link", None)):
+                    try:
+                        stream_url = best_info.get_direct_link()
+                    except Exception:
+                        stream_url = None
 
-                artist_name = 'Unknown Artist'
-                if track.artists:
-                    artist_name = ", ".join(a.name for a in track.artists)
+                cover_url = ""
+                cover_uri = getattr(track, "cover_uri", None)
+                if cover_uri:
+                    if str(cover_uri).startswith(("http://", "https://")):
+                        cover_url = str(cover_uri)
+                    else:
+                        cover_url = f'https://{str(cover_uri).replace("%%", "400x400")}'
+
+                artist_name = self._extract_artists(getattr(track, "artists", None))
+                title = getattr(track, "title", None) or "Unknown Title"
+                duration_ms = getattr(track, "duration_ms", 0) or 0
 
                 metadata = {
-                    "title": track.title,
+                    "title": title,
                     "artist": artist_name,
-                    "duration": track.duration_ms / 1000.0 if track.duration_ms else 0,
+                    "duration": duration_ms / 1000.0 if duration_ms else 0,
                     "cover_url": cover_url,
-                    "source_id": str(track.id),
+                    "source_id": str(getattr(track, "id", raw_id)),
                     "stream_url": stream_url,
-                    "format": best_info.codec,
-                    "bitrate": best_info.bitrate_in_kbps
+                    "format": getattr(best_info, "codec", "mp3"),
+                    "bitrate": getattr(best_info, "bitrate_in_kbps", 0) or 0
                 }
 
                 self.set_to_cache(raw_id, metadata)
@@ -248,18 +297,26 @@ class YandexService(BaseMusicService):
                 if error_callback:
                     error_callback(msg)
 
-        self._executor.submit(_extract)
+        BaseMusicService.submit(_extract)
         return None
 
     def download_audio_sync(self, source_id: str, output_dir: str) -> str:
         """Download audio synchronously from Yandex Music."""
-        import os
-        import time
+        if not source_id or not str(source_id).strip() or str(source_id).strip().lower() == "none":
+            raise ValueError("source_id не может быть пустым")
+
         client = self._get_client()
         if not client:
             raise Exception("Yandex Music клиент не инициализирован")
 
-        raw_id = str(source_id).split(":")[0].strip()
+        os.makedirs(output_dir, exist_ok=True)
+        raw_id = str(source_id).strip()
+        if raw_id.startswith("http"):
+            m = re.search(r"/track/(\d+)", raw_id)
+            if m:
+                raw_id = m.group(1)
+        raw_id = raw_id.split(":")[0].strip()
+
         tracks = client.tracks([raw_id])
         if not tracks:
             raise Exception("Трек не найден в Яндекс Музыке")
@@ -273,4 +330,3 @@ class YandexService(BaseMusicService):
             raise Exception("Файл не был создан после загрузки из Яндекс Музыки")
 
         return output_path
-

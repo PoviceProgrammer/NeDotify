@@ -28,6 +28,6 @@
 | DEBT-025 | DEBT | P1 | `services/spotify_service.py` | Отсутствие управления токенами доступа, интеграции со Spotify Web API и резолва ссылок плейлистов | done |
 | BUG-026 | BUG | P1 | `services/youtube_service.py` | Падения (TypeError/ValueError) при пустых/null артистах, некорректной длительности, генераторах entries и отсутствие fast-fail валидации | done |
 | BUG-027 | BUG | P1 | `services/vk_service.py` | Отсутствие наследования от BaseMusicService (кэш, пул потоков), инвертированный путь file_path, сбой fallback артиста и отсутствие поддержки в downloader | done |
-| BUG-028 | BUG | P1 | `services/yandex_service.py` | TypeError при сравнении bitrate None, сбой join артиста при None, отсутствие извлечения ID из URL в download_audio_sync и неуправляемый ThreadPoolExecutor | todo |
+| BUG-028 | BUG | P1 | `services/yandex_service.py` | TypeError при сравнении bitrate None, сбой join артиста при None, отсутствие извлечения ID из URL в download_audio_sync и неуправляемый ThreadPoolExecutor | done |
 
 

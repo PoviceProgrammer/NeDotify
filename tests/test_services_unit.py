@@ -8,6 +8,7 @@ from services.soundcloud_service import SoundCloudService, _TTLCache
 from services.spotify_service import SpotifyService, _cached_spotify_search, _cached_spotify_album_search
 from services.youtube_service import YouTubeService
 from services.vk_service import VKService
+from services.yandex_service import YandexService
 
 
 class TestTTLCache(unittest.TestCase):
@@ -663,7 +664,122 @@ class TestVKServiceUnit(unittest.TestCase):
             self.assertEqual(out, "/tmp/vk_test/vk_dl_1.mp3")
 
 
+class TestYandexServiceUnit(unittest.TestCase):
+    def setUp(self):
+        with BaseMusicService._cache_lock:
+            BaseMusicService._stream_cache.clear()
+            BaseMusicService._search_cache.clear()
+        self.ya = YandexService()
+        self.mock_client = MagicMock()
+        self.ya._client = self.mock_client
+        self.ya._get_client = MagicMock(return_value=self.mock_client)
+
+    def test_yandex_search_empty_or_none_query_returns_empty(self):
+        event = threading.Event()
+        res = []
+        self.ya.search("", callback=lambda t: (res.extend(t), event.set()))
+        event.wait(timeout=1.0)
+        self.assertEqual(res, [])
+        self.mock_client.search.assert_not_called()
+
+        event2 = threading.Event()
+        res2 = []
+        self.ya.search(None, callback=lambda t: (res2.extend(t), event2.set()))
+        event2.wait(timeout=1.0)
+        self.assertEqual(res2, [])
+        self.mock_client.search.assert_not_called()
+
+    def test_yandex_get_stream_url_empty_or_none_track_id_guard(self):
+        event = threading.Event()
+        err = []
+        self.ya.get_stream_url("", error_callback=lambda e: (err.append(e), event.set()))
+        event.wait(timeout=1.0)
+        self.assertTrue(len(err) > 0)
+
+        event2 = threading.Event()
+        err2 = []
+        self.ya.get_stream_url("None", error_callback=lambda e: (err2.append(e), event2.set()))
+        event2.wait(timeout=1.0)
+        self.assertTrue(len(err2) > 0)
+
+    def test_yandex_get_stream_url_none_bitrate_resilience(self):
+        mock_info1 = MagicMock()
+        mock_info1.codec = "mp3"
+        mock_info1.bitrate_in_kbps = None  # Bug BUG-028: None > int raises TypeError
+        mock_info1.direct_link = "https://ya.stream/audio1.mp3"
+
+        mock_info2 = MagicMock()
+        mock_info2.codec = "mp3"
+        mock_info2.bitrate_in_kbps = 320
+        mock_info2.direct_link = "https://ya.stream/audio2.mp3"
+
+        mock_track = MagicMock()
+        mock_track.id = 12345
+        mock_track.title = "Yandex Song"
+        mock_artist = MagicMock()
+        mock_artist.name = "Yandex Artist"
+        mock_track.artists = [mock_artist]
+        mock_track.duration_ms = 180000
+        mock_track.cover_uri = "avatars.yandex.net/get-music/123/%%"
+        mock_track.get_download_info.return_value = [mock_info1, mock_info2]
+
+        self.mock_client.tracks.return_value = [mock_track]
+
+        event = threading.Event()
+        resolved = {}
+
+        def cb(url, meta):
+            resolved["url"] = url
+            resolved["meta"] = meta
+            event.set()
+
+        self.ya.get_stream_url("12345", callback=cb)
+        event.wait(timeout=2.0)
+
+        self.assertEqual(resolved.get("url"), "https://ya.stream/audio2.mp3")
+        self.assertEqual(resolved.get("meta", {}).get("bitrate"), 320)
+
+    def test_yandex_search_and_stream_artist_none_resilience(self):
+        # Search track with artist name None
+        mock_artist = MagicMock()
+        mock_artist.name = None  # Bug BUG-028: ", ".join raises TypeError
+
+        mock_t = MagicMock()
+        mock_t.id = 999
+        mock_t.title = None
+        mock_t.artists = [mock_artist]
+        mock_t.duration_ms = None
+        mock_t.cover_uri = None
+
+        mock_search_res = MagicMock()
+        mock_search_res.tracks.results = [mock_t]
+        self.mock_client.search.return_value = mock_search_res
+
+        event = threading.Event()
+        res_tracks = []
+        self.ya.search("artist null test", callback=lambda t: (res_tracks.extend(t), event.set()))
+        event.wait(timeout=2.0)
+
+        self.assertEqual(len(res_tracks), 1)
+        self.assertEqual(res_tracks[0]["artist"], "Unknown Artist")
+        self.assertEqual(res_tracks[0]["title"], "Unknown Title")
+
+    def test_yandex_download_audio_sync_url_extraction_and_empty_guard(self):
+        with self.assertRaises(ValueError):
+            self.ya.download_audio_sync("", "/tmp/ya_test")
+
+        mock_track = MagicMock()
+        self.mock_client.tracks.return_value = [mock_track]
+
+        with patch("os.path.exists", return_value=True), \
+             patch("os.makedirs"):
+            out = self.ya.download_audio_sync("https://music.yandex.ru/track/77777", "/tmp/ya_test")
+            self.mock_client.tracks.assert_called_once_with(["77777"])
+            mock_track.download.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
