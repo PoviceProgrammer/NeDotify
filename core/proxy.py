@@ -528,28 +528,57 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 p = urllib.request.url2pathname(p[6:])
             return p
 
+        AUDIO_EXTENSIONS = ('.mp3', '.m4a', '.webm', '.ogg', '.opus', '.flac', '.wav', '.aac', '.wma')
+
         def _is_safe_local_audio(file_path):
-            if not file_path or not os.path.isfile(file_path):
+            if not file_path or not isinstance(file_path, str):
                 return False
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext not in AUDIO_EXTENSIONS:
+                return False
+            if not os.path.isfile(file_path):
+                return False
+
             # Allow if it's in the DB tracks
             if hasattr(self.server.app_core, 'db'):
-                if self.server.app_core.db.get_track_by_path(file_path):
+                db = self.server.app_core.db
+                if (db.get_track_by_path(file_path)
+                    or db.get_track_by_path(os.path.normpath(file_path))
+                    or db.get_track_by_path(os.path.realpath(file_path))):
                     return True
-            # Allow if it's in the streams cache directory
-            streams_dir = getattr(self.server.app_core.cache, '_streams_dir', None)
-            if streams_dir:
+                # Allow if inside any scan folder
                 try:
-                    if os.path.commonpath([os.path.realpath(file_path), os.path.realpath(streams_dir)]) == os.path.realpath(streams_dir):
-                        return True
-                except ValueError:
+                    for folder in db.get_scan_folders() or []:
+                        f_path = folder.get('folder_path')
+                        if f_path and os.path.isdir(f_path):
+                            rf = os.path.realpath(f_path)
+                            rp = os.path.realpath(file_path)
+                            if os.path.commonpath([rp, rf]) == rf:
+                                return True
+                except Exception:
                     pass
+
+            # Allow if it's in the streams cache directory
+            streams_dir = getattr(getattr(self.server.app_core, 'cache', None), '_streams_dir', None)
+            if streams_dir and os.path.isdir(streams_dir):
+                try:
+                    rf = os.path.realpath(file_path)
+                    rs = os.path.realpath(streams_dir)
+                    if os.path.commonpath([rf, rs]) == rs:
+                        return True
+                except (ValueError, Exception):
+                    pass
+
             # Allow if it's in the downloads directory
-            downloads_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'downloads')
+            downloader = getattr(self.server.app_core, 'downloader', None)
+            downloads_dir = getattr(downloader, 'download_dir', None) or os.path.join(os.path.expanduser('~'), '.nedotify', 'downloads')
             if downloads_dir and os.path.isdir(downloads_dir):
                 try:
-                    if os.path.commonpath([os.path.realpath(file_path), os.path.realpath(downloads_dir)]) == os.path.realpath(downloads_dir):
+                    rf = os.path.realpath(file_path)
+                    rd = os.path.realpath(downloads_dir)
+                    if os.path.commonpath([rf, rd]) == rd:
                         return True
-                except ValueError:
+                except (ValueError, Exception):
                     pass
             return False
 
@@ -558,6 +587,9 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         if cleaned_url and os.path.isfile(cleaned_url):
             if _is_safe_local_audio(cleaned_url):
                 self.serve_local_file(cleaned_url)
+                return None
+            else:
+                self.send_error(403, 'Forbidden local file access')
                 return None
 
         int_track_id = None
@@ -586,13 +618,13 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         source = track.get('source') or source
         source_id = track.get('source_id') or source_id
 
-        # 2. Local source check
+        # 2. Local or downloaded track check (play directly from disk without network roundtrips)
+        local_fp = _clean_local_path(url_param or track.get('file_path') or track.get('url'))
+        if local_fp and os.path.isfile(local_fp) and _is_safe_local_audio(local_fp):
+            self.serve_local_file(local_fp)
+            return None
+
         if source == 'local':
-            fp = _clean_local_path(url_param or track.get('file_path') or track.get('url'))
-            if fp and os.path.isfile(fp):
-                if _is_safe_local_audio(fp):
-                    self.serve_local_file(fp)
-                    return None
             self.send_error(404, 'Local file not found or access denied')
             return None
 

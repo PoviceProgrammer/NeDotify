@@ -99,6 +99,84 @@ Sink Input #303
             self.assertNotIn(["pactl", "set-sink-input-mute", "303", "0"], commands)
             self.assertNotIn(["pactl", "set-sink-input-volume", "303", "100%"], commands)
 
+    def test_stream_proxy_downloaded_track_served_directly(self):
+        import tempfile
+        from core.proxy import StreamProxyHandler
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            f.write(b"AUDIO BYTES")
+            temp_file = f.name
+
+        try:
+            server = MagicMock()
+            server.auth_token = "tok"
+            server.app_core = MagicMock()
+            server.app_core.cache._streams_dir = "/tmp/fake_streams"
+            server.app_core.db.get_track.return_value = {
+                "id": 99,
+                "title": "Offline Song",
+                "artist": "Artist",
+                "source": "youtube",
+                "source_id": "yt_99",
+                "is_downloaded": 1,
+                "file_path": temp_file
+            }
+            server.app_core.db.get_track_by_path.return_value = {"id": 99, "file_path": temp_file}
+            server.app_core.engine.resolve_stream_url.side_effect = RuntimeError("Online resolver should not be called!")
+
+            handler = StreamProxyHandler.__new__(StreamProxyHandler)
+            handler.server = server
+            handler.serve_local_file = MagicMock()
+            handler.send_error = MagicMock()
+
+            handler._handle_stream({"track_id": ["99"]})
+            self.assertTrue(handler.serve_local_file.called)
+            self.assertEqual(handler.serve_local_file.call_args[0][0], temp_file)
+            self.assertFalse(server.app_core.engine.resolve_stream_url.called)
+        finally:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+
+    def test_stream_proxy_forbidden_file_rejected_with_403(self):
+        from core.proxy import StreamProxyHandler
+        server = MagicMock()
+        server.auth_token = "tok"
+        server.app_core = MagicMock()
+        server.app_core.cache._streams_dir = "/tmp/fake_streams"
+        server.app_core.db.get_track_by_path.return_value = None
+
+        handler = StreamProxyHandler.__new__(StreamProxyHandler)
+        handler.server = server
+        handler.serve_local_file = MagicMock()
+        handler.send_error = MagicMock()
+
+        handler._handle_stream({"url": ["/etc/passwd"]})
+        self.assertFalse(handler.serve_local_file.called)
+        handler.send_error.assert_called_with(403, "Forbidden local file access")
+
+    def test_stream_proxy_scan_folder_audio_allowed(self):
+        import tempfile
+        from core.proxy import StreamProxyHandler
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio_file = os.path.join(temp_dir, "song.flac")
+            with open(audio_file, "wb") as f:
+                f.write(b"FLAC DATA")
+
+            server = MagicMock()
+            server.auth_token = "tok"
+            server.app_core = MagicMock()
+            server.app_core.cache._streams_dir = "/tmp/fake_streams"
+            server.app_core.db.get_track_by_path.return_value = None
+            server.app_core.db.get_scan_folders.return_value = [{"folder_path": temp_dir}]
+
+            handler = StreamProxyHandler.__new__(StreamProxyHandler)
+            handler.server = server
+            handler.serve_local_file = MagicMock()
+            handler.send_error = MagicMock()
+
+            handler._handle_stream({"url": [audio_file]})
+            self.assertTrue(handler.serve_local_file.called)
+            self.assertEqual(handler.serve_local_file.call_args[0][0], audio_file)
+
 
 if __name__ == "__main__":
     unittest.main()

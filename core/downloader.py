@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 class DownloadManager:
     def __init__(self, app_core):
         self._core = app_core
+        self.download_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'downloads')
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='download_worker')
         self._running = True
         self._queue = []
@@ -86,6 +87,10 @@ class DownloadManager:
             self._core.db.conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS ux_download_queue_track "
                 "ON download_queue(track_id)"
+            )
+            self._core.db.conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_download_queue_status "
+                "ON download_queue(status)"
             )
             self._core.db.conn.commit()
         except Exception as e:
@@ -163,7 +168,7 @@ class DownloadManager:
 
         logger.info(f'Starting download for track {track_id}...')
 
-        download_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'downloads')
+        download_dir = getattr(self, 'download_dir', None) or os.path.join(os.path.expanduser('~'), '.nedotify', 'downloads')
         os.makedirs(download_dir, exist_ok=True)
 
         try:
