@@ -212,6 +212,19 @@ class YouTubeService(BaseMusicService):
         return opts
 
 
+    @staticmethod
+    def _extract_artists_string(artists_list, fallback: str = "Unknown Artist") -> str:
+        """Safely extract and join artist names from an artists list."""
+        if not isinstance(artists_list, (list, tuple)):
+            return fallback
+        names = []
+        for a in artists_list:
+            if isinstance(a, dict):
+                name = a.get("name")
+                if isinstance(name, str) and name.strip():
+                    names.append(name.strip())
+        return ", ".join(names) or fallback
+
     @property
     def available(self) -> bool:
         return HAS_YTDLP
@@ -222,6 +235,11 @@ class YouTubeService(BaseMusicService):
         `prefetch` is off by default: turning it on pre-resolves stream URLs for the
         top hits, which costs a full yt-dlp extraction per result.
         """
+        if not query or not str(query).strip():
+            if callback:
+                callback([])
+            return None
+
         if not HAS_YTDLP or not HAS_YTMUSIC:
             if error_callback:
                 error_callback("yt-dlp или ytmusicapi не установлены")
@@ -244,16 +262,21 @@ class YouTubeService(BaseMusicService):
 
                 tracks = []
                 seen_ids = set()
-                for idx, item in enumerate(results):
+                for idx, item in enumerate(results or []):
+                    if not isinstance(item, dict):
+                        continue
                     if is_playlist_search:
                         browse_id = item.get("browseId") or item.get("playlistId")
                         if not browse_id or browse_id in seen_ids:
                             continue
                         seen_ids.add(browse_id)
-                        title = item.get("title", "Unknown Playlist")
-                        author = ", ".join([a.get("name", "") for a in item.get("artists", []) or [] if a.get("name")]) or (item.get("author") or "YouTube Music")
+                        title = item.get("title") or "Unknown Playlist"
+                        author = self._extract_artists_string(item.get("artists", []), fallback="") or (item.get("author") or "YouTube Music")
                         thumbnails = item.get("thumbnails", []) or []
-                        cover_url = thumbnails[-1]["url"] if thumbnails else ""
+                        cover_url = ""
+                        if isinstance(thumbnails, list) and thumbnails:
+                            last = thumbnails[-1]
+                            cover_url = last.get("url", "") if isinstance(last, dict) else (last if isinstance(last, str) else "")
                         tracks.append({
                             "source": "youtube",
                             "source_id": browse_id,
@@ -270,11 +293,13 @@ class YouTubeService(BaseMusicService):
                             continue
                         seen_ids.add(bid)
 
-                        title = item.get("title", "Unknown Album")
-                        artists_list = item.get("artists", []) or []
-                        artist = ", ".join([a["name"] for a in artists_list if "name" in a]) or "Unknown Artist"
+                        title = item.get("title") or "Unknown Album"
+                        artist = self._extract_artists_string(item.get("artists", []), "Unknown Artist")
                         thumbnails = item.get("thumbnails", []) or []
-                        cover_url = thumbnails[-1]["url"] if thumbnails else ""
+                        cover_url = ""
+                        if isinstance(thumbnails, list) and thumbnails:
+                            last = thumbnails[-1]
+                            cover_url = last.get("url", "") if isinstance(last, dict) else (last if isinstance(last, str) else "")
                         year = item.get("year") or ""
 
                         tracks.append({
@@ -300,12 +325,8 @@ class YouTubeService(BaseMusicService):
                         seen_ids.add(vid)
 
                         source_id = vid
-                        title = item.get("title", "Unknown Title")
-
-                        artists_list = item.get("artists", []) or []
-                        artist = ", ".join([a["name"] for a in artists_list if "name" in a])
-                        if not artist:
-                            artist = "Unknown Artist"
+                        title = item.get("title") or "Unknown Title"
+                        artist = self._extract_artists_string(item.get("artists", []), "Unknown Artist")
 
                         duration_val = item.get("duration", "0:00")
                         duration = 0
@@ -322,7 +343,10 @@ class YouTubeService(BaseMusicService):
                                 duration = 0
 
                         thumbnails = item.get("thumbnails", []) or []
-                        cover_url = thumbnails[-1]["url"] if thumbnails else ""
+                        cover_url = ""
+                        if isinstance(thumbnails, list) and thumbnails:
+                            last = thumbnails[-1]
+                            cover_url = last.get("url", "") if isinstance(last, dict) else (last if isinstance(last, str) else "")
 
                         tracks.append({
                             "source": "youtube",
@@ -353,6 +377,8 @@ class YouTubeService(BaseMusicService):
         """Synchronous search wrapper over YouTube search with timeout <= 6s.
         Returns list of track dictionaries, or [] on any error/timeout (never raises).
         """
+        if not query or not str(query).strip():
+            return []
         import threading
         result = []
         event = threading.Event()
@@ -382,6 +408,11 @@ class YouTubeService(BaseMusicService):
 
     def get_album_tracks(self, browse_id: str, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
         """Fetch YouTube Music album tracks via ytmusicapi. Runs in background thread."""
+        if not browse_id or not str(browse_id).strip():
+            if error_callback:
+                error_callback("Неверный ID альбома")
+            return None
+
         if not HAS_YTDLP or not HAS_YTMUSIC:
             if error_callback:
                 error_callback("yt-dlp или ytmusicapi не установлены")
@@ -391,31 +422,41 @@ class YouTubeService(BaseMusicService):
             try:
                 data = self._ytmusic.get_album(browse_id)
                 entries = data.get("tracks", []) if isinstance(data, dict) else []
-                album_title = data.get("title", "Album")
-                album_artist = ", ".join([a["name"] for a in data.get("artists", []) if "name" in a]) or "Unknown Artist"
-                thumbnails = data.get("thumbnails", [])
-                album_cover = thumbnails[-1].get("url", "") if thumbnails else ""
+                album_title = data.get("title") or "Album" if isinstance(data, dict) else "Album"
+                album_artist = self._extract_artists_string(data.get("artists", []), "Unknown Artist") if isinstance(data, dict) else "Unknown Artist"
+                thumbnails = data.get("thumbnails", []) if isinstance(data, dict) else []
+                album_cover = ""
+                if isinstance(thumbnails, list) and thumbnails:
+                    last = thumbnails[-1]
+                    album_cover = last.get("url", "") if isinstance(last, dict) else (last if isinstance(last, str) else "")
 
                 tracks = []
                 seen_ids = set()
-                for item in entries:
+                for item in (entries or []):
+                    if not isinstance(item, dict):
+                        continue
                     vid = item.get("videoId")
                     if not vid or vid in seen_ids:
                         continue
                     seen_ids.add(vid)
 
-                    title = item.get("title", "Unknown Title")
-                    artists_list = item.get("artists", []) or []
-                    artist = ", ".join([a["name"] for a in artists_list if "name" in a]) or album_artist
+                    title = item.get("title") or "Unknown Title"
+                    artist = self._extract_artists_string(item.get("artists", []), album_artist)
 
-                    duration = item.get("duration_seconds", 0) or 0
-                    if isinstance(duration, str):
-                        parts = duration.split(":")
-                        if len(parts) == 2:
-                            duration = int(parts[0]) * 60 + int(parts[1])
-                        elif len(parts) == 3:
-                            duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-                        else:
+                    duration_raw = item.get("duration_seconds", 0) or 0
+                    duration = 0
+                    if isinstance(duration_raw, (int, float)):
+                        duration = int(duration_raw)
+                    elif isinstance(duration_raw, str) and duration_raw:
+                        try:
+                            parts = duration_raw.split(":")
+                            if len(parts) == 2:
+                                duration = int(parts[0]) * 60 + int(parts[1])
+                            elif len(parts) == 3:
+                                duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                            else:
+                                duration = int(duration_raw)
+                        except (ValueError, TypeError):
                             duration = 0
 
                     tracks.append({
@@ -442,6 +483,11 @@ class YouTubeService(BaseMusicService):
 
     def get_playlist_tracks(self, playlist_id: str, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
         """Fetch YouTube Music playlist tracks via ytmusicapi. Runs in background thread."""
+        if not playlist_id or not str(playlist_id).strip():
+            if error_callback:
+                error_callback("Неверный ID плейлиста")
+            return None
+
         if not HAS_YTDLP or not HAS_YTMUSIC:
             if error_callback:
                 error_callback("yt-dlp или ytmusicapi не установлены")
@@ -454,37 +500,50 @@ class YouTubeService(BaseMusicService):
 
                 tracks = []
                 seen_ids = set()
-                for item in entries:
+                for item in (entries or []):
+                    if not isinstance(item, dict):
+                        continue
                     vid = item.get("videoId")
                     if not vid or vid in seen_ids:
                         continue
                     seen_ids.add(vid)
 
-                    title = item.get("title", "Unknown Title")
+                    title = item.get("title") or "Unknown Title"
+                    artist = self._extract_artists_string(item.get("artists", []), "Unknown Artist")
 
-                    artists_list = item.get("artists", []) or []
-                    artist = ", ".join([a["name"] for a in artists_list if "name" in a])
-                    if not artist:
-                        artist = "Unknown Artist"
-
-                    duration = item.get("duration_seconds", 0) or 0
-                    if isinstance(duration, str):
-                        parts = duration.split(":")
-                        if len(parts) == 2:
-                            duration = int(parts[0]) * 60 + int(parts[1])
-                        elif len(parts) == 3:
-                            duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-                        else:
+                    duration_raw = item.get("duration_seconds", 0) or 0
+                    duration = 0
+                    if isinstance(duration_raw, (int, float)):
+                        duration = int(duration_raw)
+                    elif isinstance(duration_raw, str) and duration_raw:
+                        try:
+                            parts = duration_raw.split(":")
+                            if len(parts) == 2:
+                                duration = int(parts[0]) * 60 + int(parts[1])
+                            elif len(parts) == 3:
+                                duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                            else:
+                                duration = int(duration_raw)
+                        except (ValueError, TypeError):
                             duration = 0
 
                     thumbnails = item.get("thumbnails", []) or []
                     cover_url = ""
-                    if thumbnails:
-                        best = thumbnails[-1]
+                    if isinstance(thumbnails, list) and thumbnails:
+                        best_url = ""
+                        best_area = -1
                         for t in thumbnails:
-                            if (t.get("width") or 0) * (t.get("height") or 0) > (best.get("width") or 0) * (best.get("height") or 0):
-                                best = t
-                        cover_url = best.get("url", "")
+                            if isinstance(t, dict):
+                                w = t.get("width") if isinstance(t.get("width"), (int, float)) else 0
+                                h = t.get("height") if isinstance(t.get("height"), (int, float)) else 0
+                                area = w * h
+                                if area >= best_area and t.get("url"):
+                                    best_area = area
+                                    best_url = t.get("url")
+                            elif isinstance(t, str):
+                                if not best_url:
+                                    best_url = t
+                        cover_url = best_url
 
                     tracks.append({
                         "source": "youtube",
@@ -562,6 +621,11 @@ class YouTubeService(BaseMusicService):
 
     def get_stream_url(self, video_url: str, callback: Callable = None, error_callback: Callable = None, quality: str = "high"):
         """Extract direct audio stream URL from a YouTube video."""
+        if not video_url or not str(video_url).strip():
+            if error_callback:
+                error_callback("Неверный URL или ID видео")
+            return None
+
         if not HAS_YTDLP:
             if error_callback:
                 error_callback("yt-dlp не установлен")
@@ -616,8 +680,16 @@ class YouTubeService(BaseMusicService):
                                 return None
 
                     if info:
-                        if info.get("_type") == "playlist" and "entries" in info and len(info["entries"]) > 0:
-                            info = info["entries"][0]
+                        if info.get("_type") == "playlist":
+                            entries = info.get("entries")
+                            if entries is not None:
+                                if not isinstance(entries, (list, tuple)):
+                                    try:
+                                        entries = list(entries)
+                                    except Exception:
+                                        entries = []
+                                if entries:
+                                    info = entries[0]
 
                         stream_url = info.get("url")
                         if not stream_url and info.get("requested_formats"):
@@ -671,6 +743,11 @@ class YouTubeService(BaseMusicService):
 
     def download_audio(self, video_url: str, output_path: str, callback: Callable = None, progress_callback: Callable = None, error_callback: Callable = None, quality: str = "high"):
         """Download audio from YouTube to a local file."""
+        if not video_url or not str(video_url).strip():
+            if error_callback:
+                error_callback("Неверный URL или ID видео")
+            return None
+
         if not HAS_YTDLP:
             if error_callback:
                 error_callback("yt-dlp не установлен")
@@ -678,6 +755,10 @@ class YouTubeService(BaseMusicService):
 
         def _download():
             try:
+                out_dir = os.path.dirname(output_path)
+                if out_dir:
+                    os.makedirs(out_dir, exist_ok=True)
+
                 quality_map = {
                     "low": "192",
                     "medium": "256",
@@ -726,8 +807,13 @@ class YouTubeService(BaseMusicService):
         """Download audio synchronously from YouTube via yt-dlp."""
         import os
         import time
+        if not source_id or not str(source_id).strip():
+            raise ValueError("source_id не может быть пустым")
+
         if not HAS_YTDLP:
             raise Exception("yt-dlp не установлен")
+
+        os.makedirs(output_dir, exist_ok=True)
 
         clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id))
         ts = int(time.time())

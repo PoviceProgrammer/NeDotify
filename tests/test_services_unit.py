@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from services.soundcloud_service import SoundCloudService, _TTLCache
 from services.spotify_service import SpotifyService, _cached_spotify_search, _cached_spotify_album_search
+from services.youtube_service import YouTubeService
 
 
 class TestTTLCache(unittest.TestCase):
@@ -415,5 +416,143 @@ class TestSpotifyServiceUnit(unittest.TestCase):
             self.assertEqual(res_tracks[0]["title"], "Fallback Track")
 
 
+class TestYouTubeServiceUnit(unittest.TestCase):
+    def setUp(self):
+        self.yt = YouTubeService()
+        self.yt._ytmusic = MagicMock()
+
+    def test_youtube_search_empty_or_none_query_returns_empty(self):
+        # Empty string
+        event = threading.Event()
+        res = []
+        self.yt.search("", callback=lambda t: (res.extend(t), event.set()))
+        event.wait(timeout=1.0)
+        self.assertEqual(res, [])
+        self.yt._ytmusic.search.assert_not_called()
+
+        # None query
+        event2 = threading.Event()
+        res2 = []
+        self.yt.search(None, callback=lambda t: (res2.extend(t), event2.set()))
+        event2.wait(timeout=1.0)
+        self.assertEqual(res2, [])
+        self.yt._ytmusic.search.assert_not_called()
+
+    def test_youtube_search_sync_empty_query_fast(self):
+        start = time.time()
+        res = self.yt.search_sync("")
+        duration = time.time() - start
+        self.assertEqual(res, [])
+        self.assertLess(duration, 0.5)
+
+    def test_youtube_search_null_and_malformed_artists_resilience(self):
+        fake_results = [
+            {
+                "resultType": "song",
+                "videoId": "vid_null_artist",
+                "title": "Song With Null Artist",
+                "artists": [{"name": None}],  # Bug BUG-026: TypeError on ", ".join
+                "duration": "3:20",
+                "thumbnails": [{"url": "https://img/thumb.jpg"}]
+            },
+            {
+                "resultType": "song",
+                "videoId": "vid_none_item",
+                "title": "Song With None In Artists",
+                "artists": [None, "non-dict"],
+                "duration": "2:15",
+                "thumbnails": []
+            },
+            {
+                "resultType": "song",
+                "videoId": "vid_null_title",
+                "title": None,
+                "artists": [],
+                "duration": None,
+                "thumbnails": None
+            }
+        ]
+        self.yt._ytmusic.search.return_value = fake_results
+
+        event = threading.Event()
+        res_tracks = []
+        self.yt.search("test query", callback=lambda t: (res_tracks.extend(t), event.set()))
+        event.wait(timeout=2.0)
+
+        self.assertEqual(len(res_tracks), 3)
+        self.assertEqual(res_tracks[0]["artist"], "Unknown Artist")
+        self.assertEqual(res_tracks[1]["artist"], "Unknown Artist")
+        self.assertEqual(res_tracks[2]["title"], "Unknown Title")
+
+    def test_youtube_get_album_and_playlist_tracks_malformed_duration_and_thumbnails(self):
+        fake_album_data = {
+            "title": "Test Album",
+            "artists": [{"name": None}],
+            "thumbnails": ["https://img/not_a_dict.jpg"],
+            "tracks": [
+                {
+                    "videoId": "alb_v1",
+                    "title": "Track 1",
+                    "artists": [{"name": None}],
+                    "duration_seconds": "3:45 extra text",  # Non-numeric duration string
+                }
+            ]
+        }
+        self.yt._ytmusic.get_album.return_value = fake_album_data
+
+        event = threading.Event()
+        res_tracks = []
+        self.yt.get_album_tracks("alb_123", callback=lambda t: (res_tracks.extend(t), event.set()))
+        event.wait(timeout=2.0)
+
+        self.assertEqual(len(res_tracks), 1)
+        self.assertEqual(res_tracks[0]["artist"], "Unknown Artist")
+        self.assertEqual(res_tracks[0]["duration"], 0)
+
+    def test_youtube_get_stream_url_empty_video_url_guard(self):
+        event = threading.Event()
+        err = []
+        self.yt.get_stream_url("", error_callback=lambda e: (err.append(e), event.set()))
+        event.wait(timeout=1.0)
+        self.assertTrue(len(err) > 0)
+
+        event2 = threading.Event()
+        err2 = []
+        self.yt.get_stream_url(None, error_callback=lambda e: (err2.append(e), event2.set()))
+        event2.wait(timeout=1.0)
+        self.assertTrue(len(err2) > 0)
+
+    def test_youtube_get_stream_url_generator_entries_resilience(self):
+        # yt-dlp returning generator for entries
+        def entry_gen():
+            yield {"url": "https://stream.youtube.com/audio.m4a", "id": "gen_vid", "title": "Gen Track"}
+
+        fake_info = {
+            "_type": "playlist",
+            "entries": entry_gen(),
+            "id": "gen_pl"
+        }
+
+        with patch.object(self.yt, "_extract_info_safe", return_value=fake_info):
+            event = threading.Event()
+            resolved = {}
+
+            def cb(url, meta):
+                resolved["url"] = url
+                resolved["meta"] = meta
+                event.set()
+
+            self.yt.get_stream_url("https://youtube.com/playlist?list=PL123", callback=cb)
+            event.wait(timeout=2.0)
+
+            self.assertEqual(resolved.get("url"), "https://stream.youtube.com/audio.m4a")
+            self.assertEqual(resolved.get("meta", {}).get("title"), "Gen Track")
+
+    def test_youtube_download_audio_sync_empty_guard(self):
+        with self.assertRaises(ValueError):
+            self.yt.download_audio_sync("", "/tmp/somedir")
+
+
 if __name__ == "__main__":
     unittest.main()
+
