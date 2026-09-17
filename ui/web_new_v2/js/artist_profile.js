@@ -20,100 +20,6 @@ const covers = [
 
 let profileGenerationId = 0;
 
-const STATIC_TRACKS_PHARAOH = [
-    { id: "g0XKrUoI5XA", title: "Дико, например", artist: "PHARAOH", playCount: "16 млн", year: 2017 },
-    { id: "B4HYSzp6d_Q", title: "5 минут назад", artist: "PHARAOH", playCount: "31 млн", year: 2016 },
-    { id: "mJTC4eu_Stw", title: "Black Siemens", artist: "PHARAOH", playCount: "10 млн", year: 2015 },
-    { id: "UyIv7q8JSZE", title: "Лаллипап", artist: "PHARAOH", playCount: "24 млн", year: 2017 },
-    { id: "_mFzdPFEbZE", title: "Фруктовый", artist: "PHARAOH", playCount: "5 млн", year: 2017 },
-    { id: "YeGTEtdhHd0", title: "ИДОЛ", artist: "PHARAOH", playCount: "18 млн", year: 2017 },
-    { id: "l_nK8tsNMvY", title: "Black Siemens (Remix)", artist: "PHARAOH", playCount: "1.5 млн", year: 2017 },
-    { id: "X6-0P5N8C1I", title: "Champagne Squirt", artist: "PHARAOH", playCount: "33 млн", year: 2015 },
-    { id: "c5i3Y4K0yT8", title: "На луне", artist: "PHARAOH", playCount: "38 млн", year: 2017 },
-    { id: "K9s-n8zP2wA", title: "Одним целым", artist: "PHARAOH", playCount: "25 млн", year: 2020 },
-    { id: "p0Z-8jK9uL1", title: "Smart", artist: "PHARAOH", playCount: "25 млн", year: 2018 }
-];
-
-const STATIC_TRACKS_LANA = [
-    { id: "TdrL3QxjyVw", title: "Summertime Sadness", artist: "Lana Del Rey", playCount: "900 млн", year: 2012 },
-    { id: "cE6wxDqdOV0", title: "Video Games", artist: "Lana Del Rey", playCount: "350 млн", year: 2012 },
-    { id: "Bag1gUcwU0g", title: "Born To Die", artist: "Lana Del Rey", playCount: "550 млн", year: 2012 },
-    { id: "o_1aF54DO60", title: "Young and Beautiful", artist: "Lana Del Rey", playCount: "650 млн", year: 2013 },
-    { id: "1", title: "Blue Jeans", artist: "Lana Del Rey", playCount: "200 млн", year: 2012 },
-    { id: "2", title: "West Coast", artist: "Lana Del Rey", playCount: "150 млн", year: 2014 },
-    { id: "3", title: "Cinnamon Girl", artist: "Lana Del Rey", playCount: "100 млн", year: 2019 },
-    { id: "4", title: "Brooklyn Baby", artist: "Lana Del Rey", playCount: "120 млн", year: 2014 }
-];
-
-const STATIC_TRACKS_WEEKND = [
-    { id: "4NRXx6U8ABQ", title: "Blinding Lights", artist: "The Weeknd", playCount: "3.9 млрд", year: 2020 },
-    { id: "34Na4j8HLjc", title: "Starboy", artist: "The Weeknd", playCount: "2.5 млрд", year: 2016 },
-    { id: "yzTuBuRdAyA", title: "The Hills", artist: "The Weeknd", playCount: "2.2 млрд", year: 2015 },
-    { id: "1", title: "Save Your Tears", artist: "The Weeknd", playCount: "1.5 млрд", year: 2020 },
-    { id: "2", title: "Die For You", artist: "The Weeknd", playCount: "1.2 млрд", year: 2016 },
-    { id: "3", title: "Can't Feel My Face", artist: "The Weeknd", playCount: "1.4 млрд", year: 2015 },
-    { id: "4", title: "Call Out My Name", artist: "The Weeknd", playCount: "1 млрд", year: 2018 },
-    { id: "5", title: "Often", artist: "The Weeknd", playCount: "800 млн", year: 2015 }
-];
-
-function mapStaticTracks(staticArray, albumName) {
-    return staticArray.map((t, index) => {
-        const ytId = t.id && t.id.length > 5 ? t.id : '';
-        const realCover = ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : null;
-        return {
-            id: t.id ? `ytsearch1: ${t.artist} - ${t.title}` : `track_${t.artist.replace(/\s+/g, '')}_${index}`,
-            title: t.title,
-            artist: t.artist,
-            album: albumName,
-            duration: 180000, 
-            release_date: `${t.year}-01-01`,
-            is_favorite: false,
-            source: "youtube",
-            source_id: `ytsearch1: ${t.artist} - ${t.title}`,
-            playCount: t.playCount,
-            cover_url: realCover,
-            is_search_query: true
-        };
-    });
-}
-
-// TODO: Replace this mock data with backend API calls once the backend implements artist profiles
-const MOCK_ARTISTS = {
-    'pharaoh': {
-        name: 'PHARAOH',
-        genres: 'Исполнитель',
-        avatarUrl: 'https://i.ytimg.com/vi/g0XKrUoI5XA/maxresdefault.jpg',
-        bio: 'PHARAOH (Глеб Геннадьевич Голубин, род. 11 августа 1996, Москва) — российский рэп-исполнитель и продюсер. Бывший участник коллектива Grindhouse и лидер Dead Dynasty.',
-        albums: [
-            { title: 'Pink Phloyd', year: 2017, cover: 'https://i.ytimg.com/vi/g0XKrUoI5XA/hqdefault.jpg' },
-            { title: 'Phlora', year: 2014, cover: 'https://i.ytimg.com/vi/mJTC4eu_Stw/hqdefault.jpg' }
-        ],
-        tracks: mapStaticTracks(STATIC_TRACKS_PHARAOH, 'Pink Phloyd')
-    },
-    'lana del rey': {
-        name: 'Lana Del Rey',
-        genres: 'Baroque Pop / Dream Pop',
-        avatarUrl: 'https://i.ytimg.com/vi/TdrL3QxjyVw/hqdefault.jpg',
-        bio: 'Lana Del Rey (Элизабет Вулридж Грант) — американская певица, автор песен и поэтесса. Её музыка известна своим меланхоличным звучанием.',
-        albums: [
-            { title: 'Born to Die', year: 2012, cover: 'https://i.ytimg.com/vi/TdrL3QxjyVw/hqdefault.jpg' }
-        ],
-        tracks: mapStaticTracks(STATIC_TRACKS_LANA, 'Born to Die')
-    },
-    'the weeknd': {
-        name: 'The Weeknd',
-        genres: 'R&B / Synthwave / Pop',
-        avatarUrl: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg',
-        bio: 'The Weeknd (Эйбел Макконен Тесфайе) — канадский певец, автор песен и продюсер. Известен своим темным R&B стилем.',
-        albums: [
-            { title: 'Starboy', year: 2016, cover: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg' }
-        ],
-        tracks: mapStaticTracks(STATIC_TRACKS_WEEKND, 'Starboy')
-    }
-};
-
-MOCK_ARTISTS['pharaon'] = MOCK_ARTISTS['pharaoh'];
-
 function generateFallbackArtist(name) {
     return {
         name: name,
@@ -193,8 +99,7 @@ export async function fetchArtistTracks(artistName) {
                     }
                     resolve(uniqueTracks);
                 } else {
-                    const queryKey = artistName.toLowerCase().trim();
-                    let artistData = MOCK_ARTISTS[queryKey] ? JSON.parse(JSON.stringify(MOCK_ARTISTS[queryKey])) : generateFallbackArtist(artistName);
+                    let artistData = generateFallbackArtist(artistName);
                     resolve(artistData.tracks || []);
                 }
             };
@@ -229,8 +134,7 @@ export async function fetchArtistTracks(artistName) {
     }
 
     return new Promise((resolve) => {
-        const queryKey = artistName.toLowerCase().trim();
-        let artistData = MOCK_ARTISTS[queryKey] ? JSON.parse(JSON.stringify(MOCK_ARTISTS[queryKey])) : generateFallbackArtist(artistName);
+        let artistData = generateFallbackArtist(artistName);
         resolve(artistData.tracks || []);
     });
 }
@@ -856,8 +760,8 @@ export async function loadArtistProfile(artistName, targetContainer) {
             }
             if (currentGen !== profileGenerationId) return;
         } else {
-            // Step 2: Fallback to mock data or generated artist if bridge call returns empty/fails
-            const fallback = MOCK_ARTISTS[queryKey] ? JSON.parse(JSON.stringify(MOCK_ARTISTS[queryKey])) : generateFallbackArtist(artistName);
+            // Step 2: Fallback to dynamic artist if bridge call returns empty/fails
+            const fallback = generateFallbackArtist(artistName);
             fallback.isMock = true;
 
             const [resolvedAvatar, tracks] = await Promise.all([
