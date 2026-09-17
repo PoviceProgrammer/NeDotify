@@ -295,6 +295,11 @@ class DatabaseManager:
         except sqlite3.OperationalError:
             pass
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_downloaded ON tracks(is_downloaded)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_album ON tracks(album)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_fav_added ON tracks(is_favorite, added_at DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_dl_added ON tracks(is_downloaded, added_at DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_playlist_tracks_pid_pos ON playlist_tracks(playlist_id, position)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_tid_played ON history(track_id, played_at DESC)")
 
         # Dup cleanup migration
         cursor.execute("SELECT value FROM settings WHERE key = 'migration_dup_cleanup_done'")

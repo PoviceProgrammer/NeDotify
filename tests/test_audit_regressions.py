@@ -239,6 +239,28 @@ class TestAuditRegressions(unittest.TestCase):
         self.assertIn("track = track.copy()", engine_code)
         self.assertIn('self.queue.current_track.get("id") == track.get("id")', engine_code)
 
+    def test_database_composite_indexes_exist(self):
+        import tempfile
+        from core.database import DatabaseManager
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = os.path.join(temp_dir, "test.db")
+            db = DatabaseManager(db_path)
+            cursor = db.conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='index'")
+            indexes = {row[0] for row in cursor.fetchall()}
+
+            expected_indexes = {
+                "idx_tracks_album",
+                "idx_tracks_fav_added",
+                "idx_tracks_dl_added",
+                "idx_playlist_tracks_pid_pos",
+                "idx_history_tid_played",
+                "idx_tracks_downloaded",
+            }
+            for idx in expected_indexes:
+                self.assertIn(idx, indexes, f"Missing index: {idx}")
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()
