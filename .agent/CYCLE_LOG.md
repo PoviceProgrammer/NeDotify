@@ -40,3 +40,19 @@
   - All Node.js tests passing.
   - Backlog items PERF-009, SEC-010, UX-011, BUG-012, SEC-013 resolved and verified.
 
+## Cycle 3
+- **Started**: 2026-09-17 21:36
+- **Initial Baseline**: 85 tests passing (pytest).
+- **Goals**:
+  1. Глубокий аудит и юнит-тестирование `audio/queue.py`: поддержка отрицательных индексов, метод `peek_next()`, исправление удаления дубликатов в `_original_order`, сдвиг `_history_stack`, сохранение пользовательского порядка при `move_track()`.
+  2. Глубокий аудит и юнит-тестирование `services/soundcloud_service.py`: отказоустойчивость к null-значениям user/media/transcodings/samples, кэширование TTL.
+  3. Глубокий аудит и юнит-тестирование `services/spotify_service.py`: устранение `TypeError`/`AttributeError` при null `trackTimeMillis` и `artworkUrl100`, реализация свойства `available` и метода `get_stream_url()`.
+  4. Создание изолированных наборов тестов `tests/test_audio_queue.py` (17 тестов) и `tests/test_services_unit.py` (14 тестов).
+- **Commits**:
+  - `4ae8a5f`: fix(audio): strengthen queue with negative indexing, peek_next, duplicate preservation, and history tracking
+  - `6d6d1ce`: fix(services): harden SoundCloud and Spotify parsing against null attributes and missing payloads
+- **Final Result**:
+  - Tests: 85 -> 116 passed (+31 new tests, 0 regressions).
+  - Backlog items BUG-014, BUG-015, DEBT-016, BUG-017, BUG-018, TEST-019, TEST-020 resolved and verified.
+
+

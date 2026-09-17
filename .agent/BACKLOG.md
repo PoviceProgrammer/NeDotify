@@ -15,3 +15,11 @@
 | UX-011 | UX | P2 | `ui/web_new_v2/js/artist_profile.js` | Удаление устаревшего словаря `MOCK_ARTISTS` в пользу динамических профилей и чистого фоллбэка | done |
 | BUG-012 | BUG | P0 | `core/proxy.py` | Воспроизведение скачанных треков (`is_downloaded=1`, `file_path`) при `source != 'local'` вызывало онлайн-резолв вместо локального файла | done |
 | SEC-013 | SEC | P1 | `core/proxy.py` | `_is_safe_local_audio` не проверял расширения аудиофайлов и допускал fallthrough в резолвер при запрете доступа | done |
+| BUG-014 | BUG | P1 | `audio/queue.py` | `remove_track` удаляет все дубликаты трека из `_original_order` и рассинхронизирует `_history_stack` | done |
+| BUG-015 | BUG | P1 | `audio/queue.py` | `move_track` не обновляет `_original_order` при выключенном shuffle, приводя к сбросу пользовательского порядка | done |
+| DEBT-016 | DEBT | P2 | `audio/queue.py` | Отсутствие метода `peek_next`, поддержки отрицательных индексов (-1) и валидации входных типов в `add_track` | done |
+| BUG-017 | BUG | P1 | `services/soundcloud_service.py` | `AttributeError` при null-значениях user/media объектов в ответах API SoundCloud (`search`, `get_stream_url`, `get_playlist_tracks`) | done |
+| BUG-018 | BUG | P1 | `services/spotify_service.py` | `TypeError` / `AttributeError` при `trackTimeMillis: null` и `artworkUrl100: null` в `_cached_spotify_search` и `get_album_tracks` | done |
+| TEST-019 | TEST | P1 | `tests/test_audio_queue.py` | Отсутствует изолированный набор юнит-тестов для `PlaybackQueue` (concurrency, repeat/shuffle, history, edge cases) | done |
+| TEST-020 | TEST | P1 | `tests/test_services_unit.py` | Отсутствует изолированный набор юнит-тестов для `SoundCloudService` и `SpotifyService` (bad payloads, null checks, waveform) | done |
+
