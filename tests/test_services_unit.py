@@ -910,6 +910,38 @@ class TestYandexServiceUnit(unittest.TestCase):
             self.mock_client.tracks.assert_called_once_with(["77777"])
             mock_track.download.assert_called_once()
 
+    def test_yandex_download_audio_sync_atomic_rename_and_cleanup_on_error(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mock_track = MagicMock()
+            self.mock_client.tracks.return_value = [mock_track]
+
+            def fake_download_fail(path, **kwargs):
+                with open(path, "w") as f:
+                    f.write("corrupted data")
+                raise Exception("Network abort")
+
+            mock_track.download.side_effect = fake_download_fail
+            with patch("time.time", return_value=123):
+                with self.assertRaises(Exception):
+                    self.ya.download_audio_sync("12345", tmpdir)
+
+                self.assertEqual(len(os.listdir(tmpdir)), 0)
+
+    def test_yandex_service_handles_prefixed_and_album_ids(self):
+        mock_track = MagicMock()
+        self.mock_client.tracks.return_value = [mock_track]
+
+        with patch("os.path.exists", return_value=True), patch("os.makedirs"):
+            self.ya.download_audio_sync("ya:88888", "/tmp/ya_test")
+            self.mock_client.tracks.assert_called_with(["88888"])
+
+            self.ya.download_audio_sync("yandex:99999", "/tmp/ya_test")
+            self.mock_client.tracks.assert_called_with(["99999"])
+
+            self.ya.download_audio_sync("track:55555:album_10", "/tmp/ya_test")
+            self.mock_client.tracks.assert_called_with(["55555"])
+
 
 if __name__ == "__main__":
     unittest.main()

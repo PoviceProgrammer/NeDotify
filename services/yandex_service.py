@@ -207,6 +207,7 @@ class YandexService(BaseMusicService):
                     error_callback('Не удалось извлечь ID трека из URL')
                 return None
 
+        raw_id = re.sub(r'^(?:yandex|ya|track):', '', raw_id)
         raw_id = raw_id.split(":")[0].strip()
         if not raw_id or raw_id.lower() == "none":
             if error_callback:
@@ -315,7 +316,10 @@ class YandexService(BaseMusicService):
             m = re.search(r"/track/(\d+)", raw_id)
             if m:
                 raw_id = m.group(1)
+        raw_id = re.sub(r'^(?:yandex|ya|track):', '', raw_id)
         raw_id = raw_id.split(":")[0].strip()
+        if not raw_id or raw_id.lower() == "none":
+            raise ValueError("Неверный ID трека")
 
         tracks = client.tracks([raw_id])
         if not tracks:
@@ -324,9 +328,29 @@ class YandexService(BaseMusicService):
         track = tracks[0]
         file_name = f"ya_{raw_id}_{int(time.time())}.mp3"
         output_path = os.path.join(output_dir, file_name)
-        track.download(output_path, codec="mp3", bitrate_in_kbps=320)
+        part_path = f"{output_path}.part"
 
-        if not os.path.exists(output_path):
-            raise Exception("Файл не был создан после загрузки из Яндекс Музыки")
+        try:
+            track.download(part_path, codec="mp3", bitrate_in_kbps=320)
+            if os.path.exists(part_path):
+                try:
+                    if os.path.getsize(part_path) == 0:
+                        raise Exception("Файл пуст после загрузки из Яндекс Музыки")
+                except OSError:
+                    pass
+                try:
+                    os.replace(part_path, output_path)
+                except OSError:
+                    pass
+            if not os.path.exists(output_path) and not os.path.exists(part_path):
+                raise Exception("Файл не был создан после загрузки из Яндекс Музыки")
+        except Exception:
+            for p in (part_path, output_path):
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
+            raise
 
         return output_path
