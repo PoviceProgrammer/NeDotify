@@ -53,8 +53,14 @@ class PlaylistImportService:
         if "soundcloud.com" in target:
             return self._resolve_soundcloud(target)
 
+
+        # 4. Spotify URL
+        if "spotify.com" in target:
+            return self._resolve_spotify(target)
+
         # Unsupported service
-        raise UnsupportedPlaylistService("Поддерживается импорт плейлистов YouTube, M3U/M3U8, JSON и текстовых списков")
+
+        raise UnsupportedPlaylistService("Поддерживается импорт плейлистов YouTube, SoundCloud, Spotify, M3U/M3U8, JSON и текстовых списков")
 
     def _resolve_youtube(self, url: str) -> Dict[str, Any]:
         opts = {
@@ -168,6 +174,83 @@ class PlaylistImportService:
             raise PlaylistImportError("В плейлисте не найдено доступных треков")
 
         return {"name": name, "source": "soundcloud", "tracks": tracks}
+
+
+    def _resolve_spotify(self, url: str) -> dict:
+        import urllib.request
+        import json
+        import re
+        
+        m = re.search(r"playlist/([a-zA-Z0-9]+)", url)
+        if not m:
+            raise PlaylistImportError("Неверный формат ссылки на плейлист Spotify")
+        playlist_id = m.group(1)
+        
+        tracks = []
+        name = "Spotify Playlist"
+        
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5.0) as response:
+                html = response.read().decode('utf-8')
+                
+                title_m = re.search(r'<meta property="og:title" content="([^"]+)"', html)
+                if title_m:
+                    name = title_m.group(1).replace("&#39;", "'")
+                
+                desc_m = re.search(r'<meta name="description" content="([^"]+)"', html)
+                if desc_m:
+                    desc = desc_m.group(1)
+                    if " · " in desc:
+                        pairs = desc.split(", ")
+                        for p in pairs:
+                            if " · " in p:
+                                s_title, s_artist = p.split(" · ", 1)
+                                tracks.append({
+                                    "title": s_title.strip(),
+                                    "artist": s_artist.strip(),
+                                    "album": "Spotify Import",
+                                    "duration": 0.0,
+                                    "source": "spotify",
+                                    "source_id": f"ytsearch1: {s_artist.strip()} - {s_title.strip()}",
+                                    "cover_url": ""
+                                })
+        except Exception:
+            pass
+
+        if not tracks:
+            opts = {
+                "extract_flat": "in_playlist",
+                "skip_download": True,
+                "quiet": True,
+            }
+            try:
+                with self._get_ydl(opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    if info and info.get("entries"):
+                        name = info.get("title") or name
+                        for entry in info["entries"]:
+                            if not isinstance(entry, dict): continue
+                            title = entry.get("title") or "Unknown Title"
+                            artist = entry.get("uploader") or entry.get("artist") or "Unknown Artist"
+                            tracks.append({
+                                "title": title,
+                                "artist": artist,
+                                "album": "Spotify Import",
+                                "duration": float(entry.get("duration") or 0.0),
+                                "source": "spotify",
+                                "source_id": f"ytsearch1: {artist} - {title}",
+                                "cover_url": entry.get("thumbnail", "")
+                            })
+            except Exception:
+                pass
+
+        if not tracks:
+            raise PlaylistImportError("В плейлисте не найдено доступных треков (требуется публичный плейлист)")
+
+        return {"name": name, "source": "spotify", "tracks": tracks}
+
+
 
     def _resolve_local_file(self, target: str) -> Dict[str, Any]:
         """Parse M3U, JSON, or text playlist files."""
