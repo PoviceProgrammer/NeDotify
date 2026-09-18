@@ -110,7 +110,7 @@ class SpotifyService(BaseMusicService):
     def __init__(self, settings=None):
         super().__init__()
         self.settings = settings
-        self._executor = ThreadPoolExecutor(max_workers=5)
+        self._executor = self.__class__._executor
         self.logger = logging.getLogger(__name__)
         self._token_lock = threading.Lock()
         self._access_token: Optional[str] = None

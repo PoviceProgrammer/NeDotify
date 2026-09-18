@@ -67,7 +67,7 @@ class SoundCloudService(BaseMusicService):
     def __init__(self, settings=None):
         super().__init__()
         self.settings = settings
-        self._executor = ThreadPoolExecutor(max_workers=10)
+        self._executor = self.__class__._executor
         self.logger = logging.getLogger(__name__)
         self._ydl = None
         self._ydl_search = None

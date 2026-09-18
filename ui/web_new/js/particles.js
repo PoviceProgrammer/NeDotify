@@ -58,12 +58,81 @@ function getEmojiSprite(symbol, fontStr) {
     return sprite;
 }
 
+let resizeTimeout = null;
+function performResize() {
+    if (!canvas) return;
+    const oldW = canvas.width || window.innerWidth;
+    const oldH = canvas.height || window.innerHeight;
+    const newW = window.innerWidth;
+    const newH = window.innerHeight;
+
+    canvas.width = newW;
+    canvas.height = newH;
+
+    if (oldW > 0 && oldH > 0 && (oldW !== newW || oldH !== newH) && particles.length > 0) {
+        const scaleX = newW / oldW;
+        const scaleY = newH / oldH;
+        particles.forEach(p => {
+            p.x = p.x * scaleX;
+            p.y = p.y * scaleY;
+        });
+    }
+}
+
+function onResize() {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(performResize, 100);
+}
+
+function onMiniPlayerToggled() {
+    if (document.body.classList.contains('mini-player-active')) {
+        if (animFrameId) {
+            cancelAnimationFrame(animFrameId);
+            animFrameId = null;
+        }
+    } else if (isParticlesRunning && !animFrameId && animateFn) {
+        lastFrameTime = 0;
+        animFrameId = requestAnimationFrame(animateFn);
+    }
+    setTimeout(performResize, 100);
+}
+
+let mouseThrottleId = null;
+function onMouseMove(e) {
+    if (!mouseThrottleId) {
+        mouseThrottleId = setTimeout(() => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+            mouse.active = true;
+            mouseThrottleId = null;
+        }, 32);
+    }
+}
+
+function onMouseLeave() {
+    mouse.active = false;
+}
+
 export function stopParticles() {
     isParticlesRunning = false;
     if (animFrameId) {
         cancelAnimationFrame(animFrameId);
         animFrameId = null;
     }
+    window.removeEventListener('resize', onResize);
+    window.removeEventListener('nedotify:mini_player_toggled', onMiniPlayerToggled);
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseleave', onMouseLeave);
+    if (mouseThrottleId) {
+        clearTimeout(mouseThrottleId);
+        mouseThrottleId = null;
+    }
+    if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = null;
+    }
+    mouse.active = false;
+
     const container = document.getElementById('particles-bg');
     if (container) {
         container.style.display = 'none';
@@ -88,13 +157,11 @@ export function initParticles() {
         }
     }
 
+    // Clean up any running instance first to prevent listener leaks
+    stopParticles();
+
     const container = document.getElementById('particles-bg');
     if (!container) return;
-
-    if (animFrameId) {
-        cancelAnimationFrame(animFrameId);
-        animFrameId = null;
-    }
 
     container.innerHTML = '';
     container.style.display = 'block';
@@ -104,64 +171,12 @@ export function initParticles() {
     canvas.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none !important;will-change:transform;transform:translateZ(0);';
 
     container.appendChild(canvas);
-    ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+    ctx = canvas.getContext('2d', { alpha: true });
 
-    const resize = () => {
-        if (!canvas) return;
-        const oldW = canvas.width || window.innerWidth;
-        const oldH = canvas.height || window.innerHeight;
-        const newW = window.innerWidth;
-        const newH = window.innerHeight;
-        
-        canvas.width = newW;
-        canvas.height = newH;
-        
-        if (oldW > 0 && oldH > 0 && (oldW !== newW || oldH !== newH) && particles.length > 0) {
-            const scaleX = newW / oldW;
-            const scaleY = newH / oldH;
-            particles.forEach(p => {
-                p.x = p.x * scaleX;
-                p.y = p.y * scaleY;
-            });
-        }
-    };
-    resize();
-    window.removeEventListener('resize', resize);
-    window.addEventListener('resize', resize);
-    const onMiniPlayerToggled = () => {
-        // O-6: pause when mini player hides the container, resume on restore
-        if (document.body.classList.contains('mini-player-active')) {
-            if (animFrameId) {
-                cancelAnimationFrame(animFrameId);
-                animFrameId = null;
-            }
-        } else if (isParticlesRunning && !animFrameId) {
-            lastFrameTime = 0;
-            animFrameId = requestAnimationFrame(animate);
-        }
-        setTimeout(resize, 100);
-    };
-    window.removeEventListener('nedotify:mini_player_toggled', onMiniPlayerToggled);
+    performResize();
+    window.addEventListener('resize', onResize);
     window.addEventListener('nedotify:mini_player_toggled', onMiniPlayerToggled);
-
-    let mouseThrottleId = null;
-    const onMouseMove = (e) => {
-        if (!mouseThrottleId) {
-            mouseThrottleId = setTimeout(() => {
-                mouse.x = e.clientX;
-                mouse.y = e.clientY;
-                mouse.active = true;
-                mouseThrottleId = null;
-            }, 32);
-        }
-    };
-    const onMouseLeave = () => {
-        mouse.active = false;
-    };
-
-    window.removeEventListener('mousemove', onMouseMove);
     window.addEventListener('mousemove', onMouseMove, { passive: true });
-    window.removeEventListener('mouseleave', onMouseLeave);
     window.addEventListener('mouseleave', onMouseLeave);
 
     // Read settings

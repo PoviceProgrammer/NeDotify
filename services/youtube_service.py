@@ -63,7 +63,7 @@ class YouTubeService(BaseMusicService):
     def __init__(self, settings=None):
         super().__init__()
         self.settings = settings
-        self._executor = ThreadPoolExecutor(max_workers=10)
+        self._executor = self.__class__._executor
         self._ytmusic = None
         if HAS_YTMUSIC:
             import requests

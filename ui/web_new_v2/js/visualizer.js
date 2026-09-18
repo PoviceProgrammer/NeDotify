@@ -54,9 +54,34 @@ document.addEventListener('nedotify:state_changed', (e) => {
     notifyPlaybackState(e.detail === 'playing');
 });
 
+let activeTargets = [];
+export function updateVisualizerTargets() {
+    activeTargets = [];
+    targets.forEach(t => {
+        if (!t.canvas) {
+            t.canvas = document.getElementById(t.id);
+            if (t.canvas) t.ctx = t.canvas.getContext('2d', { alpha: true });
+        }
+        if (t.canvas && t.canvas.parentElement) {
+            t.canvas.width = t.canvas.parentElement.offsetWidth || 380;
+            t.canvas.height = t.canvas.parentElement.offsetHeight || 380;
+            const parentPage = t.canvas.closest('.view-page');
+            if (!parentPage || parentPage.classList.contains('active')) {
+                activeTargets.push(t);
+            }
+        }
+    });
+}
+
+function resizeCanvas() {
+    updateVisualizerTargets();
+}
+
 window.addEventListener('nedotify:page_changed', () => {
+    updateVisualizerTargets();
     if (isEnabled && documentVisible && !animFrameId) {
         hasDrawnIdle = false;
+        lastFrameTime = performance.now();
         animFrameId = requestAnimationFrame(draw);
     }
 });
@@ -64,19 +89,12 @@ window.addEventListener('nedotify:page_changed', () => {
 export function initVisualizer() {
     targets.forEach(t => {
         t.canvas = document.getElementById(t.id);
-        if (t.canvas) t.ctx = t.canvas.getContext('2d', { alpha: true, desynchronized: true });
+        if (t.canvas) t.ctx = t.canvas.getContext('2d', { alpha: true });
     });
 
-    const resizeCanvas = () => {
-        targets.forEach(t => {
-            if (t.canvas && t.canvas.parentElement) {
-                t.canvas.width = t.canvas.parentElement.offsetWidth || 380;
-                t.canvas.height = t.canvas.parentElement.offsetHeight || 380;
-            }
-        });
-    };
-    resizeCanvas();
+    window.removeEventListener('resize', resizeCanvas);
     window.addEventListener('resize', resizeCanvas);
+    updateVisualizerTargets();
 
     bars = [];
     for (let i = 0; i < BAR_COUNT; i++) {
@@ -224,17 +242,7 @@ function draw(timestamp) {
 
     const playing = getIsPlaying();
 
-    let hasVisibleCanvas = false;
-    targets.forEach(t => {
-        if (t.canvas && t.canvas.offsetParent !== null && t.canvas.width > 0 && t.canvas.height > 0) {
-            const parentPage = t.canvas.closest('.view-page');
-            if (!parentPage || parentPage.classList.contains('active')) {
-                hasVisibleCanvas = true;
-            }
-        }
-    });
-
-    if (!hasVisibleCanvas) {
+    if (activeTargets.length === 0) {
         animFrameId = null;
         return;
     }
@@ -262,18 +270,14 @@ function draw(timestamp) {
 
     const rgb = getCachedPrimaryRgb();
 
-    targets.forEach(target => {
-        if (!target.ctx || !target.canvas) return;
-        if (target.canvas.width === 0 || target.canvas.height === 0) return;
-        if (target.canvas.offsetParent === null) return;
-
-        // Optimization for laptops: skip drawing if parent view page is not active
-        const parentPage = target.canvas.closest('.view-page');
-        if (parentPage && !parentPage.classList.contains('active')) return;
-
-        const ctx = target.ctx;
+    for (let tIdx = 0; tIdx < activeTargets.length; tIdx++) {
+        const target = activeTargets[tIdx];
+        if (!target.ctx || !target.canvas) continue;
         const w = target.canvas.width;
         const h = target.canvas.height;
+        if (w === 0 || h === 0) continue;
+
+        const ctx = target.ctx;
         ctx.clearRect(0, 0, w, h);
 
         const data = new Array(BAR_COUNT);
@@ -288,7 +292,7 @@ function draw(timestamp) {
         } else {
             drawBars(ctx, w, h, data, playing, target.primary, rgb);
         }
-    });
+    }
 }
 
 function makeGradient(ctx, x1, y1, x2, y2, playing, primary, rgb) {
