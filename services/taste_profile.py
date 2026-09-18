@@ -62,6 +62,8 @@ class UserTasteProfile:
             logger.debug('[PROFILE] Reusing profile computed less than %.0fs ago', PROFILE_CACHE_TTL)
             return self
 
+        conn = None
+        should_close_conn = isinstance(db, str)
         try:
             conn = self._get_conn(db)
 
@@ -306,6 +308,12 @@ class UserTasteProfile:
             err_msg = f'[PROFILE_ERROR] Fatal error in build_from_db: {e}\n{_tb.format_exc()}'
             logger.error(err_msg)
             print(err_msg, flush=True)
+        finally:
+            if should_close_conn and conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
         return self
 
