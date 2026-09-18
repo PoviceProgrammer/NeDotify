@@ -4,8 +4,11 @@ import { getCurrentTrack, playTrack, incrementQueueVersion } from './player.js';
 let isQueueVisible = false;
 let draggedItemIndex = null;
 let currentQueue = [];
+let _queueInitialized = false;
 
 export function initQueue() {
+    if (_queueInitialized) return;
+    _queueInitialized = true;
     const btnPP = document.getElementById('pp-btn-queue');
     const btnPB = document.getElementById('pb-btn-queue');
     const closeBtn = document.getElementById('btn-close-queue') || document.getElementById('queue-drawer-close');

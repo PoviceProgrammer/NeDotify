@@ -76,7 +76,7 @@ class BaseMusicService:
     _executor = _SharedExecutor(max_workers=8)
     _cache_lock = threading.RLock()
     _stream_cache: Dict[str, Any] = {}
-    _MAX_CACHE_SIZE = 2000
+    _MAX_CACHE_SIZE = 500
     # Provider stream URLs (googlevideo & co.) typically expire after ~6 hours,
     # so cached entries older than that are dead weight: serving them forces a
     # guaranteed 403 round trip through the proxy self-heal path.

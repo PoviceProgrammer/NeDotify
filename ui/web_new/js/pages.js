@@ -11,8 +11,11 @@ const pageTitles = {
 };
 
 let currentBasePage = 'home';
+let _pagesInitialized = false;
 
 export function initPages() {
+    if (_pagesInitialized) return;
+    _pagesInitialized = true;
     document.querySelectorAll('.nav-item[data-page]').forEach(item => {
         item.addEventListener('click', () => {
             showPage(item.dataset.page);

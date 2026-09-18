@@ -58,3 +58,11 @@
 - **Визуал**: 100% сохранен (плавный скролл списков, мгновенная подгрузка обложек, точное отображение waveform).
 - **Тесты**: 85 python tests + 3 node test suites passed in 7.80s.
 
+## Цикл 6
+- **Задачи**: PERF-016 (Pages idempotent init guard), PERF-017 (Queue idempotent init guard), PERF-018 (Stream cache max size tuning to 500)
+- **Результаты**:
+  - PERF-016: В `ui/web_new/js/pages.js` и `ui/web_new_v2/js/pages.js` добавлен флаг-страж `_pagesInitialized`, предотвращающий дублирование слушателей `keydown` (Escape) и кликов по навигации при повторных инициализациях интерфейса.
+  - PERF-017: В `ui/web_new/js/queue.js` и `ui/web_new_v2/js/queue.js` добавлен флаг `_queueInitialized`, исключающий повторную регистрацию слушателей событий очереди `nedotify:queue_updated` и смены трека.
+  - PERF-018: Лимит кэша потоков `_MAX_CACHE_SIZE` в `BaseMusicService` снижен с 2000 до 500 записей, что предотвращает накопление сотен мегабайт устаревших метаданных стримов в куче Python при длительной работе приложения.
+- **Визуал**: 100% сохранен (навигация страниц и боковая панель очереди работают штатно).
+- **Тесты**: 85 python tests + 3 node test suites passed in 8.27s.
