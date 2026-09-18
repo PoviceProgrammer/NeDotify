@@ -8,5 +8,6 @@
 | PERF-004 | CPU/RAM | `ui/web_new/js/player.js` | Сброс `animFrameId = null` при уходе вкладки в скрытое состояние (фикс залипания прогресс-бара), кэширование текстовых значений времени/aria-valuenow перед записью в DOM на 15 FPS и кэширование canvas элементов в `renderWaveforms` устранит лишние DOM mutations | done |
 | PERF-005 | RAM/CPU | `ui/web_new/js/efficiency.js` | Предотвращение накопления экземпляров `MutationObserver` и слушателей событий `nedotify:app_ready` при повторной инициализации | done |
 | PERF-006 | RAM/CPU | `core/database.py` | Оптимизация `PRAGMA cache_size`: замена чрезмерного 8MB на соединение (-8000) на 2MB (-2000) уменьшит расход памяти в многопоточных сценариях без потери скорости запросов | done |
-| PERF-007 | CPU | `main.py` | Вынос `import json` из горячего метода конвертации значений `_patched_convert_js_value` в модуль/замыкание снизит CPU overhead при IPC вызовах | todo |
-| PERF-008 | CPU/NETWORK | `core/proxy.py` | Увеличение размера чанка при отдаче локальных аудиофайлов по Range-запросам с 8KB до 64KB сократит системные вызовы read/write и уменьшит накладные расходы ядра | todo |
+| PERF-007 | CPU | `main.py` | Вынос `import json` из горячего метода конвертации значений `_patched_convert_js_value` в модуль/замыкание снизит CPU overhead при IPC вызовах | done |
+| PERF-008 | CPU/NETWORK | `core/proxy.py` | Увеличение размера чанка при отдаче локальных аудиофайлов по Range-запросам с 8KB до 64KB сократит системные вызовы read/write и уменьшит накладные расходы ядра | done |
+| PERF-009 | CPU/RAM | `ui/web_new/js/contextmenu.js` | Дедупликация слушателя `contextmenu` на `document` для предотвращения дублирования обработчиков при повторной инициализации | done |

@@ -10,6 +10,7 @@ import os
 import signal
 import sys
 import threading
+import json
 
 import socketserver
 socketserver.TCPServer.allow_reuse_address = True
@@ -79,7 +80,6 @@ if sys.platform != "win32":
                 return js_value.to_string()
             elif js_value.is_object():
                 try:
-                    import json
                     json_str = js_value.to_json(0)
                     if json_str:
                         return json.loads(json_str)

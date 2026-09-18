@@ -347,7 +347,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 with open(file_path, 'rb') as f:
                     f.seek(start_byte)
-                    chunk_size = 8192
+                    chunk_size = 65536
                     bytes_sent = 0
                     while bytes_sent < length:
                         read_size = min(chunk_size, length - bytes_sent)
