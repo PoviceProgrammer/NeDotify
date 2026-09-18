@@ -124,3 +124,33 @@
     - Metadata Precision: Prioritized explicit title tags (`- EP`, `- Single`) over track count heuristics, and cleaned trailing license/read-more boilerplate in Last.fm biographies.
     - API & UI: Added `get_artist_discography` to `ArtistService` and `AppApi`, and hardened empty bio fallback text in `artist_profile.js`.
 
+## Cycle 7
+- **Started**: 2026-09-18 07:30
+- **Initial Baseline**: 210 tests collected.
+- **Goals**:
+  1. Исправить TypeError в `services/watchdog_service.py` (`_sync_folders` unhashable type: 'dict') и защитить `stop()` при отключенном watchdog.
+  2. Исправить удаление физических файлов в `services/audio_fingerprint_service.py` (`delete_duplicate_track`), если на файл ссылаются другие треки в библиотеке.
+  3. Добавить резолв треков с источником `source == "vk"` в каскаде сетевого резолва `audio/engine.py` (`_resolve_via_network`).
+  4. Закрывать SQLite-соединение в блоке `finally` в `services/taste_profile.py` (`build_from_db`) при передаче пути к файлу БД.
+  5. Добавить уникальные UUID суффиксы во временные файлы бэкапа в `utils/tag_parser.py` (`write_tags`) для предотвращения коллизий при параллельной записи.
+  6. Сбрасывать `file_path` и `resolved_at` для онлайн-треков Spotify и Yandex в `core/session.py` (`restore_session`).
+  7. Синхронизировать `core/services/discord_rpc.py:stop()` с мьютексом `self._lock` и сбрасывать состояние подключения.
+  8. Записывать громкость LUFS через `db.update_track` с блокировкой `_write_lock` и закрывать соединение SQLite потока сканера в `services/lufs_scanner.py`.
+  9. Добавить обратную совместимость `ApiBridge = AppApi` в `core/api.py`.
+  10. Усилить распознавание `main.py` в аргументах cmdline для single-instance lock и устранить гонку при инициализации тестов UI.
+- **Commits**:
+  - `3c1d401`: fix(services): fix TypeError in WatchdogService _sync_folders and guard stop against None
+  - `b799c8c`: fix(services): prevent deleting audio files on disk if shared by other library tracks
+  - `05ffc79`: fix(audio): support source == 'vk' stream resolution in AudioEngine with fallback
+  - `f8f3f69`: fix(services): close SQLite connection in UserTasteProfile.build_from_db when filepath is passed
+  - `5e58ed8`: fix(utils): use unique uuid suffix in write_tags backup path to prevent overwrite collisions
+  - `50aafbd`: fix(core): reset file_path and resolved_at for spotify and yandex tracks on restore_session
+  - `02912cc`: fix(rpc): synchronize DiscordRPCService.stop with _lock and reset pending state
+  - `314047e`: fix(services): use update_track with write lock and close SQLite connection in LufsScannerService
+  - `a99f762`: fix(core): expose ApiBridge alias for AppApi and finalize cycle 7 test suite
+  - `8d3a55c`: feat(services, ui): enhance discography categorization, cover art fallbacks and bio cleanup
+  - `104a2ec`: fix(core, tests): strengthen instance lock cmdline detection and UI stress readiness
+- **Final Result**:
+  - Tests: All 210 tests passing cleanly (`pytest -q`), including all 13 UI adversarial tests and 10 lifecycle stability tests.
+  - Backlog items BUG-038 to BUG-045 resolved and verified.
+
