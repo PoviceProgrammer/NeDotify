@@ -499,4 +499,72 @@ class AudioEngine:
                 event.set()
             event.wait(timeout=10)
             return url
+        if source == "vk":
+            import threading
+            url = None
+            event = threading.Event()
+
+            def cb(*args):
+                nonlocal url
+                try:
+                    url = args[0] if args else None
+                finally:
+                    event.set()
+
+            def err_cb(e):
+                try:
+                    logger.error(f"VK stream resolution error: {e}")
+                finally:
+                    event.set()
+
+            try:
+                vk_service = getattr(self.app_core, "vk", None) if self.app_core else None
+                if vk_service and hasattr(vk_service, "get_stream_url"):
+                    vk_target = str(source_id).strip() if str(source_id).strip().startswith(("http://", "https://")) else f"https://vk.com/audio?id={source_id}"
+                    vk_service.get_stream_url(vk_target, cb, err_cb)
+                    event.wait(timeout=10)
+                else:
+                    event.set()
+            except Exception as ex:
+                logger.debug(f"VK stream error: {ex}")
+                event.set()
+
+            if url:
+                return url
+
+            # Fallback to YouTube search for VK track if direct resolution fails
+            artist = track.get("artist", "")
+            title = track.get("title", "")
+            search_query = f"{artist} {title}".strip()
+            if search_query and hasattr(self.app_core, "youtube") and self.app_core.youtube:
+                event2 = threading.Event()
+
+                def s_cb(res):
+                    try:
+                        if res and len(res) > 0:
+                            vid = res[0].get("source_id")
+                            if vid:
+                                def cb2(*args):
+                                    nonlocal url
+                                    try:
+                                        url = args[0] if args else None
+                                    finally:
+                                        event2.set()
+
+                                def err_cb2(e):
+                                    event2.set()
+
+                                self.app_core.youtube.get_stream_url(vid, cb2, err_cb2)
+                                return
+                    except Exception as e:
+                        logger.error(f"VK fallback err: {e}")
+                    event2.set()
+
+                try:
+                    self.app_core.youtube.search(search_query, max_results=1, callback=s_cb, error_callback=lambda e: event2.set())
+                    event2.wait(timeout=10)
+                except Exception:
+                    pass
+
+            return url
         return None

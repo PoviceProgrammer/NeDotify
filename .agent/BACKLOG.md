@@ -40,7 +40,7 @@
 | FEAT-037 | FEAT | P1 | `services/artist_service.py`, `services/musicbrainz_service.py`, `services/spotify_service.py`, `services/lastfm_service.py`, `ui/web_new/js/artist_profile.js`, `ui/web_new_v2/js/artist_profile.js` | Полноценный парсер дискографии и биографии артистов: интеграция со Spotify, Last.fm, MusicBrainz с каскадным фоллбэком, категоризацией релизов (альбомы, синглы, EP, сборники), табами в UI и расширенной двуязычной биографией | done |
 | BUG-038 | BUG | P1 | `services/watchdog_service.py` | TypeError: unhashable type: 'dict' в `_sync_folders` и падение `stop()` при отсутствующем watchdog модуле | done |
 | BUG-039 | BUG | P1 | `services/audio_fingerprint_service.py` | `delete_duplicate_track` удаляет аудиофайл с диска, если на него всё ещё ссылаются другие треки в библиотеке | done |
-| BUG-040 | BUG | P1 | `audio/engine.py` | Отсутствие обработчика `source == "vk"` в каскаде сетевого резолва `_resolve_via_network` | todo |
+| BUG-040 | BUG | P1 | `audio/engine.py` | Отсутствие обработчика `source == "vk"` в каскаде сетевого резолва `_resolve_via_network` | done |
 | BUG-041 | BUG | P1 | `services/taste_profile.py` | Утечка дескрипторов SQLite соединений при передаче строкового пути к БД в `build_from_db` | todo |
 | BUG-042 | BUG | P2 | `utils/tag_parser.py` | Коллизии не-уникальных путей бэкапа в `write_tags`, приводящие к перезаписи и повреждению отката | todo |
 | BUG-043 | BUG | P2 | `core/session.py` | `restore_session` не сбрасывает `file_path` и `resolved_at` для онлайн-треков Spotify и Yandex | todo |
