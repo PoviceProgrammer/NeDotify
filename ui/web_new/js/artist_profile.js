@@ -425,7 +425,7 @@ export class ArtistBioComponent {
                 </div>` : ''}
             </div>
             <div class="artist-bio-content">
-                <p id="artist-bio-text">${escapeHtml(this.currentLang === 'ru' ? bioRu : bioEn)}</p>
+                <p id="artist-bio-text">${escapeHtml((this.currentLang === 'ru' ? bioRu : bioEn) || 'Информация об исполнителе отсутствует.')}</p>
             </div>
         `;
 
@@ -446,7 +446,8 @@ export class ArtistBioComponent {
 
                     const textEl = container.querySelector('#artist-bio-text');
                     if (textEl) {
-                        textEl.textContent = lang === 'ru' ? bioRu : bioEn;
+                        const chosen = lang === 'ru' ? bioRu : bioEn;
+                        textEl.textContent = chosen || 'Информация об исполнителе отсутствует.';
                     }
                 });
             });
@@ -519,7 +520,11 @@ export class ArtistAlbumsComponent {
         // Build combined all-releases list deduplicated
         const seen = new Set();
         const all = [];
-        for (const item of [...this.albums, ...this.singles, ...this.eps, ...this.compilations]) {
+        const sourceAll = (albumsOrData && Array.isArray(albumsOrData.all_releases) && albumsOrData.all_releases.length > 0)
+            ? albumsOrData.all_releases
+            : [...this.albums, ...this.singles, ...this.eps, ...this.compilations];
+
+        for (const item of sourceAll) {
             const k = (item.title || item.album || '').toLowerCase().trim();
             if (k && !seen.has(k)) {
                 seen.add(k);

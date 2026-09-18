@@ -42,6 +42,7 @@ class MusicBrainzService(BaseMusicService):
         # Caching
         self._cache: Dict[str, Any] = {}
         self._cache_lock = threading.Lock()
+        self._mem_conn = None
         self._db_path = self._init_sqlite_cache_path()
         self._init_sqlite_cache_db()
 
@@ -54,18 +55,36 @@ class MusicBrainzService(BaseMusicService):
             self.logger.warning(f"Cannot create MusicBrainz cache dir {base_dir} ({e}); using memory")
             return ":memory:"
 
+    def _get_db_connection(self):
+        if self._db_path == ":memory:":
+            if self._mem_conn is None:
+                self._mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
+            return self._mem_conn
+        conn = sqlite3.connect(self._db_path, timeout=5.0)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA busy_timeout=5000")
+        except Exception:
+            pass
+        return conn
+
     def _init_sqlite_cache_db(self):
         try:
-            with sqlite3.connect(self._db_path) as conn:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS mb_response_cache (
-                        cache_key TEXT PRIMARY KEY,
-                        json_data TEXT,
-                        timestamp REAL,
-                        ttl REAL
-                    )
-                """)
-                conn.commit()
+            conn = self._get_db_connection()
+            try:
+                with conn:
+                    conn.execute("""
+                        CREATE TABLE IF NOT EXISTS mb_response_cache (
+                            cache_key TEXT PRIMARY KEY,
+                            json_data TEXT,
+                            timestamp REAL,
+                            ttl REAL
+                        )
+                    """)
+            finally:
+                if self._db_path != ":memory:":
+                    conn.close()
         except Exception as e:
             self.logger.warning(f"Failed to initialize MusicBrainz SQLite cache: {e}")
 
@@ -76,7 +95,8 @@ class MusicBrainzService(BaseMusicService):
                 return entry["data"]
 
         try:
-            with sqlite3.connect(self._db_path, timeout=3.0) as conn:
+            conn = self._get_db_connection()
+            try:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT json_data, timestamp, ttl FROM mb_response_cache WHERE cache_key = ?",
@@ -92,6 +112,9 @@ class MusicBrainzService(BaseMusicService):
                                 self._cache.pop(next(iter(self._cache)), None)
                             self._cache[cache_key] = {"data": data, "ts": ts, "ttl": ttl}
                         return data
+            finally:
+                if self._db_path != ":memory:":
+                    conn.close()
         except Exception as e:
             self.logger.debug(f"MusicBrainz cache read error: {e}")
         return None
@@ -105,12 +128,16 @@ class MusicBrainzService(BaseMusicService):
 
         try:
             json_str = json.dumps(data)
-            with sqlite3.connect(self._db_path, timeout=3.0) as conn:
-                conn.execute(
-                    "INSERT OR REPLACE INTO mb_response_cache (cache_key, json_data, timestamp, ttl) VALUES (?, ?, ?, ?)",
-                    (cache_key, json_str, now, ttl)
-                )
-                conn.commit()
+            conn = self._get_db_connection()
+            try:
+                with conn:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO mb_response_cache (cache_key, json_data, timestamp, ttl) VALUES (?, ?, ?, ?)",
+                        (cache_key, json_str, now, ttl)
+                    )
+            finally:
+                if self._db_path != ":memory:":
+                    conn.close()
         except Exception as e:
             self.logger.debug(f"MusicBrainz cache write error: {e}")
 
@@ -244,8 +271,14 @@ class MusicBrainzService(BaseMusicService):
                         year = 0
 
                 # Cover Art Archive URLs
-                cover_url = f"{CAA_BASE_URL}/{rg_id}/front-500"
-                thumb_url = f"{CAA_BASE_URL}/{rg_id}/front-250"
+                caa = rg.get("cover-art-archive")
+                has_caa = True
+                if isinstance(caa, dict):
+                    if caa.get("artwork") is False and caa.get("front") is False:
+                        has_caa = False
+
+                cover_url = f"{CAA_BASE_URL}/{rg_id}/front-500" if has_caa else ""
+                thumb_url = f"{CAA_BASE_URL}/{rg_id}/front-250" if has_caa else ""
 
                 # Classify type
                 is_compilation = "Compilation" in secondary_types or primary_type.lower() == "compilation"

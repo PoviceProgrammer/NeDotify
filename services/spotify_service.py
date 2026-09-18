@@ -510,16 +510,19 @@ class SpotifyService(BaseMusicService):
                                     cover = imgs[0].get("url") if imgs and isinstance(imgs[0], dict) else ""
 
                                     is_comp = album_group == "compilation"
-                                    is_ep = "ep" in norm_title or (album_group == "single" and 4 <= total_tracks <= 6)
-                                    is_single = (album_group == "single" and not is_ep) or total_tracks <= 3
+                                    has_ep_title = norm_title.endswith(" - ep") or " (ep)" in norm_title or " ep" in norm_title or norm_title.startswith("ep ")
+                                    has_single_title = norm_title.endswith(" - single") or " (single)" in norm_title
 
-                                    rel_type = "album"
                                     if is_comp:
                                         rel_type = "compilation"
-                                    elif is_single:
-                                        rel_type = "single"
-                                    elif is_ep:
+                                    elif has_ep_title:
                                         rel_type = "ep"
+                                    elif has_single_title:
+                                        rel_type = "single"
+                                    elif album_group == "single":
+                                        rel_type = "ep" if 4 <= total_tracks <= 6 else "single"
+                                    else:
+                                        rel_type = "album"
 
                                     release_entry = {
                                         "id": f"spotify_album_{item_id}",
@@ -537,11 +540,11 @@ class SpotifyService(BaseMusicService):
                                         "album_type": rel_type,
                                     }
 
-                                    if is_comp:
+                                    if rel_type == "compilation":
                                         compilations.append(release_entry)
-                                    elif is_single:
+                                    elif rel_type == "single":
                                         singles.append(release_entry)
-                                    elif is_ep:
+                                    elif rel_type == "ep":
                                         eps.append(release_entry)
                                     else:
                                         albums.append(release_entry)
@@ -608,17 +611,22 @@ class SpotifyService(BaseMusicService):
                             raw_art = item.get("artworkUrl100") or ""
                             cover = raw_art.replace("100x100bb", "600x600bb") if raw_art else ""
 
-                            is_single = track_count in (1, 2, 3) or norm_title.endswith(" - single") or " (single)" in norm_title
-                            is_ep = (4 <= track_count <= 6) or norm_title.endswith(" - ep") or " (ep)" in norm_title
                             is_comp = item.get("collectionType") == "Compilation"
+                            has_ep_title = norm_title.endswith(" - ep") or " (ep)" in norm_title or " ep" in norm_title or norm_title.startswith("ep ")
+                            has_single_title = norm_title.endswith(" - single") or " (single)" in norm_title
 
-                            rel_type = "album"
                             if is_comp:
                                 rel_type = "compilation"
-                            elif is_single:
-                                rel_type = "single"
-                            elif is_ep:
+                            elif has_ep_title:
                                 rel_type = "ep"
+                            elif has_single_title:
+                                rel_type = "single"
+                            elif 4 <= track_count <= 6:
+                                rel_type = "ep"
+                            elif 1 <= track_count <= 3:
+                                rel_type = "single"
+                            else:
+                                rel_type = "album"
 
                             entry = {
                                 "id": f"spotify_album_{coll_id}",
@@ -636,11 +644,11 @@ class SpotifyService(BaseMusicService):
                                 "album_type": rel_type,
                             }
 
-                            if is_comp:
+                            if rel_type == "compilation":
                                 compilations.append(entry)
-                            elif is_single:
+                            elif rel_type == "single":
                                 singles.append(entry)
-                            elif is_ep:
+                            elif rel_type == "ep":
                                 eps.append(entry)
                             else:
                                 albums.append(entry)

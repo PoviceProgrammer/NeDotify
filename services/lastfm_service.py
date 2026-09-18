@@ -552,6 +552,20 @@ class LastFMService(BaseMusicService):
                 summary_clean = re.sub(r'<a\s+[^>]*>.*?</a>', '', summary, flags=re.IGNORECASE).strip()
                 content_clean = re.sub(r'<a\s+[^>]*>.*?</a>', '', content, flags=re.IGNORECASE).strip()
 
+                for bp in [
+                    r'\s*User-contributed text is available under the Creative Commons.*$',
+                    r'\s*Read more on Last\.fm.*$',
+                ]:
+                    summary_clean = re.sub(bp, '', summary_clean, flags=re.IGNORECASE | re.DOTALL).strip()
+                    content_clean = re.sub(bp, '', content_clean, flags=re.IGNORECASE | re.DOTALL).strip()
+
+                summary_clean = re.sub(r'[\s.]*$', '', summary_clean).strip()
+                if summary_clean and not summary_clean.endswith(('.', '!', '?')):
+                    summary_clean += '.'
+                content_clean = re.sub(r'[\s.]*$', '', content_clean).strip()
+                if content_clean and not content_clean.endswith(('.', '!', '?')):
+                    content_clean += '.'
+
                 stats = a.get('stats') if isinstance(a.get('stats'), dict) else {}
                 tags_data = a.get('tags') if isinstance(a.get('tags'), dict) else {}
                 tag_list = tags_data.get('tag', [])

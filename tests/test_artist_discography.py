@@ -514,6 +514,185 @@ class TestArtistServiceMultiSourceCascade(unittest.TestCase):
         # Cover updated from MB since SP cover was empty
         self.assertEqual(merged["singles"][0]["cover"], "https://mb.img/letitbe.jpg")
 
+    def test_cross_category_deduplication_youtube_albums_shelf_ep(self):
+        # YouTube places EPs in its generic 'albums' shelf as type Album.
+        # Ensure Spotify's EP classification is preserved without creating duplicate album.
+        sp_data = {
+            "albums": [],
+            "singles": [],
+            "eps": [{"title": "My Dear Melancholy,", "year": 2018}],
+            "compilations": [],
+        }
+        mb_releases = {"albums": [], "singles": [], "eps": [], "compilations": []}
+        yt_albums = [
+            {"title": "My Dear Melancholy,", "type": "Album", "source_id": "MPREb_mdm", "year": 2018}
+        ]
+        merged = self.svc._merge_discography(sp_data, mb_releases, [], yt_albums, "The Weeknd")
+        # Zero duplicates in albums
+        self.assertEqual(len(merged["albums"]), 0)
+        # Exactly one in eps, with attached yt_source_id
+        self.assertEqual(len(merged["eps"]), 1)
+        self.assertEqual(merged["eps"][0]["title"], "My Dear Melancholy,")
+        self.assertEqual(merged["eps"][0]["yt_source_id"], "MPREb_mdm")
+
+    def test_all_releases_deduplication(self):
+        sp_data = {
+            "albums": [{"title": "Debut", "year": 2020}],
+            "singles": [{"title": "Debut", "year": 2020}],
+            "eps": [],
+            "compilations": [],
+        }
+        merged = self.svc._merge_discography(sp_data, {"albums": [], "singles": [], "eps": [], "compilations": []}, [], [], "Artist")
+        all_titles = [r["title"] for r in merged["all_releases"]]
+        self.assertEqual(len(all_titles), 1)
+        self.assertEqual(all_titles[0], "Debut")
+
+    def test_get_discography_standalone(self):
+        self.mock_spotify.get_artist_catalog.return_value = {
+            "albums": [{"title": "Solo Album", "year": 2021}],
+            "singles": [],
+            "eps": [],
+            "compilations": [],
+        }
+        self.mock_musicbrainz.search_artist.return_value = None
+        self.mock_musicbrainz.get_artist_release_groups.return_value = {}
+        self.mock_musicbrainz.get_artist_bio.return_value = {}
+        self.mock_lastfm.artist_get_top_albums.return_value = []
+
+        disco = self.svc.get_discography("Solo Artist")
+        self.assertIn("albums", disco)
+        self.assertEqual(len(disco["albums"]), 1)
+        self.assertEqual(disco["albums"][0]["title"], "Solo Album")
+
+    def test_concurrent_execution_in_get_profile(self):
+        def slow_fetch(*args, **kwargs):
+            time.sleep(0.12)
+            return {}
+
+        self.mock_spotify.get_artist_catalog.side_effect = slow_fetch
+        self.mock_lastfm.artist_get_info.side_effect = slow_fetch
+        self.mock_lastfm.artist_get_top_albums.return_value = []
+        self.mock_musicbrainz.search_artist.side_effect = slow_fetch
+        self.mock_musicbrainz.get_artist_release_groups.return_value = {}
+        self.mock_musicbrainz.get_artist_bio.return_value = {}
+        self.mock_youtube._ytmusic.return_value = None
+
+        start = time.time()
+        evt = threading.Event()
+        self.svc.get_profile("Concurrent Artist", callback=lambda p: evt.set(), error_callback=lambda e: evt.set())
+        evt.wait(timeout=2.0)
+        elapsed = time.time() - start
+        # If sequential, 3 * 0.12s = 0.36s minimum; concurrent runs in ~0.12s - 0.25s
+        self.assertLess(elapsed, 0.30, f"Expected parallel execution under 0.30s, took {elapsed:.2f}s")
+
+
+class TestMusicBrainzEdgeCases(unittest.TestCase):
+    def test_sqlite_in_memory_cache_persistence(self):
+        svc = MusicBrainzService()
+        svc._db_path = ":memory:"
+        svc._mem_conn = None
+        svc._init_sqlite_cache_db()
+
+        # Writing to in-memory DB must not crash
+        svc._set_cached("test_key", {"val": 42}, ttl=60)
+        # Clear local dict cache to force SQLite read
+        with svc._cache_lock:
+            svc._cache.clear()
+        val = svc._get_cached("test_key")
+        self.assertIsNotNone(val)
+        self.assertEqual(val.get("val"), 42)
+
+    def test_release_groups_without_caa_artwork(self):
+        svc = MusicBrainzService()
+        mock_rg_payload = {
+            "release-groups": [
+                {
+                    "id": "rg-no-art",
+                    "title": "No Art Album",
+                    "primary-type": "Album",
+                    "cover-art-archive": {"artwork": False, "front": False},
+                }
+            ]
+        }
+        with patch.object(svc, "_http_get_json", return_value=mock_rg_payload):
+            res = svc.get_artist_release_groups("mbid-no-art", artist_name="Unknown")
+            self.assertEqual(len(res["albums"]), 1)
+            # Cover URL should be empty string when CAA explicitly reports no artwork
+            self.assertEqual(res["albums"][0]["cover_url"], "")
+
+
+class TestLastFMBoilerplateClean(unittest.TestCase):
+    def test_bio_clean_creative_commons_and_read_more(self):
+        svc = LastFMService()
+        mock_payload = {
+            "artist": {
+                "name": "Artist B",
+                "bio": {
+                    "summary": 'Bio text. <a href="...">Read more on Last.fm</a>. User-contributed text is available under the Creative Commons By-SA License; additional terms may apply.',
+                    "content": 'Detailed content. <a href="...">Read more</a>. User-contributed text is available under the Creative Commons By-SA License.',
+                },
+                "stats": {"listeners": "100", "playcount": "200"},
+                "tags": {"tag": []},
+            }
+        }
+        with patch.object(svc, "_api_request", return_value=mock_payload):
+            res = svc.artist_get_info("Artist B")
+            self.assertEqual(res["bio_summary"], "Bio text.")
+            self.assertEqual(res["bio_content"], "Detailed content.")
+
+
+class TestSpotifyCatalogEdgeCases(unittest.TestCase):
+    def test_ep_with_explicit_title_and_short_track_count(self):
+        svc = SpotifyService()
+        itunes_album_payload = {
+            "results": [
+                {
+                    "collectionId": 2001,
+                    "collectionName": "Summer Vibes - EP",
+                    "artistName": "Artist C",
+                    "collectionType": "Album",
+                    "trackCount": 3,
+                    "releaseDate": "2023-06-01T08:00:00Z",
+                    "artworkUrl100": "https://img/100x100bb.jpg",
+                }
+            ]
+        }
+        with patch.object(svc, "get_access_token", return_value=None):
+            with patch("services.spotify_service._session.get") as mock_get:
+                m = MagicMock()
+                m.status_code = 200
+                m.json.return_value = itunes_album_payload
+                mock_get.return_value = m
+                res = svc.get_artist_catalog("Artist C")
+                self.assertEqual(len(res["eps"]), 1)
+                self.assertEqual(res["eps"][0]["title"], "Summer Vibes - EP")
+                self.assertEqual(res["eps"][0]["type"], "ep")
+                self.assertEqual(len(res["singles"]), 0)
+
+
+class TestApiBridgeArtistDiscography(unittest.TestCase):
+    def test_api_bridge_get_artist_discography(self):
+        from core.api import AppApi
+        mock_core = MagicMock()
+        mock_core.artists.get_discography.return_value = {
+            "albums": [{"title": "Core Album"}],
+            "singles": [],
+            "eps": [],
+            "compilations": [],
+        }
+        api = AppApi(mock_core)
+        res = api.get_artist_discography("Artist Core")
+        self.assertIn("albums", res)
+        self.assertEqual(len(res["albums"]), 1)
+        self.assertEqual(res["albums"][0]["title"], "Core Album")
+
+    def test_api_bridge_get_artist_discography_empty(self):
+        from core.api import AppApi
+        mock_core = MagicMock()
+        api = AppApi(mock_core)
+        res = api.get_artist_discography("")
+        self.assertEqual(res.get("status"), "error")
+
 
 if __name__ == "__main__":
     unittest.main()

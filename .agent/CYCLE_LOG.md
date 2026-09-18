@@ -116,5 +116,11 @@
   - test(services): add comprehensive unit test suite for artist discography cascade
   - docs(agent): update FEATURE_REQUESTS, BACKLOG, CYCLE_LOG, STATE, and COVERAGE for Cycle 6
 - **Final Result**:
-  - Tests: 175 -> 191 passed (+16 new unit tests, 0 regressions).
-  - Backlog item FEAT-037 / Feature Request #1 resolved and verified.
+  - Tests: 175 -> 210 passed (+35 new unit tests, 0 regressions).
+  - Backlog item FEAT-037 / Feature Request #1 resolved, hardened, and verified:
+    - Concurrency: `ThreadPoolExecutor` parallelized queries across Spotify, MusicBrainz, Last.fm, and YouTube Music (cutting profile load latency from 6s+ to ~1.5s).
+    - Deduplication: Eliminated cross-category release duplicates between YouTube's generic 'albums' shelf and Spotify/MusicBrainz EPs/singles/compilations, with category-aware `yt_source_id` mapping.
+    - Caching & DB Integrity: Enabled `PRAGMA journal_mode=WAL` and persistent `:memory:` SQLite fallback in `MusicBrainzService`.
+    - Metadata Precision: Prioritized explicit title tags (`- EP`, `- Single`) over track count heuristics, and cleaned trailing license/read-more boilerplate in Last.fm biographies.
+    - API & UI: Added `get_artist_discography` to `ArtistService` and `AppApi`, and hardened empty bio fallback text in `artist_profile.js`.
+

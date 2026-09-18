@@ -12,6 +12,7 @@ and MusicBrainz APIs alongside YouTube Music:
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from services.base_service import BaseMusicService
@@ -428,6 +429,47 @@ class ArtistService(BaseMusicService):
             logger.debug("MusicBrainz fetch failed for %s: %s", artist_name, exc)
             return (empty_releases, empty_bio)
 
+    def _fetch_youtube(self, name: str) -> Dict[str, Any]:
+        yt = self._ytmusic()
+        empty = {
+            "channel_id": "",
+            "albums": [],
+            "tracks": [],
+            "bio_ru": "",
+            "bio_orig": "",
+            "avatar": "",
+            "subscribers": "",
+            "views": "",
+        }
+        if yt is None:
+            return empty
+        try:
+            channel_id = self._resolve_channel_id(yt, name) or ""
+            if not channel_id:
+                return empty
+            artist = yt.get_artist(channel_id)
+            if not isinstance(artist, dict):
+                return {**empty, "channel_id": channel_id}
+            albums = self._collect_albums(yt, channel_id, artist, name)
+            tracks = self._collect_tracks(yt, channel_id, artist, name, albums)
+            bio_ru, bio_orig = self._translate_bio((artist.get("description") or "").strip())
+            avatar = self._best_thumbnail(artist)
+            subscribers = artist.get("subscribers") or ""
+            views = artist.get("views") or ""
+            return {
+                "channel_id": channel_id,
+                "albums": albums,
+                "tracks": tracks,
+                "bio_ru": bio_ru,
+                "bio_orig": bio_orig,
+                "avatar": avatar,
+                "subscribers": subscribers,
+                "views": views,
+            }
+        except Exception as exc:
+            logger.warning("YouTube data fetch failed for %s: %s", name, exc)
+            return {**empty, "error": exc}
+
     def _resolve_bio(self, lfm_info: dict, mb_bio: dict, yt_bio_ru: str, yt_bio_orig: str) -> Tuple[str, str, str, str, str]:
         """Resolves rich bio across Last.fm, Wikipedia/MusicBrainz, and YouTube Music.
 
@@ -504,13 +546,6 @@ class ArtistService(BaseMusicService):
             "compilations": {},
         }
 
-        # Build YouTube browse_id lookup by normalized title to link direct playback
-        yt_lookup = {}
-        for yta in yt_albums or []:
-            t = (yta.get("title") or "").strip().lower()
-            if t:
-                yt_lookup[t] = yta.get("source_id")
-
         import re
 
         def _clean_title(t: str) -> str:
@@ -519,6 +554,27 @@ class ArtistService(BaseMusicService):
             s = re.sub(r'(?i)\s*\((single|ep)\)\s*$', '', s)
             return s.strip()
 
+        # Build YouTube browse_id lookup by normalized title and category to link direct playback
+        yt_lookup_by_cat = {}
+        yt_lookup = {}
+        for yta in yt_albums or []:
+            raw_t = yta.get("title") or yta.get("album") or ""
+            t = _clean_title(raw_t).lower()
+            sid = yta.get("source_id")
+            raw_type = str(yta.get("album_type") or yta.get("type") or "album").lower()
+            y_cat = "albums"
+            if "single" in raw_type:
+                y_cat = "singles"
+            elif "ep" in raw_type:
+                y_cat = "eps"
+            elif "compilation" in raw_type:
+                y_cat = "compilations"
+
+            if t and sid:
+                yt_lookup_by_cat[(t, y_cat)] = sid
+                if t not in yt_lookup:
+                    yt_lookup[t] = sid
+
         def _absorb_entry(cat: str, item: dict):
             raw_title = item.get("title") or item.get("album") or ""
             if not raw_title or str(raw_title).lower() in ("null", "undefined", "(null)"):
@@ -526,16 +582,22 @@ class ArtistService(BaseMusicService):
             clean_t = _clean_title(raw_title)
             norm_key = clean_t.lower()
 
+            matched_yt_id = yt_lookup_by_cat.get((norm_key, cat)) or yt_lookup.get(norm_key)
+
             if norm_key in seen_keys[cat]:
                 existing = seen_keys[cat][norm_key]
-                if (not existing.get("cover") or not existing.get("cover_url")) and (item.get("cover") or item.get("cover_url")):
-                    c = item.get("cover") or item.get("cover_url")
-                    existing["cover"] = c
-                    existing["cover_url"] = c
+                existing_cover = existing.get("cover") or existing.get("cover_url") or ""
+                new_cover = item.get("cover") or item.get("cover_url") or ""
+
+                # Prefer verified CDN covers (YouTube, Spotify) over CAA links or empty covers
+                if new_cover and (not existing_cover or ("coverartarchive.org" in existing_cover and "coverartarchive.org" not in new_cover)):
+                    existing["cover"] = new_cover
+                    existing["cover_url"] = new_cover
+
                 if (not existing.get("year")) and item.get("year"):
                     existing["year"] = item["year"]
-                if not existing.get("yt_source_id") and norm_key in yt_lookup:
-                    existing["yt_source_id"] = yt_lookup[norm_key]
+                if not existing.get("yt_source_id") and matched_yt_id:
+                    existing["yt_source_id"] = matched_yt_id
                 return
 
             entry = dict(item)
@@ -543,8 +605,8 @@ class ArtistService(BaseMusicService):
             entry["album"] = clean_t
             if not entry.get("artist"):
                 entry["artist"] = artist_name
-            if norm_key in yt_lookup:
-                entry["yt_source_id"] = yt_lookup[norm_key]
+            if matched_yt_id:
+                entry["yt_source_id"] = matched_yt_id
 
             singular_type = cat[:-1] if cat.endswith("s") else cat
             entry["type"] = singular_type
@@ -564,8 +626,15 @@ class ArtistService(BaseMusicService):
                 _absorb_entry(cat, it)
 
         # 3. Ingest YouTube Music releases
+        # Note: YouTube Music's artist page places EPs and compilations into the generic 'albums' shelf.
+        # If Spotify or MusicBrainz has already categorized a release as EP, Single, or Compilation,
+        # absorb it into that specific category to attach yt_source_id instead of duplicating under albums.
         for yta in yt_albums or []:
+            raw_title = yta.get("title") or yta.get("album") or ""
+            clean_t = _clean_title(raw_title)
+            norm_key = clean_t.lower()
             y_type = str(yta.get("album_type") or yta.get("type") or "album").lower()
+
             target_cat = "albums"
             if "single" in y_type:
                 target_cat = "singles"
@@ -573,6 +642,13 @@ class ArtistService(BaseMusicService):
                 target_cat = "eps"
             elif "compilation" in y_type:
                 target_cat = "compilations"
+            elif norm_key in seen_keys["eps"]:
+                target_cat = "eps"
+            elif norm_key in seen_keys["compilations"]:
+                target_cat = "compilations"
+            elif norm_key in seen_keys["singles"] and norm_key not in seen_keys["albums"]:
+                target_cat = "singles"
+
             _absorb_entry(target_cat, yta)
 
         # 4. Ingest Last.fm top albums (if albums are still low)
@@ -584,10 +660,15 @@ class ArtistService(BaseMusicService):
         for cat in categories:
             categories[cat].sort(key=lambda a: (-(a.get("year") or 0), str(a.get("title") or "")))
 
-        # Build combined all releases list
+        # Build combined all releases list deduplicated across categories
         all_releases = []
+        seen_all_titles = set()
         for cat in ("albums", "singles", "eps", "compilations"):
-            all_releases.extend(categories[cat])
+            for entry in categories[cat]:
+                k = (entry.get("title") or entry.get("album") or "").strip().lower()
+                if k and k not in seen_all_titles:
+                    seen_all_titles.add(k)
+                    all_releases.append(entry)
         all_releases.sort(key=lambda a: (-(a.get("year") or 0), str(a.get("title") or "")))
 
         return {
@@ -684,6 +765,46 @@ class ArtistService(BaseMusicService):
             BaseMusicService._executor.submit(_task)
         return None
 
+    def get_discography(self, artist_name: str, callback: Optional[Callable] = None) -> Dict[str, Any]:
+        """Retrieve categorized discography (albums, singles, eps, compilations) for an artist."""
+        name = (artist_name or "").strip()
+        if not name:
+            empty = {"albums": [], "singles": [], "eps": [], "compilations": [], "all_releases": []}
+            if callback:
+                callback(empty)
+            return empty
+
+        cached = self._cache_get(name.lower())
+        if cached and "discography" in cached:
+            disco = dict(cached["discography"])
+            disco["all_releases"] = cached.get("all_releases", [])
+            if callback:
+                callback(disco)
+            return disco
+
+        def _disc_task():
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                fut_sp = pool.submit(self._fetch_spotify, name)
+                fut_mb = pool.submit(self._fetch_musicbrainz, name)
+                fut_lfm = pool.submit(self._fetch_lastfm, name)
+                sp_data = fut_sp.result()
+                mb_releases, _ = fut_mb.result()
+                _, lfm_albums = fut_lfm.result()
+
+            merged = self._merge_discography(sp_data, mb_releases, lfm_albums, [], name)
+            if callback:
+                callback(merged)
+            return merged
+
+        if callback:
+            submit = getattr(BaseMusicService, "submit", None)
+            if callable(submit):
+                submit(_disc_task)
+            else:
+                BaseMusicService._executor.submit(_disc_task)
+            return {"albums": [], "singles": [], "eps": [], "compilations": [], "all_releases": []}
+        return _disc_task()
+
     def get_profile(
         self,
         artist_name: str,
@@ -705,43 +826,26 @@ class ArtistService(BaseMusicService):
 
         def _task():
             try:
-                # 1. Fetch Spotify catalog (albums, singles, EPs, tracks, artwork)
-                sp_data = self._fetch_spotify(name)
+                # Concurrently query Spotify, Last.fm, MusicBrainz, and YouTube Music in parallel
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    fut_sp = pool.submit(self._fetch_spotify, name)
+                    fut_lfm = pool.submit(self._fetch_lastfm, name)
+                    fut_mb = pool.submit(self._fetch_musicbrainz, name)
+                    fut_yt = pool.submit(self._fetch_youtube, name)
 
-                # 2. Fetch Last.fm metadata & bio
-                lfm_info, lfm_albums = self._fetch_lastfm(name)
+                    sp_data = fut_sp.result()
+                    lfm_info, lfm_albums = fut_lfm.result()
+                    mb_releases, mb_bio = fut_mb.result()
+                    yt_data = fut_yt.result()
 
-                # 3. Fetch MusicBrainz release-groups & Wikipedia bio
-                mb_releases, mb_bio = self._fetch_musicbrainz(name)
-
-                # 4. Fetch YouTube Music data (channel, audio tracks, fallback)
-                yt = self._ytmusic()
-                yt_channel_id = ""
-                yt_albums = []
-                yt_tracks = []
-                yt_bio_ru = ""
-                yt_bio_orig = ""
-                yt_avatar = ""
-                subscribers = ""
-                views = ""
-
-                if yt is not None:
-                    try:
-                        yt_channel_id = self._resolve_channel_id(yt, name) or ""
-                        if yt_channel_id:
-                            yt_artist = yt.get_artist(yt_channel_id)
-                            if isinstance(yt_artist, dict):
-                                yt_albums = self._collect_albums(yt, yt_channel_id, yt_artist, name)
-                                yt_tracks = self._collect_tracks(yt, yt_channel_id, yt_artist, name, yt_albums)
-                                yt_bio_ru, yt_bio_orig = self._translate_bio((yt_artist.get("description") or "").strip())
-                                yt_avatar = self._best_thumbnail(yt_artist)
-                                subscribers = yt_artist.get("subscribers") or ""
-                                views = yt_artist.get("views") or ""
-                    except Exception as yt_exc:
-                        logger.warning("YouTube data fetch failed for %s: %s", name, yt_exc)
-                        # If YouTube was the ONLY configured source, re-raise to trigger error callback
-                        if not sp_data.get("albums") and not mb_releases.get("albums") and not lfm_info:
-                            raise yt_exc
+                yt_channel_id = yt_data.get("channel_id", "")
+                yt_albums = yt_data.get("albums", [])
+                yt_tracks = yt_data.get("tracks", [])
+                yt_bio_ru = yt_data.get("bio_ru", "")
+                yt_bio_orig = yt_data.get("bio_orig", "")
+                yt_avatar = yt_data.get("avatar", "")
+                subscribers = yt_data.get("subscribers", "")
+                views = yt_data.get("views", "")
 
                 # 5. Merge discography across all sources
                 discography = self._merge_discography(sp_data, mb_releases, lfm_albums, yt_albums, name)
