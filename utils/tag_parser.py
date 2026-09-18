@@ -236,10 +236,12 @@ def write_tags(
     import shutil
     import tempfile
     import base64
+    import uuid
 
-    # Create a temporary backup for atomic transaction
+    # Create a temporary backup for atomic transaction with unique suffix to prevent collisions
     temp_dir = tempfile.gettempdir()
-    backup_path = os.path.join(temp_dir, f"aura_tag_backup_{os.path.basename(filepath)}")
+    unique_id = uuid.uuid4().hex[:12]
+    backup_path = os.path.join(temp_dir, f"aura_tag_backup_{unique_id}_{os.path.basename(filepath)}")
     shutil.copy2(filepath, backup_path)
 
     try:

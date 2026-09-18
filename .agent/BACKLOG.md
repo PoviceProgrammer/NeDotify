@@ -42,7 +42,7 @@
 | BUG-039 | BUG | P1 | `services/audio_fingerprint_service.py` | `delete_duplicate_track` удаляет аудиофайл с диска, если на него всё ещё ссылаются другие треки в библиотеке | done |
 | BUG-040 | BUG | P1 | `audio/engine.py` | Отсутствие обработчика `source == "vk"` в каскаде сетевого резолва `_resolve_via_network` | done |
 | BUG-041 | BUG | P1 | `services/taste_profile.py` | Утечка дескрипторов SQLite соединений при передаче строкового пути к БД в `build_from_db` | done |
-| BUG-042 | BUG | P2 | `utils/tag_parser.py` | Коллизии не-уникальных путей бэкапа в `write_tags`, приводящие к перезаписи и повреждению отката | todo |
+| BUG-042 | BUG | P2 | `utils/tag_parser.py` | Коллизии не-уникальных путей бэкапа в `write_tags`, приводящие к перезаписи и повреждению отката | done |
 | BUG-043 | BUG | P2 | `core/session.py` | `restore_session` не сбрасывает `file_path` и `resolved_at` для онлайн-треков Spotify и Yandex | todo |
 | BUG-044 | BUG | P2 | `core/services/discord_rpc.py` | Несинхронизированный метод `stop()` допускает состояние гонки с активными потоками подключения | todo |
 | BUG-045 | BUG | P2 | `services/lufs_scanner.py` | Неосвобождаемое соединение SQLite потока сканера и сырые UPDATE без `_write_lock` | todo |
