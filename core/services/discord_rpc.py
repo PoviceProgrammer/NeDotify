@@ -168,11 +168,15 @@ class DiscordRPCService:
 
     def stop(self):
         """Disconnect Discord RPC."""
-        self.clear_presence()
-        if self.rpc:
-            try:
-                self.rpc.close()
-            except Exception:
-                pass
-            self.rpc = None
+        with self._lock:
+            self._pending_update = None
+            self.clear_presence()
+            if self.rpc:
+                try:
+                    self.rpc.close()
+                except Exception:
+                    pass
+                self.rpc = None
             self.connected = False
+            self.current_track = None
+            self.current_artist = None
