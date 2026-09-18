@@ -39,7 +39,7 @@ class LufsScannerService:
         self._core = app_core
         self._running = False
         self._thread = None
-        self._pool = ThreadPoolExecutor(max_workers=max(1, (os.cpu_count() or 4) // 2), thread_name_prefix="LufsScanner")
+        self._pool = None
 
     def start(self):
         if self._running:
@@ -52,6 +52,7 @@ class LufsScannerService:
         self._running = False
         if self._pool:
             self._pool.shutdown(wait=False, cancel_futures=True)
+            self._pool = None
 
     def _scan_loop(self):
         try:
@@ -70,6 +71,8 @@ class LufsScannerService:
                     if not rows:
                         time.sleep(60)
                         continue
+                    if self._pool is None:
+                        self._pool = ThreadPoolExecutor(max_workers=max(1, (os.cpu_count() or 4) // 2), thread_name_prefix="LufsScanner")
                     futures = {}
                     for row in rows:
                         track_id = row['id']

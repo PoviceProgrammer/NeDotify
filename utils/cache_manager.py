@@ -30,7 +30,7 @@ class CacheManager:
         for d in [self._covers_dir, self._streams_dir, self._temp_dir]:
             os.makedirs(d, exist_ok=True)
 
-        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        self._executor = None
         self._active_downloads = set()
         self._active_downloads_lock = threading.Lock()
         self._purge_lock = threading.Lock()
@@ -42,12 +42,23 @@ class CacheManager:
         self._cached_size_bytes = 0
         self._last_size_scan = 0.0
 
+    def _get_executor(self):
+        if self._executor is None:
+            with self._active_downloads_lock:
+                if self._executor is None:
+                    self._executor = concurrent.futures.ThreadPoolExecutor(
+                        max_workers=2, thread_name_prefix="CacheWorker"
+                    )
+        return self._executor
+
     def shutdown(self):
         """Cleanly tear down background cache executor."""
-        try:
-            self._executor.shutdown(wait=False, cancel_futures=True)
-        except Exception:
-            pass
+        if self._executor is not None:
+            try:
+                self._executor.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass
+            self._executor = None
 
     @property
     def cache_dir(self) -> str:
@@ -307,7 +318,7 @@ class CacheManager:
             self._active_downloads.add(download_id)
 
         # Enforce quota before starting new download
-        self._executor.submit(self.purge_stream_cache)
+        self._get_executor().submit(self.purge_stream_cache)
 
         def _download_task():
             import yt_dlp
@@ -355,7 +366,7 @@ class CacheManager:
                     except Exception:
                         pass
 
-        self._executor.submit(_download_task)
+        self._get_executor().submit(_download_task)
 
     def save_cover_from_url(self, url: str, track_id: int) -> Optional[str]:
         """Download and cache a cover image. Returns local path."""

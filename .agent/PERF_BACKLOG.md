@@ -22,6 +22,9 @@
 | PERF-018 | RAM | `services/base_service.py` | Оптимизация лимита кэша метаданных потоков `_MAX_CACHE_SIZE` с 2000 до 500 для снижения потребления памяти кучи | done |
 | PERF-019 | CPU | `core/resolver.py` | Хостинг импорта base64 и предкомпиляция regex `_RE_EXPIRE`, `_RE_POLICY`, `_RE_EPOCH` в проверке срока ссылок | done |
 | PERF-020 | CPU/RAM | `ui/web_new/js/search.js` | Дедупликация слушателя клика выпадающего списка платформ и идемпотентная защита `_searchInitialized` | done |
-| PERF-021 | CPU/RAM | `ui/web_new/js/lyrics.js` | Идемпотентная защита инициализации `_lyricsInitialized` от накопления слушателей `position_changed` и `track_changed` | todo |
-| PERF-022 | CPU/RAM | `ui/web_new/js/library.js` | Идемпотентная защита инициализации `_libraryInitialized` от повторного навешивания слушателей карточек | todo |
-| PERF-023 | CPU/RAM | `ui/web_new/js/settings.js` | Идемпотентная защита инициализации `_settingsInitialized` от повторного навешивания слушателей тумблеров и темы | todo |
+| PERF-021 | CPU/RAM | `ui/web_new/js/lyrics.js` | Идемпотентная защита инициализации `_lyricsInitialized` от накопления слушателей `position_changed` и `track_changed` | done |
+| PERF-022 | CPU/RAM | `ui/web_new/js/library.js` | Идемпотентная защита инициализации `_libraryInitialized` от повторного навешивания слушателей карточек | done |
+| PERF-023 | CPU/RAM | `ui/web_new/js/settings.js` | Идемпотентная защита инициализации `_settingsInitialized` от повторного навешивания слушателей тумблеров и темы | done |
+| PERF-024 | RAM/CPU | `utils/cache_manager.py` | Ленивая инициализация пула `CacheWorker` через `_get_executor()` устраняет 2 холостых потока на старте | done |
+| PERF-025 | RAM/CPU | `services/lufs_scanner.py` | Ленивая инициализация пула `LufsScanner` устраняет до `cpu_count // 2` холостых потоков на старте | done |
+| PERF-026 | CPU/RAM | `utils/file_scanner.py` | Оптимизация `is_audio_file`: вызов `.lower()` только для среза расширения файла вместо всего пути | done |

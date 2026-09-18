@@ -21,7 +21,7 @@ def is_audio_file(path: str) -> bool:
     """Return True when `path` has a supported audio extension."""
     if not path:
         return False
-    return os.path.splitext(str(path).lower())[1] in AUDIO_EXTENSIONS
+    return os.path.splitext(path)[1].lower() in AUDIO_EXTENSIONS
 
 
 class FileScanner:

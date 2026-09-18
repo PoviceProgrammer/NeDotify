@@ -11,3 +11,4 @@
 | Цикл 6 | PERF-016 (Pages idempotent init), PERF-017 (Queue idempotent init), PERF-018 (Stream cache limit 500) | 0.1415s (-1%) | 0.0049s (-2%) | 4 | 408.66 MB | 0.1266s | 0.0230s (-6%) | 924.17 KB | 8.27s (85 tests + 3 node) |
 | Цикл 7 | PERF-019 (Resolver regex & base64 hoisting), PERF-020 (Search dropdown click dedup & init guard) | 0.1423s | 0.0054s | 4 | 408.66 MB | 0.1280s | 0.0250s | 924.50 KB | 7.82s (85 tests + 3 node) |
 | Цикл 8 | PERF-021 (Lyrics idempotent init), PERF-022 (Library idempotent init), PERF-023 (Settings idempotent init) | 0.1637s | 0.0055s | 4 | 427.38 MB | 0.1275s | 0.0232s (-7%) | 924.80 KB | 7.90s (85 tests + 3 node) |
+| Цикл 9 | PERF-024 (CacheManager lazy executor), PERF-025 (LufsScanner lazy pool), PERF-026 (FileScanner extension lowering) | 0.1421s (-13%) | 0.0054s | 4 | 480.91 MB | 0.1287s | 0.0244s | 924.80 KB | 7.76s (94 tests + 3 node, -2%) |
