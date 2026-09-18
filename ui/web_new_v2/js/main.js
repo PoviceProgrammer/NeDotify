@@ -304,7 +304,8 @@ window.toggleMiniPlayerMode = toggleMiniPlayerMode;
                 const blur = JSON.parse(localStorage.getItem('nedotify_theme_bg_blur') || '0');
                 const dim = JSON.parse(localStorage.getItem('nedotify_theme_bg_dim') || '30');
                 document.documentElement.classList.add('has-custom-bg');
-                document.body.classList.add('has-custom-bg');
+                const appCont = document.getElementById('app-container');
+                if (appCont) appCont.classList.add('has-custom-bg');
                 document.documentElement.classList.remove('resource-bg-disabled');
                 let bgLayer = document.getElementById('custom-bg-layer');
                 let dimLayer = document.getElementById('custom-bg-dim-layer');
@@ -322,7 +323,7 @@ window.toggleMiniPlayerMode = toggleMiniPlayerMode;
                 bgLayer.style.backgroundImage = `url("${bgUrl}")`;
                 bgLayer.style.filter = `blur(${blur}px)`;
                 bgLayer.style.transform = `scale(${blur > 0 ? 1.06 : 1})`;
-                const safeDim = Math.max(65, Number(dim || 75));
+                const safeDim = Math.min(95, Math.max(0, Number(dim !== undefined ? dim : 30)));
                 dimLayer.style.display = 'block';
                 dimLayer.style.backgroundColor = `rgba(0, 0, 0, ${safeDim / 100})`;
             }

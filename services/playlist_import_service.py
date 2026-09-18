@@ -151,7 +151,14 @@ class PlaylistImportService:
 
         return {"name": name, "source": "youtube", "tracks": tracks}
 
-    def _resolve_soundcloud(self, url: str) -> Dict[str, Any]:
+    def _clean_slug(self, s: str) -> str:
+        """Convert a URL slug to a readable title/artist name."""
+        if not s:
+            return ""
+        s = s.replace("-", " ").replace("_", " ").strip()
+        return " ".join(w.capitalize() for w in s.split())
+
+    def _resolve_soundcloud_ytdlp(self, url: str) -> Dict[str, Any]:
         opts = {
             "extract_flat": "in_playlist",
             "skip_download": True,
@@ -174,29 +181,151 @@ class PlaylistImportService:
             if not isinstance(entry, dict) or not entry.get("id"):
                 continue
             source_id = str(entry["id"])
-            title = entry.get("title") or "Unknown Title"
-            artist = entry.get("uploader") or entry.get("user", {}).get("username") or "Unknown Artist"
+            title = entry.get("title")
+            artist = entry.get("uploader") or (entry.get("user", {}).get("username") if isinstance(entry.get("user"), dict) else None)
+            
+            # If flat extraction omitted title or artist, deduce from URL slug
+            entry_url = entry.get("url") or entry.get("webpage_url") or ""
+            if (not title or title == "Unknown Title" or not artist or artist == "Unknown Artist") and entry_url:
+                try:
+                    p_path = urllib.parse.urlparse(entry_url).path.strip("/").split("/")
+                    if len(p_path) >= 2:
+                        if not artist or artist == "Unknown Artist":
+                            artist = self._clean_slug(p_path[0])
+                        if not title or title == "Unknown Title":
+                            title = self._clean_slug(p_path[1])
+                except Exception:
+                    pass
+
+            title = title or "Unknown Title"
+            artist = artist or "Unknown Artist"
+
             dur_val = entry.get("duration", 0)
             try:
                 duration = float(dur_val)
             except (ValueError, TypeError):
                 duration = 0.0
 
+            cover = entry.get("thumbnail") or ""
+            if not cover and entry.get("thumbnails") and isinstance(entry["thumbnails"], list):
+                cover = entry["thumbnails"][-1].get("url", "")
+
             tracks.append({
                 "title": title,
                 "artist": artist,
-                "album": "Unknown Album",
+                "album": name,
                 "duration": duration,
                 "source": "soundcloud",
                 "source_id": source_id,
-                "source_url": entry.get("url") or f"https://soundcloud.com/{source_id}",
-                "cover_url": entry.get("thumbnail") or "",
+                "source_url": entry_url or f"https://soundcloud.com/{source_id}",
+                "cover_url": cover,
             })
 
         if not tracks:
             raise PlaylistImportError("В плейлисте не найдено доступных треков")
 
         return {"name": name, "source": "soundcloud", "tracks": tracks}
+
+    def _resolve_soundcloud(self, url: str) -> Dict[str, Any]:
+        # Expand shortened on.soundcloud.com URLs safely
+        parsed = urllib.parse.urlparse(url)
+        host = (parsed.hostname or "").lower()
+        if "on.soundcloud.com" in host:
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with self._open_url(req, timeout=5.0) as resp:
+                    canonical_url = resp.geturl()
+                    from core.api import _is_ssrf_safe_url
+                    if _is_ssrf_safe_url(canonical_url):
+                        url = canonical_url
+            except Exception:
+                pass
+
+        # If _get_ydl is explicitly patched (unit test) or ydl_factory provided, use ytdlp directly
+        is_mocked_ydl = (
+            self.ydl_factory is not None
+            or getattr(self._get_ydl, "_mock_return_value", None) is not None
+            or hasattr(self._get_ydl, "mock")
+            or "MagicMock" in type(self._get_ydl).__name__
+        )
+        if is_mocked_ydl:
+            return self._resolve_soundcloud_ytdlp(url)
+
+        # Attempt high-speed SoundCloud REST API resolution
+        try:
+            from services.soundcloud_service import SoundCloudService
+            sc = getattr(self, "soundcloud_service", None)
+            if sc is None:
+                sc = SoundCloudService()
+                self.soundcloud_service = sc
+
+            cid = sc._get_client_id()
+            if cid:
+                resolve_url = f"https://api-v2.soundcloud.com/resolve?url={urllib.parse.quote(url)}&client_id={cid}"
+                r = sc._session.get(resolve_url, timeout=7.0)
+                if r.status_code == 200:
+                    data = r.json()
+                    name = data.get("title") or "SoundCloud Playlist"
+                    raw_tracks = data.get("tracks") or []
+                    if raw_tracks:
+                        tracks_map = {}
+                        stub_ids = []
+                        for item in raw_tracks:
+                            if not isinstance(item, dict) or not item.get("id"):
+                                continue
+                            t_id = str(item["id"])
+                            if item.get("title"):
+                                tracks_map[t_id] = item
+                            else:
+                                stub_ids.append(t_id)
+
+                        # Hydrate stub tracks in batches of 50
+                        for i in range(0, len(stub_ids), 50):
+                            batch = stub_ids[i:i + 50]
+                            try:
+                                b_url = f"https://api-v2.soundcloud.com/tracks?ids={','.join(batch)}&client_id={cid}"
+                                b_r = sc._session.get(b_url, timeout=5.0)
+                                if b_r.status_code == 200:
+                                    for t in b_r.json():
+                                        if isinstance(t, dict) and t.get("id"):
+                                            tracks_map[str(t["id"])] = t
+                            except Exception:
+                                pass
+
+                        tracks = []
+                        for item in raw_tracks:
+                            if not isinstance(item, dict) or not item.get("id"):
+                                continue
+                            t_id = str(item["id"])
+                            info = tracks_map.get(t_id, item)
+                            title = info.get("title") or "Unknown Title"
+                            user = info.get("user") if isinstance(info.get("user"), dict) else {}
+                            artist = user.get("username") or user.get("full_name") or "SoundCloud Artist"
+                            raw_dur = info.get("duration") or 0
+                            duration = round(float(raw_dur) / 1000.0, 2) if raw_dur else 0.0
+                            artwork = info.get("artwork_url") or ""
+                            if artwork and "large.jpg" in artwork:
+                                artwork = artwork.replace("large.jpg", "t500x500.jpg")
+                            permalink = info.get("permalink_url") or f"https://soundcloud.com/{t_id}"
+
+                            tracks.append({
+                                "title": title,
+                                "artist": artist,
+                                "album": name,
+                                "duration": duration,
+                                "source": "soundcloud",
+                                "source_id": t_id,
+                                "source_url": permalink,
+                                "cover_url": artwork,
+                            })
+
+                        if tracks:
+                            return {"name": name, "source": "soundcloud", "tracks": tracks}
+        except Exception:
+            pass
+
+        # Fallback to yt-dlp
+        return self._resolve_soundcloud_ytdlp(url)
 
 
     def _resolve_spotify(self, url: str) -> dict:

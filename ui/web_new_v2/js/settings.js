@@ -788,15 +788,20 @@ export function applySettingsFromBackend(settings) {
                 applyIconPack(settings.theme.icon_pack);
             }
             if (settings.theme.custom_bg_image !== undefined) {
-                const blur = settings.theme.bg_blur !== undefined ? settings.theme.bg_blur : 0;
-                const dim = settings.theme.bg_dim !== undefined ? settings.theme.bg_dim : 30;
-                // Also update localStorage so instant restore on boot works perfectly
+                let bgToApply = settings.theme.custom_bg_image;
+                const localBg = getLocalSetting('nedotify_theme_custom_bg_image', '');
+                if (!bgToApply && localBg) {
+                    bgToApply = localBg;
+                    saveSetting('custom_bg_image', localBg, 'theme');
+                }
+                const blur = settings.theme.bg_blur !== undefined ? settings.theme.bg_blur : getLocalSetting('nedotify_theme_bg_blur', 0);
+                const dim = settings.theme.bg_dim !== undefined ? settings.theme.bg_dim : getLocalSetting('nedotify_theme_bg_dim', 30);
                 try {
-                    localStorage.setItem('nedotify_theme_custom_bg_image', JSON.stringify(settings.theme.custom_bg_image));
+                    localStorage.setItem('nedotify_theme_custom_bg_image', JSON.stringify(bgToApply || ''));
                     localStorage.setItem('nedotify_theme_bg_blur', JSON.stringify(blur));
                     localStorage.setItem('nedotify_theme_bg_dim', JSON.stringify(dim));
                 } catch(e) {}
-                applyCustomBg(settings.theme.custom_bg_image, blur, dim);
+                applyCustomBg(bgToApply, blur, dim);
             }
         }
 
@@ -1871,7 +1876,7 @@ export function applyCustomBg(bgDataUrl, blurPx = 0, dimPct = 30) {
     bgLayer.style.filter = `blur(${blurPx || 0}px)`;
     bgLayer.style.transform = `scale(${blurPx > 0 ? 1.06 : 1})`;
 
-    const safeDim = Math.max(65, Number(dimPct !== undefined ? dimPct : 75));
+    const safeDim = Math.min(95, Math.max(0, Number(dimPct !== undefined ? dimPct : 30)));
     dimLayer.style.display = 'block';
     dimLayer.style.backgroundColor = `rgba(0, 0, 0, ${safeDim / 100})`;
 

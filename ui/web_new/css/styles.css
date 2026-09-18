@@ -374,6 +374,12 @@ html.has-custom-bg #player-bar {
     -webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
 }
 
+html.has-custom-bg .player-glass-card {
+    background: color-mix(in srgb, var(--bg-surface, #14141d) calc(var(--app-bg-opacity, 0.75) * 70%), transparent);
+    backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
+    -webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
+}
+
 #app-container::before {
     content: '';
     position: fixed;

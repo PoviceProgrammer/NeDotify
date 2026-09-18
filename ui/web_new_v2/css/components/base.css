@@ -348,7 +348,7 @@ a { color: var(--primary); text-decoration: none; }
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    background-color: var(--bg-main, #0a0a0f);
+    background-color: transparent;
     transition: filter 0.25s ease, transform 0.25s ease;
     display: none;
 }
@@ -391,19 +391,25 @@ body.has-custom-bg #app-container::before,
 }
 
 html.has-custom-bg #sidebar {
-    background: color-mix(in srgb, var(--bg-main, #0a0a0f) 92%, transparent);
+    background: color-mix(in srgb, var(--bg-main, #0a0a0f) calc(var(--app-bg-opacity, 0.75) * 55%), transparent);
     backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
     -webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
 }
 
 html.has-custom-bg #main-content {
-    background: color-mix(in srgb, var(--bg-surface, #14141d) 93%, transparent);
+    background: color-mix(in srgb, var(--bg-surface, #14141d) calc(var(--app-bg-opacity, 0.75) * 65%), transparent);
     backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
     -webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
 }
 
 html.has-custom-bg #player-bar {
-    background: color-mix(in srgb, var(--bg-surface, #14141d) 95%, transparent);
+    background: color-mix(in srgb, var(--bg-surface, #14141d) calc(var(--app-bg-opacity, 0.75) * 75%), transparent);
+    backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
+    -webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
+}
+
+html.has-custom-bg .player-glass-card {
+    background: color-mix(in srgb, var(--color-surface, #14141d) calc(var(--app-bg-opacity, 0.75) * 70%), transparent);
     backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
     -webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)));
 }

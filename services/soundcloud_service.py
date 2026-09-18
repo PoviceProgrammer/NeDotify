@@ -335,26 +335,57 @@ class SoundCloudService(BaseMusicService):
                         r = self._session.get(url, timeout=5.0)
                         if r.status_code == 200:
                             data = r.json()
+                            raw_tracks = data.get('tracks') or []
+                            tracks_map = {}
+                            stub_ids = []
+                            for item in raw_tracks:
+                                if not isinstance(item, dict) or not item.get('id'):
+                                    continue
+                                t_id = str(item['id'])
+                                if item.get('title'):
+                                    tracks_map[t_id] = item
+                                else:
+                                    stub_ids.append(t_id)
+
+                            if stub_ids and cid:
+                                fetch_count = min(len(stub_ids), (limit * 2) if limit else len(stub_ids))
+                                for i in range(0, fetch_count, 50):
+                                    batch = stub_ids[i:i + 50]
+                                    try:
+                                        b_r = self._session.get(
+                                            f"https://api-v2.soundcloud.com/tracks?ids={','.join(batch)}&client_id={cid}",
+                                            timeout=5.0
+                                        )
+                                        if b_r.status_code == 200:
+                                            for t in b_r.json():
+                                                if isinstance(t, dict) and t.get('id'):
+                                                    tracks_map[str(t['id'])] = t
+                                    except Exception:
+                                        pass
+
                             tracks = []
-                            for item in (data.get('tracks') or []):
+                            for item in raw_tracks:
                                 if not item or not isinstance(item, dict) or not item.get('id'):
                                     continue
-                                artwork = item.get('artwork_url') or ''
+                                t_id = str(item['id'])
+                                item_full = tracks_map.get(t_id, item)
+
+                                artwork = item_full.get('artwork_url') or ''
                                 if artwork and isinstance(artwork, str) and 'large.jpg' in artwork:
                                     artwork = artwork.replace('large.jpg', 't500x500.jpg')
-                                user_info = item.get('user')
+                                user_info = item_full.get('user')
                                 if not isinstance(user_info, dict):
                                     user_info = {}
                                 artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
-                                raw_dur = item.get('duration')
+                                raw_dur = item_full.get('duration')
                                 duration = int(raw_dur / 1000) if raw_dur and isinstance(raw_dur, (int, float)) else 0
                                 track = {
-                                    'title': item.get('title') or 'Unknown Title',
+                                    'title': item_full.get('title') or 'Unknown Title',
                                     'artist': artist,
                                     'duration': duration,
                                     'source': 'soundcloud',
-                                    'source_id': str(item.get('id')),
-                                    'source_url': item.get('permalink_url') or f"https://soundcloud.com/{item.get('permalink', item.get('id'))}",
+                                    'source_id': t_id,
+                                    'source_url': item_full.get('permalink_url') or f"https://soundcloud.com/{item_full.get('permalink', t_id)}",
                                     'cover_url': artwork,
                                 }
                                 tracks.append(track)

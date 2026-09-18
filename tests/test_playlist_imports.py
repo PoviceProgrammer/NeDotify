@@ -70,6 +70,157 @@ class TestPlaylistImports(unittest.TestCase):
             self.assertEqual(len(res["tracks"]), 1)
             self.assertEqual(res["tracks"][0]["title"], "SC Track 1")
 
+    def test_soundcloud_playlist_api_resolution_with_batch_hydration(self):
+        mock_sc = MagicMock()
+        mock_sc._get_client_id.return_value = "mock_client_id_123"
+
+        # Mock resolve response: 1 full track, 1 stub track
+        resolve_resp = MagicMock()
+        resolve_resp.status_code = 200
+        resolve_resp.json.return_value = {
+            "title": "Summer Vibes Set",
+            "tracks": [
+                {
+                    "id": 101,
+                    "title": "Full Track",
+                    "user": {"username": "Artist One"},
+                    "duration": 180000,
+                    "artwork_url": "https://img.sndcdn.com/art-large.jpg",
+                    "permalink_url": "https://soundcloud.com/artist-one/full-track"
+                },
+                {
+                    "id": 102,
+                    "kind": "track"
+                }
+            ]
+        }
+
+        # Mock batch hydration response for stub track 102
+        batch_resp = MagicMock()
+        batch_resp.status_code = 200
+        batch_resp.json.return_value = [
+            {
+                "id": 102,
+                "title": "Hydrated Track",
+                "user": {"username": "Artist Two"},
+                "duration": 210000,
+                "artwork_url": "https://img.sndcdn.com/art2-large.jpg",
+                "permalink_url": "https://soundcloud.com/artist-two/hydrated-track"
+            }
+        ]
+
+        def mock_get(url, *args, **kwargs):
+            if "tracks?ids=" in url:
+                return batch_resp
+            return resolve_resp
+
+        mock_sc._session.get.side_effect = mock_get
+        self.service.soundcloud_service = mock_sc
+
+        res = self.service.resolve("https://soundcloud.com/artist/sets/summer-vibes")
+        self.assertEqual(res["name"], "Summer Vibes Set")
+        self.assertEqual(res["source"], "soundcloud")
+        self.assertEqual(len(res["tracks"]), 2)
+        
+        # Verify track 1
+        self.assertEqual(res["tracks"][0]["title"], "Full Track")
+        self.assertEqual(res["tracks"][0]["artist"], "Artist One")
+        self.assertEqual(res["tracks"][0]["duration"], 180.0)
+        self.assertIn("t500x500.jpg", res["tracks"][0]["cover_url"])
+
+        # Verify hydrated track 2
+        self.assertEqual(res["tracks"][1]["title"], "Hydrated Track")
+        self.assertEqual(res["tracks"][1]["artist"], "Artist Two")
+        self.assertEqual(res["tracks"][1]["duration"], 210.0)
+        self.assertIn("t500x500.jpg", res["tracks"][1]["cover_url"])
+
+    def test_soundcloud_ytdlp_slug_parsing_fallback(self):
+        # When yt-dlp returns flat entries with missing title/uploader
+        mock_entries = [
+            {
+                "id": "1514428012",
+                "url": "https://soundcloud.com/chill-producer/morning-coffee-beat",
+                "duration": 120
+            }
+        ]
+        mock_info = {"title": "Lofi Chill Mix", "entries": mock_entries}
+        mock_ydl = MagicMock()
+        mock_ydl.extract_info.return_value = mock_info
+        mock_ydl.__enter__.return_value = mock_ydl
+
+        with patch.object(self.service, "_get_ydl", return_value=mock_ydl):
+            res = self.service.resolve("https://soundcloud.com/chill-producer/sets/lofi-chill")
+            self.assertEqual(res["name"], "Lofi Chill Mix")
+            self.assertEqual(len(res["tracks"]), 1)
+            self.assertEqual(res["tracks"][0]["artist"], "Chill Producer")
+            self.assertEqual(res["tracks"][0]["title"], "Morning Coffee Beat")
+
+    def test_soundcloud_shortened_url_redirect(self):
+        fake_resp = MagicMock()
+        fake_resp.geturl.return_value = "https://soundcloud.com/artist/sets/canonical-set"
+        fake_resp.__enter__.return_value = fake_resp
+
+        mock_sc = MagicMock()
+        mock_sc._get_client_id.return_value = "cid_123"
+        mock_r = MagicMock()
+        mock_r.status_code = 200
+        mock_r.json.return_value = {
+            "title": "Shortened Set",
+            "tracks": [{"id": 1, "title": "Short Track", "duration": 100000}]
+        }
+        mock_sc._session.get.return_value = mock_r
+        self.service.soundcloud_service = mock_sc
+
+        with patch("urllib.request.urlopen", return_value=fake_resp):
+            res = self.service.resolve("https://on.soundcloud.com/abcde")
+            self.assertEqual(res["name"], "Shortened Set")
+            self.assertEqual(len(res["tracks"]), 1)
+            self.assertEqual(res["tracks"][0]["title"], "Short Track")
+
+    def test_soundcloud_service_get_playlist_tracks_hydrates_stubs(self):
+        from services.soundcloud_service import SoundCloudService
+        sc = SoundCloudService()
+        sc._client_id = "test_cid"
+
+        resolve_resp = MagicMock()
+        resolve_resp.status_code = 200
+        resolve_resp.json.return_value = {
+            "tracks": [
+                {"id": 1, "title": "Track 1", "user": {"username": "Artist 1"}},
+                {"id": 2, "kind": "track"}
+            ]
+        }
+
+        batch_resp = MagicMock()
+        batch_resp.status_code = 200
+        batch_resp.json.return_value = [
+            {"id": 2, "title": "Track 2 Hydrated", "user": {"username": "Artist 2"}}
+        ]
+
+        def mock_get(url, *args, **kwargs):
+            if "tracks?ids=" in url:
+                return batch_resp
+            return resolve_resp
+
+        mock_session = MagicMock()
+        mock_session.get.side_effect = mock_get
+        sc._session = mock_session
+
+        results = []
+        import threading
+        evt = threading.Event()
+        def callback(tracks):
+            results.extend(tracks)
+            evt.set()
+
+        sc.get_playlist_tracks("https://soundcloud.com/artist/sets/set", callback=callback)
+        evt.wait(timeout=3.0)
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["title"], "Track 1")
+        self.assertEqual(results[1]["title"], "Track 2 Hydrated")
+        self.assertEqual(results[1]["artist"], "Artist 2")
+
     def test_spotify_playlist_import_success(self):
         fake_html = """
         <html>

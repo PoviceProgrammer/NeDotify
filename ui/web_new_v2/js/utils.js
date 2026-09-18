@@ -508,7 +508,7 @@ export function checkLocalStorageQuota(warnThresholdBytes = 4 * 1024 * 1024) {
     }
 }
 
-// M-2: downscale a base64 image to max 256px JPEG before persisting (backgrounds)
+// Optimize wallpaper image to Full HD (max 1920px) JPEG for high visual quality
 export function compressBackgroundImage(dataUrl, callback) {
     if (!dataUrl || !dataUrl.startsWith('data:image')) {
         callback(dataUrl);
@@ -518,7 +518,7 @@ export function compressBackgroundImage(dataUrl, callback) {
         const img = new Image();
         img.onload = () => {
             try {
-                const MAX = 256;
+                const MAX = 1920;
                 const scale = Math.min(1, MAX / Math.max(img.width, img.height));
                 const w = Math.max(1, Math.round(img.width * scale));
                 const h = Math.max(1, Math.round(img.height * scale));
@@ -528,7 +528,7 @@ export function compressBackgroundImage(dataUrl, callback) {
                 const ctx = canvas.getContext('2d');
                 if (!ctx) { callback(dataUrl); return; }
                 ctx.drawImage(img, 0, 0, w, h);
-                callback(canvas.toDataURL('image/jpeg', 0.8));
+                callback(canvas.toDataURL('image/jpeg', 0.85));
             } catch (err) {
                 callback(dataUrl);
             }
