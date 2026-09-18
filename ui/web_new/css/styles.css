@@ -2704,9 +2704,9 @@ select option {
 
 /* Block 3: Albums */
 .artist-albums-card {
-    height: 220px;
+    height: 245px;
     border-radius: 18px;
-    padding: 20px;
+    padding: 18px 20px;
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid var(--border);
     display: flex;

@@ -471,11 +471,9 @@ export class ArtistBioComponent {
     }
 }
 
-// ─── Component 3: Albums Carousel (Block 3) with Fallback Gradients ───
+// ─── Component 3: Discography Carousel (Block 3: Albums, Singles, EPs) ───
 export class ArtistAlbumsComponent {
-    constructor(albums, onPlayAlbum, onOpenAlbum) {
-        // Sort albums strictly by year DESC
-        this.albums = [...albums].sort((a, b) => b.year - a.year);
+    constructor(albumsOrData, onPlayAlbum, onOpenAlbum) {
         this.onPlayAlbum = onPlayAlbum;
         this.onOpenAlbum = onOpenAlbum || ((album) => {
             if (typeof window.openAlbumModal === 'function') {
@@ -484,65 +482,207 @@ export class ArtistAlbumsComponent {
                 this.onPlayAlbum(album);
             }
         });
+
+        // Normalize data: can be an Array of albums or an ArtistData / Discography object
+        let rawAlbums = [];
+        let rawSingles = [];
+        let rawEps = [];
+        let rawCompilations = [];
+
+        if (Array.isArray(albumsOrData)) {
+            albumsOrData.forEach(item => {
+                const t = (item.type || item.album_type || 'album').toLowerCase();
+                if (t === 'single') rawSingles.push(item);
+                else if (t === 'ep') rawEps.push(item);
+                else if (t === 'compilation') rawCompilations.push(item);
+                else rawAlbums.push(item);
+            });
+            if (rawAlbums.length === 0 && (rawSingles.length > 0 || rawEps.length > 0)) {
+                // Keep rawAlbums as the fallback if all were singles/eps
+            } else if (rawSingles.length === 0 && rawEps.length === 0 && rawCompilations.length === 0) {
+                rawAlbums = albumsOrData;
+            }
+        } else if (albumsOrData && typeof albumsOrData === 'object') {
+            rawAlbums = albumsOrData.albums || [];
+            rawSingles = albumsOrData.singles || [];
+            rawEps = albumsOrData.eps || [];
+            rawCompilations = albumsOrData.compilations || [];
+        }
+
+        const sortByYear = (arr) => [...arr].sort((a, b) => (b.year || 0) - (a.year || 0));
+
+        this.albums = sortByYear(rawAlbums);
+        this.singles = sortByYear(rawSingles);
+        this.eps = sortByYear(rawEps);
+        this.compilations = sortByYear(rawCompilations);
+
+        // Build combined all-releases list deduplicated
+        const seen = new Set();
+        const all = [];
+        for (const item of [...this.albums, ...this.singles, ...this.eps, ...this.compilations]) {
+            const k = (item.title || item.album || '').toLowerCase().trim();
+            if (k && !seen.has(k)) {
+                seen.add(k);
+                all.push(item);
+            }
+        }
+        this.allReleases = sortByYear(all);
+
+        // Determine default filter tab
+        if (this.allReleases.length > 0) {
+            this.currentFilter = (this.albums.length > 0 && (this.singles.length > 0 || this.eps.length > 0)) ? 'all' : (this.albums.length > 0 ? 'albums' : 'all');
+        } else {
+            this.currentFilter = 'all';
+        }
+    }
+
+    getItemsForFilter(filter) {
+        switch (filter) {
+            case 'albums': return this.albums;
+            case 'singles': return this.singles;
+            case 'eps': return this.eps;
+            case 'compilations': return this.compilations;
+            case 'all':
+            default:
+                return this.allReleases.length > 0 ? this.allReleases : this.albums;
+        }
     }
 
     render() {
         const container = document.createElement('div');
         container.className = 'artist-albums-card';
         
-        container.innerHTML = `
-            <h3 class="artist-card-title">
-                <i data-lucide="disc" style="width:16px;height:16px;color:var(--primary)"></i>
-                Альбомы (${this.albums.length})
-            </h3>
-            <div class="artist-albums-carousel feed-scroll">
-                ${this.albums.map((album, index) => {
-                    const title = album.title || 'Unknown';
-                    const gradIndex = Math.abs(hashString(title)) % colors.length;
-                    const grad = colors[gradIndex];
-                    const coverSrc = (album.cover && album.cover !== 'null') ? escapeHtml(album.cover) : ((album.cover_url && album.cover_url !== 'null') ? escapeHtml(album.cover_url) : '');
-                    const imgTag = coverSrc ? `<img src="${coverSrc}" alt="${escapeHtml(album.title)}" onerror="this.onerror=null;this.style.display='none'" loading="lazy">` : '';
-                    
-                    return `
-                    <div class="album-item-card" data-album-index="${index}">
-                        <div class="album-cover-wrap fallback-gradient" style="background: ${grad}">
-                            ${SVG_NOTE_FALLBACK}
-                            ${imgTag}
-                            <div class="album-play-overlay">
-                                <button class="album-play-btn" title="Воспроизвести альбом">
-                                    <i data-lucide="play" style="width:18px;height:18px;fill:currentColor"></i>
-                                </button>
-                            </div>
+        const hasMultipleCategories = [
+            this.albums.length > 0,
+            this.singles.length > 0,
+            this.eps.length > 0,
+            this.compilations.length > 0
+        ].filter(Boolean).length > 1;
+
+        const renderTabsHtml = () => {
+            if (!hasMultipleCategories) {
+                return '';
+            }
+            const tabs = [
+                { id: 'all', label: 'Все', count: this.allReleases.length },
+                { id: 'albums', label: 'Альбомы', count: this.albums.length },
+                { id: 'singles', label: 'Синглы', count: this.singles.length },
+                { id: 'eps', label: 'EP', count: this.eps.length },
+                { id: 'compilations', label: 'Сборники', count: this.compilations.length },
+            ].filter(t => t.count > 0);
+
+            return `
+                <div class="disco-filter-tabs" style="display:flex; align-items:center; gap:4px; background:rgba(255,255,255,0.06); border-radius:12px; padding:2px 4px; font-size:11px; font-weight:700;">
+                    ${tabs.map(t => `
+                        <button class="disco-tab-btn ${this.currentFilter === t.id ? 'active' : ''}" data-type="${t.id}" style="padding:3px 8px; border:none; border-radius:10px; background:${this.currentFilter === t.id ? 'var(--primary)' : 'transparent'}; color:${this.currentFilter === t.id ? '#fff' : 'var(--text-sec)'}; cursor:pointer; transition:all 0.15s ease;">
+                            ${escapeHtml(t.label)} <span style="opacity:0.7; font-size:10px;">${t.count}</span>
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+        };
+
+        const renderCardsHtml = (items) => {
+            if (!items || items.length === 0) {
+                return '<div style="color:var(--text-sec); font-size:13px; padding:20px 0;">Релизы не найдены</div>';
+            }
+            return items.map((album, index) => {
+                const title = album.title || 'Unknown';
+                const gradIndex = Math.abs(hashString(title)) % colors.length;
+                const grad = colors[gradIndex];
+                const coverSrc = (album.cover && album.cover !== 'null') ? escapeHtml(album.cover) : ((album.cover_url && album.cover_url !== 'null') ? escapeHtml(album.cover_url) : '');
+                const imgTag = coverSrc ? `<img src="${coverSrc}" alt="${escapeHtml(album.title)}" onerror="this.onerror=null;this.style.display='none'" loading="lazy">` : '';
+                
+                const typeLabel = album.type === 'single' ? 'Сингл' : (album.type === 'ep' ? 'EP' : (album.type === 'compilation' ? 'Сборник' : ''));
+                const metaYear = album.year ? `${album.year} г.` : '';
+                const subtitle = [metaYear, typeLabel].filter(Boolean).join(' • ');
+
+                return `
+                <div class="album-item-card" data-album-index="${index}">
+                    <div class="album-cover-wrap fallback-gradient" style="background: ${grad}">
+                        ${SVG_NOTE_FALLBACK}
+                        ${imgTag}
+                        <div class="album-play-overlay">
+                            <button class="album-play-btn" title="Воспроизвести релиз">
+                                <i data-lucide="play" style="width:18px;height:18px;fill:currentColor"></i>
+                            </button>
                         </div>
-                        <div class="album-title" title="${escapeHtml(album.title)}">${escapeHtml(album.title)}</div>
-                        <div class="album-year">${album.year ? album.year + ' г.' : ''}</div>
                     </div>
-                `}).join('')}
+                    <div class="album-title" title="${escapeHtml(album.title)}">${escapeHtml(album.title)}</div>
+                    <div class="album-year">${escapeHtml(subtitle || 'Релиз')}</div>
+                </div>
+            `}).join('');
+        };
+
+        const currentItems = this.getItemsForFilter(this.currentFilter);
+
+        container.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                <h3 class="artist-card-title" style="margin-bottom:0;">
+                    <i data-lucide="disc" style="width:16px;height:16px;color:var(--primary)"></i>
+                    <span id="disco-title-text">Дискография (${this.allReleases.length || this.albums.length})</span>
+                </h3>
+                ${renderTabsHtml()}
+            </div>
+            <div class="artist-albums-carousel feed-scroll" id="disco-carousel-list">
+                ${renderCardsHtml(currentItems)}
             </div>
         `;
 
-        container.querySelectorAll('.album-item-card').forEach(card => {
-            card.style.cursor = 'pointer';
-            const playBtn = card.querySelector('.album-play-btn');
-            if (playBtn) {
-                playBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
+        const bindEvents = (items) => {
+            const cards = container.querySelectorAll('.album-item-card');
+            cards.forEach(card => {
+                card.style.cursor = 'pointer';
+                const playBtn = card.querySelector('.album-play-btn');
+                if (playBtn) {
+                    playBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const idx = card.dataset.albumIndex;
+                        if (this.onPlayAlbum && items[idx]) this.onPlayAlbum(items[idx]);
+                    });
+                }
+                card.addEventListener('click', () => {
                     const idx = card.dataset.albumIndex;
-                    if (this.onPlayAlbum) this.onPlayAlbum(this.albums[idx]);
+                    if (items[idx]) {
+                        if (this.onOpenAlbum) {
+                            this.onOpenAlbum(items[idx]);
+                        } else if (window.openAlbumModal) {
+                            window.openAlbumModal(items[idx]);
+                        } else if (this.onPlayAlbum) {
+                            this.onPlayAlbum(items[idx]);
+                        }
+                    }
                 });
-            }
-            card.addEventListener('click', () => {
-                const idx = card.dataset.albumIndex;
-                if (this.onOpenAlbum) {
-                    this.onOpenAlbum(this.albums[idx]);
-                } else if (window.openAlbumModal) {
-                    window.openAlbumModal(this.albums[idx]);
-                } else if (this.onPlayAlbum) {
-                    this.onPlayAlbum(this.albums[idx]);
+            });
+            renderIcons();
+        };
+
+        bindEvents(currentItems);
+
+        // Tab click listeners
+        container.querySelectorAll('.disco-tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const filterType = btn.dataset.type;
+                if (filterType === this.currentFilter) return;
+                this.currentFilter = filterType;
+
+                container.querySelectorAll('.disco-tab-btn').forEach(b => {
+                    const isActive = b.dataset.type === filterType;
+                    b.classList.toggle('active', isActive);
+                    b.style.background = isActive ? 'var(--primary)' : 'transparent';
+                    b.style.color = isActive ? '#fff' : 'var(--text-sec)';
+                });
+
+                const carousel = container.querySelector('#disco-carousel-list');
+                const newItems = this.getItemsForFilter(filterType);
+                if (carousel) {
+                    carousel.innerHTML = renderCardsHtml(newItems);
+                    bindEvents(newItems);
                 }
             });
         });
-        
+
         return container;
     }
 
@@ -772,7 +912,7 @@ export async function loadArtistProfile(artistName, targetContainer) {
         const bridgeProfile = await fetchArtistProfileFromBridge(artistName);
         if (currentGen !== profileGenerationId) return; // Stale render protection
 
-        if (bridgeProfile && (bridgeProfile.tracks?.length > 0 || bridgeProfile.albums?.length > 0 || bridgeProfile.bio || bridgeProfile.avatar_url)) {
+        if (bridgeProfile && (bridgeProfile.tracks?.length > 0 || bridgeProfile.albums?.length > 0 || bridgeProfile.singles?.length > 0 || bridgeProfile.eps?.length > 0 || bridgeProfile.bio || bridgeProfile.avatar_url)) {
             artistData = {
                 name: bridgeProfile.name || artistName,
                 genres: bridgeProfile.genres || (bridgeProfile.subscribers ? `${bridgeProfile.subscribers} подписчиков` : 'Исполнитель'),
@@ -781,6 +921,11 @@ export async function loadArtistProfile(artistName, targetContainer) {
                 bio_ru: bridgeProfile.bio_ru || bridgeProfile.bio || null,
                 bio_original: bridgeProfile.bio_original || bridgeProfile.bio_en || null,
                 albums: bridgeProfile.albums || [],
+                singles: bridgeProfile.singles || [],
+                eps: bridgeProfile.eps || [],
+                compilations: bridgeProfile.compilations || [],
+                discography: bridgeProfile.discography || null,
+                all_releases: bridgeProfile.all_releases || [],
                 tracks: bridgeProfile.tracks || [],
                 isMock: false
             };
@@ -828,7 +973,8 @@ export async function loadArtistProfile(artistName, targetContainer) {
         
         const onPlayAlbum = async (album) => {
             if (!album) return;
-            const albumTracks = (artistData.tracks || []).filter(t => t.album && t.album.toLowerCase() === (album.title || '').toLowerCase());
+            const albumTitle = (album.title || album.album || '').toLowerCase();
+            const albumTracks = (artistData.tracks || []).filter(t => t.album && t.album.toLowerCase() === albumTitle);
             if (albumTracks.length > 0) {
                 if (window.pywebview?.api?.play_track) {
                     window.pywebview.api.play_track(albumTracks[0], albumTracks, 0);
@@ -843,7 +989,7 @@ export async function loadArtistProfile(artistName, targetContainer) {
                         title: album.title,
                         artist: artistData.name,
                         source: album.source || 'youtube',
-                        source_id: album.source_id || ''
+                        source_id: album.yt_source_id || album.source_id || ''
                     });
                     if (fetched && fetched.length > 0) {
                         window.pywebview.api.play_track(fetched[0], fetched, 0);
@@ -861,9 +1007,14 @@ export async function loadArtistProfile(artistName, targetContainer) {
             }
         };
         
-        if (artistData.albums && artistData.albums.length > 0) {
+        const hasReleases = (artistData.albums && artistData.albums.length > 0) ||
+                            (artistData.singles && artistData.singles.length > 0) ||
+                            (artistData.eps && artistData.eps.length > 0) ||
+                            (artistData.compilations && artistData.compilations.length > 0);
+
+        if (hasReleases) {
             const albumsComp = new ArtistAlbumsComponent(
-                artistData.albums, 
+                artistData, 
                 onPlayAlbum,
                 (album) => {
                     if (window.openAlbumModal) {
