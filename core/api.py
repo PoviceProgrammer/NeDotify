@@ -2677,6 +2677,16 @@ class AppApi:
         svc.get_profile(name, callback=_ok, error_callback=_err)
         return {"status": "loading", "artist": name}
 
+    def get_artist_discography(self, artist_name: str):
+        """Request categorized discography for an artist: albums, singles, EPs, compilations."""
+        name = (artist_name or "").strip()
+        if not name:
+            return {"status": "error", "error": "Имя исполнителя не указано"}
+        svc = getattr(self._core, "artists", None)
+        if svc is None:
+            return {"status": "error", "error": "Сервис исполнителей недоступен"}
+        return svc.get_discography(name)
+
     def get_artists_avatars(self, names):
         """Resolve avatar photos for a batch of artist names (home feed).
 
@@ -3177,4 +3187,5 @@ class AppApi:
             return []
 
 
-
+# Alias for backward compatibility and test convenience
+ApiBridge = AppApi
