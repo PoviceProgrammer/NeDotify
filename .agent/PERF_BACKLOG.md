@@ -17,6 +17,11 @@
 | PERF-013 | CPU/GPU | `ui/web_new/js/library.js` | Пассивный `{ passive: true }` и rAF-дросселированный бесконечный скролл библиотеки с отменой `cancelAnimationFrame` при смене плейлиста | done |
 | PERF-014 | CPU/NETWORK | `core/proxy.py` | LRU-кэширование корней обложек/аватаров `_cover_roots` и увеличение буфера потоковой передачи удаленных аудиостримов до 64KB | done |
 | PERF-015 | CPU/GPU | `ui/web_new/js/player.js`, `ui/web_new_v2/js/settings.js` | rAF-дросселирование и `{ passive: true }` ресайза холста waveforms, проверка `document.hidden` в таймере опроса аудиоустройств | done |
-| PERF-016 | CPU/RAM | `ui/web_new/js/pages.js` | Идемпотентная защита инициализации `_pagesInitialized` от накопления обработчиков keydown/click | todo |
-| PERF-017 | CPU/RAM | `ui/web_new/js/queue.js` | Идемпотентная защита инициализации `_queueInitialized` от накопления слушателей очереди и смены трека | todo |
-| PERF-018 | RAM | `services/base_service.py` | Оптимизация лимита кэша метаданных потоков `_MAX_CACHE_SIZE` с 2000 до 500 для снижения потребления памяти кучи | todo |
+| PERF-016 | CPU/RAM | `ui/web_new/js/pages.js` | Идемпотентная защита инициализации `_pagesInitialized` от накопления обработчиков keydown/click | done |
+| PERF-017 | CPU/RAM | `ui/web_new/js/queue.js` | Идемпотентная защита инициализации `_queueInitialized` от накопления слушателей очереди и смены трека | done |
+| PERF-018 | RAM | `services/base_service.py` | Оптимизация лимита кэша метаданных потоков `_MAX_CACHE_SIZE` с 2000 до 500 для снижения потребления памяти кучи | done |
+| PERF-019 | CPU | `core/resolver.py` | Хостинг импорта base64 и предкомпиляция regex `_RE_EXPIRE`, `_RE_POLICY`, `_RE_EPOCH` в проверке срока ссылок | done |
+| PERF-020 | CPU/RAM | `ui/web_new/js/search.js` | Дедупликация слушателя клика выпадающего списка платформ и идемпотентная защита `_searchInitialized` | done |
+| PERF-021 | CPU/RAM | `ui/web_new/js/lyrics.js` | Идемпотентная защита инициализации `_lyricsInitialized` от накопления слушателей `position_changed` и `track_changed` | todo |
+| PERF-022 | CPU/RAM | `ui/web_new/js/library.js` | Идемпотентная защита инициализации `_libraryInitialized` от повторного навешивания слушателей карточек | todo |
+| PERF-023 | CPU/RAM | `ui/web_new/js/settings.js` | Идемпотентная защита инициализации `_settingsInitialized` от повторного навешивания слушателей тумблеров и темы | todo |

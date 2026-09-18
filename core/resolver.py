@@ -8,6 +8,7 @@ Single-flight: concurrent requests for the same (source, source_id) share one
 background resolution instead of each triggering the full network cascade.
 """
 
+import base64
 import logging
 import re
 import threading
@@ -20,6 +21,10 @@ _MEM_TTL = 3600.0        # in-memory URL lifetime (seconds)
 _MEM_MAX_SIZE = 1024     # in-memory cache cap; oldest entry (insertion order) is evicted on overflow
 _RESOLVE_TIMEOUT = 12.0  # max wait for a single-flight resolution
 _DB_MAX_AGE = 14400      # DB stream_cache max age (seconds) — googlevideo URLs expire in ~6h
+
+_RE_EXPIRE = re.compile(r'[?&]expire=(\d{6,})')
+_RE_POLICY = re.compile(r'[?&]Policy=([A-Za-z0-9_\-]+)')
+_RE_EPOCH = re.compile(r'EpochTime["\':\s]+(\d+)')
 
 
 class _Flight:
@@ -68,17 +73,16 @@ class StreamResolver:
             return False
         now = time.time()
         try:
-            m = re.search(r'[?&]expire=(\d{6,})', url)
+            m = _RE_EXPIRE.search(url)
             if m and int(m.group(1)) < now + 60:
                 return True
             if 'Policy=' in url or 'sndcdn.com' in url:
-                m_pol = re.search(r'[?&]Policy=([A-Za-z0-9_\-]+)', url)
+                m_pol = _RE_POLICY.search(url)
                 if m_pol:
-                    import base64
                     b64 = m_pol.group(1).replace('-', '+').replace('_', '/')
                     b64 += '=' * ((4 - len(b64) % 4) % 4)
                     raw = base64.b64decode(b64).decode('utf-8', errors='ignore')
-                    m_epoch = re.search(r'EpochTime[\"\'\:\s]+(\d+)', raw)
+                    m_epoch = _RE_EPOCH.search(raw)
                     if m_epoch and int(m_epoch.group(1)) < now + 60:
                         return True
         except Exception:

@@ -66,3 +66,12 @@
   - PERF-018: Лимит кэша потоков `_MAX_CACHE_SIZE` в `BaseMusicService` снижен с 2000 до 500 записей, что предотвращает накопление сотен мегабайт устаревших метаданных стримов в куче Python при длительной работе приложения.
 - **Визуал**: 100% сохранен (навигация страниц и боковая панель очереди работают штатно).
 - **Тесты**: 85 python tests + 3 node test suites passed in 8.27s.
+
+## Цикл 7
+- **Задачи**: PERF-019 (Resolver module-level base64 and precompiled regexes), PERF-020 (Search platform dropdown click deduplication and idempotent init)
+- **Результаты**:
+  - PERF-019: В `core/resolver.py` импорт `base64` вынесен на уровень модуля, а регулярные выражения `_RE_EXPIRE`, `_RE_POLICY`, `_RE_EPOCH` предкомпилированы; исключены блокировки импорта и повторные компиляции регулярных выражений при проверке срока жизни аудиоссылок YouTube и SoundCloud.
+  - PERF-020: В `ui/web_new/js/search.js` и `ui/web_new_v2/js/search.js` дедуплицирован слушатель клика вне выпадающего списка платформ `_searchPlatformClickHandler`, а функция `initSearch()` защищена флагом `_searchInitialized` от повторной регистрации обработчиков клавиатуры и фильтров.
+- **Визуал**: 100% сохранен (мгновенное переключение провайдеров и поиск треков работают безупречно).
+- **Тесты**: 85 python tests + 3 node test suites passed in 7.82s.
+
