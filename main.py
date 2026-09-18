@@ -423,9 +423,11 @@ def main():
                             is_nedotify = False
                             try:
                                 with open(f"/proc/{old_pid}/cmdline", "r") as pf:
-                                    cmd = pf.read()
-                                    if "main.py" in cmd:
-                                        is_nedotify = True
+                                    args = pf.read().split("\0")
+                                    is_nedotify = any(
+                                        a == "main.py" or a.endswith("/main.py") or "\\main.py" in a
+                                        for a in args
+                                    )
                             except Exception:
                                 pass
                             if is_nedotify:

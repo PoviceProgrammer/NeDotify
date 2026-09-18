@@ -165,6 +165,7 @@ class AppRunner:
         if not ready:
             raise TimeoutError("Frontend failed to reach ready state within timeout.")
 
+        time.sleep(1.0)
         logger.info("Installing global error interceptors & preloading modules...")
         self.eval_js("""
             (() => {
