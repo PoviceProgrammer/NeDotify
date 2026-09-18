@@ -95,13 +95,24 @@ class WatchdogService:
         self.observer.start()
 
     def stop(self):
-        self.handler.stop()
-        self.observer.stop()
-        self.observer.join()
+        if self.handler and hasattr(self.handler, 'stop'):
+            try:
+                self.handler.stop()
+            except Exception as e:
+                logger.debug(f'Error stopping watchdog handler: {e}')
+        if self.observer and hasattr(self.observer, 'stop'):
+            try:
+                self.observer.stop()
+                self.observer.join(timeout=2.0)
+            except Exception as e:
+                logger.debug(f'Error stopping watchdog observer: {e}')
 
     def _sync_folders(self):
-        folders = self._core.db.get_scan_folders()
-        db_paths = set(f for f in folders if f.get('auto_scan'))
+        folders = self._core.db.get_scan_folders() if hasattr(self._core, 'db') and hasattr(self._core.db, 'get_scan_folders') else []
+        db_paths = set(
+            f.get('folder_path') for f in folders
+            if isinstance(f, dict) and f.get('auto_scan') and f.get('folder_path')
+        )
         for path in db_paths:
             if path not in self._watched_paths:
                 if not os.path.isdir(path):
