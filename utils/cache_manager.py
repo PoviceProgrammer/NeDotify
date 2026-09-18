@@ -4,8 +4,10 @@ Manages cover art cache, stream URL cache, and metadata cache with LRU eviction.
 """
 
 import os
+import re
 import shutil
 import time
+import atexit
 import logging
 import threading
 import concurrent.futures
@@ -31,12 +33,21 @@ class CacheManager:
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
         self._active_downloads = set()
         self._active_downloads_lock = threading.Lock()
+        self._purge_lock = threading.Lock()
         self.logger = logging.getLogger("CacheManager")
+        atexit.register(self.shutdown)
 
         # Cached size scanning (Decision 1: rescan <= 1 time per 60s unless forced)
         self._size_cache_lock = threading.Lock()
         self._cached_size_bytes = 0
         self._last_size_scan = 0.0
+
+    def shutdown(self):
+        """Cleanly tear down background cache executor."""
+        try:
+            self._executor.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
 
     @property
     def cache_dir(self) -> str:
@@ -95,12 +106,12 @@ class CacheManager:
         quota_gb = 5
         if self.settings:
             try:
-                quota_gb = int(self.settings.get("storage", "cache_quota_gb", 5))
+                quota_gb = max(0, int(self.settings.get("storage", "cache_quota_gb", 5)))
             except Exception:
                 quota_gb = 5
 
         quota_bytes = quota_gb * 1024 * 1024 * 1024 if quota_gb > 0 else 0
-        used_bytes = self.get_cache_size()
+        used_bytes = max(0, self.get_cache_size())
 
         # Count protected tracks (downloaded or favorites)
         protected_count = 0
@@ -162,106 +173,112 @@ class CacheManager:
         - Purges down to 75% of quota.
         - Updates DB stream_cache & tracks records in the same transaction.
         """
-        if quota_bytes is None:
-            quota_gb = 5
-            if self.settings:
+        with self._purge_lock:
+            if quota_bytes is None:
+                quota_gb = 5
+                if self.settings:
+                    try:
+                        quota_gb = max(0, int(self.settings.get("storage", "cache_quota_gb", 5)))
+                    except Exception:
+                        quota_gb = 5
+                quota_bytes = quota_gb * 1024 * 1024 * 1024 if quota_gb > 0 else 0
+            else:
                 try:
-                    quota_gb = int(self.settings.get("storage", "cache_quota_gb", 5))
+                    quota_bytes = max(0, int(quota_bytes))
                 except Exception:
-                    quota_gb = 5
-            quota_bytes = quota_gb * 1024 * 1024 * 1024 if quota_gb > 0 else 0
+                    quota_bytes = 0
 
-        # If quota is 0 (unlimited) and not forced, no purge needed
-        if quota_bytes == 0 and not force_all_temporary:
-            return 0
+            # If quota is 0 (unlimited) and not forced, no purge needed
+            if quota_bytes == 0 and not force_all_temporary:
+                return 0
 
-        total_used = self.get_cache_size(force_rescan=True)
-        if not force_all_temporary and total_used <= quota_bytes:
-            return 0
+            total_used = self.get_cache_size(force_rescan=True)
+            if not force_all_temporary and total_used <= quota_bytes:
+                return 0
 
-        target_bytes = int(quota_bytes * 0.75) if not force_all_temporary else 0
+            target_bytes = int(quota_bytes * 0.75) if not force_all_temporary else 0
 
-        # Step 1: Query protected file paths and source_ids from database
-        protected_paths = set()
-        protected_sources = set()
-        try:
-            cursor = self.db.conn.cursor()
-            cursor.execute(
-                "SELECT file_path, source, source_id FROM tracks WHERE is_downloaded = 1 OR is_favorite = 1"
-            )
-            for row in cursor.fetchall():
-                fp = row[0]
-                if fp:
-                    protected_paths.add(os.path.normpath(fp).lower())
-                src = row[1]
-                src_id = row[2]
-                if src and src_id:
-                    protected_sources.add(f"{src}_{src_id}".lower())
-        except Exception as e:
-            self.logger.error(f"Error fetching protected tracks: {e}")
+            # Step 1: Query protected file paths and source_ids from database
+            protected_paths = set()
+            protected_sources = set()
+            try:
+                cursor = self.db.conn.cursor()
+                cursor.execute(
+                    "SELECT file_path, source, source_id FROM tracks WHERE is_downloaded = 1 OR is_favorite = 1"
+                )
+                for row in cursor.fetchall():
+                    fp = row[0]
+                    if fp:
+                        protected_paths.add(os.path.normpath(fp).lower())
+                    src = row[1]
+                    src_id = row[2]
+                    if src and src_id:
+                        protected_sources.add(f"{src}_{src_id}".lower())
+            except Exception as e:
+                self.logger.error(f"Error fetching protected tracks: {e}")
 
-        # Step 2: Query active downloads under lock (Decision 2)
-        with self._active_downloads_lock:
-            active_downloads_copy = {d.lower() for d in self._active_downloads}
+            # Step 2: Query active downloads under lock (Decision 2)
+            with self._active_downloads_lock:
+                active_downloads_copy = {d.lower() for d in self._active_downloads}
 
-        # Step 3: Collect purge candidates from streams_dir
-        candidates = []
-        for dirpath, _, filenames in os.walk(self._streams_dir):
-            for f in filenames:
-                fp = os.path.join(dirpath, f)
-                norm_fp = os.path.normpath(fp).lower()
-                base_name = os.path.splitext(f)[0].lower()
+            # Step 3: Collect purge candidates from streams_dir
+            candidates = []
+            for dirpath, _, filenames in os.walk(self._streams_dir):
+                for f in filenames:
+                    fp = os.path.join(dirpath, f)
+                    norm_fp = os.path.normpath(fp).lower()
+                    base_name = os.path.splitext(f)[0].lower()
 
-                # Check if protected
-                if norm_fp in protected_paths:
-                    continue
-                if any(p_src in base_name for p_src in protected_sources):
-                    continue
-                if any(act in base_name for act in active_downloads_copy):
-                    continue
+                    # Check if protected
+                    if norm_fp in protected_paths:
+                        continue
+                    if any(p_src in base_name for p_src in protected_sources):
+                        continue
+                    if any(act in base_name for act in active_downloads_copy):
+                        continue
 
+                    try:
+                        stat = os.stat(fp)
+                        candidates.append((fp, stat.st_mtime, stat.st_size))
+                    except OSError:
+                        pass
+
+            # Sort candidates by mtime ASC (oldest first - LRU)
+            candidates.sort(key=lambda x: x[1])
+
+            deleted_files = []
+            freed_bytes = 0
+
+            for fp, _, size in candidates:
+                if not force_all_temporary and (total_used - freed_bytes) <= target_bytes:
+                    break
                 try:
-                    stat = os.stat(fp)
-                    candidates.append((fp, stat.st_mtime, stat.st_size))
-                except OSError:
-                    pass
+                    os.remove(fp)
+                    freed_bytes += size
+                    deleted_files.append(fp)
+                except OSError as oe:
+                    self.logger.debug(f"Failed to delete {fp}: {oe}")
 
-        # Sort candidates by mtime ASC (oldest first - LRU)
-        candidates.sort(key=lambda x: x[1])
+            # Step 4: Synchronize DB in a single transaction (Decision 3)
+            if deleted_files:
+                try:
+                    with self.db.conn:
+                        for dfp in deleted_files:
+                            self.db.conn.execute(
+                                "UPDATE stream_cache SET cached_file_path = NULL WHERE cached_file_path = ?",
+                                (dfp,)
+                            )
+                            self.db.conn.execute(
+                                "UPDATE tracks SET is_cached = 0, file_path = NULL "
+                                "WHERE file_path = ? AND is_downloaded = 0 AND is_favorite = 0",
+                                (dfp,)
+                            )
+                except Exception as dbe:
+                    self.logger.error(f"Error syncing DB after cache purge: {dbe}")
 
-        deleted_files = []
-        freed_bytes = 0
-
-        for fp, _, size in candidates:
-            if not force_all_temporary and (total_used - freed_bytes) <= target_bytes:
-                break
-            try:
-                os.remove(fp)
-                freed_bytes += size
-                deleted_files.append(fp)
-            except OSError as oe:
-                self.logger.debug(f"Failed to delete {fp}: {oe}")
-
-        # Step 4: Synchronize DB in a single transaction (Decision 3)
-        if deleted_files:
-            try:
-                with self.db.conn:
-                    for dfp in deleted_files:
-                        self.db.conn.execute(
-                            "UPDATE stream_cache SET cached_file_path = NULL WHERE cached_file_path = ?",
-                            (dfp,)
-                        )
-                        self.db.conn.execute(
-                            "UPDATE tracks SET is_cached = 0, file_path = NULL "
-                            "WHERE file_path = ? AND is_downloaded = 0 AND is_favorite = 0",
-                            (dfp,)
-                        )
-            except Exception as dbe:
-                self.logger.error(f"Error syncing DB after cache purge: {dbe}")
-
-        self.mark_cache_dirty()
-        self.logger.info(f"Purged {len(deleted_files)} cached streams, freed {freed_bytes / (1024 * 1024):.2f} MB")
-        return freed_bytes
+            self.mark_cache_dirty()
+            self.logger.info(f"Purged {len(deleted_files)} cached streams, freed {freed_bytes / (1024 * 1024):.2f} MB")
+            return freed_bytes
 
     def enforce_cache_limit(self, max_bytes: Optional[int] = None, max_mb: Optional[float] = None) -> int:
         """Evict least-recently-used stream cache files down to the quota.
@@ -281,7 +298,9 @@ class CacheManager:
 
     def download_audio_stream(self, source: str, source_id: str, url: str):
         """Asynchronously download audio stream to disk with active tracking and LRU enforcement."""
-        download_id = f"{source}_{source_id}"
+        safe_source = re.sub(r'[^\w\-]', '_', str(source or '')).strip('_') or 'unknown'
+        safe_source_id = re.sub(r'[^\w\-]', '_', str(source_id or '')).strip('_') or 'unknown'
+        download_id = f"{safe_source}_{safe_source_id}"
         with self._active_downloads_lock:
             if download_id in self._active_downloads:
                 return
@@ -323,6 +342,8 @@ class CacheManager:
                             self.logger.info(f"Successfully cached {source}/{source_id} to {final_path}")
                             self.db.set_cached_file(source, source_id, final_path)
                             self.mark_cache_dirty()
+            except OSError as oe:
+                self.logger.error(f"Disk or permission error caching {source}/{source_id}: {oe}")
             except Exception as e:
                 self.logger.error(f"Failed to cache {source}/{source_id}: {e}")
             finally:
@@ -358,7 +379,8 @@ class CacheManager:
         if not ext or ext.lower() not in ('.jpg', '.jpeg', '.png', '.webp'):
             ext = '.jpg'
 
-        filepath = os.path.join(self._covers_dir, f"cover_{track_id}{ext}")
+        safe_track_id = re.sub(r'[^\w\-]', '_', str(track_id or '')).strip('_') or 'unknown'
+        filepath = os.path.join(self._covers_dir, f"cover_{safe_track_id}{ext}")
         if os.path.exists(filepath):
             return filepath
 
@@ -374,6 +396,14 @@ class CacheManager:
             os.replace(tmp_path, filepath)
             self.mark_cache_dirty()
             return filepath
+        except (OSError, IOError, ValueError) as oe:
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except OSError:
+                pass
+            self.logger.error(f"Disk or network error downloading cover from {url}: {oe}")
+            return None
         except Exception as e:
             try:
                 if os.path.exists(tmp_path):
