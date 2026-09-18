@@ -32,6 +32,9 @@
 | BUG-029 | BUG | P1 | `services/youtube_service.py` | Артист возвращает None при uploader/channel=None в стриме, сбой парсинга duration в search на строках секунд, промах кэша по video_id и утечка .part файлов | done |
 | BUG-030 | BUG | P1 | `services/vk_service.py`, `core/downloader.py` | Отсутствие нормализации raw ID треков в download_audio_sync/get_stream_url приводит к ошибкам yt-dlp, утечка .part файлов и отсутствие проверки сервиса vk в downloader | done |
 | BUG-031 | BUG | P1 | `services/yandex_service.py` | Неатомарная загрузка повреждает конечный mp3 файл при обрыве сети и парсинг префиксов ya:, yandex:, track: ломает запросы к API | done |
-
-
+| BUG-032 | BUG | P1 | `utils/cache_manager.py` | Уязвимость path traversal в download_id / кэш-файлах, отсутствие блокировки mutex при конкурентном purge_stream_cache, отсутствие обработки disk full / permission errors и отрицательных квот | done |
+| BUG-033 | BUG | P1 | `utils/file_scanner.py` | Необработанные битые симлинки и не-файлы в scan_folder/scan_files, отсутствие нормализации путей (дубликаты в БД) и сбои при поврежденных/отрицательных тегах аудио | done |
+| BUG-034 | BUG | P1 | `services/lyrics_service.py` | Отсутствие парсера LRC таймстемпов, сбои на 1-значных минутах [1:23.45], неразобранные теги [offset: +/-ms] и принятие пустых/пробельных текстов песен | done |
+| BUG-035 | BUG | P1 | `services/artist_service.py` | Падения при null-значениях артистов / не-словарях в ответах, TypeError при сортировке альбомов с null title, необработанные сетевые таймауты и rate limiting | done |
+| BUG-036 | BUG | P1 | `services/lastfm_service.py` | Преждевременный abort при временных таймаутах сети, AttributeError на null-коллекциях, падение при строковых числах и сбой обработки одиночных картинок-словарей | done |
 

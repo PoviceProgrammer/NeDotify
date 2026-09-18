@@ -74,5 +74,23 @@
   - Tests: 127 -> 156 passed (+29 new unit tests, 0 regressions).
   - Backlog items BUG-026, BUG-027, BUG-028, BUG-029, BUG-030, BUG-031 resolved and verified.
 
-
-
+## Cycle 5
+- **Started**: 2026-09-18 07:01
+- **Initial Baseline**: 156 tests passing (pytest).
+- **Goals**:
+  1. Глубокий аудит и защита `utils/cache_manager.py`: предотвращение path traversal в download_id/ключах, мьютекс потокобезопасности при конкурентном `purge_stream_cache`, обработка сбоев диска/прав доступа и отрицательных квот.
+  2. Глубокий аудит `utils/file_scanner.py`: обработка битых симлинков и спец-файлов, кроссплатформенная нормализация путей для исключения дубликатов в БД, валидация поврежденных/отрицательных метаданных ID3/Vorbis.
+  3. Глубокий аудит `services/lyrics_service.py`: парсер LRC таймстемпов, поддержка 1-значных минут `[1:23.45]`, обработка тегов сдвига `[offset: +/-ms]` и отсечение пустых/пробельных текстов песен.
+  4. Глубокий аудит `services/artist_service.py`: устойчивость к null-артистам и не-словарям в ответах, безопасная сортировка альбомов с отсутствующим названием, ретраи при таймаутах сети.
+  5. Глубокий аудит `services/lastfm_service.py`: безопасное преобразование чисел (int/float), обработка коллекций с `None` вместо словарей, поддержка картинок-словарей, fast-fail при пустых аргументах.
+  6. Добавление тестового набора `tests/test_utils_services.py` (19 юнит-тестов).
+- **Commits**:
+  - `2d68192`: fix(utils): harden CacheManager against path traversal, concurrency races, and disk errors
+  - `a2e9433`: fix(utils): normalize scanner file paths, handle broken symlinks, and sanitize audio metadata
+  - `3abdb9b`: fix(services): implement robust LRC parser with offset tag support and validate empty lyrics
+  - `a20448d`: fix(services): handle null artist payloads, safe album title sorting, and network timeout retries
+  - `809ed41`: fix(services): handle malformed numbers, null collections, and empty arguments in LastFMService
+  - `5849284`: test(utils, services): add unit tests for cache, scanner, lyrics, and services
+- **Final Result**:
+  - Tests: 156 -> 175 passed (+19 new unit tests, 0 regressions).
+  - Backlog items BUG-032, BUG-033, BUG-034, BUG-035, BUG-036 resolved and verified.
