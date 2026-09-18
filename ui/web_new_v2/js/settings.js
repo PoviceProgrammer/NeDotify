@@ -31,7 +31,11 @@ const THEMES = [
     { id: 'slate', name: 'Slate', colors: ['#94a3b8', '#0f172a'] }
 ];
 
+let _settingsInitialized = false;
+
 export function initSettings() {
+    if (_settingsInitialized) return;
+    _settingsInitialized = true;
 
     // Backend may push theme changes (theme string) at runtime — re-apply the active theme
     window.addEventListener('nedotify:theme_changed', (e) => {

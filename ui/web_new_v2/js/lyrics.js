@@ -115,7 +115,11 @@ export function adjustLyricsOffset(deltaMs) {
     updateLyricsPosition(lastPosMs);
 }
 
+let _lyricsInitialized = false;
+
 export function initLyrics() {
+    if (_lyricsInitialized) return;
+    _lyricsInitialized = true;
     const btn = document.getElementById('pp-btn-lyrics');
     const closeBtn = document.getElementById('btn-close-lyrics') || document.getElementById('lyrics-close');
     const overlay = document.getElementById('lyrics-overlay');

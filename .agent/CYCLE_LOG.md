@@ -75,3 +75,13 @@
 - **Визуал**: 100% сохранен (мгновенное переключение провайдеров и поиск треков работают безупречно).
 - **Тесты**: 85 python tests + 3 node test suites passed in 7.82s.
 
+## Цикл 8
+- **Задачи**: PERF-021 (Lyrics idempotent init guard), PERF-022 (Library idempotent init guard), PERF-023 (Settings idempotent init guard)
+- **Результаты**:
+  - PERF-021: В `ui/web_new/js/lyrics.js` и `ui/web_new_v2/js/lyrics.js` добавлен флаг `_lyricsInitialized`, исключающий дублирование высокочастотных слушателей `nedotify:position_changed` и `nedotify:track_changed` при смене темы или перезапуске модуля.
+  - PERF-022: В `ui/web_new/js/library.js` и `ui/web_new_v2/js/library.js` добавлен флаг `_libraryInitialized`, предотвращающий повторное навешивание обработчиков клика по карточкам и запуска пакетного скачивания.
+  - PERF-023: В `ui/web_new/js/settings.js` и `ui/web_new_v2/js/settings.js` добавлен флаг `_settingsInitialized`, устраняющий повторную регистрацию десятков слушателей переключателей, ползунков и события `nedotify:theme_changed`.
+- **Визуал**: 100% сохранен (тексты синхронизируются плавно, библиотека и настройки работают быстро и стабильно).
+- **Тесты**: 85 python tests + 3 node test suites passed in 7.90s.
+
+

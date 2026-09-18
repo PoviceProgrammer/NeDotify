@@ -5,8 +5,11 @@ import { getCurrentTrack } from './player.js';
 let currentContextTrack = null;
 
 let currentActiveTracks = [];
+let _libraryInitialized = false;
 
 export function initLibrary() {
+    if (_libraryInitialized) return;
+    _libraryInitialized = true;
     // Top card click handlers
     const favCard = document.getElementById('lib-card-favorites');
     if (favCard) {
