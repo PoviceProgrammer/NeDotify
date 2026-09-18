@@ -46,9 +46,9 @@
 | BUG-043 | BUG | P2 | `core/session.py` | `restore_session` не сбрасывает `file_path` и `resolved_at` для онлайн-треков Spotify и Yandex | done |
 | BUG-044 | BUG | P2 | `core/services/discord_rpc.py` | Несинхронизированный метод `stop()` допускает состояние гонки с активными потоками подключения | done |
 | BUG-045 | BUG | P2 | `services/lufs_scanner.py` | Неосвобождаемое соединение SQLite потока сканера и сырые UPDATE без `_write_lock` | done |
-| BUG-046 | BUG | P1 | `core/services/recommendation.py` | `TypeError` в `RecommendationEngine` при `None` в признаках трека (`bpm`, `energy`, `mood`, `acoustics`, `bass`, `global_streams`, `viral_velocity`) или полях профиля (`subscriptions`, `history`, `favorites`, `skips`, `repeats`), и `KeyError` при отсутствии `id` | todo |
-| BUG-047 | BUG | P1 | `services/recommendation_service.py` | `_format_ui_track` возвращает пустой dict для `sqlite3.Row` / tuple объектов, отсекает валидные `vk` и `spotify` источники, а `get_flow_tracks_sync` вызывает асинхронный метод `get_wave_for_track` без возврата значений | todo |
-| TEST-048 | TEST | P1 | `tests/test_recommendation_services.py` | Отсутствует изолированный набор тестов для `RecommendationEngine` и `RecommendationService` (экстремальные значения, None атрибуты, fallbacks) | todo |
-| TEST-049 | TEST | P2 | `tests/test_plugins.py` | Отсутствует модуль тестов для `core/plugins.py` (PluginManager, opt-in флаг, изоляция, teardown, ошибки синтаксиса) | todo |
-| TEST-050 | TEST | P2 | `tests/test_stream_resolver.py` | Отсутствует модуль тестов для `core/resolver.py` (StreamResolver single-flight de-duplication, memory LRU eviction, expiration parsing) | todo |
+| BUG-046 | BUG | P1 | `core/services/recommendation.py` | `TypeError` в `RecommendationEngine` при `None` в признаках трека (`bpm`, `energy`, `mood`, `acoustics`, `bass`, `global_streams`, `viral_velocity`) или полях профиля (`subscriptions`, `history`, `favorites`, `skips`, `repeats`), и `KeyError` при отсутствии `id` | done |
+| BUG-047 | BUG | P1 | `services/recommendation_service.py` | `_format_ui_track` возвращает пустой dict для `sqlite3.Row` / tuple объектов, отсекает валидные `vk` и `spotify` источники, а `get_flow_tracks_sync` вызывает асинхронный метод `get_wave_for_track` без возврата значений | done |
+| TEST-048 | TEST | P1 | `tests/test_recommendation_services.py` | Отсутствует изолированный набор тестов для `RecommendationEngine` и `RecommendationService` (экстремальные значения, None атрибуты, fallbacks) | done |
+| TEST-049 | TEST | P2 | `tests/test_plugins.py` | Отсутствует модуль тестов для `core/plugins.py` (PluginManager, opt-in флаг, изоляция, teardown, ошибки синтаксиса) | done |
+| TEST-050 | TEST | P2 | `tests/test_stream_resolver.py` | Отсутствует модуль тестов для `core/resolver.py` (StreamResolver single-flight de-duplication, memory LRU eviction, expiration parsing) | done |
 

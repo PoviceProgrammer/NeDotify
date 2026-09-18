@@ -23,4 +23,8 @@
 | `services/lyrics_service.py` | Тексты песен, парсинг LRC, offset теги, Genius fallback | `test_utils_services.py` |
 | `utils/cache_manager.py` | LRU дисковый кэш треков и обложек, защита от traversal | `test_utils_services.py`, `test_audit_regressions.py` |
 | `utils/file_scanner.py` | Сканер локальных аудиофайлов, нормализация путей | `test_utils_services.py`, `test_audit_regressions.py` |
+| `core/plugins.py` | Менеджер плагинов, динамическая загрузка, изоляция | `test_plugins.py` |
+| `core/resolver.py` | Координатор резолва потоков, single-flight дедупликация, LRU кэш | `test_stream_resolver.py` |
+| `core/services/recommendation.py` | Движок рекомендаций RecommendationEngine, контекстные миксы | `test_recommendation_services.py` |
+| `services/recommendation_service.py` | Рекомендательный сервис RecommendationService, Smart Feed, Flow | `test_recommendation_services.py` |
 | `ui/web_new_v2/` | Интерфейс плеера, шрифты, частицы, настройки, профиль артиста и табы дискографии | `test_visual_ui.py`, `test_particles_m1.py`, `test_fonts_m2.py`, `test_player_tab_m3.py` |

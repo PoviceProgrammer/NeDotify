@@ -2,9 +2,10 @@
 
 ## Current State
 - **Cycle**: 8
-- **Status**: in-progress
+- **Status**: done
 - **Branch**: `agent/continuous-improvement`
-- **Last Green Commit**: `104a2ec` (`fix(core, tests): strengthen instance lock cmdline detection and UI stress readiness`)
-- **Current Step**: C/D (Cycle 8: Fixes & Unit Tests for Recommendation, Plugins & Stream Resolver)
-- **Next Step**: Reproduce and fix BUG-046 and BUG-047, and add TEST-048, TEST-049, TEST-050
+- **Last Green Commit**: `8e125fa` (`test(core): add unit tests for StreamResolver single-flight de-duplication and LRU eviction`)
+- **Current Step**: Stopping Condition Check (Section 7.1)
+- **Next Step**: Await user selection from FEATURE_REQUESTS.md
+
 

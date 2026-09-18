@@ -154,3 +154,25 @@
   - Tests: All 210 tests passing cleanly (`pytest -q`), including all 13 UI adversarial tests and 10 lifecycle stability tests.
   - Backlog items BUG-038 to BUG-045 resolved and verified.
 
+## Cycle 8
+- **Started**: 2026-09-18 07:54
+- **Initial Baseline**: 210 tests passing.
+- **Goals**:
+  1. Исправить `TypeError` в `RecommendationEngine` (`core/services/recommendation.py`) при `None` или строковых значениях аудио-признаков (`bpm`, `energy`, `mood`, `acoustics`, `bass`, `global_streams`, `viral_velocity`), полях профиля (`subscriptions`, `history`, `favorites`, `skips`, `repeats`) и `KeyError` при отсутствии ключа `id`.
+  2. Исправить `_format_ui_track` в `services/recommendation_service.py` для извлечения метаданных из объектов `sqlite3.Row` и mapping-типов (ранее возвращался пустой словарь `{}`).
+  3. Расширить разрешенные источники стриминга в рекомендациях (`ALLOWED_RECOMMENDATION_SOURCES`), включив поддержку источников `vk`, `spotify` и `yandex`.
+  4. Защитить метод `get_wave_for_track` от падения при `seed_track: None` или не-словаре.
+  5. Создать изолированный набор тестов `tests/test_recommendation_services.py` (10 тестов) для `RecommendationEngine` и `RecommendationService`.
+  6. Создать изолированный набор тестов `tests/test_plugins.py` (6 тестов) для `PluginManager` (`core/plugins.py`).
+  7. Создать изолированный набор тестов `tests/test_stream_resolver.py` (6 тестов) для `StreamResolver` (`core/resolver.py`).
+- **Commits**:
+  - `4c775b0`: fix(services): handle None values and missing track attributes in RecommendationEngine
+  - `210e58d`: fix(services): support sqlite3.Row and allow all valid stream sources in RecommendationService
+  - `32a79db`: test(services): add comprehensive unit test suite for RecommendationEngine and RecommendationService
+  - `cc448bf`: test(core): add unit tests for PluginManager discovery, isolation, and teardown
+  - `8e125fa`: test(core): add unit tests for StreamResolver single-flight de-duplication and LRU eviction
+- **Final Result**:
+  - Tests: 210 -> 232 passed (+22 new tests, 0 regressions).
+  - Fast unit tests pass in 2.73s, full suite in 48.59s.
+  - Backlog items BUG-046, BUG-047, TEST-048, TEST-049, TEST-050 resolved and verified.
+
