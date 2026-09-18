@@ -43,6 +43,7 @@ class TestCacheManagerUnit(unittest.TestCase):
         malicious_id = "passwd"
         url = "https://example.com/audio.mp3"
 
+        self.cm._get_executor()
         with patch.object(self.cm._executor, "submit") as mock_submit:
             self.cm.download_audio_stream(malicious_source, malicious_id, url)
             for call_args in mock_submit.call_args_list:
@@ -264,6 +265,38 @@ class TestLyricsServiceUnit(unittest.TestCase):
         with patch.object(self.svc, "_open_url", return_value=mock_resp):
             res = self.svc._fetch_genius("Track", "Artist")
             self.assertIsNone(res)
+
+    def test_lyrics_clean_track_and_artist_youtube_junk(self):
+        """Verify cleaning of YouTube junk, VEVO channels, and embedded artist names."""
+        # 1. YouTube VEVO channel and junk title
+        t, a = self.svc._clean_track_and_artist("In The End (Official HD Video)", "LinkinParkVEVO")
+        self.assertEqual(t.lower(), "in the end")
+        self.assertEqual(a.lower(), "linkin park")
+
+        # 2. Artist - Title split from title
+        t2, a2 = self.svc._clean_track_and_artist("Queen - Bohemian Rhapsody (Remastered 2011)", "")
+        self.assertEqual(t2.lower(), "bohemian rhapsody")
+        self.assertEqual(a2.lower(), "queen")
+
+        # 3. Topic channel suffix
+        t3, a3 = self.svc._clean_track_and_artist("Starboy", "The Weeknd - Topic")
+        self.assertEqual(t3.lower(), "starboy")
+        self.assertEqual(a3.lower(), "the weeknd")
+
+    def test_lyrics_score_candidate_matching_and_duration(self):
+        """Verify candidate scoring differentiates exact matches, wrong artists, and different durations."""
+        # Exact match with exact duration
+        exact = self.svc._score_candidate("Numb", "Linkin Park", 187, "Numb", "Linkin Park", 186)
+        self.assertGreaterEqual(exact, 0.90)
+
+        # Same title but completely different artist (e.g. Usher vs Linkin Park)
+        wrong_artist = self.svc._score_candidate("Numb", "Linkin Park", 187, "Numb", "Usher", 230)
+        self.assertLess(wrong_artist, 0.50)
+
+        # Same artist and title but live/extended cut with huge duration mismatch (e.g. 187s vs 350s)
+        wrong_dur = self.svc._score_candidate("Numb", "Linkin Park", 187, "Numb", "Linkin Park", 350)
+        self.assertLess(wrong_dur, exact)
+        self.assertLess(wrong_dur, 0.70)
 
 
 class TestArtistServiceUnit(unittest.TestCase):

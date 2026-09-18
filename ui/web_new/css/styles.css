@@ -4105,30 +4105,26 @@ html.slider-type-wave .volume-fill {
 
 /* 5. Queue Position */
 html.queue-pos-left #queue-drawer {
-    left: 0 !important;
+    left: 24px !important;
     right: auto !important;
-    top: 0 !important;
-    bottom: 0 !important;
-    width: 380px !important;
-    border-right: 1px solid rgba(255,255,255,0.1);
-    background: color-mix(in srgb, var(--bg-main) 95%, transparent) !important;
-    transform: translateX(-100%) !important;
+    border: 1px solid rgba(255,255,255,0.14) !important;
+    border-radius: 16px !important;
+    background: rgba(18, 14, 24, 0.65) !important;
+    backdrop-filter: blur(30px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(30px) saturate(180%) !important;
+    box-shadow: 0 20px 48px rgba(0,0,0,0.65), 0 0 24px rgba(244, 63, 94, 0.08) !important;
 }
-html.queue-pos-left #queue-drawer.visible,
-html.queue-pos-left #queue-drawer.open { transform: translateX(0) !important; }
 
 html.queue-pos-right #queue-drawer {
-    right: 0 !important;
+    right: 24px !important;
     left: auto !important;
-    top: 0 !important;
-    bottom: 0 !important;
-    width: 380px !important;
-    border-left: 1px solid rgba(255,255,255,0.1);
-    background: color-mix(in srgb, var(--bg-main) 95%, transparent) !important;
-    transform: translateX(100%) !important;
+    border: 1px solid rgba(255,255,255,0.14) !important;
+    border-radius: 16px !important;
+    background: rgba(18, 14, 24, 0.65) !important;
+    backdrop-filter: blur(30px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(30px) saturate(180%) !important;
+    box-shadow: 0 20px 48px rgba(0,0,0,0.65), 0 0 24px rgba(244, 63, 94, 0.08) !important;
 }
-html.queue-pos-right #queue-drawer.visible,
-html.queue-pos-right #queue-drawer.open { transform: translateX(0) !important; }
 
 /* 6. Queue View Mode */
 html.queue-view-expanded #queue-drawer-content .track-item {
@@ -4452,42 +4448,150 @@ button:active, .icon-btn:active, .play-btn:active {
 /* 5. QUEUE DRAWER */
 #queue-drawer {
     position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 90px; /* above playback bar */
-    width: 350px;
-    background: rgba(18, 18, 18, 0.85);
-    backdrop-filter: blur(30px);
-    border-left: 1px solid rgba(255, 255, 255, 0.05);
-    transform: translateX(100%);
-    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    bottom: calc(var(--player-bar-height, 90px) + 16px);
+    right: 24px;
+    width: 360px;
+    max-height: 500px;
+    background: rgba(18, 14, 24, 0.65);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.65), 0 0 24px rgba(244, 63, 94, 0.08);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(12px) scale(0.98);
+    transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     z-index: 1000;
     display: flex;
     flex-direction: column;
-    box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+    overflow: hidden;
 }
 
+#queue-drawer.active,
 #queue-drawer.open {
-    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
 }
 
 #queue-drawer-header {
-    padding: 20px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    font-weight: 700;
+    font-size: 15px;
+    color: #ffffff;
+    flex-shrink: 0;
 }
 
 #queue-drawer-header h2 {
     margin: 0;
-    font-size: 18px;
+    font-size: 15px;
+    font-weight: 700;
+    color: inherit;
+}
+
+#queue-drawer-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.6);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+#queue-drawer-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
 }
 
 #queue-drawer-content {
     flex: 1;
     overflow-y: auto;
-    padding: 10px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 120px;
+}
+
+#queue-drawer-content .empty-state {
+    padding: 40px 16px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+}
+
+#queue-drawer-content .track-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.02);
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s;
+    user-select: none;
+    position: relative;
+}
+
+#queue-drawer-content .track-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateX(2px);
+}
+
+#queue-drawer-content .track-item.playing {
+    background: linear-gradient(90deg, rgba(244, 63, 94, 0.22), rgba(255, 255, 255, 0.04));
+    border-color: rgba(244, 63, 94, 0.4);
+}
+
+#queue-drawer-content .track-item.dragging {
+    opacity: 0.45;
+    transform: scale(0.97);
+    cursor: grabbing !important;
+}
+
+#queue-drawer-content .track-item.drag-over-top {
+    border-top: 2px solid var(--primary, #f43f5e) !important;
+    box-shadow: 0 -2px 10px rgba(244, 63, 94, 0.7);
+}
+
+#queue-drawer-content .track-item.drag-over-bottom {
+    border-bottom: 2px solid var(--primary, #f43f5e) !important;
+    box-shadow: 0 2px 10px rgba(244, 63, 94, 0.7);
+}
+
+#queue-drawer-content .track-item .queue-item-remove {
+    opacity: 0;
+    transition: opacity 0.2s ease, color 0.15s ease;
+    padding: 4px;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+#queue-drawer-content .track-item:hover .queue-item-remove {
+    opacity: 1;
+}
+
+#queue-drawer-content .track-item .queue-item-remove:hover {
+    color: #f43f5e;
+    background: rgba(244, 63, 94, 0.15);
 }
 
 /* 6. KARAOKE LYRICS OVERLAY */

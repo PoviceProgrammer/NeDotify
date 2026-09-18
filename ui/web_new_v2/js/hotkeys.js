@@ -13,6 +13,22 @@ export const DEFAULT_KEYBINDS = [
     { id: 'like', label: 'Нравится трек', defaultKey: 'KeyK' }
 ];
 
+export const ACTION_ALIASES = {
+    'mute': 'toggle_mute',
+    'favorite': 'like',
+    'next': 'next_track',
+    'prev': 'prev_track'
+};
+
+const CYRILLIC_TO_CODE = {
+    'й': 'KeyQ', 'ц': 'KeyW', 'у': 'KeyE', 'к': 'KeyR', 'е': 'KeyT', 'н': 'KeyY', 'г': 'KeyU', 'ш': 'KeyI', 'щ': 'KeyO', 'з': 'KeyP',
+    'х': 'BracketLeft', 'ъ': 'BracketRight',
+    'ф': 'KeyA', 'ы': 'KeyS', 'в': 'KeyD', 'а': 'KeyF', 'п': 'KeyG', 'р': 'KeyH', 'о': 'KeyJ', 'л': 'KeyK', 'д': 'KeyL',
+    'ж': 'Semicolon', 'э': 'Quote',
+    'я': 'KeyZ', 'ч': 'KeyX', 'с': 'KeyC', 'м': 'KeyV', 'и': 'KeyB', 'т': 'KeyN', 'ь': 'KeyM', 'б': 'Comma', 'ю': 'Period',
+    'ё': 'Backquote', '.': 'Slash'
+};
+
 export const activeKeybinds = {};
 let listeningKeybindId = null;
 
@@ -37,8 +53,19 @@ export function parseKeyEventCombo(e) {
     if (e.shiftKey) parts.push('Shift');
     if (e.metaKey) parts.push('Meta');
 
-    let keyName = e.code || e.key;
-    if (keyName === ' ' || e.key === ' ') keyName = 'Space';
+    let keyName = e.code || '';
+    if (!keyName || keyName === 'Unidentified') {
+        const kLow = (e.key || '').toLowerCase();
+        if (CYRILLIC_TO_CODE[kLow]) {
+            keyName = CYRILLIC_TO_CODE[kLow];
+        } else if (/^[a-z]$/i.test(e.key)) {
+            keyName = 'Key' + e.key.toUpperCase();
+        } else {
+            keyName = e.key;
+        }
+    }
+
+    if (keyName === ' ' || e.key === ' ' || e.key === 'Spacebar') keyName = 'Space';
     if (keyName === '/' || e.key === '/') keyName = 'Slash';
     
     // Ignore standalone modifier keypresses
@@ -56,17 +83,22 @@ export function initHotkeys() {
         activeKeybinds[kb.id] = kb.defaultKey;
     });
 
+    const KNOWN_ACTIONS = new Set(DEFAULT_KEYBINDS.map(kb => kb.id));
+
     // 2. Load local storage fallback
     const localSaved = localStorage.getItem('nedotify_keybinds');
     if (localSaved) {
-        try { Object.assign(activeKeybinds, JSON.parse(localSaved)); } catch(e) {}
+        try {
+            const parsed = JSON.parse(localSaved);
+            for (let [actionId, key] of Object.entries(parsed)) {
+                if (ACTION_ALIASES[actionId]) actionId = ACTION_ALIASES[actionId];
+                if (KNOWN_ACTIONS.has(actionId)) activeKeybinds[actionId] = key;
+            }
+        } catch(e) {}
     }
-    // Migrate legacy defaults: bare arrow keys hijacked list/navigation,
-    // they are now Ctrl-modified.
+
+    // Migrate legacy arrow defaults
     const LEGACY_ARROW_MAP = { ArrowRight: 'Ctrl+ArrowRight', ArrowLeft: 'Ctrl+ArrowLeft', ArrowUp: 'Ctrl+ArrowUp', ArrowDown: 'Ctrl+ArrowDown' };
-    // Migrate OLD backend-default formats that used to leak into storage and
-    // shadow the current defaults ("like" was stuck at Ctrl+KeyK, so plain K
-    // never fired). null = drop the entry entirely (action no longer exists).
     const LEGACY_DEFAULT_MIGRATION = {
         'Ctrl+Right': 'Ctrl+ArrowRight', 'Ctrl+Left': 'Ctrl+ArrowLeft',
         'Ctrl+Up': 'Ctrl+ArrowUp', 'Ctrl+Down': 'Ctrl+ArrowDown',
@@ -74,7 +106,7 @@ export function initHotkeys() {
         'Ctrl+M': 'KeyM', 'Ctrl+L': 'KeyK', 'Ctrl+F': 'Slash',
         'Ctrl+KeyO': null, 'Ctrl+O': null
     };
-    const KNOWN_ACTIONS = new Set(DEFAULT_KEYBINDS.map(kb => kb.id));
+
     let migrated = false;
     for (const [oldK, newK] of Object.entries(LEGACY_ARROW_MAP)) {
         for (const [actionId, key] of Object.entries(activeKeybinds)) {
@@ -88,22 +120,19 @@ export function initHotkeys() {
             else { activeKeybinds[actionId] = newK; }
             migrated = true;
         } else if (!KNOWN_ACTIONS.has(actionId)) {
-            // Ghost entries for actions that no longer exist (e.g. toggle_overlay).
             delete activeKeybinds[actionId];
             migrated = true;
         }
     }
     if (migrated) saveKeybindsToStorage(activeKeybinds);
 
-    // 3. Load backend keybinds category settings.
-    // Only accept KNOWN actions: the backend must never inject ghost entries
-    // (an old "toggle_overlay" default used to linger here forever) and must
-    // not shadow the defaults for actions it does not know about.
+    // 3. Load backend keybinds category settings
     if (window.pywebview?.api?.get_settings_by_category) {
         window.pywebview.api.get_settings_by_category('hotkeys').then(saved => {
             if (saved && typeof saved === 'object') {
                 let backendApplied = false;
-                for (const [actionId, key] of Object.entries(saved)) {
+                for (let [actionId, key] of Object.entries(saved)) {
+                    if (ACTION_ALIASES[actionId]) actionId = ACTION_ALIASES[actionId];
                     if (KNOWN_ACTIONS.has(actionId) && typeof key === 'string' && key) {
                         if (activeKeybinds[actionId] !== key) backendApplied = true;
                         activeKeybinds[actionId] = key;
@@ -117,7 +146,7 @@ export function initHotkeys() {
         });
     }
 
-    // SINGLE AUTHORITATIVE GLOBAL KEYDOWN LISTENER (Eliminates double toggle on Space)
+    // SINGLE AUTHORITATIVE GLOBAL KEYDOWN LISTENER
     window.addEventListener('keydown', (e) => {
         // Rebinding Mode inside Settings UI
         if (listeningKeybindId) {
@@ -161,10 +190,22 @@ export function initHotkeys() {
         const pressedCombo = parseKeyEventCombo(e);
         if (!pressedCombo) return;
 
-        // Exact combo match against active keybinds
+        // Cyrillic layout fallback check
+        const cyrKey = (e.key || '').toLowerCase();
+        const cyrCode = CYRILLIC_TO_CODE[cyrKey];
+        const parts = [];
+        if (e.ctrlKey) parts.push('Ctrl');
+        if (e.altKey) parts.push('Alt');
+        if (e.shiftKey) parts.push('Shift');
+        if (e.metaKey) parts.push('Meta');
+        const altCyrCombo = cyrCode ? [...parts, cyrCode].join('+') : null;
+
+        // Check against active keybinds
         for (const [actionId, key] of Object.entries(activeKeybinds)) {
-            const isMatch = (key === pressedCombo) || 
-                            (key === 'Space' && (pressedCombo === 'Space' || e.code === 'Space' || e.key === ' '));
+            const isMatch = (key === pressedCombo) ||
+                            (altCyrCombo && key === altCyrCombo) ||
+                            (key.toLowerCase() === pressedCombo.toLowerCase()) ||
+                            (key === 'Space' && (pressedCombo === 'Space' || e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar'));
             if (isMatch) {
                 e.preventDefault();
                 executeHotkeysAction(actionId);
@@ -180,19 +221,35 @@ export function executeHotkeysAction(actionId) {
             togglePlayPause();
             break;
         case 'next_track':
+        case 'next':
             if (window.pywebview?.api?.next_track) window.pywebview.api.next_track();
             break;
         case 'prev_track':
+        case 'prev':
             if (window.pywebview?.api?.prev_track) window.pywebview.api.prev_track();
             break;
         case 'volume_up':
             if (window.NeDotify?.adjustVolume) {
                 window.NeDotify.adjustVolume(5);
+            } else {
+                const slider = document.getElementById('pb-volume-slider');
+                if (slider) {
+                    slider.value = Math.min(100, (parseInt(slider.value, 10) || 70) + 5);
+                    slider.dispatchEvent(new Event('input', { bubbles: true }));
+                    slider.dispatchEvent(new Event('change', { bubbles: true }));
+                }
             }
             break;
         case 'volume_down':
             if (window.NeDotify?.adjustVolume) {
                 window.NeDotify.adjustVolume(-5);
+            } else {
+                const slider = document.getElementById('pb-volume-slider');
+                if (slider) {
+                    slider.value = Math.max(0, (parseInt(slider.value, 10) || 70) - 5);
+                    slider.dispatchEvent(new Event('input', { bubbles: true }));
+                    slider.dispatchEvent(new Event('change', { bubbles: true }));
+                }
             }
             break;
         case 'toggle_mute':
@@ -201,13 +258,24 @@ export function executeHotkeysAction(actionId) {
             if (volBtn) volBtn.click();
             break;
         case 'like':
-            const btnLike = document.getElementById('pp-btn-like') || document.getElementById('btn-like');
+        case 'favorite':
+            const btnLike = document.getElementById('pb-btn-like') ||
+                            document.getElementById('pp-btn-like') ||
+                            document.getElementById('mp-btn-like');
             if (btnLike) btnLike.click();
             break;
-        case 'toggle_lyrics':
-            const lyricsBtn = document.getElementById('pp-btn-lyrics');
-            if (lyricsBtn) lyricsBtn.click();
+        case 'toggle_lyrics': {
+            const overlay = document.getElementById('lyrics-overlay');
+            if (overlay && overlay.classList.contains('active')) {
+                const closeBtn = document.getElementById('btn-close-lyrics');
+                if (closeBtn) closeBtn.click();
+                else overlay.classList.remove('active');
+            } else {
+                const lyricsBtn = document.getElementById('pp-btn-lyrics');
+                if (lyricsBtn) lyricsBtn.click();
+            }
             break;
+        }
         case 'toggle_mini':
             if (window.NeDotify?.toggleMiniPlayerMode) {
                 window.NeDotify.toggleMiniPlayerMode();

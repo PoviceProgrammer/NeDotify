@@ -122,8 +122,12 @@ DEFAULT_SETTINGS = {
         "prev_track": "Ctrl+ArrowLeft",
         "volume_up": "Ctrl+ArrowUp",
         "volume_down": "Ctrl+ArrowDown",
+        "toggle_mute": "KeyM",
         "mute": "KeyM",
+        "toggle_lyrics": "KeyL",
+        "toggle_mini": "KeyP",
         "like": "KeyK",
+        "favorite": "KeyK",
         "search": "Slash",
     },
     "storage": {
