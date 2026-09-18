@@ -1,20 +1,37 @@
+let _blurIo = null;
+let _blurMo = null;
+let _blurScanFn = null;
+
 export function initBlurObserver() {
     // C-5: heavy backdrop-filter disabled on offscreen glass cards (IntersectionObserver)
     if (!('IntersectionObserver' in window)) return;
     if (document.documentElement.classList.contains('perf-low')) return;
 
+    if (_blurIo) {
+        _blurIo.disconnect();
+        _blurIo = null;
+    }
+    if (_blurMo) {
+        _blurMo.disconnect();
+        _blurMo = null;
+    }
+    if (_blurScanFn) {
+        window.removeEventListener('nedotify:app_ready', _blurScanFn);
+        _blurScanFn = null;
+    }
+
     const selector = '.card, .glass-panel, .player-glass-card, .settings-modal-card';
 
-    const io = new IntersectionObserver((entries) => {
+    _blurIo = new IntersectionObserver((entries) => {
         for (const entry of entries) {
             entry.target.classList.toggle('blur-out', !entry.isIntersecting);
         }
     }, { rootMargin: '150px 0px', threshold: 0 });
 
     const observeEl = (el) => {
-        if (el && el.nodeType === 1 && !el._blurObserved) {
+        if (el && el.nodeType === 1 && !el._blurObserved && _blurIo) {
             el._blurObserved = true;
-            io.observe(el);
+            _blurIo.observe(el);
         }
     };
 
@@ -32,9 +49,10 @@ export function initBlurObserver() {
         const container = document.getElementById('views-container') || document.body;
         scanElement(container);
     };
+    _blurScanFn = scan;
 
     // Process mutations checking addedNodes instead of unconditional querySelectorAll over document.body
-    const observer = new MutationObserver((mutationsList) => {
+    _blurMo = new MutationObserver((mutationsList) => {
         for (const mutation of mutationsList) {
             if (mutation.addedNodes && mutation.addedNodes.length > 0) {
                 for (let i = 0; i < mutation.addedNodes.length; i++) {
@@ -48,7 +66,7 @@ export function initBlurObserver() {
     });
 
     const targetContainer = document.getElementById('views-container') || document.body;
-    observer.observe(targetContainer, { childList: true, subtree: true });
+    _blurMo.observe(targetContainer, { childList: true, subtree: true });
 
     scan();
     window.addEventListener('nedotify:app_ready', scan);

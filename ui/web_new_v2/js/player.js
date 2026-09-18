@@ -1127,6 +1127,9 @@ export function initPlayer() {
 }
 
 let lastProgressFrame = 0;
+let _lastTimeStr = '';
+let _lastAriaNow = '';
+let _lastTxVal = '';
 
 // Pre-cache progress DOM elements once (avoids getElementById on every frame)
 const _prog = {};
@@ -1135,6 +1138,9 @@ function _getProgEls() {
         _prog.pbFill   = document.getElementById('pb-progress-fill');
         _prog.ppFill   = document.getElementById('pp-progress-fill');
         _prog.mpFill   = document.getElementById('mp-progress-fill');
+        _prog.pbTrack  = document.getElementById('pb-progress-track');
+        _prog.ppTrack  = document.getElementById('pp-progress-track');
+        _prog.mpTrack  = document.getElementById('mp-progress-track');
         _prog.pbTime   = document.getElementById('pb-time-current');
         _prog.ppTime   = document.getElementById('pp-time-current');
         _prog.mpTime   = document.getElementById('mp-time-current');
@@ -1157,7 +1163,10 @@ function animateProgress(timestamp) {
         animFrameId = null;
         return;
     }
-    if (document.hidden) return;
+    if (document.hidden) {
+        animFrameId = null;
+        return;
+    }
     animFrameId = requestAnimationFrame(animateProgress);
 
     // Throttle progress bar updates to target UI FPS
@@ -1173,25 +1182,31 @@ function animateProgress(timestamp) {
             const pct = Math.max(0, Math.min(100, (currentPosMs / currentDuration) * 100));
             if (!isFinite(pct)) return;
 
-            const timeStr  = formatTime(currentPosMs / 1000);
             const els = _getProgEls();
 
             const txVal = `translateX(${pct - 100}%)`;
-            if (els.pbFill) els.pbFill.style.transform = txVal;
-            if (els.ppFill) els.ppFill.style.transform = txVal;
-            if (els.mpFill) els.mpFill.style.transform = txVal;
-            if (!els.pbTrack) {
-                els.pbTrack = document.getElementById('pb-progress-track');
-                els.ppTrack = document.getElementById('pp-progress-track');
-                els.mpTrack = document.getElementById('mp-progress-track');
+            if (txVal !== _lastTxVal) {
+                _lastTxVal = txVal;
+                if (els.pbFill) els.pbFill.style.transform = txVal;
+                if (els.ppFill) els.ppFill.style.transform = txVal;
+                if (els.mpFill) els.mpFill.style.transform = txVal;
             }
+
             const ariaNow = pct.toFixed(1);
-            if (els.pbTrack) els.pbTrack.setAttribute('aria-valuenow', ariaNow);
-            if (els.ppTrack) els.ppTrack.setAttribute('aria-valuenow', ariaNow);
-            if (els.mpTrack) els.mpTrack.setAttribute('aria-valuenow', ariaNow);
-            if (els.pbTime) els.pbTime.textContent = timeStr;
-            if (els.ppTime) els.ppTime.textContent = timeStr;
-            if (els.mpTime) els.mpTime.textContent = timeStr;
+            if (ariaNow !== _lastAriaNow) {
+                _lastAriaNow = ariaNow;
+                if (els.pbTrack) els.pbTrack.setAttribute('aria-valuenow', ariaNow);
+                if (els.ppTrack) els.ppTrack.setAttribute('aria-valuenow', ariaNow);
+                if (els.mpTrack) els.mpTrack.setAttribute('aria-valuenow', ariaNow);
+            }
+
+            const timeStr = formatTime(currentPosMs / 1000);
+            if (timeStr !== _lastTimeStr) {
+                _lastTimeStr = timeStr;
+                if (els.pbTime) els.pbTime.textContent = timeStr;
+                if (els.ppTime) els.ppTime.textContent = timeStr;
+                if (els.mpTime) els.mpTime.textContent = timeStr;
+            }
 
             // Waveform scrubber update
             renderWaveforms(pct / 100);
@@ -1984,17 +1999,19 @@ function generatePseudoWaveform(track) {
     return peaks;
 }
 
+let _pbWfCanvas = null;
+let _ppWfCanvas = null;
 export function renderWaveforms(progressPct = 0) {
     if (!isWaveformScrubberActive || !currentWaveformData) return;
     
-    const pbCanvas = document.getElementById('pb-waveform-canvas');
-    const ppCanvas = document.getElementById('pp-waveform-canvas');
+    if (!_pbWfCanvas) _pbWfCanvas = document.getElementById('pb-waveform-canvas');
+    if (!_ppWfCanvas) _ppWfCanvas = document.getElementById('pp-waveform-canvas');
     
-    if (pbCanvas && !pbCanvas.classList.contains('hidden')) {
-        drawWaveformToCanvas(pbCanvas, currentWaveformData, progressPct);
+    if (_pbWfCanvas && !_pbWfCanvas.classList.contains('hidden')) {
+        drawWaveformToCanvas(_pbWfCanvas, currentWaveformData, progressPct);
     }
-    if (ppCanvas && !ppCanvas.classList.contains('hidden')) {
-        drawWaveformToCanvas(ppCanvas, currentWaveformData, progressPct);
+    if (_ppWfCanvas && !_ppWfCanvas.classList.contains('hidden')) {
+        drawWaveformToCanvas(_ppWfCanvas, currentWaveformData, progressPct);
     }
 }
 

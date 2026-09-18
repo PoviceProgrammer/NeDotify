@@ -22,3 +22,13 @@
 - **Визуал**: 100% сохранен (без изменений CSS/шейдеров/качества анимаций).
 - **Тесты**: 62 passed in 7.79s (services unit + particles + adversarial stress).
 
+## Цикл 2
+- **Задачи**: PERF-004 (Player progress bar DOM updates & hidden fix), PERF-005 (Efficiency MutationObserver leak fix), PERF-006 (SQLite cache_size memory tuning)
+- **Результаты**:
+  - PERF-004: Сброс `animFrameId = null` при уходе вкладки в скрытое состояние устранил баг залипания прогресс-бара; кэширование значений времени и aria-valuenow устранило до 42 избыточных мутаций DOM в секунду на 15 FPS; кэширование холстов waveforms исключило `getElementById` на каждом тике.
+  - PERF-005: Добавлены ссылки модуля и отключение старых `IntersectionObserver` / `MutationObserver` / слушателя `nedotify:app_ready` при повторном вызове `initBlurObserver`, предотвращая утечку наблюдателей DOM.
+  - PERF-006: `PRAGMA cache_size` оптимизирован с 8MB (-8000) до 2MB (-2000), сэкономив 6MB оперативной памяти на каждое активное SQLite-соединение при сохранении быстродействия (вставка 1000 записей: 0.1211s, 50 поисков: 0.0230s).
+- **Визуал**: 100% сохранен (дизайн прогресс-бара, плавность скруббера, волны и карточки идентичны).
+- **Тесты**: 85 python tests + 3 node test suites passed in 8.04s.
+
+

@@ -114,7 +114,7 @@ class DatabaseManager:
             pragmas.extend([
                 "PRAGMA synchronous=NORMAL",
                 "PRAGMA temp_store=MEMORY",
-                "PRAGMA cache_size=-8000",
+                "PRAGMA cache_size=-2000",
                 "PRAGMA busy_timeout=30000",
                 "PRAGMA foreign_keys=ON",
             ])

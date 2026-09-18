@@ -4,3 +4,4 @@
 |---|---|---|---|---|---|---|---|---|---|
 | Baseline | Чистый старт до оптимизации | 0.1458s | 0.0051s | 4 | 331.82 MB | 0.1254s | 0.0234s | 922.10 KB | 1.38s |
 | Цикл 1 | PERF-001 (SharedExecutor), PERF-002 (Particles leak fix), PERF-003 (Visualizer reflow fix) | 0.1464s | 0.0054s | 4 (без 25 eager потоков) | 352.74 MB | 0.1234s | 0.0241s | 921.91 KB (-192 B) | 1.40s |
+| Цикл 2 | PERF-004 (Player DOM throttle), PERF-005 (Efficiency leak fix), PERF-006 (SQLite 2MB cache) | 0.1689s | 0.0058s | 4 | 362.85 MB | 0.1211s (-2%) | 0.0230s (-5%) | 922.74 KB | 8.04s (85 tests) |
