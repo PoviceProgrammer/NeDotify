@@ -36,6 +36,7 @@ class RecommendationService(BaseMusicService):
     """Generates track and mix recommendations using Last.fm API, UserTasteProfile, and TrackResolver."""
 
     DEFAULT_FALLBACK_ARTISTS = ['The Weeknd', 'Dua Lipa', 'Eminem', 'Queen', 'Coldplay']
+    ALLOWED_RECOMMENDATION_SOURCES = frozenset({'soundcloud', 'youtube', 'local', 'vk', 'spotify', 'yandex'})
 
     def __init__(self, settings=None, db=None, soundcloud_service=None, youtube_service=None):
         super().__init__()
@@ -71,7 +72,14 @@ class RecommendationService(BaseMusicService):
         except Exception as e:
             self.logger.debug(f'Resolution prefetch skipped: {e}', exc_info=True)
 
-    def _format_ui_track(self, track: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_ui_track(self, track: Any) -> Dict[str, Any]:
+        if not track:
+            return {}
+        if hasattr(track, 'keys') and not isinstance(track, dict):
+            try:
+                track = dict(track)
+            except Exception:
+                pass
         if not isinstance(track, dict):
             return {}
         return {
@@ -255,7 +263,7 @@ class RecommendationService(BaseMusicService):
             resolved = self.resolver.resolve_track(c_title, c_artist)
             if not resolved:
                 continue
-            if resolved.get('source') not in ('soundcloud', 'youtube', 'local'):
+            if resolved.get('source') not in self.ALLOWED_RECOMMENDATION_SOURCES:
                 continue
             if not resolved.get('source_id') and not resolved.get('source_url'):
                 continue
@@ -323,7 +331,7 @@ class RecommendationService(BaseMusicService):
                     resolved = self.resolver.resolve_track(t_name, t_artist)
                     if not resolved:
                         continue
-                    if resolved.get('source') not in ('soundcloud', 'youtube', 'local'):
+                    if resolved.get('source') not in self.ALLOWED_RECOMMENDATION_SOURCES:
                         continue
 
                     ui_track = self._format_ui_track(resolved)
@@ -394,7 +402,7 @@ class RecommendationService(BaseMusicService):
                     resolved = self.resolver.resolve_track(cand['title'], cand['artist'])
                     if not resolved:
                         continue
-                    if resolved.get('source') not in ('soundcloud', 'youtube', 'local'):
+                    if resolved.get('source') not in self.ALLOWED_RECOMMENDATION_SOURCES:
                         continue
 
                     ui_track = self._format_ui_track(resolved)
@@ -496,7 +504,7 @@ class RecommendationService(BaseMusicService):
                         resolved = self.resolver.resolve_track(t_name, artist)
                         if not resolved:
                             continue
-                        if resolved.get('source') not in ('soundcloud', 'youtube', 'local'):
+                        if resolved.get('source') not in self.ALLOWED_RECOMMENDATION_SOURCES:
                             continue
 
                         tracks.append(self._format_ui_track(resolved))
@@ -578,7 +586,7 @@ class RecommendationService(BaseMusicService):
                         resolved = self.resolver.resolve_track(t_title, t_artist)
                         if not resolved:
                             continue
-                        if resolved.get('source') not in ('soundcloud', 'youtube', 'local'):
+                        if resolved.get('source') not in self.ALLOWED_RECOMMENDATION_SOURCES:
                             continue
 
                         rkey = f"{(resolved.get('artist') or '').lower()}:{(resolved.get('title') or '').lower()}"
@@ -612,7 +620,7 @@ class RecommendationService(BaseMusicService):
                     resolved = self.resolver.resolve_track(t_title, t_artist)
                     if not resolved:
                         continue
-                    if resolved.get('source') not in ('soundcloud', 'youtube', 'local'):
+                    if resolved.get('source') not in self.ALLOWED_RECOMMENDATION_SOURCES:
                         continue
 
                     rkey = f"{(resolved.get('artist') or '').lower()}:{(resolved.get('title') or '').lower()}"
@@ -669,7 +677,7 @@ class RecommendationService(BaseMusicService):
                         return None
 
                     resolved = self.resolver.resolve_track(title, artist)
-                    if not resolved or resolved.get('source') not in ('soundcloud', 'youtube', 'local'):
+                    if not resolved or resolved.get('source') not in self.ALLOWED_RECOMMENDATION_SOURCES:
                         return None
 
                     rkey = f"{(resolved.get('artist') or '').lower()}:{(resolved.get('title') or '').lower()}"
@@ -818,7 +826,7 @@ class RecommendationService(BaseMusicService):
                     res = self.resolver.resolve_track(item.get('name', ''), item.get('artist', ''))
                     if not res:
                         continue
-                    if res.get('source') not in ('soundcloud', 'youtube', 'local'):
+                    if res.get('source') not in self.ALLOWED_RECOMMENDATION_SOURCES:
                         continue
 
                     tracks.append(self._format_ui_track(res))
@@ -840,6 +848,8 @@ class RecommendationService(BaseMusicService):
         3. Last.fm Similar Artists + Top Tracks
         4. User Taste Profile / Local DB
         """
+        if not isinstance(seed_track, dict):
+            seed_track = {}
         if exclude_ids is None:
             exclude_ids = []
         exclude_set = {str(eid).strip().lower() for eid in exclude_ids if eid}
