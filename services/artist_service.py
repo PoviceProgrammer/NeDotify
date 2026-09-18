@@ -82,28 +82,46 @@ class ArtistService(BaseMusicService):
         """Largest thumbnail URL from a ytmusicapi item, or an empty string."""
         if isinstance(item, dict):
             thumbs = item.get("thumbnails") or []
+        elif isinstance(item, (list, tuple)):
+            thumbs = item
         else:
-            thumbs = item or []
+            thumbs = []
         if not thumbs:
             return ""
         try:
-            best = max(thumbs, key=lambda t: (t.get("width") or 0) * (t.get("height") or 0))
+            valid_thumbs = [t for t in thumbs if isinstance(t, dict)]
+            if not valid_thumbs:
+                return ""
+            best = max(valid_thumbs, key=lambda t: (int(t.get("width") or 0)) * (int(t.get("height") or 0)))
             return best.get("url", "") or ""
         except Exception:
             logger.debug("thumbnail selection failed", exc_info=True)
-            last = thumbs[-1]
-            return last.get("url", "") if isinstance(last, dict) else ""
+            for last in reversed(thumbs):
+                if isinstance(last, dict) and last.get("url"):
+                    return last.get("url")
+            return ""
 
     @staticmethod
-    def _artists_label(item: dict, fallback: str = "") -> str:
-        names = [a.get("name", "") for a in (item.get("artists") or []) if a.get("name")]
-        return ", ".join(names) or fallback
+    def _artists_label(item: Any, fallback: str = "") -> str:
+        fallback_str = str(fallback or "").strip()
+        if not isinstance(item, dict):
+            return fallback_str
+        artists_list = item.get("artists")
+        if not isinstance(artists_list, list):
+            return fallback_str
+        names = [str(a.get("name", "")).strip() for a in artists_list if isinstance(a, dict) and a.get("name")]
+        return ", ".join([n for n in names if n]) or fallback_str
 
-    def _normalize_album(self, item: dict, artist_name: str) -> Optional[dict]:
+    def _normalize_album(self, item: Any, artist_name: str) -> Optional[dict]:
         """Shape one ytmusicapi album/single entry into the app's album dict."""
+        if not isinstance(item, dict):
+            return None
         browse_id = item.get("browseId") or item.get("playlistId")
         title = item.get("title")
         if not browse_id or not title:
+            return None
+        title_str = str(title).strip()
+        if not title_str:
             return None
         raw_year = item.get("year") or ""
         try:
@@ -111,24 +129,26 @@ class ArtistService(BaseMusicService):
         except (TypeError, ValueError):
             year = 0
         cover = self._best_thumbnail(item)
+        fallback_artist = str(artist_name or "").strip()
         return {
             "id": "yt_album_" + str(browse_id),
             "source": "youtube",
-            "source_id": browse_id,
-            "title": title,
-            "album": title,
-            "artist": self._artists_label(item, artist_name),
+            "source_id": str(browse_id),
+            "title": title_str,
+            "album": title_str,
+            "artist": self._artists_label(item, fallback_artist),
             "year": year,
             "cover": cover,
             "cover_url": cover,
             "type": "album",
-            "album_type": item.get("type") or "Album",
+            "album_type": str(item.get("type") or "Album"),
         }
 
-    def _collect_albums(self, yt, channel_id: str, artist: dict, artist_name: str) -> List[dict]:
+    def _collect_albums(self, yt, channel_id: str, artist: Any, artist_name: str) -> List[dict]:
         """Full discography: the inline shelves plus every continuation page."""
         albums: List[dict] = []
         seen = set()
+        artist_dict = artist if isinstance(artist, dict) else {}
 
         def _absorb(items):
             for raw in items or []:
@@ -138,7 +158,7 @@ class ArtistService(BaseMusicService):
                     albums.append(album)
 
         for shelf_name in ("albums", "singles"):
-            shelf = artist.get(shelf_name) or {}
+            shelf = artist_dict.get(shelf_name) or {}
             _absorb(shelf.get("results"))
 
             # A shelf carrying browse params has more entries behind it than the
@@ -149,16 +169,12 @@ class ArtistService(BaseMusicService):
             try:
                 _absorb(yt.get_artist_albums(channel_id, params, limit=MAX_ALBUMS))
             except Exception:
-                # ytmusicapi's continuation parser does not match the shape YouTube
-                # Music currently returns for these shelves and raises KeyError on
-                # musicCarouselShelfRenderer. The catalogue search below recovers the
-                # releases the continuation would have added.
                 logger.debug("get_artist_albums(%s) unavailable for %s", shelf_name, artist_name, exc_info=True)
 
         if len(albums) < MAX_ALBUMS:
             _absorb(self._search_albums_by_artist(yt, artist_name, seen))
 
-        albums.sort(key=lambda a: (-(a.get("year") or 0), a.get("title", "")))
+        albums.sort(key=lambda a: (-(a.get("year") or 0), str(a.get("title") or "")))
         return albums[:MAX_ALBUMS]
 
     def _search_albums_by_artist(self, yt, artist_name: str, seen: set) -> List[dict]:
@@ -211,14 +227,17 @@ class ArtistService(BaseMusicService):
 
         return (bio_orig, bio_orig)
 
-    def _collect_tracks(self, yt, channel_id: str, artist: dict, artist_name: str, albums: List[dict] = None) -> List[dict]:
+    def _collect_tracks(self, yt, channel_id: str, artist: Any, artist_name: str, albums: List[dict] = None) -> List[dict]:
         """The artist's full tracks catalogue, shaped like the app's track dicts."""
         tracks: List[dict] = []
         seen_ids = set()
         seen_titles = set()
+        artist_dict = artist if isinstance(artist, dict) else {}
 
         def _absorb(raw_items, default_album=""):
             for item in raw_items or []:
+                if not isinstance(item, dict):
+                    continue
                 video_id = item.get("videoId")
                 title = (item.get("title") or "").strip()
                 if not video_id or not title:
@@ -264,7 +283,7 @@ class ArtistService(BaseMusicService):
                 })
 
         # 1. Inline top songs shelf
-        songs_shelf = artist.get("songs") or {}
+        songs_shelf = artist_dict.get("songs") or {}
         _absorb(songs_shelf.get("results"))
 
         # 2. Complete songs playlist via browseId if provided by YouTube Music
@@ -446,54 +465,64 @@ class ArtistService(BaseMusicService):
             return None
 
         def _task():
-            yt = self._ytmusic()
-            if yt is None:
-                if error_callback:
-                    error_callback("YouTube Music недоступен")
-                return
-
-            channel_id = self._resolve_channel_id(yt, name)
-            if not channel_id:
-                if error_callback:
-                    error_callback("Исполнитель не найден: " + name)
-                return
-
             try:
-                artist = yt.get_artist(channel_id)
-            except Exception as exc:
-                logger.warning("get_artist(%s) failed: %s", channel_id, exc, exc_info=True)
+                yt = self._ytmusic()
+                if yt is None:
+                    if error_callback:
+                        error_callback("YouTube Music недоступен")
+                    return
+
+                channel_id = self._resolve_channel_id(yt, name)
+                if not channel_id:
+                    if error_callback:
+                        error_callback("Исполнитель не найден: " + name)
+                    return
+
+                try:
+                    artist = yt.get_artist(channel_id)
+                except Exception as exc:
+                    logger.warning("get_artist(%s) failed: %s", channel_id, exc, exc_info=True)
+                    if error_callback:
+                        error_callback("Не удалось загрузить профиль: " + type(exc).__name__)
+                    return
+
+                if not artist or not isinstance(artist, dict):
+                    if error_callback:
+                        error_callback("Исполнитель не найден: " + name)
+                    return
+
+                albums_list = self._collect_albums(yt, channel_id, artist, name)
+                tracks_list = self._collect_tracks(yt, channel_id, artist, name, albums_list)
+                bio_ru, bio_original = self._translate_bio((artist.get("description") or "").strip())
+
+                profile = {
+                    "name": artist.get("name") or name,
+                    "channel_id": channel_id,
+                    "avatar_url": self._best_thumbnail(artist),
+                    "bio": bio_ru or bio_original,
+                    "bio_ru": bio_ru,
+                    "bio_original": bio_original,
+                    "bio_en": bio_original,
+                    "subscribers": artist.get("subscribers") or "",
+                    "views": artist.get("views") or "",
+                    "albums": albums_list,
+                    "tracks": tracks_list,
+                    "source": "youtube",
+                }
+                self._cache_put(name.lower(), profile)
+                if profile.get("avatar_url"):
+                    with self._avatars_lock:
+                        self._avatars[name.lower()] = (time.time(), profile["avatar_url"])
+                logger.info(
+                    "Artist profile for %r: %d albums, %d tracks, bio length %d",
+                    profile["name"], len(profile["albums"]), len(profile["tracks"]), len(profile["bio"]),
+                )
+                if callback:
+                    callback(profile)
+            except Exception as e:
+                logger.warning("get_profile failed for %s: %s", name, e, exc_info=True)
                 if error_callback:
-                    error_callback("Не удалось загрузить профиль: " + type(exc).__name__)
-                return
-
-            albums_list = self._collect_albums(yt, channel_id, artist, name)
-            tracks_list = self._collect_tracks(yt, channel_id, artist, name, albums_list)
-            bio_ru, bio_original = self._translate_bio((artist.get("description") or "").strip())
-
-            profile = {
-                "name": artist.get("name") or name,
-                "channel_id": channel_id,
-                "avatar_url": self._best_thumbnail(artist),
-                "bio": bio_ru or bio_original,
-                "bio_ru": bio_ru,
-                "bio_original": bio_original,
-                "bio_en": bio_original,
-                "subscribers": artist.get("subscribers") or "",
-                "views": artist.get("views") or "",
-                "albums": albums_list,
-                "tracks": tracks_list,
-                "source": "youtube",
-            }
-            self._cache_put(name.lower(), profile)
-            if profile.get("avatar_url"):
-                with self._avatars_lock:
-                    self._avatars[name.lower()] = (time.time(), profile["avatar_url"])
-            logger.info(
-                "Artist profile for %r: %d albums, %d tracks, bio length %d",
-                profile["name"], len(profile["albums"]), len(profile["tracks"]), len(profile["bio"]),
-            )
-            if callback:
-                callback(profile)
+                    error_callback("Не удалось загрузить профиль: " + type(e).__name__)
 
         submit = getattr(BaseMusicService, "submit", None)
         if callable(submit):
