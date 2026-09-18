@@ -54,54 +54,64 @@ class LufsScannerService:
             self._pool.shutdown(wait=False, cancel_futures=True)
 
     def _scan_loop(self):
-        time.sleep(10)
-        while self._running:
-            try:
-                cursor = self._core.db.conn.cursor()
-                cursor.execute("""
-                    SELECT id, file_path FROM tracks 
-                    WHERE source = 'local' 
-                    AND lufs IS NULL 
-                    AND file_path IS NOT NULL
-                    LIMIT 20
-                """)
-                rows = cursor.fetchall()
-                if not rows:
-                    time.sleep(60)
-                    continue
-                futures = {}
-                for row in rows:
-                    track_id = row['id']
-                    filepath = row['file_path']
-                    if os.path.exists(filepath):
-                        # M-9 fix: key by the future, not the track id
-                        futures[self._pool.submit(analyze_lufs, filepath)] = track_id
-                    else:
-                        self._update_db(track_id, 0.0, 0.0)
-                from concurrent.futures import as_completed
-                for future in as_completed(futures):
-                    track_id = futures[future]
-                    try:
-                        lufs, peak, err = future.result()
-                        if lufs is not None:
-                            self._update_db(track_id, lufs, peak)
+        try:
+            time.sleep(10)
+            while self._running:
+                try:
+                    cursor = self._core.db.conn.cursor()
+                    cursor.execute("""
+                        SELECT id, file_path FROM tracks 
+                        WHERE source = 'local' 
+                        AND lufs IS NULL 
+                        AND file_path IS NOT NULL
+                        LIMIT 20
+                    """)
+                    rows = cursor.fetchall()
+                    if not rows:
+                        time.sleep(60)
+                        continue
+                    futures = {}
+                    for row in rows:
+                        track_id = row['id']
+                        filepath = row['file_path']
+                        if os.path.exists(filepath):
+                            # M-9 fix: key by the future, not the track id
+                            futures[self._pool.submit(analyze_lufs, filepath)] = track_id
                         else:
-                            logger.error(f'LUFS scan failed for track {track_id}: {err}')
+                            self._update_db(track_id, 0.0, 0.0)
+                    from concurrent.futures import as_completed
+                    for future in as_completed(futures):
+                        track_id = futures[future]
+                        try:
+                            lufs, peak, err = future.result()
+                            if lufs is not None:
+                                self._update_db(track_id, lufs, peak)
+                            else:
+                                logger.error(f'LUFS scan failed for track {track_id}: {err}')
+                                self._update_db(track_id, -14.0, 1.0)
+                        except Exception as e:
+                            logger.error(f'Error retrieving LUFS future for track {track_id}: {e}')
                             self._update_db(track_id, -14.0, 1.0)
-                    except Exception as e:
-                        logger.error(f'Error retrieving LUFS future for track {track_id}: {e}')
-                        self._update_db(track_id, -14.0, 1.0)
-            except Exception as e:
-                logger.error(f'LUFS scan loop error: {e}')
-                time.sleep(10)
+                except Exception as e:
+                    logger.error(f'LUFS scan loop error: {e}')
+                    time.sleep(10)
+        finally:
+            if hasattr(self._core, 'db') and hasattr(self._core.db, 'close_thread_connection'):
+                try:
+                    self._core.db.close_thread_connection()
+                except Exception:
+                    pass
 
     def _update_db(self, track_id, lufs, peak):
         try:
-            self._core.db.conn.execute(
-                'UPDATE tracks SET lufs = ?, loudness_lufs = ?, peak_volume = ? WHERE id = ?',
-                (lufs, lufs, peak, track_id)
-            )
-            self._core.db.conn.commit()
+            if hasattr(self._core, 'db') and hasattr(self._core.db, 'update_track'):
+                self._core.db.update_track(track_id, lufs=lufs, loudness_lufs=lufs, peak_volume=peak)
+            else:
+                self._core.db.conn.execute(
+                    'UPDATE tracks SET lufs = ?, loudness_lufs = ?, peak_volume = ? WHERE id = ?',
+                    (lufs, lufs, peak, track_id)
+                )
+                self._core.db.conn.commit()
             logger.debug(f'Saved LUFS {lufs:.2f} for track {track_id}')
         except Exception as e:
             logger.error(f'Failed to update LUFS DB: {e}')

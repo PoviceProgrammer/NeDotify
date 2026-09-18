@@ -45,5 +45,5 @@
 | BUG-042 | BUG | P2 | `utils/tag_parser.py` | Коллизии не-уникальных путей бэкапа в `write_tags`, приводящие к перезаписи и повреждению отката | done |
 | BUG-043 | BUG | P2 | `core/session.py` | `restore_session` не сбрасывает `file_path` и `resolved_at` для онлайн-треков Spotify и Yandex | done |
 | BUG-044 | BUG | P2 | `core/services/discord_rpc.py` | Несинхронизированный метод `stop()` допускает состояние гонки с активными потоками подключения | done |
-| BUG-045 | BUG | P2 | `services/lufs_scanner.py` | Неосвобождаемое соединение SQLite потока сканера и сырые UPDATE без `_write_lock` | todo |
+| BUG-045 | BUG | P2 | `services/lufs_scanner.py` | Неосвобождаемое соединение SQLite потока сканера и сырые UPDATE без `_write_lock` | done |
 
