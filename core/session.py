@@ -82,7 +82,7 @@ class SessionManager:
         for track in session.get("queue", []):
             if not isinstance(track, dict):
                 continue
-            if track.get("source") in ("youtube", "soundcloud", "vk"):
+            if track.get("source") in ("youtube", "soundcloud", "vk", "spotify", "yandex"):
                 track["file_path"] = None
                 track["resolved_at"] = 0
 
