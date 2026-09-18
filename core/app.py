@@ -109,7 +109,7 @@ class AppCore:
         self.vk = VKService(self.settings)
         self.spotify = SpotifyService(self.settings)
         self.lyrics = LyricsService(self.settings)
-        self.artists = ArtistService(youtube_service=self.youtube, settings=self.settings)
+        self.artists = ArtistService(youtube_service=self.youtube, settings=self.settings, spotify_service=self.spotify)
 
         # Proxy, Downloader & Plugins
         self.proxy = LocalProxyManager(self)

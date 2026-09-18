@@ -1,45 +1,73 @@
 """
 AURA Music - Artist Profile Service
 
-Builds a real artist profile from YouTube Music: avatar, description, subscriber
-count, top tracks and the artist's COMPLETE album list.
-
-Before this service existed the artist page was driven by a hardcoded dictionary of
-three artists plus a stock photo for everyone else, and the album shelf was derived
-from the `album` field of ordinary search hits - a field the YouTube search parser
-never populates - so it was empty for effectively every artist.
+Builds a comprehensive artist profile integrating official Spotify, Last.fm,
+and MusicBrainz APIs alongside YouTube Music:
+- Full categorized discography: Albums, Singles, EPs, Compilations
+- Extended bilingual biography (Russian & English/original)
+- High-resolution avatars & cover artwork
+- Top playable tracks catalogue with streaming resolution
 """
 
 import logging
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from services.base_service import BaseMusicService
 
 logger = logging.getLogger(__name__)
 
-#: get_artist() returns only the first page of albums/singles. When YouTube Music
-#: offers browse params we follow them to enumerate the full discography, but still
-#: cap the result so a prolific artist cannot produce an unbounded payload.
+#: Maximum releases per category in profile
 MAX_ALBUMS = 120
 
-#: Cached profiles are reused for this long. Artist pages get re-opened often and a
-#: full profile costs two to three YouTube Music round trips.
+#: Cached profiles are reused for this long (15 minutes).
 PROFILE_TTL = 900
 
-#: Resolved avatar URLs live for a week: channel photos change rarely, and the
-#: home feed re-requests the same top artists on every load.
+#: Resolved avatar URLs live for a week: channel photos change rarely.
 AVATAR_TTL = 7 * 24 * 3600
 
 
 class ArtistService(BaseMusicService):
-    """Resolves an artist name to a full profile using the YouTube Music catalogue."""
+    """Resolves an artist name to a full profile using Spotify, Last.fm, MusicBrainz and YouTube Music."""
 
-    def __init__(self, youtube_service=None, settings=None):
+    def __init__(
+        self,
+        youtube_service=None,
+        settings=None,
+        spotify_service=None,
+        lastfm_service=None,
+        musicbrainz_service=None,
+    ):
         super().__init__()
         self.youtube = youtube_service
         self.settings = settings
+        self.spotify = spotify_service
+        self.lastfm = lastfm_service
+        self.musicbrainz = musicbrainz_service
+
+        # Lazily initialize secondary providers when settings are provided
+        if self.spotify is None and self.settings is not None:
+            try:
+                from services.spotify_service import SpotifyService
+                self.spotify = SpotifyService(self.settings)
+            except Exception as exc:
+                logger.debug("Could not initialize SpotifyService: %s", exc)
+
+        if self.lastfm is None and self.settings is not None:
+            try:
+                from services.lastfm_service import LastFMService
+                self.lastfm = LastFMService(self.settings)
+            except Exception as exc:
+                logger.debug("Could not initialize LastFMService: %s", exc)
+
+        if self.musicbrainz is None and self.settings is not None:
+            try:
+                from services.musicbrainz_service import MusicBrainzService
+                self.musicbrainz = MusicBrainzService(self.settings)
+            except Exception as exc:
+                logger.debug("Could not initialize MusicBrainzService: %s", exc)
+
         self._profiles: Dict[str, Any] = {}
         self._profiles_lock = threading.Lock()
         self._avatars: Dict[str, Any] = {}
@@ -47,7 +75,12 @@ class ArtistService(BaseMusicService):
 
     @property
     def available(self) -> bool:
-        return self._ytmusic() is not None
+        return (
+            self._ytmusic() is not None
+            or self.spotify is not None
+            or self.musicbrainz is not None
+            or self.lastfm is not None
+        )
 
     def _ytmusic(self):
         """The YTMusic client owned by YouTubeService, or None when unavailable."""
@@ -130,6 +163,15 @@ class ArtistService(BaseMusicService):
             year = 0
         cover = self._best_thumbnail(item)
         fallback_artist = str(artist_name or "").strip()
+        raw_type = str(item.get("type") or "Album").strip()
+        norm_type = "album"
+        if "single" in raw_type.lower():
+            norm_type = "single"
+        elif "ep" in raw_type.lower():
+            norm_type = "ep"
+        elif "compilation" in raw_type.lower():
+            norm_type = "compilation"
+
         return {
             "id": "yt_album_" + str(browse_id),
             "source": "youtube",
@@ -140,12 +182,12 @@ class ArtistService(BaseMusicService):
             "year": year,
             "cover": cover,
             "cover_url": cover,
-            "type": "album",
-            "album_type": str(item.get("type") or "Album"),
+            "type": norm_type,
+            "album_type": norm_type,
         }
 
     def _collect_albums(self, yt, channel_id: str, artist: Any, artist_name: str) -> List[dict]:
-        """Full discography: the inline shelves plus every continuation page."""
+        """Full discography from YouTube Music: inline shelves plus continuations."""
         albums: List[dict] = []
         seen = set()
         artist_dict = artist if isinstance(artist, dict) else {}
@@ -161,8 +203,6 @@ class ArtistService(BaseMusicService):
             shelf = artist_dict.get(shelf_name) or {}
             _absorb(shelf.get("results"))
 
-            # A shelf carrying browse params has more entries behind it than the
-            # handful inlined in get_artist().
             params = shelf.get("params")
             if not params or len(albums) >= MAX_ALBUMS:
                 continue
@@ -178,12 +218,7 @@ class ArtistService(BaseMusicService):
         return albums[:MAX_ALBUMS]
 
     def _search_albums_by_artist(self, yt, artist_name: str, seen: set) -> List[dict]:
-        """Catalogue search for releases credited to this artist.
-
-        Used to complete the discography when the artist-shelf continuation is
-        unavailable. Results are filtered on the artist credit so a name-similar
-        release by somebody else is not attributed to this artist.
-        """
+        """Catalogue search for releases credited to this artist."""
         try:
             hits = yt.search(artist_name, filter="albums", limit=40)
         except Exception:
@@ -202,15 +237,12 @@ class ArtistService(BaseMusicService):
             extra.append(hit)
         return extra
 
-    def _translate_bio(self, bio: str) -> tuple[str, str]:
-        """Translates artist bio into Russian using the lyrics translation mechanism.
-        Returns (bio_ru, bio_original).
-        """
+    def _translate_bio(self, bio: str) -> Tuple[str, str]:
+        """Translates artist bio into Russian using the lyrics translation mechanism."""
         if not bio:
             return ("", "")
         bio_orig = bio.strip()
 
-        # Check if already in Russian (predominantly Cyrillic)
         cyrillic_chars = sum(1 for c in bio_orig if '\u0400' <= c <= '\u04FF')
         latin_chars = sum(1 for c in bio_orig if 'a' <= c.lower() <= 'z')
         if cyrillic_chars > 0 and cyrillic_chars >= latin_chars:
@@ -218,7 +250,7 @@ class ArtistService(BaseMusicService):
 
         try:
             from services.lyrics_service import LyricsService
-            ls = LyricsService()
+            ls = LyricsService(self.settings)
             translated = ls.translate_lyrics(bio_orig, target_lang="ru")
             if translated and translated.strip():
                 return (translated.strip(), bio_orig)
@@ -286,7 +318,7 @@ class ArtistService(BaseMusicService):
         songs_shelf = artist_dict.get("songs") or {}
         _absorb(songs_shelf.get("results"))
 
-        # 2. Complete songs playlist via browseId if provided by YouTube Music
+        # 2. Complete songs playlist via browseId
         browse_id = songs_shelf.get("browseId")
         if browse_id:
             try:
@@ -350,16 +382,226 @@ class ArtistService(BaseMusicService):
                 best = browse_id
         return best
 
+    # --- multi-source providers & cascade ---
+
+    def _fetch_spotify(self, artist_name: str) -> Dict[str, Any]:
+        sp = self.spotify
+        if not sp or not hasattr(sp, "get_artist_catalog"):
+            return {"albums": [], "singles": [], "eps": [], "compilations": [], "tracks": [], "avatar_url": "", "genres": ""}
+        try:
+            return sp.get_artist_catalog(artist_name) or {}
+        except Exception as exc:
+            logger.debug("Spotify catalog fetch failed for %s: %s", artist_name, exc)
+            return {"albums": [], "singles": [], "eps": [], "compilations": [], "tracks": [], "avatar_url": "", "genres": ""}
+
+    def _fetch_lastfm(self, artist_name: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+        lfm = self.lastfm
+        if not lfm:
+            return ({}, [])
+        info: Dict[str, Any] = {}
+        albums: List[Dict[str, Any]] = []
+        try:
+            if hasattr(lfm, "artist_get_info"):
+                info = lfm.artist_get_info(artist_name, lang="ru") or {}
+        except Exception as exc:
+            logger.debug("Last.fm artist_get_info failed for %s: %s", artist_name, exc)
+        try:
+            if hasattr(lfm, "artist_get_top_albums"):
+                albums = lfm.artist_get_top_albums(artist_name, limit=30) or []
+        except Exception as exc:
+            logger.debug("Last.fm artist_get_top_albums failed for %s: %s", artist_name, exc)
+        return (info, albums)
+
+    def _fetch_musicbrainz(self, artist_name: str) -> Tuple[Dict[str, List[Dict[str, Any]]], Dict[str, str]]:
+        mb = self.musicbrainz
+        empty_releases = {"albums": [], "singles": [], "eps": [], "compilations": []}
+        empty_bio = {"bio": "", "bio_ru": "", "bio_en": "", "bio_original": "", "avatar_url": "", "source": ""}
+        if not mb:
+            return (empty_releases, empty_bio)
+        try:
+            artist_match = mb.search_artist(artist_name)
+            mbid = artist_match.get("id") if isinstance(artist_match, dict) else None
+            releases = mb.get_artist_release_groups(mbid, artist_name=artist_name, limit=100) if mbid else empty_releases
+            bio = mb.get_artist_bio(mbid, artist_name)
+            return (releases, bio)
+        except Exception as exc:
+            logger.debug("MusicBrainz fetch failed for %s: %s", artist_name, exc)
+            return (empty_releases, empty_bio)
+
+    def _resolve_bio(self, lfm_info: dict, mb_bio: dict, yt_bio_ru: str, yt_bio_orig: str) -> Tuple[str, str, str, str, str]:
+        """Resolves rich bio across Last.fm, Wikipedia/MusicBrainz, and YouTube Music.
+
+        Returns (primary_bio, bio_ru, bio_en, bio_original, bio_source).
+        """
+        lfm_summary = str(lfm_info.get("bio_summary") or "").strip()
+        lfm_content = str(lfm_info.get("bio_content") or "").strip()
+        lfm_bio = lfm_content or lfm_summary
+
+        mb_ru = str(mb_bio.get("bio_ru") or "").strip()
+        mb_en = str(mb_bio.get("bio_en") or "").strip()
+        mb_primary = str(mb_bio.get("bio") or "").strip()
+
+        def _is_cyrillic(text: str) -> bool:
+            if not text:
+                return False
+            cyr = sum(1 for c in text if '\u0400' <= c <= '\u04FF')
+            lat = sum(1 for c in text if 'a' <= c.lower() <= 'z')
+            return cyr > 0 and cyr >= lat
+
+        bio_ru = ""
+        bio_en = ""
+        bio_source = ""
+
+        # 1. Russian Biography
+        if lfm_bio and _is_cyrillic(lfm_bio):
+            bio_ru = lfm_bio
+            bio_source = "lastfm"
+        elif mb_ru:
+            bio_ru = mb_ru
+            bio_source = "wikipedia"
+        elif yt_bio_ru:
+            bio_ru = yt_bio_ru
+            bio_source = "youtube"
+
+        # 2. English / Original Biography
+        if lfm_bio and not _is_cyrillic(lfm_bio):
+            bio_en = lfm_bio
+            if not bio_source:
+                bio_source = "lastfm"
+        elif mb_en:
+            bio_en = mb_en
+            if not bio_source:
+                bio_source = "wikipedia"
+        elif yt_bio_orig:
+            bio_en = yt_bio_orig
+            if not bio_source:
+                bio_source = "youtube"
+
+        primary_bio = bio_ru or bio_en or mb_primary or lfm_bio or yt_bio_ru or yt_bio_orig
+        bio_original = bio_en or bio_ru or yt_bio_orig
+
+        return (primary_bio, bio_ru, bio_en, bio_original, bio_source or "unknown")
+
+    def _merge_discography(
+        self,
+        sp_data: dict,
+        mb_releases: dict,
+        lfm_albums: list,
+        yt_albums: list,
+        artist_name: str,
+    ) -> Dict[str, Any]:
+        """Merges and deduplicates releases across Spotify, MusicBrainz, Last.fm, and YouTube."""
+        categories: Dict[str, List[Dict[str, Any]]] = {
+            "albums": [],
+            "singles": [],
+            "eps": [],
+            "compilations": [],
+        }
+        seen_keys: Dict[str, Dict[str, Dict[str, Any]]] = {
+            "albums": {},
+            "singles": {},
+            "eps": {},
+            "compilations": {},
+        }
+
+        # Build YouTube browse_id lookup by normalized title to link direct playback
+        yt_lookup = {}
+        for yta in yt_albums or []:
+            t = (yta.get("title") or "").strip().lower()
+            if t:
+                yt_lookup[t] = yta.get("source_id")
+
+        import re
+
+        def _clean_title(t: str) -> str:
+            s = t.strip()
+            s = re.sub(r'(?i)\s*[-–]\s*(single|ep)\s*$', '', s)
+            s = re.sub(r'(?i)\s*\((single|ep)\)\s*$', '', s)
+            return s.strip()
+
+        def _absorb_entry(cat: str, item: dict):
+            raw_title = item.get("title") or item.get("album") or ""
+            if not raw_title or str(raw_title).lower() in ("null", "undefined", "(null)"):
+                return
+            clean_t = _clean_title(raw_title)
+            norm_key = clean_t.lower()
+
+            if norm_key in seen_keys[cat]:
+                existing = seen_keys[cat][norm_key]
+                if (not existing.get("cover") or not existing.get("cover_url")) and (item.get("cover") or item.get("cover_url")):
+                    c = item.get("cover") or item.get("cover_url")
+                    existing["cover"] = c
+                    existing["cover_url"] = c
+                if (not existing.get("year")) and item.get("year"):
+                    existing["year"] = item["year"]
+                if not existing.get("yt_source_id") and norm_key in yt_lookup:
+                    existing["yt_source_id"] = yt_lookup[norm_key]
+                return
+
+            entry = dict(item)
+            entry["title"] = clean_t
+            entry["album"] = clean_t
+            if not entry.get("artist"):
+                entry["artist"] = artist_name
+            if norm_key in yt_lookup:
+                entry["yt_source_id"] = yt_lookup[norm_key]
+
+            singular_type = cat[:-1] if cat.endswith("s") else cat
+            entry["type"] = singular_type
+            entry["album_type"] = singular_type
+
+            seen_keys[cat][norm_key] = entry
+            categories[cat].append(entry)
+
+        # 1. Ingest Spotify (high quality metadata and artwork)
+        for cat in ("albums", "singles", "eps", "compilations"):
+            for it in (sp_data.get(cat) or []):
+                _absorb_entry(cat, it)
+
+        # 2. Ingest MusicBrainz (canonical release-group discography)
+        for cat in ("albums", "singles", "eps", "compilations"):
+            for it in (mb_releases.get(cat) or []):
+                _absorb_entry(cat, it)
+
+        # 3. Ingest YouTube Music releases
+        for yta in yt_albums or []:
+            y_type = str(yta.get("album_type") or yta.get("type") or "album").lower()
+            target_cat = "albums"
+            if "single" in y_type:
+                target_cat = "singles"
+            elif "ep" in y_type:
+                target_cat = "eps"
+            elif "compilation" in y_type:
+                target_cat = "compilations"
+            _absorb_entry(target_cat, yta)
+
+        # 4. Ingest Last.fm top albums (if albums are still low)
+        if len(categories["albums"]) < 10:
+            for la in lfm_albums or []:
+                _absorb_entry("albums", la)
+
+        # Sort each category by year DESC, then title
+        for cat in categories:
+            categories[cat].sort(key=lambda a: (-(a.get("year") or 0), str(a.get("title") or "")))
+
+        # Build combined all releases list
+        all_releases = []
+        for cat in ("albums", "singles", "eps", "compilations"):
+            all_releases.extend(categories[cat])
+        all_releases.sort(key=lambda a: (-(a.get("year") or 0), str(a.get("title") or "")))
+
+        return {
+            "albums": categories["albums"][:MAX_ALBUMS],
+            "singles": categories["singles"][:MAX_ALBUMS],
+            "eps": categories["eps"][:MAX_ALBUMS],
+            "compilations": categories["compilations"][:MAX_ALBUMS],
+            "all_releases": all_releases[:MAX_ALBUMS * 2],
+        }
+
     # --- public API ---
 
     def get_avatars(self, names: List[str], callback: Optional[Callable] = None):
-        """Resolve avatar image URLs for a batch of artist names in the background.
-
-        Costs ONE YouTube Music artist-search round trip per unknown name (no
-        get_artist / discography walks). Results are delivered once via
-        ``callback({name: url_or_empty})``; resolved URLs and full profiles are
-        reused from cache without any network.
-        """
+        """Resolve avatar image URLs for a batch of artist names in the background."""
         clean: List[str] = []
         seen = set()
         for n in names or []:
@@ -385,7 +627,6 @@ class ArtistService(BaseMusicService):
                         result[name] = url
                         continue
                     self._avatars.pop(key, None)
-            # A previously fetched full profile already contains the photo.
             profile = self._cache_get(key)
             if profile and profile.get("avatar_url"):
                 url = profile["avatar_url"]
@@ -437,21 +678,19 @@ class ArtistService(BaseMusicService):
         submit = getattr(BaseMusicService, "submit", None)
         if callable(submit):
             if submit(_task) is None:
-                # Pools are shut down (app exiting).
                 if callback:
                     callback(result)
         else:
             BaseMusicService._executor.submit(_task)
         return None
 
-    def get_profile(self, artist_name: str,
-                    callback: Optional[Callable] = None,
-                    error_callback: Optional[Callable] = None):
-        """Resolve a full artist profile in the background.
-
-        callback receives a dict with name, avatar_url, bio, subscribers, albums and
-        tracks. error_callback receives a message string.
-        """
+    def get_profile(
+        self,
+        artist_name: str,
+        callback: Optional[Callable] = None,
+        error_callback: Optional[Callable] = None,
+    ):
+        """Resolve a full artist profile: discography (albums/singles/EPs), bio, tracks, artwork."""
         name = (artist_name or "").strip()
         if not name:
             if error_callback:
@@ -466,68 +705,150 @@ class ArtistService(BaseMusicService):
 
         def _task():
             try:
+                # 1. Fetch Spotify catalog (albums, singles, EPs, tracks, artwork)
+                sp_data = self._fetch_spotify(name)
+
+                # 2. Fetch Last.fm metadata & bio
+                lfm_info, lfm_albums = self._fetch_lastfm(name)
+
+                # 3. Fetch MusicBrainz release-groups & Wikipedia bio
+                mb_releases, mb_bio = self._fetch_musicbrainz(name)
+
+                # 4. Fetch YouTube Music data (channel, audio tracks, fallback)
                 yt = self._ytmusic()
-                if yt is None:
-                    if error_callback:
-                        error_callback("YouTube Music недоступен")
-                    return
+                yt_channel_id = ""
+                yt_albums = []
+                yt_tracks = []
+                yt_bio_ru = ""
+                yt_bio_orig = ""
+                yt_avatar = ""
+                subscribers = ""
+                views = ""
 
-                channel_id = self._resolve_channel_id(yt, name)
-                if not channel_id:
+                if yt is not None:
+                    try:
+                        yt_channel_id = self._resolve_channel_id(yt, name) or ""
+                        if yt_channel_id:
+                            yt_artist = yt.get_artist(yt_channel_id)
+                            if isinstance(yt_artist, dict):
+                                yt_albums = self._collect_albums(yt, yt_channel_id, yt_artist, name)
+                                yt_tracks = self._collect_tracks(yt, yt_channel_id, yt_artist, name, yt_albums)
+                                yt_bio_ru, yt_bio_orig = self._translate_bio((yt_artist.get("description") or "").strip())
+                                yt_avatar = self._best_thumbnail(yt_artist)
+                                subscribers = yt_artist.get("subscribers") or ""
+                                views = yt_artist.get("views") or ""
+                    except Exception as yt_exc:
+                        logger.warning("YouTube data fetch failed for %s: %s", name, yt_exc)
+                        # If YouTube was the ONLY configured source, re-raise to trigger error callback
+                        if not sp_data.get("albums") and not mb_releases.get("albums") and not lfm_info:
+                            raise yt_exc
+
+                # 5. Merge discography across all sources
+                discography = self._merge_discography(sp_data, mb_releases, lfm_albums, yt_albums, name)
+
+                # 6. Resolve extended biography
+                primary_bio, bio_ru, bio_en, bio_orig, bio_src = self._resolve_bio(
+                    lfm_info, mb_bio, yt_bio_ru, yt_bio_orig
+                )
+
+                # 7. Resolve high-resolution avatar
+                avatar_url = (
+                    sp_data.get("avatar_url")
+                    or mb_bio.get("avatar_url")
+                    or lfm_info.get("image")
+                    or yt_avatar
+                    or ""
+                )
+
+                # 8. Merge playable tracks catalogue
+                tracks: List[Dict[str, Any]] = []
+                seen_track_titles = set()
+                for trk in yt_tracks:
+                    t_title = (trk.get("title") or "").strip().lower()
+                    if t_title and t_title not in seen_track_titles:
+                        seen_track_titles.add(t_title)
+                        tracks.append(trk)
+
+                if len(tracks) < 25:
+                    for trk in sp_data.get("tracks") or []:
+                        t_title = (trk.get("title") or "").strip().lower()
+                        if t_title and t_title not in seen_track_titles:
+                            seen_track_titles.add(t_title)
+                            tracks.append(trk)
+
+                has_releases = any(
+                    len(discography[k]) > 0
+                    for k in ("albums", "singles", "eps", "compilations")
+                )
+
+                if not has_releases and not tracks and not primary_bio and not avatar_url:
                     if error_callback:
                         error_callback("Исполнитель не найден: " + name)
                     return
 
-                try:
-                    artist = yt.get_artist(channel_id)
-                except Exception as exc:
-                    logger.warning("get_artist(%s) failed: %s", channel_id, exc, exc_info=True)
-                    if error_callback:
-                        error_callback("Не удалось загрузить профиль: " + type(exc).__name__)
-                    return
+                genres = sp_data.get("genres") or (", ".join(lfm_info.get("tags") or [])) or ""
+                if not genres and subscribers:
+                    genres = f"{subscribers} подписчиков"
+                elif not genres:
+                    genres = "Исполнитель"
 
-                if not artist or not isinstance(artist, dict):
-                    if error_callback:
-                        error_callback("Исполнитель не найден: " + name)
-                    return
-
-                albums_list = self._collect_albums(yt, channel_id, artist, name)
-                tracks_list = self._collect_tracks(yt, channel_id, artist, name, albums_list)
-                bio_ru, bio_original = self._translate_bio((artist.get("description") or "").strip())
+                primary_source = "spotify" if sp_data.get("albums") else ("musicbrainz" if mb_releases.get("albums") else "youtube")
 
                 profile = {
-                    "name": artist.get("name") or name,
-                    "channel_id": channel_id,
-                    "avatar_url": self._best_thumbnail(artist),
-                    "bio": bio_ru or bio_original,
+                    "name": name,
+                    "channel_id": yt_channel_id,
+                    "avatar_url": avatar_url,
+                    "bio": primary_bio,
                     "bio_ru": bio_ru,
-                    "bio_original": bio_original,
-                    "bio_en": bio_original,
-                    "subscribers": artist.get("subscribers") or "",
-                    "views": artist.get("views") or "",
-                    "albums": albums_list,
-                    "tracks": tracks_list,
-                    "source": "youtube",
+                    "bio_en": bio_en,
+                    "bio_original": bio_orig,
+                    "bio_source": bio_src,
+                    "subscribers": subscribers,
+                    "listeners": lfm_info.get("listeners", 0),
+                    "playcount": lfm_info.get("playcount", 0),
+                    "views": views,
+                    "genres": genres,
+                    "albums": discography["albums"],
+                    "singles": discography["singles"],
+                    "eps": discography["eps"],
+                    "compilations": discography["compilations"],
+                    "discography": {
+                        "albums": discography["albums"],
+                        "singles": discography["singles"],
+                        "eps": discography["eps"],
+                        "compilations": discography["compilations"],
+                    },
+                    "all_releases": discography["all_releases"],
+                    "tracks": tracks,
+                    "source": primary_source,
                 }
+
                 self._cache_put(name.lower(), profile)
-                if profile.get("avatar_url"):
+                if avatar_url:
                     with self._avatars_lock:
-                        self._avatars[name.lower()] = (time.time(), profile["avatar_url"])
+                        self._avatars[name.lower()] = (time.time(), avatar_url)
+
                 logger.info(
-                    "Artist profile for %r: %d albums, %d tracks, bio length %d",
-                    profile["name"], len(profile["albums"]), len(profile["tracks"]), len(profile["bio"]),
+                    "Artist profile for %r: %d albums, %d singles, %d EPs, %d tracks, bio source %s",
+                    profile["name"],
+                    len(profile["albums"]),
+                    len(profile["singles"]),
+                    len(profile["eps"]),
+                    len(profile["tracks"]),
+                    bio_src,
                 )
+
                 if callback:
                     callback(profile)
-            except Exception as e:
-                logger.warning("get_profile failed for %s: %s", name, e, exc_info=True)
+
+            except Exception as exc:
+                logger.warning("get_profile failed for %s: %s", name, exc, exc_info=True)
                 if error_callback:
-                    error_callback("Не удалось загрузить профиль: " + type(e).__name__)
+                    error_callback("Не удалось загрузить профиль: " + type(exc).__name__)
 
         submit = getattr(BaseMusicService, "submit", None)
         if callable(submit):
             if submit(_task) is None:
-                # Pools are shut down (app exiting): report instead of failing silently.
                 if error_callback:
                     error_callback("Сервис недоступен")
         else:
