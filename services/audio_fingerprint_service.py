@@ -109,10 +109,22 @@ class AudioFingerprintService:
             if track and delete_file:
                 file_path = track.get("file_path")
                 if file_path and os.path.exists(file_path):
+                    is_shared = False
                     try:
-                        os.remove(file_path)
-                    except Exception as fe:
-                        logger.warning(f"Could not remove duplicate file {file_path}: {fe}")
+                        cursor = db_manager.conn.cursor()
+                        cursor.execute("SELECT COUNT(*) FROM tracks WHERE file_path = ? AND id != ?", (file_path, track_id))
+                        row = cursor.fetchone()
+                        if row and row[0] > 0:
+                            is_shared = True
+                            logger.info(f"Retaining {file_path} on disk: referenced by {row[0]} other track(s).")
+                    except Exception as ce:
+                        logger.debug(f"Could not check track references for {file_path}: {ce}")
+
+                    if not is_shared:
+                        try:
+                            os.remove(file_path)
+                        except Exception as fe:
+                            logger.warning(f"Could not remove duplicate file {file_path}: {fe}")
 
             db_manager.delete_track(track_id)
             return True
