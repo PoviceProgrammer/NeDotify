@@ -170,10 +170,12 @@ class LyricsService:
             except Exception as e:
                 logger.debug("Embedded lyrics lookup error for %s: %s", file_path, e)
 
-        if not track_name:
+        track_name_str = str(track_name).strip() if track_name is not None else ""
+        artist_name_str = str(artist_name).strip() if artist_name is not None else ""
+        if not track_name_str:
             return {"syncedLyrics": None, "plainLyrics": None, "instrumental": False, "weight": 3}
 
-        track, artist = self._clean_track_and_artist(track_name, artist_name)
+        track, artist = self._clean_track_and_artist(track_name_str, artist_name_str)
 
         # Check in-memory lyrics cache
         cache_key = (track.lower(), artist.lower())
@@ -263,11 +265,102 @@ class LyricsService:
 
         return {"syncedLyrics": None, "plainLyrics": None, "instrumental": False, "weight": 3}
 
+    @staticmethod
+    def parse_lrc(lrc_text: str, offset_ms: int = 0) -> list:
+        """
+        Parse raw LRC text into a list of timed lyrics dictionaries:
+        [{ 'timeMs': <int>, 'text': <str> }, ...]
+        
+        Handles:
+        - [offset: +/-ms] tags in metadata header
+        - 1-digit, 2-digit, and 3-digit minutes ([1:23.45], [01:23.45], [120:00.00])
+        - Centiseconds and milliseconds ([mm:ss.xx], [mm:ss.xxx])
+        - Colon-separated milliseconds ([mm:ss:xx])
+        - Multiple timestamps on the same line ([00:10.00][00:20.00]Chorus)
+        - Metadata headers ([ti:], [ar:], [al:], etc.) filtered out
+        - Empty/malformed strings and timestamp clamping to >= 0
+        """
+        if not lrc_text or not isinstance(lrc_text, str):
+            return []
+
+        lines = lrc_text.splitlines()
+        result = []
+        header_offset = 0
+
+        # Pass 1: find [offset: +/-milliseconds] tag
+        offset_re = re.compile(r'^\[offset:\s*([+-]?\d+)\]', re.IGNORECASE)
+        for line in lines:
+            trimmed = line.strip()
+            m = offset_re.match(trimmed)
+            if m:
+                try:
+                    header_offset = int(m.group(1))
+                except (ValueError, TypeError):
+                    pass
+                break
+
+        total_offset = int(offset_ms) + header_offset
+
+        # Pass 2: parse timestamps
+        time_reg = re.compile(r'\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]')
+        meta_reg = re.compile(r'^\[(ti|ar|al|by|offset|length|re|ve):', re.IGNORECASE)
+
+        for line in lines:
+            trimmed = line.strip()
+            if not trimmed or meta_reg.match(trimmed):
+                continue
+
+            matches = list(time_reg.finditer(trimmed))
+            if matches:
+                text = time_reg.sub('', trimmed).strip()
+                if not text:
+                    text = '♪'
+                for m in matches:
+                    try:
+                        minute = int(m.group(1))
+                        second = int(m.group(2))
+                        ms_str = m.group(3) or '0'
+                        if len(ms_str) == 1:
+                            ms = int(ms_str) * 100
+                        elif len(ms_str) == 2:
+                            ms = int(ms_str) * 10
+                        else:
+                            ms = int(ms_str[:3])
+                        time_ms = minute * 60000 + second * 1000 + ms
+                        final_time = max(0, time_ms + total_offset)
+                        result.append({'timeMs': final_time, 'text': text})
+                    except (ValueError, TypeError):
+                        continue
+
+        result.sort(key=lambda x: x['timeMs'])
+        return result
+
     def _make_result(self, synced, plain):
-        if synced and re.search(r'\[\d{2}:\d{2}', synced):
-            return {"syncedLyrics": synced, "plainLyrics": plain or synced, "weight": 1}
-        elif plain or (synced and len(synced.strip()) > 0):
-            return {"syncedLyrics": None, "plainLyrics": plain or synced, "weight": 2}
+        c_synced = str(synced).strip() if synced is not None else ""
+        c_plain = str(plain).strip() if plain is not None else ""
+
+        if not c_synced and not c_plain:
+            return None
+
+        # Check if synced contains valid parsed timestamps
+        if c_synced:
+            parsed = self.parse_lrc(c_synced)
+            if len(parsed) > 0:
+                return {
+                    "syncedLyrics": c_synced,
+                    "plainLyrics": c_plain or c_synced,
+                    "weight": 1,
+                }
+
+        # Fallback to plain lyrics if text is non-empty
+        lyrics_text = c_plain or c_synced
+        if lyrics_text and len(lyrics_text.strip()) > 0:
+            return {
+                "syncedLyrics": None,
+                "plainLyrics": lyrics_text,
+                "weight": 2,
+            }
+
         return None
 
     def _clean_str(self, text):
@@ -366,7 +459,8 @@ class LyricsService:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with self._open_url(req, timeout=3.5) as resp:
                 data = json.loads(resp.read().decode('utf-8', errors='ignore'))
-                hits = data.get('response', {}).get('sections', [{}])[0].get('hits', [])
+                sections = data.get('response', {}).get('sections') or [{}]
+                hits = sections[0].get('hits', []) if sections else []
                 if not hits:
                     return None
                 s_url = hits[0]['result']['url']
