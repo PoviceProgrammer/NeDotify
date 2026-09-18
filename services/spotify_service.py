@@ -435,3 +435,274 @@ class SpotifyService(BaseMusicService):
         """Spotify does not provide direct stream URLs; reports error gracefully."""
         if error_callback:
             error_callback("Spotify does not provide direct streams; resolve via YouTube.")
+
+    def get_artist_catalog(self, artist_name: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None) -> Dict[str, Any]:
+        """Fetch artist discography (albums, singles, EPs, compilations), top tracks, and artwork."""
+        name = (artist_name or "").strip()
+        if not name:
+            empty = {"albums": [], "singles": [], "eps": [], "compilations": [], "tracks": [], "avatar_url": "", "genres": ""}
+            if callback:
+                callback(empty)
+            return empty
+
+        def _task():
+            albums = []
+            singles = []
+            eps = []
+            compilations = []
+            tracks = []
+            avatar_url = ""
+            genres = []
+
+            # Tier 1: Spotify Web API if access token is available
+            tok = self.get_access_token()
+            if tok:
+                try:
+                    headers = {"Authorization": f"Bearer {tok}"}
+                    encoded = urllib.parse.quote(name)
+                    search_url = f"https://api.spotify.com/v1/search?q={encoded}&type=artist&limit=5"
+                    s_resp = _session.get(search_url, headers=headers, timeout=3.5)
+                    if s_resp.status_code == 200:
+                        s_data = s_resp.json()
+                        art_items = (s_data.get("artists") or {}).get("items") or []
+                        target = name.lower()
+                        best_art = None
+                        for art in art_items:
+                            if not isinstance(art, dict):
+                                continue
+                            if (art.get("name") or "").lower() == target:
+                                best_art = art
+                                break
+                            if best_art is None:
+                                best_art = art
+
+                        if best_art:
+                            art_id = best_art.get("id")
+                            genres = best_art.get("genres") or []
+                            art_images = best_art.get("images") or []
+                            if art_images and isinstance(art_images, list) and isinstance(art_images[0], dict):
+                                avatar_url = art_images[0].get("url") or ""
+
+                            # Fetch releases
+                            alb_url = f"https://api.spotify.com/v1/artists/{art_id}/albums?include_groups=album,single,compilation&limit=50"
+                            alb_resp = _session.get(alb_url, headers=headers, timeout=3.5)
+                            if alb_resp.status_code == 200:
+                                alb_data = alb_resp.json()
+                                seen_titles = set()
+                                for item in (alb_data.get("items") or []):
+                                    if not isinstance(item, dict):
+                                        continue
+                                    item_id = item.get("id")
+                                    item_title = (item.get("name") or "").strip()
+                                    if not item_id or not item_title:
+                                        continue
+                                    norm_title = item_title.lower()
+                                    if norm_title in seen_titles:
+                                        continue
+                                    seen_titles.add(norm_title)
+
+                                    album_group = (item.get("album_group") or item.get("album_type") or "album").lower()
+                                    total_tracks = int(item.get("total_tracks") or 1)
+                                    rel_date = str(item.get("release_date") or "")
+                                    year = int(rel_date[:4]) if len(rel_date) >= 4 and rel_date[:4].isdigit() else 0
+
+                                    imgs = item.get("images") or []
+                                    cover = imgs[0].get("url") if imgs and isinstance(imgs[0], dict) else ""
+
+                                    is_comp = album_group == "compilation"
+                                    is_ep = "ep" in norm_title or (album_group == "single" and 4 <= total_tracks <= 6)
+                                    is_single = (album_group == "single" and not is_ep) or total_tracks <= 3
+
+                                    rel_type = "album"
+                                    if is_comp:
+                                        rel_type = "compilation"
+                                    elif is_single:
+                                        rel_type = "single"
+                                    elif is_ep:
+                                        rel_type = "ep"
+
+                                    release_entry = {
+                                        "id": f"spotify_album_{item_id}",
+                                        "source": "spotify",
+                                        "source_id": item_id,
+                                        "title": item_title,
+                                        "album": item_title,
+                                        "artist": name,
+                                        "year": year,
+                                        "release_date": rel_date,
+                                        "track_count": total_tracks,
+                                        "cover": cover,
+                                        "cover_url": cover,
+                                        "type": rel_type,
+                                        "album_type": rel_type,
+                                    }
+
+                                    if is_comp:
+                                        compilations.append(release_entry)
+                                    elif is_single:
+                                        singles.append(release_entry)
+                                    elif is_ep:
+                                        eps.append(release_entry)
+                                    else:
+                                        albums.append(release_entry)
+
+                            # Fetch top tracks
+                            tt_url = f"https://api.spotify.com/v1/artists/{art_id}/top-tracks?market=US"
+                            tt_resp = _session.get(tt_url, headers=headers, timeout=3.5)
+                            if tt_resp.status_code == 200:
+                                tt_data = tt_resp.json()
+                                for trk in (tt_data.get("tracks") or []):
+                                    if not isinstance(trk, dict):
+                                        continue
+                                    t_id = trk.get("id")
+                                    t_title = trk.get("name") or "Unknown"
+                                    dur_ms = trk.get("duration_ms") or 0
+                                    alb_obj = trk.get("album") or {}
+                                    alb_name = alb_obj.get("name") or "Spotify"
+                                    alb_imgs = alb_obj.get("images") or []
+                                    c_url = alb_imgs[0].get("url") if alb_imgs and isinstance(alb_imgs[0], dict) else None
+                                    tracks.append({
+                                        "id": f"spotify_{t_id}",
+                                        "title": t_title,
+                                        "artist": name,
+                                        "album": alb_name,
+                                        "duration": int(dur_ms / 1000) if dur_ms else 180,
+                                        "cover_url": c_url,
+                                        "source": "spotify",
+                                        "source_id": f"ytsearch1: {name} - {t_title}",
+                                        "popularity": trk.get("popularity", 0),
+                                    })
+                except Exception as sp_exc:
+                    self.logger.debug(f"Spotify Web API artist catalog failed: {sp_exc}")
+
+            # Tier 2: iTunes API album & song search fallback (always runs if albums and singles are empty)
+            if not albums and not singles:
+                try:
+                    encoded_artist = urllib.parse.quote(name)
+                    itunes_url = f"https://itunes.apple.com/search?term={encoded_artist}&entity=album&limit=100"
+                    resp = _session.get(itunes_url, timeout=4.0)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        seen_titles = set()
+                        target_low = name.lower()
+                        for item in (data.get("results") or []):
+                            if not isinstance(item, dict):
+                                continue
+                            artist_credit = (item.get("artistName") or "").lower()
+                            if target_low not in artist_credit and artist_credit not in target_low:
+                                continue
+
+                            coll_name = (item.get("collectionName") or "").strip()
+                            coll_id = str(item.get("collectionId") or "")
+                            if not coll_name or not coll_id:
+                                continue
+
+                            norm_title = coll_name.lower()
+                            if norm_title in seen_titles:
+                                continue
+                            seen_titles.add(norm_title)
+
+                            track_count = int(item.get("trackCount") or 0)
+                            rel_date = str(item.get("releaseDate") or "")
+                            year = int(rel_date[:4]) if len(rel_date) >= 4 and rel_date[:4].isdigit() else 0
+                            raw_art = item.get("artworkUrl100") or ""
+                            cover = raw_art.replace("100x100bb", "600x600bb") if raw_art else ""
+
+                            is_single = track_count in (1, 2, 3) or norm_title.endswith(" - single") or " (single)" in norm_title
+                            is_ep = (4 <= track_count <= 6) or norm_title.endswith(" - ep") or " (ep)" in norm_title
+                            is_comp = item.get("collectionType") == "Compilation"
+
+                            rel_type = "album"
+                            if is_comp:
+                                rel_type = "compilation"
+                            elif is_single:
+                                rel_type = "single"
+                            elif is_ep:
+                                rel_type = "ep"
+
+                            entry = {
+                                "id": f"spotify_album_{coll_id}",
+                                "source": "spotify",
+                                "source_id": coll_id,
+                                "title": coll_name,
+                                "album": coll_name,
+                                "artist": item.get("artistName") or name,
+                                "year": year,
+                                "release_date": rel_date,
+                                "track_count": track_count,
+                                "cover": cover,
+                                "cover_url": cover,
+                                "type": rel_type,
+                                "album_type": rel_type,
+                            }
+
+                            if is_comp:
+                                compilations.append(entry)
+                            elif is_single:
+                                singles.append(entry)
+                            elif is_ep:
+                                eps.append(entry)
+                            else:
+                                albums.append(entry)
+                except Exception as itunes_exc:
+                    self.logger.debug(f"iTunes artist album fallback failed: {itunes_exc}")
+
+            # Top tracks fallback via iTunes if tracks are empty
+            if not tracks:
+                try:
+                    encoded_artist = urllib.parse.quote(name)
+                    itunes_song_url = f"https://itunes.apple.com/search?term={encoded_artist}&entity=song&limit=30"
+                    resp = _session.get(itunes_song_url, timeout=4.0)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        target_low = name.lower()
+                        for item in (data.get("results") or []):
+                            if not isinstance(item, dict):
+                                continue
+                            artist_credit = (item.get("artistName") or "").lower()
+                            if target_low not in artist_credit and artist_credit not in target_low:
+                                continue
+                            track_id = str(item.get("trackId") or "")
+                            track_name = (item.get("trackName") or "").strip()
+                            if not track_id or not track_name:
+                                continue
+                            dur_ms = item.get("trackTimeMillis")
+                            dur = int(dur_ms / 1000) if dur_ms and isinstance(dur_ms, (int, float)) else 180
+                            raw_art = item.get("artworkUrl100") or ""
+                            c_url = raw_art.replace("100x100bb", "600x600bb") if raw_art else None
+                            tracks.append({
+                                "id": f"spotify_{track_id}",
+                                "title": track_name,
+                                "artist": item.get("artistName") or name,
+                                "album": item.get("collectionName") or "Single",
+                                "duration": dur,
+                                "cover_url": c_url,
+                                "source": "spotify",
+                                "source_id": f"ytsearch1: {name} - {track_name}",
+                            })
+                except Exception as it_tr_exc:
+                    self.logger.debug(f"iTunes artist song fallback failed: {it_tr_exc}")
+
+            # Sort by year DESC
+            albums.sort(key=lambda a: (-(a.get("year") or 0), a.get("title", "")))
+            singles.sort(key=lambda a: (-(a.get("year") or 0), a.get("title", "")))
+            eps.sort(key=lambda a: (-(a.get("year") or 0), a.get("title", "")))
+            compilations.sort(key=lambda a: (-(a.get("year") or 0), a.get("title", "")))
+
+            res = {
+                "albums": albums,
+                "singles": singles,
+                "eps": eps,
+                "compilations": compilations,
+                "tracks": tracks,
+                "avatar_url": avatar_url,
+                "genres": ", ".join(genres) if isinstance(genres, list) else str(genres or ""),
+            }
+            if callback:
+                callback(res)
+            return res
+
+        if callback:
+            self._executor.submit(_task)
+            return {}
+        return _task()
