@@ -14,6 +14,9 @@
 | PERF-010 | CPU/GPU | `ui/web_new/js/artist_profile.js` | Пассивный `{ passive: true }` и rAF-дросселированный скролл в бесконечном списке треков профиля артиста устранит микрофризы и layout thrashing | done |
 | PERF-011 | CPU/RAM | `ui/web_new/js/equalizer.js` | Дедупликация слушателя `click` на `document` для закрытия меню пресетов эквалайзера | done |
 | PERF-012 | RAM/NETWORK | `ui/web_new/js/artist_profile.js` | Очистка слушателей поиска и таймеров при ошибке bridge-запроса профиля артиста для предотвращения утечек памяти промисов | done |
-| PERF-013 | CPU/GPU | `ui/web_new/js/library.js` | Пассивный `{ passive: true }` и rAF-дросселированный бесконечный скролл библиотеки с отменой `cancelAnimationFrame` при смене плейлиста | todo |
-| PERF-014 | CPU/NETWORK | `core/proxy.py` | LRU-кэширование корней обложек/аватаров `_cover_roots` и увеличение буфера потоковой передачи удаленных аудиостримов до 64KB | todo |
-| PERF-015 | CPU/GPU | `ui/web_new/js/player.js`, `ui/web_new_v2/js/settings.js` | rAF-дросселирование и `{ passive: true }` ресайза холста waveforms, проверка `document.hidden` в таймере опроса аудиоустройств | todo |
+| PERF-013 | CPU/GPU | `ui/web_new/js/library.js` | Пассивный `{ passive: true }` и rAF-дросселированный бесконечный скролл библиотеки с отменой `cancelAnimationFrame` при смене плейлиста | done |
+| PERF-014 | CPU/NETWORK | `core/proxy.py` | LRU-кэширование корней обложек/аватаров `_cover_roots` и увеличение буфера потоковой передачи удаленных аудиостримов до 64KB | done |
+| PERF-015 | CPU/GPU | `ui/web_new/js/player.js`, `ui/web_new_v2/js/settings.js` | rAF-дросселирование и `{ passive: true }` ресайза холста waveforms, проверка `document.hidden` в таймере опроса аудиоустройств | done |
+| PERF-016 | CPU/RAM | `ui/web_new/js/pages.js` | Идемпотентная защита инициализации `_pagesInitialized` от накопления обработчиков keydown/click | todo |
+| PERF-017 | CPU/RAM | `ui/web_new/js/queue.js` | Идемпотентная защита инициализации `_queueInitialized` от накопления слушателей очереди и смены трека | todo |
+| PERF-018 | RAM | `services/base_service.py` | Оптимизация лимита кэша метаданных потоков `_MAX_CACHE_SIZE` с 2000 до 500 для снижения потребления памяти кучи | todo |

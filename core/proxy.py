@@ -19,6 +19,7 @@ import urllib.error
 import threading
 import logging
 import sys
+from functools import lru_cache
 
 from core.api import _is_ssrf_safe_url  # mirrors core/api.py:_is_ssrf_safe_url; imported (not copied) — core.api does not import core.proxy, so no import cycle
 _is_safe_url = _is_ssrf_safe_url
@@ -77,11 +78,13 @@ AVATAR_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
 COVER_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
 
 
+@lru_cache(maxsize=1)
 def _avatars_root() -> str:
     """The only directory /api/avatar is allowed to serve files from."""
     return os.path.normpath(os.path.join(os.path.expanduser('~'), '.nedotify', 'avatars'))
 
 
+@lru_cache(maxsize=1)
 def _cover_roots() -> list:
     """Directories /api/cover is allowed to serve files from.
 
@@ -879,7 +882,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 bytes_written = 0
                 with open(temp_path, 'wb') as tmp:
                     while True:
-                        chunk = resp.read(32768)
+                        chunk = resp.read(65536)
                         if not chunk:
                             break
                         bytes_written += len(chunk)
@@ -904,7 +907,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                             pass
             else:
                 while True:
-                    chunk = resp.read(32768)
+                    chunk = resp.read(65536)
                     if not chunk:
                         break
                     self.wfile.write(chunk)

@@ -398,14 +398,26 @@ function attachLibraryScrollLoader(container, renderNext, getRendered, getTotal)
         guard++;
     }
 
+    let scrollTicking = false;
+    let animId = null;
     const onScroll = () => {
-        const sc = scrollParent.scrollTop + scrollParent.clientHeight;
-        if (sc >= scrollParent.scrollHeight - 200 && getRendered() < getTotal()) {
-            renderNext();
+        if (!scrollTicking) {
+            scrollTicking = true;
+            animId = requestAnimationFrame(() => {
+                scrollTicking = false;
+                animId = null;
+                const sc = scrollParent.scrollTop + scrollParent.clientHeight;
+                if (sc >= scrollParent.scrollHeight - 200 && getRendered() < getTotal()) {
+                    renderNext();
+                }
+            });
         }
     };
     scrollParent.addEventListener('scroll', onScroll, { passive: true });
-    return () => scrollParent.removeEventListener('scroll', onScroll);
+    return () => {
+        if (animId !== null) cancelAnimationFrame(animId);
+        scrollParent.removeEventListener('scroll', onScroll);
+    };
 }
 
 function renderLibraryList(tracksContainer, tracks) {

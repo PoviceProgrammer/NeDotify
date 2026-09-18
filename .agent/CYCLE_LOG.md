@@ -48,3 +48,13 @@
   - PERF-012: Добавлена гарантированная очистка таймеров и отписка от слушателей `nedotify:artist_profile_data` в блоке `.catch()` промиса вызова bridge API, предотвратив утечку обработчиков и памяти при ошибках сети.
 - **Визуал**: 100% сохранен (скролл треков стал плавнее, меню эквалайзера работает безупречно).
 - **Тесты**: 85 python tests + 3 node test suites passed in 7.85s.
+
+## Цикл 5
+- **Задачи**: PERF-013 (Library rAF passive scroll & animFrame cancellation), PERF-014 (Proxy cover roots LRU cache & 64KB remote stream chunks), PERF-015 (Waveform resize rAF throttle & settings poll timer hidden check)
+- **Результаты**:
+  - PERF-013: В `attachLibraryScrollLoader` добавлен троттлинг `onScroll` через `requestAnimationFrame` и гарантированная отмена незавершенных кадров `cancelAnimationFrame(animId)` при переключении плейлистов/секций библиотеки, устранив layout thrashing и гонки рендеринга.
+  - PERF-014: В `core/proxy.py` добавлено `@lru_cache(maxsize=1)` для `_avatars_root()` и `_cover_roots()`, устранив избыточные `expanduser` и обходы путей на каждом запросе обложки; размер чанка проксирования удаленных стримов увеличен с 32KB до 64KB, сократив системные вызовы в 2 раза.
+  - PERF-015: В `player.js` слушатель ресайза окна для инвалидации размеров waveform-холстов обернут в rAF-троттлинг и `{ passive: true }`; в `settings.js` таймер опроса аудиоустройств дополнен проверкой `document.hidden` и увеличен до 3000ms, устранив фоновые пробуждения процессора.
+- **Визуал**: 100% сохранен (плавный скролл списков, мгновенная подгрузка обложек, точное отображение waveform).
+- **Тесты**: 85 python tests + 3 node test suites passed in 7.80s.
+

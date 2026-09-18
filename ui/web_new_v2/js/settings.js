@@ -1526,11 +1526,12 @@ export function setupAudioDeviceSelector(deviceInfo) {
     // Polling while Settings panel is open so newly connected headphones appear automatically
     if (!audioDevicePollTimer) {
         audioDevicePollTimer = setInterval(() => {
+            if (document.hidden) return;
             const settingsView = document.getElementById('view-settings');
             if (settingsView && settingsView.classList.contains('active')) {
                 fetchDevices();
             }
-        }, 2000);
+        }, 3000);
     }
 }
 

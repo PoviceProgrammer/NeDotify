@@ -1945,12 +1945,19 @@ if (typeof MutationObserver !== 'undefined') {
 }
 
 // Invalidate cached element sizes on window resize
+let _resizeWfTicking = false;
 window.addEventListener('resize', () => {
-    document.querySelectorAll('.waveform-canvas').forEach(cv => {
-        cv._wfW = undefined;
-        cv._wfH = undefined;
-    });
-});
+    if (!_resizeWfTicking) {
+        _resizeWfTicking = true;
+        requestAnimationFrame(() => {
+            _resizeWfTicking = false;
+            document.querySelectorAll('.waveform-canvas').forEach(cv => {
+                cv._wfW = undefined;
+                cv._wfH = undefined;
+            });
+        });
+    }
+}, { passive: true });
 
 export async function fetchAndRenderWaveform(track) {
     currentWaveformData = null;
