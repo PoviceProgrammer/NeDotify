@@ -37,4 +37,5 @@
 | BUG-034 | BUG | P1 | `services/lyrics_service.py` | Отсутствие парсера LRC таймстемпов, сбои на 1-значных минутах [1:23.45], неразобранные теги [offset: +/-ms] и принятие пустых/пробельных текстов песен | done |
 | BUG-035 | BUG | P1 | `services/artist_service.py` | Падения при null-значениях артистов / не-словарях в ответах, TypeError при сортировке альбомов с null title, необработанные сетевые таймауты и rate limiting | done |
 | BUG-036 | BUG | P1 | `services/lastfm_service.py` | Преждевременный abort при временных таймаутах сети, AttributeError на null-коллекциях, падение при строковых числах и сбой обработки одиночных картинок-словарей | done |
+| FEAT-037 | FEAT | P1 | `services/artist_service.py`, `services/musicbrainz_service.py`, `services/spotify_service.py`, `services/lastfm_service.py`, `ui/web_new/js/artist_profile.js`, `ui/web_new_v2/js/artist_profile.js` | Полноценный парсер дискографии и биографии артистов: интеграция со Spotify, Last.fm, MusicBrainz с каскадным фоллбэком, категоризацией релизов (альбомы, синглы, EP, сборники), табами в UI и расширенной двуязычной биографией | done |
 

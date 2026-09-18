@@ -94,3 +94,27 @@
 - **Final Result**:
   - Tests: 156 -> 175 passed (+19 new unit tests, 0 regressions).
   - Backlog items BUG-032, BUG-033, BUG-034, BUG-035, BUG-036 resolved and verified.
+
+## Cycle 6
+- **Started**: 2026-09-18 07:10
+- **Initial Baseline**: 175 tests passing (pytest).
+- **Goals**:
+  1. Реализация Feature Request #1: "Полноценный парсер дискографии и биографии артистов" с интеграцией Spotify API (с fallback на iTunes Search API), MusicBrainz API (release-groups, Wikipedia REST summaries) и Last.fm API.
+  2. Разработка `services/musicbrainz_service.py` с токен-бакет рейт-лимитером (1 rps, threading.Condition), SQLite кэшированием ответов, категоризацией release-groups (albums, singles, eps, compilations) и обложками Cover Art Archive.
+  3. Интеграция извлечения двуязычной биографии артиста (RU / EN) через Wikipedia REST API summary по связям MusicBrainz (wikidata / wikipedia URL-relations).
+  4. Расширение `services/lastfm_service.py` методами `artist_get_info` (очистка HTML, теги, playcount, listeners, bio) и `artist_get_top_albums`.
+  5. Расширение `services/spotify_service.py` методом `get_artist_catalog` с поддержкой Spotify Web API и iTunes API fallback с классификацией по типам релизов (albums, singles, eps, compilations) и извлечением 600x600 artwork.
+  6. Рефакторинг `services/artist_service.py` в каскадный сервис с дедупликацией релизов, привязкой `yt_source_id` для воспроизведения, каскадом аватаров и приоритетом двуязычной биографии.
+  7. Обновление UI (`ui/web_new/js/artist_profile.js`, `ui/web_new_v2/js/artist_profile.js` и CSS): переключаемые табы дискографии (Все, Альбомы, Синглы, EP, Сборники), отображение года и типа релиза, нормализация названий.
+  8. Создание полного набора модульных тестов `tests/test_artist_discography.py` (16 тестов).
+- **Commits**:
+  - feat(services): add MusicBrainzService with rate limiting and Wikipedia bio integration
+  - feat(services): add artist_get_info and artist_get_top_albums to LastFMService
+  - feat(services): add get_artist_catalog with Web API and iTunes fallback to SpotifyService
+  - feat(services, core): implement multi-source discography and bio cascade in ArtistService
+  - feat(ui): render categorized discography tabs and bilingual bio in artist_profile.js
+  - test(services): add comprehensive unit test suite for artist discography cascade
+  - docs(agent): update FEATURE_REQUESTS, BACKLOG, CYCLE_LOG, STATE, and COVERAGE for Cycle 6
+- **Final Result**:
+  - Tests: 175 -> 191 passed (+16 new unit tests, 0 regressions).
+  - Backlog item FEAT-037 / Feature Request #1 resolved and verified.
