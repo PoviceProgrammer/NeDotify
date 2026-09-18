@@ -1,9 +1,10 @@
 # Continuous Optimization State
 
 ## Current State
-- **Cycle**: 3
+- **Cycle**: 5
 - **Status**: running
 - **Branch**: `agent/continuous-optimization`
-- **Current Tasks**: PERF-007 (main.py import json hoisting in convert_js_value), PERF-008 (core/proxy.py 64KB range streaming chunk buffer), PERF-009 (contextmenu.js deduplication)
-- **Last Metrics**: Cycle 2 (Commit: c4d1cfe, DB 1000 ins: 0.1211s, DB 50x search: 0.0230s, 85 tests passing)
-- **Next Step**: Apply fixes -> Verify Visuals & Tests -> Benchmark -> Commit & Log.
+- **Current Tasks**: PERF-013 (Library rAF passive infinite scroll & anim frame cleanup), PERF-014 (Proxy cover roots LRU cache & 64KB remote stream chunks), PERF-015 (Waveform resize rAF throttle & settings poll timer hidden check)
+- **Last Metrics**: Cycle 4 (Commit: pending, Import: 0.1475s, RSS: 398MB, 85 tests passing in 7.85s)
+- **Next Step**: Commit Cycle 4 -> Implement Cycle 5 -> Verify & Benchmark -> Commit.
+

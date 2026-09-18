@@ -210,7 +210,12 @@ export async function fetchArtistProfileFromBridge(artistName, timeoutMs = 6000)
                         cleanup();
                         resolve(null);
                     }
-                }).catch(() => {});
+                }).catch(() => {
+                    if (isResolved) return;
+                    isResolved = true;
+                    cleanup();
+                    resolve(null);
+                });
             } else if (res && typeof res === 'object' && res.status !== 'loading' && res.status !== 'error' && (res.name || res.tracks || res.albums)) {
                 isResolved = true;
                 cleanup();
@@ -804,16 +809,23 @@ export class ArtistTracksComponent {
             showMoreBtn.addEventListener('click', loadMore);
         }
 
-        // Infinite Scroll Event Listener
+        // Infinite Scroll Event Listener (rAF-throttled & passive)
+        let scrollTicking = false;
         listContainer.addEventListener('scroll', () => {
-            const scrollTop = listContainer.scrollTop;
-            const clientHeight = listContainer.clientHeight;
-            const scrollHeight = listContainer.scrollHeight;
+            if (!scrollTicking) {
+                scrollTicking = true;
+                requestAnimationFrame(() => {
+                    scrollTicking = false;
+                    const scrollTop = listContainer.scrollTop;
+                    const clientHeight = listContainer.clientHeight;
+                    const scrollHeight = listContainer.scrollHeight;
 
-            if (scrollTop + clientHeight >= scrollHeight - 20) {
-                loadMore();
+                    if (scrollTop + clientHeight >= scrollHeight - 20) {
+                        loadMore();
+                    }
+                });
             }
-        });
+        }, { passive: true });
         
         return container;
     }

@@ -40,5 +40,11 @@
 - **Визуал**: 100% сохранен (контекстное меню, плеер и стриминг работают абсолютно прозрачно).
 - **Тесты**: 85 python tests + 3 node test suites passed in 7.65s (-5% времени выполнения).
 
-
-
+## Цикл 4
+- **Задачи**: PERF-010 (Artist profile rAF passive infinite scroll), PERF-011 (Equalizer dropdown document click deduplication), PERF-012 (Artist profile bridge promise cleanup)
+- **Результаты**:
+  - PERF-010: Добавлен `{ passive: true }` и троттлинг через `requestAnimationFrame` для слушателя бесконечного скролла списка треков артиста, что устранило блокировку потока прокрутки и layout thrashing.
+  - PERF-011: Именован и дедуплицирован глобальный слушатель `click` для закрытия меню пресетов эквалайзера при повторных вызовах `initEqualizer()`.
+  - PERF-012: Добавлена гарантированная очистка таймеров и отписка от слушателей `nedotify:artist_profile_data` в блоке `.catch()` промиса вызова bridge API, предотвратив утечку обработчиков и памяти при ошибках сети.
+- **Визуал**: 100% сохранен (скролл треков стал плавнее, меню эквалайзера работает безупречно).
+- **Тесты**: 85 python tests + 3 node test suites passed in 7.85s.

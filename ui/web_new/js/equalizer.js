@@ -54,6 +54,8 @@ const BAND_CONFIGS = {
     ]
 };
 
+let _eqDropdownClickHandler = null;
+
 export async function initEqualizer() {
     const container = document.getElementById('eq-bands-container');
     if (!container) return;
@@ -93,11 +95,15 @@ export async function initEqualizer() {
             dropdownMenu.classList.toggle('hidden');
         });
 
-        document.addEventListener('click', (e) => {
+        if (_eqDropdownClickHandler) {
+            document.removeEventListener('click', _eqDropdownClickHandler);
+        }
+        _eqDropdownClickHandler = (e) => {
             if (!e.target.closest('#eq-custom-preset-dropdown')) {
                 dropdownMenu.classList.add('hidden');
             }
-        });
+        };
+        document.addEventListener('click', _eqDropdownClickHandler);
 
         dropdownMenu.querySelectorAll('.custom-glass-dropdown-item').forEach(item => {
             item.addEventListener('click', () => {
