@@ -52,6 +52,12 @@ class LastFmArtistHandler:
     def getTopTags(self, artist: str) -> List[Dict]:
         return self._service.artist_get_top_tags(artist)
 
+    def getInfo(self, artist: str, lang: str = "ru") -> Dict:
+        return self._service.artist_get_info(artist, lang=lang)
+
+    def getTopAlbums(self, artist: str, limit: int = 50) -> List[Dict]:
+        return self._service.artist_get_top_albums(artist, limit=limit)
+
 
 class LastFmTrackHandler:
     """Namespace wrapper for track queries."""
@@ -417,6 +423,8 @@ class LastFMService(BaseMusicService):
 
     @staticmethod
     def _extract_image_url(images) -> str:
+        if isinstance(images, dict) and 'image' in images:
+            images = images.get('image')
         if isinstance(images, list) and images:
             last = images[-1]
             if isinstance(last, dict):
@@ -516,6 +524,98 @@ class LastFMService(BaseMusicService):
             if callback:
                 callback(results)
             return results
+
+        if callback:
+            self._executor.submit(_task)
+            return []
+        return _task()
+
+    def artist_get_info(self, artist: str, lang: str = "ru", callback: Callable = None) -> Dict[str, Any]:
+        """Fetch artist biography, listeners, playcount, tags and images from Last.fm."""
+        if not artist or not str(artist).strip():
+            if callback:
+                callback({})
+            return {}
+
+        def _task():
+            params = {'artist': str(artist).strip(), 'autocorrect': 1}
+            if lang:
+                params['lang'] = lang
+            data = self._api_request('artist.getinfo', params, RECOMMENDATION_TTL)
+            res = {}
+            if data and isinstance(data.get('artist'), dict):
+                a = data['artist']
+                bio_dict = a.get('bio') if isinstance(a.get('bio'), dict) else {}
+                summary = (bio_dict.get('summary') or '').strip()
+                content = (bio_dict.get('content') or '').strip()
+                import re
+                summary_clean = re.sub(r'<a\s+[^>]*>.*?</a>', '', summary, flags=re.IGNORECASE).strip()
+                content_clean = re.sub(r'<a\s+[^>]*>.*?</a>', '', content, flags=re.IGNORECASE).strip()
+
+                stats = a.get('stats') if isinstance(a.get('stats'), dict) else {}
+                tags_data = a.get('tags') if isinstance(a.get('tags'), dict) else {}
+                tag_list = tags_data.get('tag', [])
+                if isinstance(tag_list, dict):
+                    tag_list = [tag_list]
+                tags = [t.get('name', '') for t in tag_list if isinstance(t, dict) and t.get('name')]
+
+                res = {
+                    'name': a.get('name') or artist,
+                    'bio_summary': summary_clean,
+                    'bio_content': content_clean,
+                    'bio': content_clean or summary_clean,
+                    'listeners': self._safe_int(stats.get('listeners')),
+                    'playcount': self._safe_int(stats.get('playcount')),
+                    'tags': tags,
+                    'image': self._extract_image_url(a.get('image', [])),
+                }
+            if callback:
+                callback(res)
+            return res
+
+        if callback:
+            self._executor.submit(_task)
+            return {}
+        return _task()
+
+    def artist_get_top_albums(self, artist: str, limit: int = 50, callback: Callable = None) -> List[Dict[str, Any]]:
+        """Fetch artist top albums from Last.fm."""
+        if not artist or not str(artist).strip():
+            if callback:
+                callback([])
+            return []
+
+        def _task():
+            params = {'artist': str(artist).strip(), 'limit': limit, 'autocorrect': 1}
+            data = self._api_request('artist.gettopalbums', params, CHART_TTL)
+            albums = []
+            if data and isinstance(data.get('topalbums'), dict):
+                items = data['topalbums'].get('album', [])
+                if isinstance(items, dict):
+                    items = [items]
+                for item in items or []:
+                    if not isinstance(item, dict):
+                        continue
+                    name = (item.get('name') or '').strip()
+                    if not name or name == '(null)':
+                        continue
+                    cover = self._extract_image_url(item.get('image', []))
+                    playcount = self._safe_int(item.get('playcount'))
+                    albums.append({
+                        'id': f"lastfm_{abs(hash(name))}",
+                        'title': name,
+                        'album': name,
+                        'artist': (item.get('artist') or {}).get('name', artist) if isinstance(item.get('artist'), dict) else str(item.get('artist') or artist),
+                        'playcount': playcount,
+                        'cover': cover,
+                        'cover_url': cover,
+                        'source': 'lastfm',
+                        'type': 'album',
+                        'album_type': 'album',
+                    })
+            if callback:
+                callback(albums)
+            return albums
 
         if callback:
             self._executor.submit(_task)
