@@ -1,7 +1,7 @@
 // NeDotify — Settings Module
 import { renderIcons, escapeHtml, compressBackgroundImage, showToast } from './utils.js';
 import { initParticles, stopParticles, setParticlesFps } from './particles.js';
-import { setVisualizerFps } from './visualizer.js';
+import { setVisualizerFps, setVisualizerEnabled } from './visualizer.js';
 import { initOnboarding } from './onboarding.js';
 import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js';
 import { evaluateEfficiencyState } from './efficiency.js';
@@ -96,7 +96,9 @@ export function initSettings() {
     setupToggle('toggle-normalization', 'volume_normalization', 'audio');
     setupToggle('toggle-autoplay', 'autoplay', 'audio');
     setupToggle('toggle-particles', 'particles_enabled', 'ui');
-    setupToggle('toggle-visualizer', 'cover_visualizer', 'ui');
+    // NOTE: #toggle-visualizer is owned by visualizer.js (single source of truth).
+    // settings.js must NOT bind a second click handler here — it only persists
+    // via saveSetting() when told to, and syncs state through setVisualizerEnabled().
 
     setupSlider('slider-crossfade-sec', 'crossfade_duration_sec', 'audio', (v) => {
         setElText('label-crossfade-sec', `${v} сек`);
@@ -263,19 +265,9 @@ export function initSettings() {
         } catch(e) {}
     }
 
-    // Custom theme random button
-    const btnRandom = document.getElementById('btn-random-theme');
-    if (btnRandom) {
-        btnRandom.addEventListener('click', () => {
-            const rColor = () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
-            const p = rColor();
-            const a = rColor();
-            document.documentElement.style.setProperty('--primary', p);
-            document.documentElement.style.setProperty('--accent', a);
-            saveSetting('custom_primary', p, 'theme');
-            saveSetting('custom_accent', a, 'theme');
-        });
-    }
+    // Custom theme random button lives in setupAppearancePanel() (single source).
+    // (Removed duplicate minimal listener that overwrote only --primary/--accent
+    //  and double-fired alongside the full-palette generator.)
 
     // Playlist Import
     const btnImport = document.getElementById('btn-import-playlist');
@@ -642,6 +634,15 @@ export function applySettingsFromBackend(settings) {
         });
     }
 
+    // theme_mode is the actual light/dark/system switch (theme.theme is the palette name).
+    if (settings.theme && settings.theme.theme_mode !== undefined) {
+        const mode = String(settings.theme.theme_mode);
+        document.querySelectorAll('.theme-mode-btn[data-mode]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === mode);
+        });
+        try { applyThemeMode(mode); } catch(e) {}
+    }
+
     if (settings.ui) {
         if (settings.ui.particles_enabled !== undefined) {
             const toggle = document.getElementById('toggle-particles');
@@ -654,7 +655,8 @@ export function applySettingsFromBackend(settings) {
         }
         if (settings.ui.cover_visualizer !== undefined) {
             const toggle = document.getElementById('toggle-visualizer');
-            if (toggle) toggle.classList.toggle('on', settings.ui.cover_visualizer);
+            if (toggle) toggle.classList.toggle('on', !!settings.ui.cover_visualizer);
+            try { setVisualizerEnabled(!!settings.ui.cover_visualizer, { silent: true }); } catch(e) {}
         }
         if (settings.ui.particles_count !== undefined) {
             const slider = document.getElementById('slider-particles-count');
@@ -769,6 +771,16 @@ export function applySettingsFromBackend(settings) {
         if (selectRegion && settings.general.region !== undefined) {
             selectRegion.value = settings.general.region;
         }
+    }
+
+    // Discord Rich Presence state from backend (settings.app.discord_rpc_enabled).
+    // Only syncs the toggle UI + localStorage; the backend already holds the value.
+    if (settings.app && settings.app.discord_rpc_enabled !== undefined) {
+        const toggleDiscord = document.getElementById('toggle-discord-rpc');
+        if (toggleDiscord) toggleDiscord.classList.toggle('on', !!settings.app.discord_rpc_enabled);
+        try {
+            localStorage.setItem('nedotify_app_discord_rpc_enabled', JSON.stringify(!!settings.app.discord_rpc_enabled));
+        } catch(e) {}
     }
 
     if (settings.efficiency) {
@@ -1446,9 +1458,10 @@ function setupAppearancePanel() {
         }
     });
 
-    // Random Theme Palette Generator
+    // Random Theme Palette Generator (single listener: full palette + save)
     const btnRandom = document.getElementById('btn-random-theme');
-    if (btnRandom) {
+    if (btnRandom && !btnRandom._boundRandomTheme) {
+        btnRandom._boundRandomTheme = true;
         btnRandom.addEventListener('click', () => {
             const rHex = () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
             colorPickers.forEach(item => {
@@ -1463,7 +1476,12 @@ function setupAppearancePanel() {
                     const b = parseInt(c.substring(4, 6), 16) || 0;
                     document.documentElement.style.setProperty(`${item.prop}-rgb`, `${r}, ${g}, ${b}`);
                 }
+                saveSetting(item.id.replace('picker-color-', 'color_'), val, 'theme');
             });
+            const primaryEl = document.getElementById('picker-color-primary');
+            const accentEl = document.getElementById('picker-color-accent');
+            if (primaryEl) saveSetting('custom_primary', primaryEl.value, 'theme');
+            if (accentEl) saveSetting('custom_accent', accentEl.value, 'theme');
             window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Палитра случайно сгенерирована!', type: 'info' } }));
         });
     }
@@ -1607,6 +1625,11 @@ function setupZapretPanel() {
         if (selectZapretMode) {
             selectZapretMode.addEventListener('change', (e) => {
                 selectedMode = e.target.value;
+                // Persist immediately, regardless of the enable toggle state.
+                saveSetting('mode', selectedMode, 'zapret');
+                if (window.pywebview?.api?.set_setting) {
+                    window.pywebview.api.set_setting('zapret', 'mode', selectedMode);
+                }
                 if (toggleZapret && toggleZapret.classList.contains('on')) {
                     applyZapret(true);
                 }
@@ -1782,11 +1805,9 @@ function setupBackgroundPanel() {
     setupSlider('slider-bg-blur', 'bg_blur', 'theme', (v) => {
         const val = parseInt(v) || 0;
         setElText('label-bg-blur', `${val}px`);
-        setElText('label-glass-blur', `${val}px`);
-        const glassSlider = document.getElementById('slider-glass-blur');
-        if (glassSlider) glassSlider.value = val;
-        document.documentElement.style.setProperty('--glass-blur', `${val}px`);
-        document.documentElement.style.setProperty('--blur-sm', `${Math.max(4, Math.round(val * 0.4))}px`);
+        // bg-blur applies ONLY to #custom-bg-layer (via applyCustomBg filter).
+        // Glass blur (--glass-blur / --blur-*) is owned exclusively by
+        // #slider-glass-blur and must not be touched here.
         const bgUrl = getLocalSetting('nedotify_theme_custom_bg_image', '') || window.settings?.theme?.custom_bg_image;
         const dimVal = parseInt(document.getElementById('slider-bg-dim')?.value || 30);
         if (bgUrl) {

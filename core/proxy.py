@@ -241,6 +241,15 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
             pass
 
+    def _safe_send_error(self, code, message=None, explain=None):
+        """send_error() that never raises on a dead client socket (WinError 10053)."""
+        try:
+            self.send_error(code, message, explain)
+        except OSError:
+            pass
+        except Exception:
+            logger.debug("_safe_send_error suppressed", exc_info=True)
+
     def finish(self):
         """Release this request thread's SQLite connection before the thread dies.
 
@@ -333,7 +342,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 logger.error(f'Error serving Range request: {e}')
                 try:
-                    self.send_error(500, 'Range processing error')
+                    self._safe_send_error(500, 'Range processing error')
                 except Exception:
                     logger.debug("serve_local_file: suppressed exception", exc_info=True)
         else:

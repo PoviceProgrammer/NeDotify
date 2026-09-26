@@ -10,6 +10,9 @@ import os
 import sys
 import threading
 
+import socketserver
+socketserver.TCPServer.allow_reuse_address = True
+
 if sys.platform == "win32":
     multiprocessing.freeze_support()
 

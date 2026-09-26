@@ -22,6 +22,44 @@ export function setVisualizerFps(fps) {
     frameInterval = 1000 / targetFps;
 }
 
+// Single source of truth for #toggle-visualizer (settings.js must NOT bind it).
+// options.silent skips persistence (used when restoring backend state).
+export function setVisualizerEnabled(enabled, options = {}) {
+    isEnabled = !!enabled;
+    const toggle = document.getElementById('toggle-visualizer');
+    if (toggle) toggle.classList.toggle('on', isEnabled);
+    const canvas = document.getElementById('visualizer-canvas');
+    if (canvas) canvas.style.display = isEnabled ? '' : 'none';
+    if (!isEnabled) {
+        if (animFrameId) {
+            cancelAnimationFrame(animFrameId);
+            animFrameId = null;
+        }
+        targets.forEach(t => {
+            if (t.ctx && t.canvas) t.ctx.clearRect(0, 0, t.canvas.width, t.canvas.height);
+        });
+    } else if (documentVisible && !animFrameId) {
+        hasDrawnIdle = false;
+        animFrameId = requestAnimationFrame(draw);
+    }
+    if (!options.silent) persistVisualizerEnabled();
+}
+
+function persistVisualizerEnabled() {
+    try {
+        localStorage.setItem('nedotify_ui_cover_visualizer', JSON.stringify(isEnabled));
+    } catch(e) {}
+    if (window.settings) {
+        window.settings.ui = window.settings.ui || {};
+        window.settings.ui.cover_visualizer = isEnabled;
+    }
+    if (window.pywebview?.api?.save_setting) {
+        try { window.pywebview.api.save_setting('cover_visualizer', isEnabled, 'ui'); } catch(e) {}
+    }
+}
+
+export function isVisualizerEnabled() { return isEnabled; }
+
 // Cached gradient colors
 let cachedPrimaryRgb = '255, 159, 28';
 let gradientCacheTime = 0;
@@ -100,21 +138,18 @@ export function initVisualizer() {
     }
 
     const toggleEnabled = document.getElementById('toggle-visualizer');
-    if (toggleEnabled) {
+    if (toggleEnabled && !toggleEnabled._boundVisualizerClick) {
+        toggleEnabled._boundVisualizerClick = true;
+        // Initial state: DOM toggle class wins if present, else stored setting.
+        try {
+            const stored = localStorage.getItem('nedotify_ui_cover_visualizer');
+            const fromStore = stored !== null ? JSON.parse(stored) : null;
+            const fromDom = toggleEnabled.classList.contains('on');
+            const initial = fromStore !== null ? !!fromStore : (fromDom || isEnabled);
+            setVisualizerEnabled(initial, { silent: true });
+        } catch(e) {}
         toggleEnabled.addEventListener('click', () => {
-            isEnabled = !isEnabled;
-            toggleEnabled.classList.toggle('on', isEnabled);
-            if (!isEnabled) {
-                if (animFrameId) {
-                    cancelAnimationFrame(animFrameId);
-                    animFrameId = null;
-                }
-                targets.forEach(t => {
-                    if (t.ctx && t.canvas) t.ctx.clearRect(0, 0, t.canvas.width, t.canvas.height);
-                });
-            } else {
-                draw(0);
-            }
+            setVisualizerEnabled(!isEnabled);
         });
     }
 

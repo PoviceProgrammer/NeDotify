@@ -63,6 +63,8 @@ export function initSearch() {
             if (clearBtn) clearBtn.classList.toggle('visible', query.length > 0);
 
             if (query.length > 0) {
+                const sugg = document.getElementById('search-suggestions-dropdown');
+                if (sugg) sugg.classList.add('hidden');
                 showLoading();
                 searchDebounce = setTimeout(() => {
                     allResults = [];
@@ -106,6 +108,8 @@ export function initSearch() {
     function onSelectPlatform(selectedSource, targetBtn) {
         if (!selectedSource || !PLATFORM_SVGS[selectedSource]) return;
 
+        // Any explicit source switch is a new search intent -> leave artist profile
+        isViewingArtistProfile = false;
         currentSource = selectedSource;
 
         // Update active icon on platform button
@@ -152,14 +156,8 @@ export function initSearch() {
             }
         });
     }
-
-    document.querySelectorAll('.platform-item').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const targetBtn = e.currentTarget || btn;
-            onSelectPlatform(targetBtn.dataset.source, targetBtn);
-        });
-    });
+    // De-duplicated: per-button listeners removed — delegated listener above is enough.
+    // Keeping this comment to prevent re-adding a second dispatch that doubled api('search').
 
     // Sub-type Filters: Все, Треки, Плейлисты, Альбомы, Артисты
     document.querySelectorAll('.type-filter-btn[data-type]').forEach(btn => {
@@ -238,32 +236,51 @@ export function searchArtistProfile(artistName) {
 
 window.searchArtistProfile = searchArtistProfile;
 
+function trackDedupKey(t) {
+    const src = String(t.source || '').toLowerCase().trim();
+    const sid = String(t.source_id || t.id || '').trim();
+    if (src && sid) return `${src}::${sid}`;
+    const title = String(t.title || '').toLowerCase().trim();
+    const artist = String(t.artist || '').toLowerCase().trim();
+    const dur = t.duration ? String(Math.round(Number(t.duration)) || '') : '';
+    return `fallback::${title}__${artist}__${dur}`;
+}
+
 export function onSearchResults(data) {
-    if (isViewingArtistProfile) {
-        return; // Don't overwrite active artist profile view
+    if (data && data.source === '__completion__') {
+        if (data.query && currentSearchQuery && data.query !== currentSearchQuery) {
+            return; // Stale completion — a newer query is already in flight
+        }
+        const container = document.getElementById('search-results');
+        if (container && container.querySelector('.spinner') && allResults.length === 0) {
+            container.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
+        }
+        return;
+    }
+    // Don't let provider bursts overwrite an active artist profile, but allow explicit type switches
+    if (isViewingArtistProfile && data && data.type !== 'artists' && currentType === 'artists') {
+        return;
     }
     if (data.query && currentSearchQuery && data.query !== currentSearchQuery) {
         return; // Stale result — ignore
     }
-    if (data.tracks && data.tracks.length > 0) {
-        const filteredTracks = filterVisibleTracks(data.tracks);
+    const incoming = Array.isArray(data.tracks) ? data.tracks : [];
+    if (incoming.length > 0) {
+        const filteredTracks = filterVisibleTracks(incoming);
         if (filteredTracks.length > 0) {
-            const seen = new Set(allResults.map(t => `${(t.title || '').toLowerCase().trim()}_${(t.artist || '').toLowerCase().trim()}`));
+            const seen = new Set(allResults.map(trackDedupKey));
             for (const t of filteredTracks) {
-                const key = `${(t.title || '').toLowerCase().trim()}_${(t.artist || '').toLowerCase().trim()}`;
+                const key = trackDedupKey(t);
                 if (!seen.has(key)) {
                     seen.add(key);
                     allResults.push(t);
                 }
             }
             renderResults(allResults);
-        }
-    } else {
-        const container = document.getElementById('search-results');
-        if (container && container.querySelector('.spinner') && allResults.length === 0) {
-            container.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
+            return;
         }
     }
+    // Empty chunk: keep spinner until completion sentinel arrives
 }
 
 function renderResults(tracks) {

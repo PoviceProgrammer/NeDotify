@@ -147,12 +147,30 @@ class LyricsService:
     def translate_lyrics(self, lyrics: str, target_lang="ru") -> str:
         if not lyrics:
             return ""
+        # Chunk long lyrics: a whole song in one ?q= blows past URL limits (414)
+        # and gets rate-limited. 1500 chars keeps each GET well under 8KB quoted.
+        chunks = []
+        text = str(lyrics)
+        while text:
+            if len(text) <= 1500:
+                chunks.append(text)
+                break
+            cut = text.rfind("\n", 0, 1500)
+            if cut <= 0:
+                cut = 1500
+            chunks.append(text[:cut])
+            text = text[cut:].lstrip("\n")
+            if len(chunks) >= 10:
+                break
+        out = []
         try:
-            url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_lang}&dt=t&q={urllib.parse.quote(lyrics)}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with self._open_url(req, timeout=HTTP_TIMEOUT) as resp:
-                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
-                return "".join([x[0] for x in data[0] if x[0]])
+            for ch in chunks:
+                url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_lang}&dt=t&q={urllib.parse.quote(ch)}"
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with self._open_url(req, timeout=HTTP_TIMEOUT) as resp:
+                    data = json.loads(resp.read().decode('utf-8', errors='ignore'))
+                    out.append("".join([x[0] for x in data[0] if x[0]]))
+            return "\n".join(out) if out else lyrics
         except Exception as e:
             logger.debug(f"Translation error: {e}")
             return lyrics

@@ -142,12 +142,16 @@ export function handleImageError(img, coverUrl, sourceId, source) {
 
 // Builds a safe <img> tag: escaped src + data-attributes instead of inline onerror.
 // The delegated error listener below handles image fallback (coverUrl/sourceId/source).
+// Empty src is never rendered: <img src=""> triggers a same-page request and a
+// broken-image icon on cold start (no PROXY_PORT yet).
 export function coverImgHtml({ src, coverUrl, sourceId, source, alt = '', extraAttrs = '' }) {
+    const safeSrc = (src || '').trim();
+    if (!safeSrc) return '';
     let dataAttrs = '';
     if (coverUrl) dataAttrs += ` data-cover-url="${escapeHtml(coverUrl)}"`;
     if (sourceId) dataAttrs += ` data-source-id="${escapeHtml(sourceId)}"`;
     if (source) dataAttrs += ` data-source="${escapeHtml(source)}"`;
-    return `<img src="${escapeHtml(src || '')}" alt="${escapeHtml(alt)}"${dataAttrs} loading="lazy"${extraAttrs ? ' ' + extraAttrs : ''}>`;
+    return `<img src="${escapeHtml(safeSrc)}" alt="${escapeHtml(alt)}"${dataAttrs} loading="lazy"${extraAttrs ? ' ' + extraAttrs : ''}>`;
 }
 
 // 'error' does not bubble, but is caught on document in the capture phase.
@@ -573,21 +577,66 @@ document.addEventListener('nedotify:track_changed', (e) => {
     }
 });
 
+function matchDownloadTarget(el, data) {
+    if (!data) return false;
+    // Strict comparison only: String(a) === String(b). No .includes() —
+    // a track id "12" must never match a source id "123".
+    const tid = (data.track_id !== undefined && data.track_id !== null) ? String(data.track_id) : '';
+    const sid = (data.source_id !== undefined && data.source_id !== null) ? String(data.source_id) : '';
+    if (!tid && !sid) return false;
+    const ds = el.dataset && el.dataset.trackSourceId ? String(el.dataset.trackSourceId) : '';
+    if (ds && ((tid && ds === tid) || (sid && ds === sid))) return true;
+    const trk = el._trackData;
+    if (trk) {
+        const ids = [trk.id, trk.source_id].map(v => (v !== undefined && v !== null) ? String(v) : '');
+        if (ids.some(v => v && ((tid && v === tid) || (sid && v === sid)))) return true;
+    }
+    return false;
+}
+
+function clearDownloadSpinner(el, downloaded) {
+    const btn = el.querySelector('.download-btn');
+    if (!btn) return;
+    btn.classList.remove('downloading');
+    if (downloaded) {
+        btn.classList.add('downloaded');
+        btn.title = 'Скачан';
+        btn.innerHTML = '<i data-lucide="check" style="width:14px;height:14px"></i>';
+    } else {
+        btn.title = 'Скачать';
+        btn.innerHTML = '<i data-lucide="download" style="width:14px;height:14px"></i>';
+    }
+}
+
 document.addEventListener('nedotify:track_downloaded', (e) => {
     const data = e.detail;
     if (!data) return;
-    const targetId = String(data.track_id || data.source_id || '');
     document.querySelectorAll('.track-item').forEach(el => {
-        if (el.dataset.trackSourceId && targetId && el.dataset.trackSourceId.includes(targetId)) {
-            const btn = el.querySelector('.download-btn');
-            if (btn) {
-                btn.classList.remove('downloading');
-                btn.classList.add('downloaded');
-                btn.title = 'Скачан';
-                btn.innerHTML = '<i data-lucide="check" style="width:14px;height:14px"></i>';
-            }
+        if (matchDownloadTarget(el, data)) {
+            clearDownloadSpinner(el, true);
         }
     });
+    renderIcons();
+});
+
+document.addEventListener('nedotify:track_download_failed', (e) => {
+    const data = e.detail;
+    if (!data) return;
+    let matched = false;
+    document.querySelectorAll('.track-item').forEach(el => {
+        if (matchDownloadTarget(el, data)) {
+            matched = true;
+            clearDownloadSpinner(el, false);
+        }
+    });
+    // Fallback: if the failed track has no rendered row, drop all spinners
+    // so no button stays stuck in the loading state.
+    if (!matched) {
+        document.querySelectorAll('.download-btn.downloading').forEach(btn => {
+            btn.classList.remove('downloading');
+            btn.innerHTML = '<i data-lucide="download" style="width:14px;height:14px"></i>';
+        });
+    }
     renderIcons();
 });
 

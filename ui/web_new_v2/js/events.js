@@ -57,9 +57,12 @@ export function initEvents() {
                 break;
 
             case 'search_results':
-            case 'search_completed':
                 onSearchResults(data);
                 window.dispatchEvent(new CustomEvent('app:search_results', { detail: data }));
+                break;
+            case 'search_completed':
+                onSearchResults({ ...data, source: '__completion__', type: data?.type || null });
+                window.dispatchEvent(new CustomEvent('app:search_completed', { detail: data }));
                 break;
                 
             case 'authentic_home_ready':
@@ -189,20 +192,51 @@ export function initEvents() {
                 document.dispatchEvent(new CustomEvent('nedotify:track_downloaded', { detail: data }));
                 break;
 
+            case 'download_failed': {
+                // Drop the spinner on every download button (global fallback;
+                // utils.js also clears the exact track button by strict id match).
+                document.querySelectorAll('.download-btn.downloading').forEach(btn => {
+                    btn.classList.remove('downloading');
+                    if (!btn.classList.contains('downloaded')) {
+                        btn.innerHTML = '<i data-lucide="download" style="width:14px;height:14px"></i>';
+                    }
+                });
+                renderIcons();
+                const dlErr = (data?.error || data?.message || 'Неизвестная ошибка').toString();
+                showToast('Ошибка скачивания: ' + dlErr, 'error');
+                document.dispatchEvent(new CustomEvent('nedotify:track_download_failed', { detail: data }));
+                break;
+            }
+
             case 'queue_updated':
                 // Will be handled by queue.js listening to pywebview event directly, or we can dispatch
                 document.dispatchEvent(new CustomEvent('nedotify:queue_updated', { detail: data }));
                 break;
 
-            case 'shuffle_changed':
-                const btnShuffle = document.getElementById('pp-btn-shuffle');
-                if (btnShuffle) btnShuffle.classList.toggle('active', !!data?.state);
+            case 'shuffle_changed': {
+                const shuffleOn = !!data?.state;
+                const btnShufflePP = document.getElementById('pp-btn-shuffle');
+                if (btnShufflePP) btnShufflePP.classList.toggle('active', shuffleOn);
+                const btnShufflePB = document.getElementById('pb-btn-shuffle');
+                if (btnShufflePB) btnShufflePB.classList.toggle('active', shuffleOn);
                 break;
+            }
 
-            case 'repeat_changed':
+            case 'repeat_changed': {
+                const repeatMode = data?.state ?? 'off';
+                const repeatOn = repeatMode !== 'off';
                 const ppRepeat = document.getElementById('pp-btn-repeat');
-                if (ppRepeat) ppRepeat.classList.toggle('active', data?.state !== 'off');
+                if (ppRepeat) {
+                    ppRepeat.classList.toggle('active', repeatOn);
+                    syncRepeatIcon(ppRepeat, repeatMode);
+                }
+                const pbRepeat = document.getElementById('pb-btn-repeat');
+                if (pbRepeat) {
+                    pbRepeat.classList.toggle('active', repeatOn);
+                    syncRepeatIcon(pbRepeat, repeatMode);
+                }
                 break;
+            }
 
             case 'setting_changed':
                 // data = { key, value, category }
@@ -290,6 +324,17 @@ function logFutureEvent(eventName, data) {
         console.info(`[NeDotify] Future/deprecated event ignored: ${eventName}`, data || '');
         loggedFutureEvents.add(eventName);
     }
+}
+
+// Mirrors player.js updateRepeatIcon so backend repeat_changed syncs both bars.
+function syncRepeatIcon(btn, mode) {
+    if (!btn) return;
+    if (mode === 'one') {
+        btn.innerHTML = '<i data-lucide="repeat-1" style="width:16px;height:16px"></i>';
+    } else {
+        btn.innerHTML = '<i data-lucide="repeat" style="width:16px;height:16px"></i>';
+    }
+    renderIcons();
 }
 
 

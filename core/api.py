@@ -26,9 +26,10 @@ logger = logging.getLogger(__name__)
 # until they are replaced with a remote, server-owned licensing service.
 LICENSE_VALIDATION_ENABLED = False
 
-# Hard per-provider search deadline. Single source of truth: the docstring, the
-# timer below and the test suite all read this constant.
-PROVIDER_SEARCH_TIMEOUT = 4.0
+# Hard per-provider search deadline. Raised from 4.0 to 6.0: yt-dlp socket_timeout
+# is 6s and YTMusic session timeout is 15s; a 4s bridge deadline forced a
+# visible "nothing found" before the provider even answered.
+PROVIDER_SEARCH_TIMEOUT = 6.0
 
 # Total wall-clock budget for a bridge method that must answer synchronously.
 # pywebview serves the call on a bridge thread and the JS caller is awaiting it, so
@@ -787,6 +788,13 @@ class AppApi:
             "duration_ms": duration
         })
 
+    def _notify_queue_updated(self):
+        """Emit queue_updated so the drawer never goes stale after a queue swap."""
+        try:
+            self._emit("queue_updated", self.get_queue())
+        except Exception:
+            logger.debug("_notify_queue_updated failed", exc_info=True)
+
     def play_track(self, track: dict, track_list: list = None, index: int = 0):
         """Play given track data object."""
         logger.info(f"api.py -> play_track called! track={track.get('title') if isinstance(track, dict) else track}, has_track_list={bool(track_list)}, index={index}")
@@ -856,6 +864,7 @@ class AppApi:
             if source == "local" or _fp_usable(fp):
                 logger.info(f"api.py -> play_track fast path: source={source}, file_path={str(fp)[:80] if fp else None}")
                 self._core.engine.play_queue(track_list, safe_index)
+                self._notify_queue_updated()
                 return
 
             # Check DB stream cache (local file or fresh url)
@@ -867,12 +876,14 @@ class AppApi:
                         target_track["file_path"] = cfp
                         logger.info(f"api.py -> play_track cache hit (local file): {cfp}")
                         self._core.engine.play_queue(track_list, safe_index)
+                        self._notify_queue_updated()
                         return
                     c_url = cached.get("stream_url")
                     if c_url and (c_url.startswith("http://") or c_url.startswith("https://")):
                         target_track["file_path"] = c_url
                         logger.info(f"api.py -> play_track cache hit (url): {c_url[:80]}")
                         self._core.engine.play_queue(track_list, safe_index)
+                        self._notify_queue_updated()
                         return
 
             # Check on-disk streams directory
@@ -892,11 +903,13 @@ class AppApi:
                 if found_local:
                     logger.info(f"api.py -> play_track streams dir hit: {target_track['file_path']}")
                     self._core.engine.play_queue(track_list, safe_index)
+                    self._notify_queue_updated()
                     return
 
             # Start queue playback immediately (frontend shows loading state),
             # resolve the target stream in background and notify again when ready.
             self._core.engine.play_queue(track_list, safe_index)
+            self._notify_queue_updated()
 
             def on_queue_resolved(stream_url, metadata=None):
                 if not stream_url:
@@ -953,6 +966,10 @@ class AppApi:
                 self._core.engine._notify_track_changed()
             else:
                 play_callback(track)
+            try:
+                self._emit("queue_updated", self.get_queue())
+            except Exception:
+                logger.debug("_deliver queue_updated failed", exc_info=True)
 
         fp = track.get("file_path")
         if source == "local" and not fp:
@@ -1129,6 +1146,21 @@ class AppApi:
             return {"success": True}
         except Exception as e:
             logger.error(f"remove_from_queue error: {e}")
+            return {"success": False, "error": str(e)}
+
+    def clear_queue(self):
+        """Remove all tracks except the currently playing one (O-1)."""
+        try:
+            queue = self._core.engine.queue
+            current = queue.current_track
+            queue.clear()
+            # Keep the current track so playback state stays valid.
+            if current:
+                queue.set_tracks([current], 0)
+            self._emit("queue_updated", self.get_queue())
+            return {"success": True}
+        except Exception as e:
+            logger.error(f"clear_queue error: {e}")
             return {"success": False, "error": str(e)}
 
     def get_setting(self, key: str, default=None):
@@ -1341,6 +1373,12 @@ class AppApi:
                     completion_emitted[0] = True
                     self._emit("search_completed", {"query": query, "source": source})
 
+        if not requested_providers:
+            # All providers filtered out (e.g. DISABLED_UI_PROVIDERS): do not hang,
+            # emit completion immediately so the UI stops its spinner.
+            self._emit("search_completed", {"query": query, "source": source})
+            return {"query": query, "tracks": []}
+
         # Local DB Search
         if "local" in requested_providers:
             def _run_local():
@@ -1398,14 +1436,18 @@ class AppApi:
                     logger.info("%s search failed: %s", name, err)
                     _finish([])
 
+                # SoundCloud regularly exceeds the 4s budget (client_id scrape +
+                # api-v2 round trips); give it 8s, keep 4.0s for the rest.
+                _timeout = 8.0 if name == "soundcloud" else PROVIDER_SEARCH_TIMEOUT
+
                 def _on_timeout():
                     with lock:
                         if is_done[0]:
                             return
-                    logger.warning("%s search timed out after %.1fs", name, PROVIDER_SEARCH_TIMEOUT)
+                    logger.warning("%s search timed out after %.1fs", name, _timeout)
                     _finish([])
 
-                timer = threading.Timer(PROVIDER_SEARCH_TIMEOUT, _on_timeout)
+                timer = threading.Timer(_timeout, _on_timeout)
                 timer.daemon = True
                 timer.start()
 
@@ -1507,28 +1549,83 @@ class AppApi:
         return self.get_favorite_tracks()
 
     def get_downloaded_tracks(self):
-        """Get list of downloaded local tracks."""
-        return self._core.db.get_downloaded_tracks()
+        """Get list of downloaded local tracks (missing files filtered out)."""
+        try:
+            tracks = self._core.db.get_downloaded_tracks() or []
+        except Exception:
+            return []
+        result = []
+        for t in tracks:
+            if not isinstance(t, dict):
+                continue
+            fp = t.get("file_path")
+            if fp and os.path.exists(fp):
+                result.append(t)
+        return result
 
     def download_track(self, track_data: dict):
-        """Queue track for background download."""
-        if not track_data:
+        """Queue track for background download. Returns True if queued, False otherwise."""
+        if not track_data or not isinstance(track_data, dict):
             return False
 
         track_id = track_data.get("id")
-        source = track_data.get("source", "youtube")
-        source_id = track_data.get("source_id") or str(track_id)
+        source = track_data.get("source") or "youtube"
+        source_id = track_data.get("source_id")
+
+        if not source_id and track_id is not None:
+            # Never substitute a numeric DB id for a provider videoId: look up
+            # the real provider source_id first.
+            try:
+                db_track = self._core.db.get_track(int(track_id))
+                if db_track:
+                    if db_track.get("source_id"):
+                        source_id = db_track.get("source_id")
+                    if db_track.get("source"):
+                        source = db_track.get("source")
+            except (ValueError, TypeError):
+                # track_id is not a numeric DB id (e.g. already a videoId string)
+                source_id = source_id or str(track_data.get("source_id") or track_id)
+            except Exception:
+                logger.debug("download_track DB lookup failed", exc_info=True)
 
         if not track_id:
-            track_id = self._core.db.add_track(
-                title=track_data.get("title", "Unknown"),
-                artist=track_data.get("artist", "Unknown Artist"),
-                source=source,
-                source_id=source_id,
-                duration=track_data.get("duration", 0)
-            )
+            try:
+                track_id = self._core.db.add_track(
+                    title=track_data.get("title", "Unknown"),
+                    artist=track_data.get("artist", "Unknown Artist"),
+                    source=source,
+                    source_id=source_id,
+                    duration=track_data.get("duration", 0)
+                )
+            except Exception as e:
+                logger.error(f"download_track: failed to persist track: {e}")
+                try:
+                    self._emit("download_failed", {"track_id": None, "error": str(e)})
+                except Exception:
+                    pass
+                return False
 
-        return self._core.downloader.queue_download(track_id, source, source_id)
+        if not source_id:
+            logger.warning(f"download_track: missing source_id for track {track_id}, refusing to queue")
+            try:
+                self._emit("download_failed", {"track_id": track_id, "error": "missing source_id"})
+            except Exception:
+                pass
+            return False
+
+        try:
+            queued = self._core.downloader.queue_download(track_id, source, str(source_id))
+        except Exception as e:
+            logger.error(f"download_track: queue_download failed for {track_id}: {e}")
+            try:
+                self._emit("download_failed", {"track_id": track_id, "error": str(e)})
+            except Exception:
+                pass
+            return False
+        if not queued:
+            # Duplicate or rejected by the queue manager.
+            return False
+        return True
 
     def import_external_playlist(self, url: str, name: str | None = None):
         """Resolve a supported external playlist and persist its tracks locally."""
@@ -1983,7 +2080,7 @@ class AppApi:
                 "total_mb": total_mb,
                 "tracks": {"count": track_count, "size": f"{track_mb} MB"},
                 "covers": {"count": covers_count, "size": f"{cover_mb} MB"},
-                "cache_dir": cache_dir
+                "cache_dir": base_cache_dir
             }
             self._storage_info_cache = (time.monotonic(), res)
             self._emit("storage_info", res)
@@ -2725,12 +2822,54 @@ class AppApi:
             logger.error(f"Error getting storage details: {e}")
             return {"used_bytes": 0, "quota_bytes": 5 * 1024 * 1024 * 1024, "quota_gb": 5, "protected_count": 0}
 
-    def set_cache_quota(self, quota_gb: int) -> dict:
-        """Set storage cache quota in GB and trigger LRU eviction if quota is exceeded."""
+    def set_cache_quota(self, quota_gb=None, cache_size_mb=None, cache_quota_gb=None, **kwargs) -> dict:
+        """Set storage cache quota and trigger LRU eviction if quota is exceeded.
+
+        Unifies the two historically divergent keys:
+          - frontend sends ``cache_quota_gb`` (GB, select-cache-quota),
+          - older settings schema used ``storage.cache_size_mb`` (MB).
+        Accepts either (GB wins when both are given) so callers never silently
+        write a key the reader ignores.
+        """
         try:
-            quota_val = max(0, int(quota_gb))
+            # Alias handling: explicit kwargs / alternate kw names.
+            if cache_quota_gb is None:
+                cache_quota_gb = kwargs.get("cache_quota_gb")
+            if cache_size_mb is None:
+                cache_size_mb = kwargs.get("cache_size_mb")
+            # Positional compat: set_cache_quota(500) historically meant MB in
+            # some builds; values > 64 are almost certainly MB, not GB.
+            quota_val_gb = None
+            if quota_gb is not None:
+                try:
+                    quota_val_gb = float(quota_gb)
+                except (TypeError, ValueError):
+                    quota_val_gb = None
+            if cache_quota_gb is not None and quota_val_gb is None:
+                try:
+                    quota_val_gb = float(cache_quota_gb)
+                except (TypeError, ValueError):
+                    quota_val_gb = None
+            size_mb = None
+            if cache_size_mb is not None:
+                try:
+                    size_mb = float(cache_size_mb)
+                except (TypeError, ValueError):
+                    size_mb = None
+            if quota_val_gb is None and size_mb is not None:
+                quota_val_gb = size_mb / 1024.0
+            if quota_val_gb is None:
+                return {"success": False, "error": "quota not specified"}
+            # Heuristic: a bare number > 64 passed positionally is MB, not GB
+            # (nobody sets a 500 GB stream cache from the settings dropdown).
+            if cache_quota_gb is None and size_mb is None and quota_val_gb > 64:
+                size_mb = quota_val_gb
+                quota_val_gb = size_mb / 1024.0
+            quota_val = max(0, int(round(quota_val_gb)))
+            size_mb_val = int(round(quota_val * 1024)) if quota_val else (int(size_mb) if size_mb else 0)
             if hasattr(self._core, "settings") and self._core.settings:
                 self._core.settings.set("storage", "cache_quota_gb", quota_val)
+                self._core.settings.set("storage", "cache_size_mb", size_mb_val)
 
             freed = 0
             if hasattr(self._core, "cache") and self._core.cache:

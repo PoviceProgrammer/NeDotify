@@ -33,8 +33,28 @@ export function toggleTranslation() {
     if (isTranslationEnabled && Object.keys(currentTranslationMap).length === 0 && currentRawLyricsText) {
         if (window.pywebview?.api?.get_lyrics_translation) {
             window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Переводим текст песни...', type: 'info' } }));
-            window.pywebview.api.get_lyrics_translation(currentRawLyricsText, 'ru').then(res => {
-                currentTranslationMap = res || {};
+            // Strip LRC timestamps: backend translates plain lines, not "[00:12.34]" tags
+            const cleanText = String(currentRawLyricsText).replace(/\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/g, '').replace(/^\s*\n/gm, '\n').trim();
+            window.pywebview.api.get_lyrics_translation(cleanText, 'ru').then(res => {
+                if (typeof res === 'string') {
+                    // Backend returns full translated text: align line-by-line with parsedLyrics
+                    const transLines = res.split(/\r?\n/).map(s => s.trim());
+                    const origLines = cleanText.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+                    const map = {};
+                    // Prefer parsedLyrics order (synced), fallback to raw order
+                    const keys = parsedLyrics.length > 0 ? parsedLyrics.map(l => l.text) : origLines;
+                    keys.forEach((k, i) => {
+                        if (k && transLines[i] && transLines[i] !== k) map[k] = transLines[i];
+                        else if (k && origLines[i] && transLines[i]) map[origLines[i]] = transLines[i];
+                    });
+                    // If line counts mismatch, fall back to index alignment with origLines
+                    if (Object.keys(map).length === 0) {
+                        origLines.forEach((k, i) => { if (k && transLines[i]) map[k] = transLines[i]; });
+                    }
+                    currentTranslationMap = map;
+                } else {
+                    currentTranslationMap = res || {};
+                }
                 renderLyrics(lastLyricsData);
             }).catch(err => {
                 console.error("Translation failed:", err);
@@ -343,8 +363,8 @@ export function renderLyrics(data) {
 
     currentRawLyricsText = normalizedData.syncedLyrics || normalizedData.plainLyrics || "";
 
-    if (data.syncedLyrics) {
-        parsedLyrics = parseLrc(data.syncedLyrics);
+    if (normalizedData.syncedLyrics) {
+        parsedLyrics = parseLrc(normalizedData.syncedLyrics);
         if (parsedLyrics.length > 0) {
             containers.forEach(c => {
                 c.innerHTML = '';
@@ -383,7 +403,7 @@ export function renderLyrics(data) {
     parsedLyrics = [];
     containers.forEach(c => {
         c.innerHTML = '';
-        const lines = cleanPlainLyrics(data.plainLyrics);
+        const lines = cleanPlainLyrics(normalizedData.plainLyrics);
         
         const warnEl = document.createElement('div');
         warnEl.className = 'lyric-notice';
@@ -395,6 +415,12 @@ export function renderLyrics(data) {
             const el = document.createElement('div');
             el.className = 'lyric-line lyric-plain';
             el.textContent = line;
+            if (isTranslationEnabled && currentTranslationMap[line]) {
+                const subEl = document.createElement('div');
+                subEl.className = 'lyric-translation';
+                subEl.textContent = currentTranslationMap[line];
+                el.appendChild(subEl);
+            }
             c.appendChild(el);
         });
     });

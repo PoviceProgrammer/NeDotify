@@ -558,21 +558,32 @@ class SoundCloudService(BaseMusicService):
         if not HAS_YTDLP:
             raise Exception('yt-dlp is missing')
 
-        sc_url_str = str(sc_url).strip()
+        # Single timestamp for every filename derived from this call, otherwise
+        # output_path and outtmpl drift apart by a second and the existence
+        # fallback below can never match the real download.
+        ts = int(time.time())
+
+        raw_input = str(sc_url).strip()
+        sc_url_str = raw_input
         if not sc_url_str.startswith('http'):
             if sc_url_str.isdigit():
+                # Bare numeric track id: yt-dlp cannot fetch a permalink from it,
+                # the api-v2 track URL is the only resolvable form.
                 sc_url_str = f'https://api-v2.soundcloud.com/tracks/{sc_url_str}'
             else:
-                sc_url_str = f'https://soundcloud.com/{sc_url_str}'
+                # Permalink slug such as "artist/track": qualify it. A value that
+                # already contains a slash is used as-is after the host prefix;
+                # a bare slug without slash is also prefixed (best effort).
+                sc_url_str = f'https://soundcloud.com/{sc_url_str.lstrip("/")}'
 
-        file_name = f'sc_{int(time.time())}.mp3'
+        file_name = f'sc_{ts}.mp3'
         output_path = os.path.join(output_dir, file_name)
 
         ydl_opts = {'quiet': True, 'no_warnings': True, 'format': 'bestaudio/best'}
-        ydl = yt_dlp.YoutubeDL(ydl_opts)
-        
+
         try:
-            info = ydl.extract_info(sc_url_str, download=False)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(sc_url_str, download=False)
         except Exception as e:
             self.logger.debug(f'SoundCloud metadata probe failed for {sc_url_str}: {e}', exc_info=True)
             info = None
@@ -601,7 +612,7 @@ class SoundCloudService(BaseMusicService):
 
             yt_dlp_opts = yt._get_ydl_opts('bestaudio/best', fallback=True)
             yt_dlp_opts.update({
-                'outtmpl': os.path.join(output_dir, f'sc_yt_{int(time.time())}.%(ext)s'),
+                'outtmpl': os.path.join(output_dir, f'sc_yt_{ts}.%(ext)s'),
                 'skip_download': False,
             })
             with yt_dlp.YoutubeDL(yt_dlp_opts) as yt_ydl:
@@ -619,7 +630,7 @@ class SoundCloudService(BaseMusicService):
                 'quiet': True,
                 'no_warnings': True,
                 'format': 'bestaudio/best',
-                'outtmpl': os.path.join(output_dir, f'sc_{int(time.time())}.%(ext)s'),
+                'outtmpl': os.path.join(output_dir, f'sc_{ts}.%(ext)s'),
             }
             with yt_dlp.YoutubeDL(dl_opts) as sc_ydl:
                 sc_info = sc_ydl.extract_info(sc_url_str, download=True)

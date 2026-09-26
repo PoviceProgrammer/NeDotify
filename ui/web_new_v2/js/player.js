@@ -78,6 +78,8 @@ function loadAudioSource(audioEl, src) {
         try { hlsInstance.destroy(); } catch(e) {}
         hlsInstance = null;
     }
+    // Reset stale src so a fast skip never fires error/stall handlers for the old stream
+    try { audioEl.removeAttribute('src'); audioEl.src = ''; audioEl.load(); } catch(e) {}
 
     const isHls = typeof src === 'string' && (src.includes('.m3u8') || src.includes('/playlist') || src.includes('format=m3u8'));
     if (isHls && window.Hls && window.Hls.isSupported()) {
@@ -577,7 +579,36 @@ export function togglePlayPause() {
     if (!hasValidSrc) {
         if (currentTrack) {
             if (window.pywebview?.api?.play_track) {
-                window.pywebview.api.play_track(currentTrack);
+                // Pass the current queue when we have it so the backend keeps
+                // the queue (shuffle/repeat/next) instead of resolving solo.
+                const q = Array.isArray(window.currentQueue) ? window.currentQueue : null;
+                if (q && q.length > 0) {
+                    let idx = q.findIndex(t => t && currentTrack && (
+                        (t.id !== undefined && currentTrack.id !== undefined && String(t.id) === String(currentTrack.id)) ||
+                        (t.source_id && currentTrack.source_id && String(t.source_id) === String(currentTrack.source_id)) ||
+                        (t.title === currentTrack.title && (t.artist || '') === (currentTrack.artist || ''))
+                    ));
+                    if (idx < 0) idx = 0;
+                    window.pywebview.api.play_track(currentTrack, q, idx);
+                } else if (window.pywebview?.api?.get_queue) {
+                    window.pywebview.api.get_queue().then(queueState => {
+                        const tracks = (queueState && queueState.tracks) || [];
+                        if (tracks.length > 0) {
+                            let idx = tracks.findIndex(t => t && currentTrack && (
+                                (t.id !== undefined && currentTrack.id !== undefined && String(t.id) === String(currentTrack.id)) ||
+                                (t.source_id && currentTrack.source_id && String(t.source_id) === String(currentTrack.source_id))
+                            ));
+                            if (idx < 0) idx = (queueState.current_index >= 0 ? queueState.current_index : 0);
+                            window.pywebview.api.play_track(currentTrack, tracks, idx);
+                        } else {
+                            window.pywebview.api.play_track(currentTrack);
+                        }
+                    }).catch(() => {
+                        window.pywebview.api.play_track(currentTrack);
+                    });
+                } else {
+                    window.pywebview.api.play_track(currentTrack);
+                }
             }
         }
         return;
@@ -1028,7 +1059,10 @@ function animateProgress(timestamp) {
         animFrameId = null;
         return;
     }
-    if (document.hidden) return;
+    if (document.hidden) {
+        animFrameId = requestAnimationFrame(animateProgress);
+        return;
+    }
     animFrameId = requestAnimationFrame(animateProgress);
 
     // Throttle progress bar updates to target UI FPS
@@ -1088,8 +1122,8 @@ function animateProgress(timestamp) {
                                     const inactiveAudio = activeAudio === audioA ? audioB : audioA;
                                     if (inactiveAudio && inactiveAudio.src !== nextTrack.stream_url) {
                                         try {
-                                            inactiveAudio.src = nextTrack.stream_url;
-                                            inactiveAudio.load();
+                                            // Route through the HLS-aware loader, never raw .src.
+                                            loadAudioSource(inactiveAudio, nextTrack.stream_url);
                                         } catch (preErr) {
                                             inactiveAudio.src = "";
                                             inactiveAudio.removeAttribute("src");

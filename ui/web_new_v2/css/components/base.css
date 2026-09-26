@@ -181,7 +181,7 @@
 
 
 html, body {
-    background: transparent !important;
+    background-color: var(--bg-main, #0a0a0f);
 }
 
 body {

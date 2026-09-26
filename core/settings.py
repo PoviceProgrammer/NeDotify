@@ -49,6 +49,10 @@ def get_system_region():
 
 
 DEFAULT_SETTINGS = {
+    "app": {
+        "discord_rpc_enabled": True,
+        "autostart": False,
+    },
     "general": {
         "language": "ru",
         "region": get_system_region(),

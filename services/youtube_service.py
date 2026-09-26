@@ -55,6 +55,37 @@ def _detect_browser_cookies():
     return None
 
 
+_YT_GATED_MSG = (
+    "YouTube не отдал аудиоформаты (anti-bot гейт: доступны только превью). "
+    "Попробуйте версию трека с SoundCloud или повторите позже."
+)
+_YT_GATING_MARKS = (
+    "requested format is not available",
+    "needs to be reloaded",
+    "sign in to confirm",
+    "confirm you're not a bot",
+    "confirm you are not a bot",
+    "bot",
+    "drm",
+)
+
+
+def _yt_gating_error(exc):
+    """Map yt-dlp anti-bot failures to an actionable message."""
+    if any(m in str(exc).lower() for m in _YT_GATING_MARKS):
+        return Exception(_YT_GATED_MSG)
+    return exc
+
+
+def _is_storyboards_only(info):
+    """True when YouTube returned formats but none is playable (gated)."""
+    if isinstance(info, dict) and info.get("_type") == "playlist":
+        entries = info.get("entries") or []
+        info = entries[0] if entries else {}
+    fmts = (info or {}).get("formats") or []
+    return bool(fmts) and not any(f.get("url") for f in fmts)
+
+
 class YouTubeService(BaseMusicService):
     """Client-side YouTube audio extraction using yt-dlp."""
 
@@ -71,7 +102,8 @@ class YouTubeService(BaseMusicService):
 
             class TimeoutSession(requests.Session):
                 def request(self, *args, **kwargs):
-                    kwargs["timeout"] = 15
+                    # Must answer inside PROVIDER_SEARCH_TIMEOUT (6s bridge deadline)
+                    kwargs["timeout"] = 6
                     return super().request(*args, **kwargs)
 
             session = TimeoutSession()
@@ -106,7 +138,7 @@ class YouTubeService(BaseMusicService):
 
                 class TimeoutSession(requests.Session):
                     def request(self, *args, **kwargs):
-                        kwargs["timeout"] = 15
+                        kwargs["timeout"] = 6
                         return super().request(*args, **kwargs)
 
                 session = TimeoutSession()
@@ -170,7 +202,7 @@ class YouTubeService(BaseMusicService):
                     "player_skip": ["configs"]
                 }
             },
-            "socket_timeout": 6,
+            "socket_timeout": 5,
             "retries": 1,
             "extractor_retries": 1,
             "source_address": "0.0.0.0",
@@ -631,7 +663,10 @@ class YouTubeService(BaseMusicService):
                         if not stream_url:
                             logger.warning(f"No stream_url found in info for {video_url}")
                             if error_callback:
-                                error_callback("Не удалось извлечь аудио поток")
+                                if _is_storyboards_only(info):
+                                    error_callback(_YT_GATED_MSG)
+                                else:
+                                    error_callback("Не удалось извлечь аудио поток")
                             return None
 
                         metadata = {
@@ -739,9 +774,14 @@ class YouTubeService(BaseMusicService):
         })
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+            try:
+                info = ydl.extract_info(url, download=True)
+            except Exception as exc:
+                raise _yt_gating_error(exc) from exc
             if not info:
                 raise Exception("Не удалось извлечь информацию о треке YouTube")
+            if _is_storyboards_only(info):
+                raise Exception(_YT_GATED_MSG)
 
             # 1. Check prepare_filename
             downloaded_file = ydl.prepare_filename(info)

@@ -293,6 +293,11 @@ class DatabaseManager:
             pass
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tracks_downloaded ON tracks(is_downloaded)")
 
+        # The download queue table used to be created lazily by DownloadManager,
+        # so any code touching the db helpers first (or two processes racing at
+        # startup) hit "no such table". Create it here, idempotently.
+        self.ensure_download_queue_table(cursor=cursor)
+
         # Dup cleanup migration
         cursor.execute("SELECT value FROM settings WHERE key = 'migration_dup_cleanup_done'")
         if not cursor.fetchone():
@@ -1453,6 +1458,144 @@ class DatabaseManager:
         cursor = self.conn.cursor()
         cursor.execute("SELECT COALESCE(SUM(duration_ms), 0) FROM listening_stats")
         return cursor.fetchone()[0]
+
+    def ensure_download_queue_table(self) -> None:
+        """Create download_queue table + unique index (thread-safe)."""
+        with self._write_lock:
+            with self.conn:
+                cursor = self.conn.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS download_queue (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        track_id INTEGER NOT NULL,
+                        source TEXT,
+                        source_id TEXT,
+                        status TEXT DEFAULT 'pending',
+                        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                cursor.execute("""
+                    DELETE FROM download_queue
+                    WHERE id NOT IN (
+                        SELECT MAX(id) FROM download_queue GROUP BY track_id
+                    )
+                """)
+                cursor.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_download_queue_track "
+                    "ON download_queue(track_id)"
+                )
+
+    def ensure_download_queue_table(self, cursor=None) -> None:
+        """Create the download queue table + uniqueness guard, idempotently.
+
+        Used by ``_init_database`` (with its cursor) and preferred by
+        ``DownloadManager._init_db_table`` over its own fallback DDL, so both
+        paths converge on one schema. Older databases may hold duplicate rows
+        per track, which are collapsed (newest attempt wins) before the unique
+        index is created.
+        """
+        ddl = """
+            CREATE TABLE IF NOT EXISTS download_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                track_id INTEGER NOT NULL,
+                source TEXT,
+                source_id TEXT,
+                status TEXT DEFAULT 'pending',
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """
+        dedup = """
+            DELETE FROM download_queue
+            WHERE id NOT IN (
+                SELECT MAX(id) FROM download_queue GROUP BY track_id
+            )
+        """
+        unique_index = (
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_download_queue_track "
+            "ON download_queue(track_id)"
+        )
+        if cursor is not None:
+            cursor.execute(ddl)
+            try:
+                cursor.execute(dedup)
+            except sqlite3.OperationalError:
+                pass
+            cursor.execute(unique_index)
+            return
+        with self._write_lock:
+            with self.conn:
+                self.conn.execute(ddl)
+                try:
+                    self.conn.execute(dedup)
+                except sqlite3.OperationalError:
+                    pass
+                self.conn.execute(unique_index)
+
+    def download_queue_add(self, track_id, source, source_id) -> bool:
+        """Insert a queue row. Returns False when the track already has a row (dedup)."""
+        with self._write_lock:
+            try:
+                with self.conn:
+                    self.conn.execute(
+                        'INSERT INTO download_queue (track_id, source, source_id) VALUES (?, ?, ?)',
+                        (track_id, source, source_id),
+                    )
+                return True
+            except Exception as e:
+                logger.debug(f'Download queue insert skipped for track {track_id}: {e}')
+                return False
+
+    def download_queue_set_status(self, track_id, status: str) -> None:
+        with self._write_lock:
+            try:
+                with self.conn:
+                    self.conn.execute(
+                        "UPDATE download_queue SET status = ? WHERE track_id = ?",
+                        (status, track_id),
+                    )
+            except Exception:
+                logger.debug("download_queue_set_status failed", exc_info=True)
+
+    def download_queue_set_downloading(self, track_id) -> None:
+        with self._write_lock:
+            try:
+                with self.conn:
+                    self.conn.execute(
+                        "UPDATE download_queue SET status = 'downloading' "
+                        "WHERE track_id = ? AND status != 'completed'",
+                        (track_id,),
+                    )
+            except Exception:
+                pass
+
+    def download_queue_get_status(self, track_id):
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("SELECT status FROM download_queue WHERE track_id = ?", (track_id,))
+            row = cursor.fetchone()
+        except Exception:
+            return None
+        if not row:
+            return None
+        try:
+            if isinstance(row, dict) or hasattr(row, 'keys'):
+                return row['status']
+            return row[0]
+        except Exception:
+            return None
+
+    def download_queue_cancel_pending(self) -> None:
+        with self._write_lock:
+            try:
+                with self.conn:
+                    self.conn.execute("UPDATE download_queue SET status = 'cancelled' WHERE status = 'pending'")
+            except Exception:
+                pass
+
+    def download_queue_get_pending(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT track_id, source, source_id FROM download_queue WHERE status IN ('pending', 'downloading')")
+        return [dict(r) if hasattr(r, 'keys') else {"track_id": r[0], "source": r[1], "source_id": r[2]} for r in cursor.fetchall()]
 
     def close_thread_connection(self) -> None:
         """Close and forget the calling thread's connection, if it has one.
