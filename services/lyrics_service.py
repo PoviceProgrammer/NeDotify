@@ -86,6 +86,75 @@ _lyrics_pool = _LyricsSharedExecutor(max_workers=4, thread_name_prefix="LyricsPo
 atexit.register(_lyrics_pool.shutdown, wait=False, cancel_futures=True)
 
 
+# Words that name a VARIANT of a song rather than the song itself. Lyrics
+# providers index the base recording, so these have to be stripped from a title
+# before querying -- otherwise a bootleg/slowed/remix is looked up verbatim,
+# matches nothing, and the app reports " lyrics not found" for a track whose
+# words are perfectly well indexed.
+#
+# Matched token-by-token (see _strip_variant_qualifiers) rather than as one
+# regex, because these qualifiers compose freely: "Hardstyle Bootleg",
+# "Radio Edit" and "Extended Mix" are all multi-word, and no single alternation
+# covers every combination of genre + variant.
+#
+# `instrumental` is intentionally absent: an instrumental has no sung lyrics,
+# and silently substituting the original's words would be wrong.
+_VARIANT_TOKENS = frozenset("""
+    mix mixes mixed remix remixes remixed bootleg boot mashup mash edit edits
+    extended ext club dub vip rework flip remaster remastered radio version ver
+    original album full clean slow slowed sped speed up down half double
+    doubler reverb nightcore 8d audio free download preview teaser snippet
+    live mono stereo remaster bonus
+    hardstyle rawstyle headhunter gabber uplift hardtrance euphoric
+    bass boosted reverse techno house trance edm dnb drum and bass progressive
+    psy psytrance electro dance electrohouse future
+    1x 1_5x 1_25x 0_75x 0_5x 2x
+""".split())
+
+# A bracketed qualifier longer than this is assumed to be part of the title
+# rather than decoration ("(I Love You)").
+_MAX_VARIANT_WORDS = 5
+
+
+def _strip_variant_qualifiers(title: str) -> str:
+    """Drop parenthesised/bracketed groups that consist only of variant words.
+
+    Applies to "(Hardstyle Bootleg)", "[Extended Mix]", "(Radio Edit)" and the
+    trailing-dash form "Song - Extended Mix". A group is removed only when every
+    one of its words is a known variant token, so real titles in brackets are
+    left alone.
+    """
+    if not title:
+        return title
+
+    def _is_variant_group(inner: str) -> bool:
+        words = re.findall(r'[0-9]+(?:[._][0-9]+)?[a-z]*|[a-z]+', inner.lower())
+        if not words or len(words) > _MAX_VARIANT_WORDS:
+            return False
+        for w in words:
+            # A year inside the qualifier ("(Remastered 2009)") is not a variant
+            # word, but it must not veto the group either.
+            if w.isdigit() and len(w) == 4 and 1900 <= int(w) <= 2099:
+                continue
+            # "1.5x" and "1_5x" are the same token.
+            if w.replace('.', '_') in _VARIANT_TOKENS:
+                continue
+            return False
+        return True
+
+    def _strip_bracketed(m):
+        return "" if _is_variant_group(m.group(1)) else m.group(0)
+
+    cleaned = re.sub(r'[\(\[\{]([^\)\]\}]*)[\)\]\}]', _strip_bracketed, title)
+
+    # "Song - Extended Mix" / "Song – Radio Edit"
+    def _strip_dash(m):
+        return "" if _is_variant_group(m.group(1)) else m.group(0)
+
+    cleaned = re.sub(r'\s*[\-—–]\s*([A-Za-z0-9][^\-—–]*)$', _strip_dash, cleaned)
+    return re.sub(r'\s{2,}', ' ', cleaned).strip()
+
+
 class LyricsService:
     def __init__(self, settings=None):
         self.settings = settings
@@ -109,15 +178,19 @@ class LyricsService:
         # Remove video/audio suffixes and junk common in streaming and YouTube titles
         junk_patterns = [
             r'\s*[\(\[](official\s*(music\s*)?(video|audio|lyrics?|visualizer|track)?|lyric\s*video|audio|video|visualizer|clip|клип|премьера(\s*трека|\s*клипа)?)[\)\]]',
-            r'\s*[\(\[](feat|ft)\.?\s+[^\)\]]+[\)\]]',
+            r'\s*[\(\[](feat|ft|featuring)\.?\s+[^\)\]]+[\)\]]',
             r'\s*[\(\[](prod|produced)\.?\s+by\s+[^\)\]]+[\)\]]',
             r'\s*[\(\[](remix|slowed(\s*\+\s*reverb)?|speed\s*up|sped\s*up)[\)\]]',
+            r'\s*[\(\[]\d+(?:[.,]\d+)?x[\)\]]',
             r'\s*[\(\[]\d{4}[\)\]]',
             r'\s*[\(\[](hd|hq|4k|1080p)[\)\]]',
             r'\s*\|\s*.*$',
         ]
         for p in junk_patterns:
             track = re.sub(p, '', track, flags=re.IGNORECASE)
+
+        # Compositional qualifier groups ("(Hardstyle Bootleg)", "[Extended Mix]")
+        track = _strip_variant_qualifiers(track)
 
         track = track.replace('"', '').replace("'", "").strip()
 
