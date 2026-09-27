@@ -677,7 +677,12 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                         except Exception:
                             logger.debug("_inject_ydl_cookies: suppressed exception", exc_info=True)
                         try:
-                            import threading
+                            # NB: no local `import threading` here. A function-local
+                            # import makes `threading` a local name for the WHOLE
+                            # do_GET body, so the earlier use at the cache-tag line
+                            # raised UnboundLocalError and every stream request
+                            # through the proxy died before reaching the upstream.
+                            # threading is imported at module scope instead.
                             resolve_event = threading.Event()
                             new_url = None
 

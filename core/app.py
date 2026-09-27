@@ -35,6 +35,13 @@ from utils.file_scanner import FileScanner
 
 logger = logging.getLogger(__name__)
 
+# Wall-clock ceiling for the YouTube -> SoundCloud fallback cascade. Each
+# candidate costs a SoundCloud search plus a stream extraction, and an
+# unreachable SoundCloud burns a full socket_timeout per attempt; the total
+# has to stay inside the frontend's stall window so the user gets an error
+# instead of an endless spinner.
+_SC_FALLBACK_BUDGET_S = 20.0
+
 
 def update_ytdlp_safely():
     """Update yt-dlp safely if not frozen and last update > 24h ago."""
@@ -85,7 +92,12 @@ class AppCore:
 
     def __init__(self):
         self.update_lock = threading.Lock()
-        self._service_lock = threading.Lock()
+        # RLock, not Lock: the lazy service properties below nest. `recommendations`
+        # acquires this lock and then reads `self.soundcloud`, which acquires it
+        # again. With a plain Lock that is a self-deadlock on the very first
+        # access: the thread holds _service_lock forever, every later reader
+        # (search, home feed) blocks on it, and no provider is ever dispatched.
+        self._service_lock = threading.RLock()
         self._soundcloud = None
         self._yandex = None
         self._recommendations = None
@@ -190,14 +202,19 @@ class AppCore:
     @property
     def recommendations(self):
         if self._recommendations is None:
+            # Resolve dependencies BEFORE taking the lock: these constructors do
+            # network I/O, and holding the lock across it would stall every other
+            # lazy-property reader (search included) for the whole handshake.
+            sc_service = self.soundcloud
+            yt_service = self.youtube
             with self._service_lock:
                 if self._recommendations is None:
                     from services.recommendation_service import RecommendationService
                     self._recommendations = RecommendationService(
                         settings=self.settings,
                         db=self.db,
-                        soundcloud_service=self.soundcloud,
-                        youtube_service=self.youtube
+                        soundcloud_service=sc_service,
+                        youtube_service=yt_service
                     )
         return self._recommendations
 
@@ -349,8 +366,21 @@ class AppCore:
                             if qn and len(qn) > 1 and qn not in candidates:
                                 candidates.append(qn)
 
-                        def try_search_candidates(idx=0):
-                            if idx >= len(candidates):
+                        def try_search_candidates(idx=0, _started=None):
+                            # Hard budget: without it the chain was candidates x
+                            # (SoundCloud socket_timeout + yt-dlp retries). When
+                            # SoundCloud is unreachable that is minutes of silence
+                            # and on_error never reached the UI, so the track sat
+                            # in a permanent loading state.
+                            if _started is None:
+                                _started = time.monotonic()
+                            elapsed = time.monotonic() - _started
+                            if idx >= len(candidates) or elapsed > _SC_FALLBACK_BUDGET_S:
+                                logger.warning(
+                                    "SoundCloud fallback exhausted for %s "
+                                    "(candidates=%d tried=%d elapsed=%.1fs)",
+                                    source_id, len(candidates), idx, elapsed,
+                                )
                                 if on_error:
                                     on_error(err)
                                 return
@@ -359,13 +389,24 @@ class AppCore:
                             logger.info(f"YouTube resolution failed; trying SoundCloud fallback ({idx+1}/{len(candidates)}) for: {sq}")
 
                             def on_sc_search_res(res):
+                                if elapsed and (time.monotonic() - _started) > _SC_FALLBACK_BUDGET_S:
+                                    if on_error:
+                                        on_error(err)
+                                    return
                                 if res and len(res) > 0:
                                     target_sc = res[0].get("source_url") or res[0].get("source_id")
-                                    self.soundcloud.get_stream_url(target_sc, callback=_on_resolved, error_callback=lambda e: try_search_candidates(idx + 1))
+                                    self.soundcloud.get_stream_url(target_sc, callback=_on_resolved, error_callback=lambda e: try_search_candidates(idx + 1, _started))
                                 else:
-                                    try_search_candidates(idx + 1)
+                                    try_search_candidates(idx + 1, _started)
 
-                            self.soundcloud.search(sq, max_results=3, callback=on_sc_search_res, error_callback=lambda e: try_search_candidates(idx + 1))
+                            def on_sc_search_err(e):
+                                if (time.monotonic() - _started) > _SC_FALLBACK_BUDGET_S:
+                                    if on_error:
+                                        on_error(err)
+                                    return
+                                try_search_candidates(idx + 1, _started)
+
+                            self.soundcloud.search(sq, max_results=3, callback=on_sc_search_res, error_callback=on_sc_search_err)
 
                         try_search_candidates(0)
                         return

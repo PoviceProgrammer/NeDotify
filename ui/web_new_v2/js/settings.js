@@ -18,6 +18,20 @@ function getLocalSetting(key, defaultVal) {
     }
 }
 
+// Helper: read a saved setting, preferring the backend (the durable store).
+//
+// The restore helpers below used to read localStorage unconditionally, so a
+// cleared/evicted WebView2 cache silently reset every setting to its default
+// even though the backend still had the user's value -- the "my settings did
+// not save" symptom. window.settings is populated from the backend before these
+// run, so it wins; localStorage stays as the fallback for keys the backend has
+// not seen yet, and for the first paint before the bridge answers.
+function savedSetting(category, key, defaultVal) {
+    const fromBackend = window.settings?.[category]?.[key];
+    if (fromBackend !== undefined && fromBackend !== null) return fromBackend;
+    return getLocalSetting(`nedotify_${category}_${key}`, defaultVal);
+}
+
 const THEMES = [
     { id: 'amoled', name: 'AMOLED', colors: ['#ffffff', '#000000'] },
     { id: 'dark', name: 'Dark', colors: ['#ffffff', '#121212'] },
@@ -635,12 +649,19 @@ export function applySettingsFromBackend(settings) {
     }
 
     // theme_mode is the actual light/dark/system switch (theme.theme is the palette name).
+    // Both used to be written to the same data-theme attribute, so applying the
+    // mode straight after the palette made the chosen palette vanish on every
+    // restart. The palette now wins; the mode only picks the colours when no
+    // palette is stored, and the mode buttons always reflect the saved state.
     if (settings.theme && settings.theme.theme_mode !== undefined) {
         const mode = String(settings.theme.theme_mode);
         document.querySelectorAll('.theme-mode-btn[data-mode]').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.mode === mode);
         });
-        try { applyThemeMode(mode); } catch(e) {}
+        const hasPalette = !!(settings.theme.theme || settings.theme.name);
+        if (!hasPalette) {
+            try { applyThemeMode(mode); } catch(e) {}
+        }
     }
 
     if (settings.ui) {
@@ -764,6 +785,14 @@ export function applySettingsFromBackend(settings) {
         if (toggleGL) toggleGL.classList.toggle('on', settings.audio.gapless_playback !== false);
         const toggleAP = document.getElementById('toggle-autoplay');
         if (toggleAP) toggleAP.classList.toggle('on', !!settings.audio.autoplay);
+        // volume_normalization is bound in setupToggle('toggle-normalization',
+        // 'volume_normalization', 'audio') so it was saved on every change but
+        // never read back here, leaving the toggle stuck at its default after a
+        // restart even though the backend had the right value.
+        if (settings.audio.volume_normalization !== undefined) {
+            const toggleVN = document.getElementById('toggle-normalization');
+            if (toggleVN) toggleVN.classList.toggle('on', !!settings.audio.volume_normalization);
+        }
     }
 
     if (settings.general) {
@@ -809,6 +838,10 @@ export function applySettingsFromBackend(settings) {
             const toggleAP = document.getElementById('toggle-queue-autopilot');
             if (toggleAP) toggleAP.classList.toggle('on', !!autoVal);
         }
+        // Now that window.settings holds the backend values, repaint the Player
+        // tab's cards and toggles. The earlier setupPlayerSettingsPanel() pass
+        // ran before the bridge answered and could only guess from localStorage.
+        try { syncPlayerSettingsUI(); } catch(e) {}
     }
 
     if (settings.auth) {
@@ -1135,20 +1168,20 @@ export function applyPerformancePreset(preset, skipSave = false) {
         root.classList.add('perf-low');
         applyBlurQuality('off');
         applyGlowSettings('off');
-        _setSlidersForPreset(15, 10, 30);
+        _setSlidersForPreset(15, 10, 30, skipSave);
         _syncActiveCard('opt-blur-quality', 'off');
         _syncActiveCard('opt-glow-quality', 'off');
     } else if (normalized === 'medium') {
         root.classList.add('perf-medium');
         applyBlurQuality('lq');
         applyGlowSettings('subtle');
-        _setSlidersForPreset(30, 18, 45);
+        _setSlidersForPreset(30, 18, 45, skipSave);
         _syncActiveCard('opt-blur-quality', 'lq');
         _syncActiveCard('opt-glow-quality', 'subtle');
     } else { // high
         applyBlurQuality('hq');
         applyGlowSettings('full');
-        _setSlidersForPreset(60, 24, 60);
+        _setSlidersForPreset(60, 24, 60, skipSave);
         _syncActiveCard('opt-blur-quality', 'hq');
         _syncActiveCard('opt-glow-quality', 'full');
     }
@@ -1156,11 +1189,17 @@ export function applyPerformancePreset(preset, skipSave = false) {
     if (!skipSave) {
         saveSetting('performance_preset', preset, 'optimization');
     }
-    applyAuraOrbs(getLocalSetting('nedotify_player_aura_orbs_enabled', true));
+    applyAuraOrbs(savedSetting('player', 'aura_orbs_enabled', true));
     window.dispatchEvent(new CustomEvent('nedotify:performance_preset_changed', { detail: { preset: normalized } }));
 }
 
-function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
+// skipSave is threaded through so the restore path can lay the preset's values
+// onto the sliders without writing them back. saveSetting() also mutates
+// window.settings, so saving here during restore overwrote the user's own
+// fps_* / blur / glow values with the preset's defaults on every startup --
+// which also made the final applied value depend on a race with the restore
+// block that runs right after this call.
+function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60, skipSave = false) {
     const sv = document.getElementById('slider-fps-visualizer');
     if (sv) {
         sv.value = vizFps;
@@ -1168,7 +1207,7 @@ function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
         sv.style.setProperty('--value-percent', `${pct}%`);
         setElText('label-fps-visualizer', `${vizFps} FPS`);
         setVisualizerFps(vizFps);
-        saveSetting('fps_visualizer', vizFps, 'optimization');
+        if (!skipSave) saveSetting('fps_visualizer', vizFps, 'optimization');
     }
     const sp = document.getElementById('slider-fps-particles');
     if (sp) {
@@ -1177,7 +1216,7 @@ function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
         sp.style.setProperty('--value-percent', `${pct}%`);
         setElText('label-fps-particles', `${particlesFps} FPS`);
         setParticlesFps(particlesFps);
-        saveSetting('fps_particles', particlesFps, 'optimization');
+        if (!skipSave) saveSetting('fps_particles', particlesFps, 'optimization');
     }
     const su = document.getElementById('slider-fps-ui');
     if (su) {
@@ -1186,7 +1225,7 @@ function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
         su.style.setProperty('--value-percent', `${pct}%`);
         setElText('label-fps-ui', `${uiFps} FPS`);
         setUiFps(uiFps);
-        saveSetting('fps_ui', uiFps, 'optimization');
+        if (!skipSave) saveSetting('fps_ui', uiFps, 'optimization');
     }
 }
 
@@ -1535,7 +1574,7 @@ function applyThemeMode(mode) {
     } else {
         document.documentElement.setAttribute('data-theme', mode);
     }
-    applyAuraOrbs(getLocalSetting('nedotify_player_aura_orbs_enabled', true));
+    applyAuraOrbs(savedSetting('player', 'aura_orbs_enabled', true));
 }
 
 let _zapretListenersAttached = false;
@@ -2248,6 +2287,47 @@ export function applyMpPos(pos) {
     }
 }
 
+// Repaint the Player tab's cards and toggles from the saved values.
+//
+// This runs twice on a cold start: once from setupPlayerSettingsPanel() (before
+// the bridge has answered, so it can only see localStorage) and again from
+// applySettingsFromBackend() once the backend values are known. Without the
+// second call the toggles kept whatever the first pass guessed, so a cleared
+// localStorage left the Player tab showing "queue on" while the queue was
+// actually hidden. applyShowQueue() and friends change behaviour but not the
+// toggle markup, so the visual state has to be re-synced explicitly.
+function syncPlayerSettingsUI() {
+    const syncActiveCard = (containerId, val) => {
+        const c = document.getElementById(containerId);
+        if (c) {
+            c.querySelectorAll('.opt-card').forEach(card => {
+                card.classList.toggle('active', card.dataset.val === val);
+            });
+        }
+    };
+    const syncToggleVisual = (id, val) => {
+        const t = document.getElementById(id);
+        if (t) t.classList.toggle('on', !!val);
+    };
+
+    syncActiveCard('opt-title-align', savedSetting('player', 'title_align', 'left'));
+    syncActiveCard('opt-player-style', savedSetting('player', 'player_style', 'default'));
+    syncActiveCard('opt-slider-type', savedSetting('player', 'slider_type', 'default'));
+    syncActiveCard('opt-queue-pos', savedSetting('player', 'queue_pos', 'bottom'));
+    syncActiveCard('opt-queue-view', savedSetting('player', 'queue_view', 'normal'));
+    syncActiveCard('opt-mp-progress', savedSetting('player', 'mp_progress', 'line'));
+    syncActiveCard('opt-mp-cover-shape', savedSetting('player', 'mp_cover_shape', 'default'));
+    syncActiveCard('opt-mp-shape', savedSetting('player', 'mp_shape', 'default'));
+
+    syncToggleVisual('toggle-show-queue', savedSetting('player', 'show_queue', true));
+    syncToggleVisual('toggle-compact-queue-btn', savedSetting('player', 'compact_queue_btn', true));
+    syncToggleVisual('toggle-next-track-preview', savedSetting('player', 'next_track_preview', true));
+    syncToggleVisual('toggle-queue-autopilot', savedSetting('player', 'queue_autopilot',
+        savedSetting('player', 'flow_enabled', true)));
+    syncToggleVisual('toggle-player-prefetch', savedSetting('player', 'player_prefetch', true));
+    syncToggleVisual('toggle-aura-orbs', savedSetting('player', 'aura_orbs_enabled', true));
+}
+
 function setupPlayerSettingsPanel() {
     const setupCardGroup = (containerId, settingKey, onChange) => {
         const container = document.getElementById(containerId);
@@ -2301,57 +2381,29 @@ function setupPlayerSettingsPanel() {
         });
     }
 
-    // Restore saved settings from localStorage
+    // Restore saved settings, backend first (see savedSetting) so a cleared
+    // localStorage cannot reset the Player tab back to its defaults.
     const saved = {
-        align: getLocalSetting('nedotify_player_title_align', 'left'),
-        style: getLocalSetting('nedotify_player_player_style', 'default'),
-        slider: getLocalSetting('nedotify_player_slider_type', 'default'),
-        showQueue: getLocalSetting('nedotify_player_show_queue', true),
-        queuePos: getLocalSetting('nedotify_player_queue_pos', 'bottom'),
-        compactQueue: getLocalSetting('nedotify_player_compact_queue_btn', true),
-        nextPreview: getLocalSetting('nedotify_player_next_track_preview', true),
-        autopilot: getLocalSetting('nedotify_player_queue_autopilot', getLocalSetting('nedotify_player_flow_enabled', true)),
-        prefetch: getLocalSetting('nedotify_player_player_prefetch', true),
-        auraOrbs: getLocalSetting('nedotify_player_aura_orbs_enabled', true),
-        queueView: getLocalSetting('nedotify_player_queue_view', 'normal'),
-        mpProg: getLocalSetting('nedotify_player_mp_progress', 'line'),
-        mpCover: getLocalSetting('nedotify_player_mp_cover_shape', 'default'),
-        mpShape: getLocalSetting('nedotify_player_mp_shape', 'default'),
-        mpPos: getLocalSetting('nedotify_player_mp_pos', 'bottom-right'),
+        align: savedSetting('player', 'title_align', 'left'),
+        style: savedSetting('player', 'player_style', 'default'),
+        slider: savedSetting('player', 'slider_type', 'default'),
+        showQueue: savedSetting('player', 'show_queue', true),
+        queuePos: savedSetting('player', 'queue_pos', 'bottom'),
+        compactQueue: savedSetting('player', 'compact_queue_btn', true),
+        nextPreview: savedSetting('player', 'next_track_preview', true),
+        autopilot: savedSetting('player', 'queue_autopilot',
+                                savedSetting('player', 'flow_enabled', true)),
+        prefetch: savedSetting('player', 'player_prefetch', true),
+        auraOrbs: savedSetting('player', 'aura_orbs_enabled', true),
+        queueView: savedSetting('player', 'queue_view', 'normal'),
+        mpProg: savedSetting('player', 'mp_progress', 'line'),
+        mpCover: savedSetting('player', 'mp_cover_shape', 'default'),
+        mpShape: savedSetting('player', 'mp_shape', 'default'),
+        mpPos: savedSetting('player', 'mp_pos', 'bottom-right'),
     };
 
-    // Update active UI cards according to saved state
-    const syncActiveCard = (containerId, val) => {
-        const c = document.getElementById(containerId);
-        if (c) {
-            c.querySelectorAll('.opt-card').forEach(card => {
-                card.classList.toggle('active', card.dataset.val === val);
-            });
-        }
-    };
-
-    // Sync toggle visual states from saved values
-    const syncToggleVisual = (id, val) => {
-        const t = document.getElementById(id);
-        if (t) t.classList.toggle('on', !!val);
-    };
-
-    syncActiveCard('opt-title-align', saved.align);
-    syncActiveCard('opt-player-style', saved.style);
-    syncActiveCard('opt-slider-type', saved.slider);
-    syncActiveCard('opt-queue-pos', saved.queuePos);
-    syncActiveCard('opt-queue-view', saved.queueView);
-    syncActiveCard('opt-mp-progress', saved.mpProg);
-    syncActiveCard('opt-mp-cover-shape', saved.mpCover);
-    syncActiveCard('opt-mp-shape', saved.mpShape);
-
-    // Sync toggle visuals
-    syncToggleVisual('toggle-show-queue', saved.showQueue);
-    syncToggleVisual('toggle-compact-queue-btn', saved.compactQueue);
-    syncToggleVisual('toggle-next-track-preview', saved.nextPreview);
-    syncToggleVisual('toggle-queue-autopilot', saved.autopilot);
-    syncToggleVisual('toggle-player-prefetch', saved.prefetch);
-    syncToggleVisual('toggle-aura-orbs', saved.auraOrbs);
+    // Update active UI cards / toggle visuals from the saved state.
+    syncPlayerSettingsUI();
 
     if (mpPosGroup) {
         mpPosGroup.querySelectorAll('.opt-card-btn').forEach(b => {

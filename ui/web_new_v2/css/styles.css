@@ -7,7 +7,9 @@
 @import "tokens.css";
 @import "components/base.css";
 @import "components/player-bar.css";
+@import "components/player-view.css";
 @import "components/lyrics.css";
 @import "components/home-view.css";
 @import "components/track-table.css";
 @import "themes.css";
+@import "components/visual-polish.css";

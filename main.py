@@ -499,7 +499,11 @@ def main():
     logging.info(f"[startup] webview loop starting (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
     _storage_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'webview2_data')
     os.makedirs(_storage_dir, exist_ok=True)
-    webview.start(http_server=True, debug=False, private_mode=False, storage_path=_storage_dir)
+    # NEDOTIFY_DEVTOOLS=1 opens the WebView2 DevTools (Console + errors).
+    _devtools = os.environ.get("NEDOTIFY_DEVTOOLS", "").strip().lower() in ("1", "true", "yes", "on")
+    if _devtools:
+        logging.info("[startup] DevTools ENABLED (NEDOTIFY_DEVTOOLS)")
+    webview.start(http_server=True, debug=_devtools, private_mode=False, storage_path=_storage_dir)
 
     # Save session before exit
     try:

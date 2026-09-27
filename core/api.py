@@ -22,6 +22,9 @@ import webview
 
 logger = logging.getLogger(__name__)
 
+# Captured once: evaluate_js must never be awaited on this thread (see _emit).
+_MAIN_THREAD = threading.main_thread()
+
 # Temporary feature flag: license validation and VK-based activation are disabled
 # until they are replaced with a remote, server-owned licensing service.
 LICENSE_VALIDATION_ENABLED = False
@@ -614,15 +617,39 @@ class AppApi:
         if not self._window:
             return
 
-        payload_json = json.dumps(data or {})
-        js_code = (
-            f"if (window.onPythonEvent) {{ window.onPythonEvent("
-            f"{json.dumps(event_name)}, {payload_json}); }}"
-        )
+        # json.dumps must be inside the guard: a single non-serializable value in
+        # the payload (or a recursive structure) used to raise straight out of
+        # _emit before the try below, so the event was silently dropped and the
+        # caller saw no error at all.
+        try:
+            payload_json = json.dumps(data or {})
+            js_code = (
+                f"if (window.onPythonEvent) {{ window.onPythonEvent("
+                f"{json.dumps(event_name)}, {payload_json}); }}"
+            )
+        except Exception as e:
+            logger.error("emit %s payload serialization failed: %r", event_name, e, exc_info=True)
+            return
+
+        # pywebview's WinForms backend marshals evaluate_js through
+        # Control.Invoke. Calling that FROM the UI thread deadlocks the whole
+        # app: the thread waits for itself to drain the message queue. The
+        # pywebview `loaded` event runs on the UI thread, so a track restored
+        # from the saved session froze the entire window and the UI stopped
+        # reacting to clicks. Hand those calls to a worker instead.
+        if threading.current_thread() is _MAIN_THREAD:
+            threading.Thread(
+                target=self._window.evaluate_js,
+                args=(js_code,),
+                daemon=True,
+                name="EmitWorker",
+            ).start()
+            return
+
         try:
             self._window.evaluate_js(js_code)
         except Exception as e:
-            logger.debug(f"Failed to evaluate JS event {event_name}: {e}")
+            logger.error("emit %s failed: %r", event_name, e, exc_info=True)
 
     def _enrich_track_lufs(self, track_dict: dict) -> dict:
         """Ensure loudness_lufs and lufs fields are populated from DB if available."""

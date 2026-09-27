@@ -262,11 +262,16 @@ class LyricsService:
 
             return best_weight_2
 
-        result = _execute_cascade(track, artist, max_timeout=3.5)
+        # Netease is the only provider that reliably covers Russian/Cyrillic
+        # tracks, and its working endpoint is slow (2-6s), so the cascade has to
+        # wait long enough for it to be worth running. Lyrics are fetched off the
+        # UI thread and delivered via the lyrics_ready event, so this does not
+        # block playback.
+        result = _execute_cascade(track, artist, max_timeout=5.5)
 
         # If not found and artist was inferred from track title, try flipped (artist, track)
         if (not result or result.get("weight", 3) >= 3) and not artist_name and artist and track != artist:
-            alt_res = _execute_cascade(artist, track, max_timeout=2.0)
+            alt_res = _execute_cascade(artist, track, max_timeout=3.0)
             if alt_res and alt_res.get("weight", 3) < 3:
                 result = alt_res
 
@@ -332,23 +337,65 @@ class LyricsService:
 
         return None
 
+    # A provider's fuzzy search happily returns a completely different song, so a
+    # candidate is only accepted when its title actually resembles the track we
+    # asked for. Without this gate the cascade happily shows the wrong lyrics.
+    _TITLE_MATCH_MIN = 0.6
+
+    @staticmethod
+    def _title_match_score(want: str, got: str) -> float:
+        """0..1 similarity between a wanted track title and a provider's title."""
+        def norm(s):
+            s = (s or "").lower()
+            s = re.sub(r'\s*[\(\[].*?[\)\]]', ' ', s)      # drop parentheticals
+            s = re.sub(r'[^0-9a-zа-яё]+', ' ', s)          # punctuation/whitespace
+            return " ".join(s.split())
+
+        a, b = norm(want), norm(got)
+        if not a or not b:
+            return 0.0
+        if a == b:
+            return 1.0
+        if a in b or b in a:
+            return 0.85
+        ta, tb = set(a.split()), set(b.split())
+        return len(ta & tb) / max(len(ta), len(tb))
+
     def _fetch_netease(self, track, artist):
         try:
             query = f"{artist} {track}".strip()
-            url = f"http://music.163.com/api/search/pc?type=1&offset=0&limit=1&s={urllib.parse.quote(query)}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with self._open_url(req, timeout=3.5) as resp:
+            # NOTE: the old /api/search/pc endpoint now answers code=-462 with zero
+            # songs for *every* query, and /api/search returns an empty body, so
+            # Netease was effectively dead. /api/cloudsearch/pc is the endpoint
+            # that still resolves. It is also slow, hence the wider timeout.
+            url = f"https://music.163.com/api/cloudsearch/pc?type=1&offset=0&limit=5&s={urllib.parse.quote(query)}"
+            req = urllib.request.Request(
+                url, headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/'})
+            with self._open_url(req, timeout=6.0) as resp:
                 data = json.loads(resp.read().decode('utf-8', errors='ignore'))
-                songs = data.get('result', {}).get('songs', [])
+                songs = (data.get('result') or {}).get('songs') or []
                 if not songs:
                     return None
-                sid = songs[0]['id']
 
-            l_url = f"http://music.163.com/api/song/lyric?id={sid}&lv=1&kv=1&tv=-1"
-            l_req = urllib.request.Request(l_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with self._open_url(l_req, timeout=3.5) as l_resp:
+                # Pick the best title match rather than blindly taking songs[0].
+                song = max(
+                    songs,
+                    key=lambda s: self._title_match_score(track, s.get('name') or ''),
+                )
+                if self._title_match_score(track, song.get('name') or '') < self._TITLE_MATCH_MIN:
+                    logger.debug(
+                        "netease: no title match for '%s' (best was '%s')",
+                        track, song.get('name'),
+                    )
+                    return None
+                sid = song['id']
+
+            l_url = f"https://music.163.com/api/song/lyric?id={sid}&lv=1&kv=1&tv=-1"
+            l_req = urllib.request.Request(
+                l_url, headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/'})
+            with self._open_url(l_req, timeout=6.0) as l_resp:
                 l_data = json.loads(l_resp.read().decode('utf-8', errors='ignore'))
-                lrc = l_data.get('lrc', {}).get('lyric')
+                lrc = (l_data.get('lrc') or {}).get('lyric')
                 return self._make_result(lrc, lrc)
         except Exception as e:
             logger.debug(f"netease lookup failed for '{artist} {track}': {e}", exc_info=True)

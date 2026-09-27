@@ -29,7 +29,12 @@ class DiscordRPCService:
         self.current_artist = None
         self.start_time = None
         self.duration_sec = 0
-        self._lock = threading.Lock()
+        # RLock, not Lock: update_presence() holds this lock and then calls
+        # start(), which acquires it again. With a plain Lock that is a
+        # self-deadlock on the very first track change, and because that first
+        # change comes from session restore on the MAIN startup thread, it
+        # froze the whole app before the window was even created.
+        self._lock = threading.RLock()
         self._connecting = False
         self._pending_update = None
         self._last_update_ts = 0.0

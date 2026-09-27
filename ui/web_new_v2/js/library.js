@@ -918,6 +918,8 @@ export function openPlaylistMenu(track, x, y) {
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
     menu.classList.add('visible');
+    // Fixed-position menu: dismiss it when the window resizes or the page changes.
+    window.NeDotify?._armFloatingMenuGuard?.();
 
     items.innerHTML = '<div class="context-menu-item" style="justify-content:center"><div class="spinner"></div></div>';
 

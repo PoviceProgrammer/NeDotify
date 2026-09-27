@@ -923,6 +923,10 @@ export function initPlayer() {
             optMenu.style.top = `${rect.top - 10}px`;
             optMenu.style.transform = 'translateY(-100%)';
             optMenu.classList.toggle('visible');
+            // Fixed-position menu: dismiss it when the window resizes or the page changes.
+            if (optMenu.classList.contains('visible')) {
+                window.NeDotify?._armFloatingMenuGuard?.();
+            }
 
             // Update track title in header
             const header = document.getElementById('track-options-header');

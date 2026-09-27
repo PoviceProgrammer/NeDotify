@@ -642,6 +642,48 @@ document.addEventListener('nedotify:track_download_failed', (e) => {
 
 let activeRichMenu = null;
 
+/* Fixed-position popups keep viewport-absolute coordinates. Resizing or
+   scrolling the window invalidates them, so a menu opened in a small window
+   stayed stranded (misplaced) after the window was maximised. Track every
+   floating menu here and dismiss them all on layout changes. */
+const FLOATING_MENU_IDS = ['playlist-context-menu', 'track-options-menu'];
+
+export function closeAllFloatingMenus() {
+    if (activeRichMenu) {
+        activeRichMenu.remove();
+        activeRichMenu = null;
+    }
+    document.querySelectorAll('.rich-track-menu').forEach(m => m.remove());
+    FLOATING_MENU_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('visible');
+    });
+}
+
+if (typeof window !== 'undefined') {
+    let _floatMenuTeardown = null;
+    const _dismiss = () => {
+        closeAllFloatingMenus();
+        if (_floatMenuTeardown) {
+            window.removeEventListener('resize', _dismiss);
+            window.removeEventListener('scroll', _dismiss, true);
+            window.removeEventListener('nedotify:page_changed', _dismiss);
+            _floatMenuTeardown = null;
+        }
+    };
+    // Armed when the first floating menu appears so an idle UI pays nothing.
+    const _arm = () => {
+        if (_floatMenuTeardown) return;
+        _floatMenuTeardown = true;
+        window.addEventListener('resize', _dismiss);
+        window.addEventListener('scroll', _dismiss, true);
+        window.addEventListener('nedotify:page_changed', _dismiss);
+    };
+    window.NeDotify = window.NeDotify || {};
+    window.NeDotify._armFloatingMenuGuard = _arm;
+    window.NeDotify.closeAllFloatingMenus = closeAllFloatingMenus;
+}
+
 export function showTrackContextMenu(track, e, tracksArray, index) {
     if (e) {
         e.preventDefault();
@@ -736,6 +778,7 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
 
     document.body.appendChild(menu);
     activeRichMenu = menu;
+    window.NeDotify?._armFloatingMenuGuard?.();
     renderIcons();
 
     // Calculate position relative to mouse or button
