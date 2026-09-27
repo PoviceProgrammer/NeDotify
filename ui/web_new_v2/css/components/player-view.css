@@ -9,6 +9,11 @@
 .player-2col-layout {
     display: grid;
     grid-template-columns: minmax(340px, 380px) 1fr;
+    /* minmax(0, 1fr) is required: with the default `auto` row the row grows to
+       the tallest card's content, the grid clips it (overflow: hidden), and the
+       lyrics panel never becomes a scrollport -- so it could not be scrolled by
+       hand or by the karaoke auto-scroll. */
+    grid-template-rows: minmax(0, 1fr);
     gap: var(--space-md);
     height: 100%;
     width: 100%;
@@ -46,6 +51,9 @@
     display: flex;
     flex-direction: column;
     overflow: visible;
+    /* Grid/flex items default to min-height:auto, which lets the card outgrow
+       its track and stops the lyrics panel from ever becoming scrollable. */
+    min-height: 0;
     contain: layout;
     transition: border-color 0.3s ease;
 }

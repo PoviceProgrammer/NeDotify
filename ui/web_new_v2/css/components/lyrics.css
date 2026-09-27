@@ -13,6 +13,10 @@
     overflow-y: auto;
     overflow-x: hidden;
     position: relative;
+    /* Without min-height:0 this flex item is sized by its content, so the panel
+       grew to the full lyric sheet instead of scrolling -- the last lines were
+       simply cut off and neither the wheel nor the karaoke auto-scroll moved. */
+    min-height: 0;
     scroll-behavior: smooth;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;

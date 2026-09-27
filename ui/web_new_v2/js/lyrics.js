@@ -242,6 +242,10 @@ function getContainers() {
 
 function resetLyricsScroll() {
     currentLineIndex = -1;
+    // A new track starts a new karaoke run, so do not inherit a scroll pause
+    // left over from the user scrolling the previous one.
+    lastManualScrollAt = 0;
+    programmaticScrollUntil = 0;
     getContainers().forEach(c => {
         if (c._lastActiveLyric) {
             c._lastActiveLyric.classList.remove('active');
@@ -456,10 +460,35 @@ export function parseLrc(lrcText) {
     return result;
 }
 
+// Karaoke auto-scroll vs. the user's own scrolling. Auto-follow only resumes
+// after this many ms without manual input, otherwise every wheel tick is
+// yanked back to the active line on the next line change, which reads as
+// "scrolling does not work".
+const MANUAL_SCROLL_PAUSE_MS = 4000;
+let lastManualScrollAt = 0;
+let programmaticScrollUntil = 0;
+
+// A scroll event that arrives while no programmatic scroll is in flight is the
+// user's own (wheel, drag, keyboard, scrollbar).
+function noteScrollEvents(el) {
+    if (!el || el._scrollGuardBound) return;
+    el._scrollGuardBound = true;
+    el.addEventListener('scroll', () => {
+        if (performance.now() < programmaticScrollUntil) return;
+        lastManualScrollAt = performance.now();
+    }, { passive: true });
+}
+
+function autoScrollPaused() {
+    return (performance.now() - lastManualScrollAt) < MANUAL_SCROLL_PAUSE_MS;
+}
+
 function scrollToElement(targetLine, c) {
     if (!targetLine || !c) return;
+    if (autoScrollPaused()) return;
     const scrollParent = c.closest('.player-lyrics-container') || c.closest('.lyrics-scroll-container') || c.parentElement;
     if (!scrollParent) return;
+    noteScrollEvents(scrollParent);
 
     const parentRect = scrollParent.getBoundingClientRect();
     if (parentRect.height === 0) return; // Hidden container
@@ -468,6 +497,7 @@ function scrollToElement(targetLine, c) {
     const relativeTop = lineRect.top - parentRect.top + scrollParent.scrollTop;
     const targetScroll = relativeTop - (scrollParent.clientHeight / 2) + (lineRect.height / 2);
 
+    programmaticScrollUntil = performance.now() + 900;
     if (typeof scrollParent.scrollTo === 'function') {
         scrollParent.scrollTo({
             top: Math.max(0, targetScroll),
