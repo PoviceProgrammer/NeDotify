@@ -32,10 +32,25 @@ AUTH_PARAM = 'k'
 # Upstream credentials are attached ONLY when the target host belongs to the
 # provider that owns them. Without this, a caller could point ?url= at any host
 # and have the user's Yandex OAuth token or provider cookies forwarded to it.
+# SoundCloud serves audio from several unrelated-looking domains. Missing
+# `soundcloud.cloud` made every stream on playback.media-streaming.soundcloud.cloud
+# lose its credentials, so downloads/streaming silently lost whatever the API
+# had attached, and source inference fell through leaving `source` unset.
+# Kept as one list so host checks cannot drift apart again.
+SOUNDCLOUD_HOSTS = ('soundcloud.com', 'sndcdn.com', 'soundcloud.cloud', 'scdn.co')
+YOUTUBE_HOSTS = ('youtube.com', 'youtu.be', 'googlevideo.com', 'ytimg.com')
+YANDEX_HOSTS = ('yandex.ru', 'yandex.net', 'yandex.com')
+
+
+def _host_matches(host: str, suffixes) -> bool:
+    """True when host equals or is a subdomain of any of `suffixes`."""
+    return any(host == sfx or host.endswith('.' + sfx) for sfx in suffixes)
+
+
 CREDENTIAL_HOSTS = {
-    'yandex': ('yandex.ru', 'yandex.net', 'yandex.com'),
-    'youtube': ('youtube.com', 'youtu.be', 'googlevideo.com', 'ytimg.com', 'google.com'),
-    'soundcloud': ('soundcloud.com', 'sndcdn.com'),
+    'yandex': YANDEX_HOSTS,
+    'youtube': YOUTUBE_HOSTS,
+    'soundcloud': SOUNDCLOUD_HOSTS,
 }
 
 
@@ -592,11 +607,11 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             # Infer source if not specified
             if not source and target_url:
                 h = _host_of(target_url)
-                if any(h == sfx or h.endswith('.' + sfx) for sfx in ('googlevideo.com', 'youtube.com', 'youtu.be')):
+                if _host_matches(h, YOUTUBE_HOSTS):
                     source = 'youtube'
-                elif any(h == sfx or h.endswith('.' + sfx) for sfx in ('sndcdn.com', 'soundcloud.com')):
+                elif _host_matches(h, SOUNDCLOUD_HOSTS):
                     source = 'soundcloud'
-                elif any(h == sfx or h.endswith('.' + sfx) for sfx in ('yandex.net', 'yandex.ru')):
+                elif _host_matches(h, YANDEX_HOSTS):
                     source = 'yandex'
 
             # SSRF guard: reject URLs resolving to internal/private hosts (same logic as core/api.py).

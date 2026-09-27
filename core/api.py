@@ -93,6 +93,31 @@ def _is_ssrf_safe_url(url: str) -> bool:
         return False
 
 
+_URL_IN_TEXT_RE = re.compile(r'https?://[^\s<>"\']+', re.IGNORECASE)
+
+
+def _extract_first_url(raw: str) -> str:
+    """Pull the first http(s) URL out of arbitrary pasted text.
+
+    Users paste a whole share blob rather than a bare link -- e.g.
+    ``15 треков '...' 2026 https://on.soundcloud.com/xyz  SoundCloud``.
+    urlparse() on that returns the wrong scheme, so SSRF validation rejected a
+    perfectly good playlist link with "Некорректная или небезопасная ссылка".
+    """
+    if not raw:
+        return ""
+    text = str(raw).strip()
+    if text.lower().startswith(("http://", "https://")):
+        # Still strip trailing sentence punctuation: a link copied out of a
+        # sentence keeps it ("...list=PL123.").
+        return text.rstrip('.,;:!?)]}"\'')
+    match = _URL_IN_TEXT_RE.search(text)
+    if not match:
+        return text
+    # Trailing punctuation is common when copying from a sentence.
+    return match.group(0).rstrip('.,;:!?)]}"\'')
+
+
 class AppApi:
     """JS Bridge API passed to PyWebView create_window(js_api=...)."""
 
@@ -751,6 +776,20 @@ class AppApi:
                 return
             self._history_logged_key = key
             t_id = track.get("id")
+            if not t_id:
+                # A track played straight from search has no local row yet, so
+                # there was nothing to attach the history entry to and the play
+                # was silently dropped. Persist it first: add_track() also
+                # stores cover_url, which is what the home/library grids render
+                # their artwork from -- without this every streamed track showed
+                # a skeleton placeholder forever.
+                try:
+                    t_id = self._core.db.ensure_track_exists(track)
+                except Exception:
+                    logger.debug("maybe_log_history: could not persist track", exc_info=True)
+                    t_id = None
+                if t_id:
+                    track["id"] = t_id
             if t_id:
                 try:
                     self._core.db.add_to_history(int(t_id))
@@ -1656,8 +1695,8 @@ class AppApi:
 
     def import_external_playlist(self, url: str, name: str | None = None):
         """Resolve a supported external playlist and persist its tracks locally."""
-        url = (url or "").strip()
-        if not _is_ssrf_safe_url(url):
+        url = _extract_first_url(url or "")
+        if not url or not _is_ssrf_safe_url(url):
             logger.warning("SSRF block triggered for playlist import URL: %s", url)
             return {"success": False, "error": "Некорректная или небезопасная ссылка"}
 
@@ -2200,6 +2239,65 @@ class AppApi:
 
         threading.Thread(target=run, daemon=True, name=f"Lyrics-{cascade_no}").start()
         return {"status": "loading", "cascade": cascade_no}
+
+    def fetch_missing_covers(self, limit: int = 40):
+        """Backfill cover_url for library/history rows that have none.
+
+        Rows written before covers were persisted on playback keep a NULL
+        cover_url, so every grid rendered a bare placeholder forever. Resolve
+        artwork from the owning provider and store it. Runs off the bridge
+        thread; failures are per-track and non-fatal.
+        """
+        try:
+            rows = self._core.db.get_tracks_missing_cover(limit=limit) or []
+        except Exception:
+            logger.debug("fetch_missing_covers: query failed", exc_info=True)
+            return {"updated": 0}
+
+        updated = 0
+        for row in rows:
+            source = (row.get("source") or "").lower()
+            source_id = str(row.get("source_id") or "").strip()
+            if not source or not source_id:
+                continue
+            try:
+                extra = self._resolve_track_metadata(source, source_id)
+            except Exception:
+                logger.debug("fetch_missing_covers: %s/%s failed", source, source_id, exc_info=True)
+                continue
+            cover = str(extra.get("cover_url") or "")
+            if cover:
+                try:
+                    self._core.db.backfill_track_metadata(
+                        int(row["id"]), cover,
+                        title=str(extra.get("title") or ""),
+                        artist=str(extra.get("artist") or ""),
+                    )
+                    updated += 1
+                except Exception:
+                    logger.debug("fetch_missing_covers: store failed", exc_info=True)
+        if updated:
+            self._emit("library_updated", {"covers": updated})
+        return {"updated": updated, "scanned": len(rows)}
+
+    def _resolve_track_metadata(self, source: str, source_id: str) -> dict:
+        """Ask the owning provider for one track's artwork and real names."""
+        svc = None
+        if source == "soundcloud":
+            svc = getattr(self._core, "soundcloud", None)
+        elif source == "youtube":
+            svc = getattr(self._core, "youtube", None)
+        getter = getattr(svc, "get_track_metadata", None) if svc else None
+        if not callable(getter):
+            return {}
+        try:
+            return getter(source_id) or {}
+        except Exception:
+            logger.debug("_resolve_track_metadata(%s/%s) failed", source, source_id, exc_info=True)
+            return {}
+
+    def _resolve_track_cover(self, source: str, source_id: str) -> str:
+        return str(self._resolve_track_metadata(source, source_id).get("cover_url") or "")
 
     def get_lyrics_translation(self, lyrics_text: str, target_lang: str = "ru"):
         """Get translation for lyrics text."""

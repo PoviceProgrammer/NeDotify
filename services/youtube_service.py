@@ -644,7 +644,29 @@ class YouTubeService(BaseMusicService):
 
                     if info:
                         if info.get("_type") == "playlist" and "entries" in info and len(info["entries"]) > 0:
-                            info = info["entries"][0]
+                            first_entry = info["entries"][0]
+                            # yt-dlp leaves None in `entries` for videos it could
+                            # not resolve (unavailable/removed). Reassigning
+                            # unconditionally made `info` None and the next line
+                            # then raised AttributeError: 'NoneType' object has
+                            # no attribute 'get', which surfaced as a generic
+                            # "Ошибка при извлечении потока YouTube".
+                            if first_entry is None:
+                                logger.warning(
+                                    "Playlist %s resolved but its first entry is unavailable",
+                                    video_url,
+                                )
+                                if error_callback:
+                                    error_callback("Трек недоступен для извлечения")
+                                return None
+                            info = first_entry
+
+                        # A non-dict mapping here would fail the same way.
+                        if not isinstance(info, dict):
+                            logger.warning("Unexpected info payload for %s: %r", video_url, type(info))
+                            if error_callback:
+                                error_callback("Трек недоступен для извлечения")
+                            return None
 
                         stream_url = info.get("url")
                         if not stream_url and info.get("requested_formats"):

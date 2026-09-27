@@ -167,7 +167,53 @@ class PlaylistImportService:
         if not tracks:
             raise PlaylistImportError("В плейлисте не найдено доступных треков")
 
+        # extract_flat="in_playlist" gives SoundCloud entries with an id but no
+        # title/uploader/thumbnail, so every track came back as
+        # "Unknown Title" and the whole import looked broken. Fill the gaps
+        # from the SoundCloud API, which is one cheap call per track.
+        self._enrich_soundcloud_tracks(tracks)
+
         return {"name": name, "source": "soundcloud", "tracks": tracks}
+
+    def _enrich_soundcloud_tracks(self, tracks: List[Dict[str, Any]]) -> None:
+        """Fill in missing title/artist/cover for flat-extracted entries."""
+        missing = [
+            t for t in tracks
+            if not t.get("title") or t["title"] == "Unknown Title"
+            or not t.get("artist") or t["artist"] == "Unknown Artist"
+        ]
+        if not missing:
+            return
+
+        svc = None
+        try:
+            from services.soundcloud_service import SoundCloudService
+            svc = SoundCloudService()
+        except Exception:
+            return
+
+        # Bounded concurrency: 33 sequential API calls would take ~20s.
+        from concurrent.futures import ThreadPoolExecutor
+        def _fetch(track):
+            try:
+                return svc.get_track_metadata(str(track.get("source_id") or ""))
+            except Exception:
+                return {}
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            for track, meta in zip(missing, pool.map(_fetch, missing)):
+                if not meta:
+                    continue
+                if not track.get("title") or track["title"] == "Unknown Title":
+                    if meta.get("title"):
+                        track["title"] = meta["title"]
+                if not track.get("artist") or track["artist"] == "Unknown Artist":
+                    if meta.get("artist"):
+                        track["artist"] = meta["artist"]
+                if not track.get("cover_url") and meta.get("cover_url"):
+                    track["cover_url"] = meta["cover_url"]
+                if not track.get("source_url") and meta.get("source_url"):
+                    track["source_url"] = meta["source_url"]
 
     def _resolve_local_file(self, target: str) -> Dict[str, Any]:
         """Parse M3U, JSON, or text playlist files."""

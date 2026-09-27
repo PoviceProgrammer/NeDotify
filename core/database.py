@@ -497,7 +497,23 @@ class DatabaseManager:
                     if row:
                         return row["id"]
 
-                if title and title != "Unknown":
+                # Only dedupe by name when the name actually identifies the
+                # track. The old guard compared against "Unknown", but the real
+                # placeholder is "Unknown Title" -- so every placeholder track
+                # matched every other one and a 33-track playlist import
+                # collapsed onto a single row. Placeholder names carry no
+                # identity, so fall through to INSERT; for non-local sources
+                # the source/source_id check above already handles repeats.
+                _placeholder_names = {
+                    "", "unknown", "unknown title", "unknown artist",
+                    "none", "null", "неизвестный трек",
+                }
+                name_is_meaningful = (
+                    title
+                    and str(title).strip().lower() not in _placeholder_names
+                    and str(artist or "").strip().lower() not in _placeholder_names
+                )
+                if name_is_meaningful:
                     cursor.execute(
                         "SELECT id, cover_url, file_path FROM tracks WHERE LOWER(title) = LOWER(?) AND LOWER(artist) = LOWER(?)",
                         (title, artist),
@@ -905,18 +921,95 @@ class DatabaseManager:
                 )
 
     def get_history(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Recently played tracks, one entry per track.
+
+        This used to return one row per listening event, so a track played five
+        times produced five identical cards in "Недавно прослушано" and pushed
+        genuinely different tracks out of the feed. Collapse per track, keeping
+        the most recent play for ordering.
+        """
         cursor = self.conn.cursor()
         cursor.execute(
             """
-            SELECT h.*, t.title, t.artist, t.album, t.cover_path, t.cover_url, t.source, t.source_id
+            SELECT t.id AS track_id,
+                   MAX(h.played_at) AS played_at,
+                   COUNT(*) AS play_count,
+                   COALESCE(SUM(h.duration_listened), 0) AS duration_listened,
+                   t.title, t.artist, t.album, t.cover_path, t.cover_url,
+                   t.source, t.source_id
             FROM history h
             JOIN tracks t ON h.track_id = t.id
-            ORDER BY h.played_at DESC
+            GROUP BY t.id
+            ORDER BY played_at DESC
             LIMIT ?
         """,
             (limit,),
         )
         return [dict(row) for row in cursor.fetchall()]
+
+    def get_tracks_missing_cover(self, limit: int = 40) -> List[Dict[str, Any]]:
+        """Rows whose artwork (or real title/artist) is still missing.
+
+        Also picks up rows that carry the 'Unknown Title' / 'Unknown Artist'
+        placeholders, because those were written when metadata extraction failed
+        and the provider can supply the real values.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, source, source_id FROM tracks
+            WHERE cover_path IS NULL
+              AND (
+                    cover_url IS NULL OR cover_url = ''
+                 OR title IS NULL OR title IN ('', 'Unknown', 'Unknown Title')
+                 OR artist IS NULL OR artist IN ('', 'Unknown', 'Unknown Artist')
+              )
+              AND source IS NOT NULL AND source != 'local'
+              AND source_id IS NOT NULL AND source_id != ''
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def set_track_cover(self, track_id: int, cover_url: str) -> None:
+        with self._write_lock:
+            with self.conn:
+                self.conn.execute(
+                    "UPDATE tracks SET cover_url = ? WHERE id = ?",
+                    (cover_url, track_id),
+                )
+
+    def backfill_track_metadata(self, track_id: int, cover_url: str,
+                                title: str = "", artist: str = "") -> None:
+        """Store artwork, and replace placeholder title/artist with real values.
+
+        Rows written while metadata extraction failed carry the literal
+        placeholders 'Unknown Title' / 'Unknown Artist'. Those are not real
+        data, so the provider's values should win; genuine values are left
+        untouched.
+        """
+        placeholders = {"", "unknown", "unknown title", "unknown artist",
+                        "unknown album", "none", "null", "неизвестный трек"}
+        with self._write_lock:
+            with self.conn:
+                sets, args = [], []
+                if cover_url:
+                    sets.append("cover_url = ?")
+                    args.append(cover_url)
+                if title and str(title).strip().lower() not in placeholders:
+                    sets.append("title = ?")
+                    args.append(str(title).strip())
+                if artist and str(artist).strip().lower() not in placeholders:
+                    sets.append("artist = ?")
+                    args.append(str(artist).strip())
+                if not sets:
+                    return
+                args.append(track_id)
+                self.conn.execute(
+                    f"UPDATE tracks SET {', '.join(sets)} WHERE id = ?", args
+                )
 
     def get_most_played(self, limit: int = 10) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()

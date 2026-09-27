@@ -65,6 +65,27 @@ export async function loadHome(isTrackChange = false) {
             renderTopArtists(data.analytics.top_artists || []);
         }
 
+        // Backfill artwork for rows stored before covers were persisted on
+        // playback. Without this those tiles stay empty placeholders forever,
+        // because the grid can only render what the row already holds.
+        if (window.pywebview.api.fetch_missing_covers) {
+            try {
+                const res = await window.pywebview.api.fetch_missing_covers(40);
+                if (res && res.updated > 0 && currentGen === homeLoadGeneration) {
+                    const fresh = await window.pywebview.api.get_home_data() || {};
+                    if (currentGen === homeLoadGeneration) {
+                        if (fresh.history && fresh.history.length) renderHistory(fresh.history);
+                        if (fresh.analytics) {
+                            renderTopTracks(fresh.analytics.top_tracks || []);
+                            renderTopArtists(fresh.analytics.top_artists || []);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('Cover backfill failed:', err);
+            }
+        }
+
         // Step 2: Playlists (fast local query)
         if (window.pywebview.api.get_playlists) {
             try {

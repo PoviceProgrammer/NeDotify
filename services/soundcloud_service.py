@@ -389,6 +389,39 @@ class SoundCloudService(BaseMusicService):
 
         self._executor.submit(_fetch)
 
+    def get_track_metadata(self, track_id: str) -> dict:
+        """Fetch a single track's metadata (artwork included) by numeric id.
+
+        Used to backfill cover_url for rows stored before artwork was persisted
+        on playback, so library grids stop showing empty placeholders.
+        """
+        try:
+            cid = self._get_client_id()
+            if not cid:
+                return {}
+            r = self._session.get(
+                f"https://api-v2.soundcloud.com/tracks/{track_id}?client_id={cid}",
+                timeout=6.0,
+            )
+            if r.status_code != 200:
+                return {}
+            data = r.json() or {}
+        except Exception:
+            self.logger.debug("get_track_metadata(%s) failed", track_id, exc_info=True)
+            return {}
+
+        artwork = data.get("artwork_url") or ""
+        if artwork and "large.jpg" in artwork:
+            # t500 keeps the download small while staying sharp on a grid tile.
+            artwork = artwork.replace("large.jpg", "t500x500.jpg")
+        return {
+            "title": data.get("title") or "",
+            "artist": (data.get("user") or {}).get("username") or "",
+            "cover_url": artwork,
+            "source_id": str(data.get("id") or track_id),
+            "source_url": data.get("permalink_url") or f"https://soundcloud.com/{track_id}",
+        }
+
     def get_stream_url(self, track_url: str, callback: Callable = None, error_callback: Callable = None, quality: str = "high", **kwargs):
         """Extract direct audio stream URL from a SoundCloud track."""
         info = self.get_from_cache(track_url)
