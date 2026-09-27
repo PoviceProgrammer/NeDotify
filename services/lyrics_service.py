@@ -361,11 +361,31 @@ class LyricsService:
         # block playback.
         result = _execute_cascade(track, artist, max_timeout=5.5)
 
-        # If not found and artist was inferred from track title, try flipped (artist, track)
-        if (not result or result.get("weight", 3) >= 3) and not artist_name and artist and track != artist:
-            alt_res = _execute_cascade(artist, track, max_timeout=3.0)
+        # Extra query shapes, tried ONLY when the primary found nothing.
+        #
+        # A remix upload carries the REMIXER as its artist (SoundCloud's
+        # uploader) while the real artist is embedded in the title:
+        #   artist="SWEEQTY", title="KENTUKKI - Замигает свет (SWEEQTY hardstyle remix)"
+        # Querying that verbatim misses, because providers index the original
+        # recording under the original artist. The "A - B" split of the title is
+        # exactly the missing candidate.
+        fallbacks = []
+        parts = re.split(r'\s*[\-—–]\s*', track, maxsplit=1)
+        if (len(parts) == 2 and parts[0] and parts[1]
+                and parts[0].strip().lower() != artist.strip().lower()):
+            fallbacks.append((parts[0].strip(), parts[1].strip()))
+        # An artist inferred from the title means the two may be swapped.
+        if not artist_name and artist and track != artist:
+            fallbacks.append((artist, track))
+
+        for alt_artist, alt_track in fallbacks:
+            if result and result.get("weight", 3) < 3:
+                break
+            alt_res = _execute_cascade(alt_track, alt_artist, max_timeout=3.0)
             if alt_res and alt_res.get("weight", 3) < 3:
                 result = alt_res
+                logger.info("[lyrics] resolved via fallback query: %s - %s",
+                            alt_artist, alt_track)
 
         if result and result.get("weight", 3) < 3:
             with self._cache_lock:
