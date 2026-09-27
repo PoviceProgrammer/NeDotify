@@ -86,6 +86,26 @@ def _is_storyboards_only(info):
     return bool(fmts) and not any(f.get("url") for f in fmts)
 
 
+def _has_playable_audio(info) -> bool:
+    """True when the payload actually contains a usable audio stream.
+
+    Needed to reject a response that parsed fine but carried only previews --
+    accepting it would cache a dead stream URL and fail silently at playback.
+    """
+    if isinstance(info, dict) and info.get("_type") == "playlist":
+        entries = info.get("entries") or []
+        info = entries[0] if entries else {}
+    if not isinstance(info, dict):
+        return False
+    if info.get("url") and info.get("acodec") not in (None, "none"):
+        return True
+    for key in ("requested_formats", "formats"):
+        for f in (info.get(key) or []):
+            if isinstance(f, dict) and f.get("url") and f.get("acodec") != "none":
+                return True
+    return False
+
+
 class YouTubeService(BaseMusicService):
     """Client-side YouTube audio extraction using yt-dlp."""
 
@@ -189,6 +209,13 @@ class YouTubeService(BaseMusicService):
     def _get_ydl_opts(self, format_str, fallback=False):
         import os
 
+        # NB: do NOT pin `player_client`. Pinning restricts yt-dlp to exactly
+        # those clients, and the modern ones (ios / web_safari / web_embedded /
+        # tv_embedded) now need a PO token -- their formats get filtered out and
+        # every request dies with "Requested format is not available". Verified
+        # against yt-dlp 2026.08.19 on the very videos that failed: with the
+        # pinned list all of them errored, while letting yt-dlp pick its default
+        # (or android_music alone) returned 41-48 formats with 5 audio streams.
         opts = {
             "quiet": True,
             "no_warnings": True,
@@ -196,12 +223,6 @@ class YouTubeService(BaseMusicService):
             "noplaylist": True,
             "nocheckcertificate": True,
             "skip_download": True,
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["ios", "web_safari", "android_music", "mweb"],
-                    "player_skip": ["configs"]
-                }
-            },
             "socket_timeout": 5,
             "retries": 1,
             "extractor_retries": 1,
@@ -212,11 +233,10 @@ class YouTubeService(BaseMusicService):
         }
 
         if fallback:
+            # android_music is the one pinned client that still resolves
+            # without a PO token, so it is worth naming explicitly here.
             opts["extractor_args"] = {
-                "youtube": {
-                    "player_client": ["ios", "web_safari", "mweb"],
-                    "player_skip": ["configs"]
-                }
+                "youtube": {"player_client": ["android_music"]}
             }
             opts["format"] = "bestaudio/best/ba/b/worst"
             opts["ignoreerrors"] = True
@@ -557,6 +577,24 @@ class YouTubeService(BaseMusicService):
                         return ydl_clean.extract_info(video_url, download=False)
                 except Exception as e_clean:
                     err_msg = str(e_clean)
+            if any(k in err_lower for k in _YT_GATING_MARKS):
+                # Try anonymously FIRST. Browser cookies are auto-detected even
+                # when the user configured none, and a stale profile makes
+                # YouTube answer "The page needs to be reloaded" for a video
+                # that plays fine unsigned. It is also far quicker than the
+                # browser sweep below, so the common case no longer stalls.
+                try:
+                    anon_opts = opts.copy()
+                    anon_opts.pop("cookiesfrombrowser", None)
+                    anon_opts.pop("cookiefile", None)
+                    with yt_dlp.YoutubeDL(anon_opts) as ydl_anon:
+                        res = ydl_anon.extract_info(video_url, download=False)
+                    if res and _has_playable_audio(res):
+                        logger.info("YouTube extraction succeeded without cookies")
+                        return res
+                except Exception as anon_err:
+                    logger.debug("Anonymous YouTube extraction failed: %s", anon_err)
+
             if any(k in err_lower for k in ("confirm your age", "sign in", "inappropriate", "bot", "confirm you")):
                 configured_browser = "none"
                 if self.settings:
@@ -587,6 +625,38 @@ class YouTubeService(BaseMusicService):
                         logger.debug(f"Browser cookies extraction from {b_name} failed: {cookie_err}")
             raise e
 
+    def get_track_metadata(self, track_id: str) -> dict:
+        """Fetch a single video's metadata (thumbnail included) by video id.
+
+        Used by fetch_missing_covers() to backfill rows that never got artwork.
+        """
+        if not HAS_YTDLP or not track_id:
+            return {}
+        video_id = str(track_id).strip()
+        if "youtube.com/watch" in video_id or "youtu.be" in video_id:
+            from urllib.parse import parse_qs, urlparse
+            q = parse_qs(urlparse(video_id).query)
+            video_id = (q.get("v") or [video_id])[0]
+        video_id = video_id.split("&")[0].split("=")[-1]
+        if not re.fullmatch(r"[A-Za-z0-9_-]{6,20}", video_id):
+            return {}
+        try:
+            with yt_dlp.YoutubeDL(self._get_ydl_opts("bestaudio/best")) as ydl:
+                info = ydl.extract_info(
+                    f"https://www.youtube.com/watch?v={video_id}", download=False
+                )
+        except Exception:
+            logger.debug("get_track_metadata(%s) failed", track_id, exc_info=True)
+            return {}
+        if not isinstance(info, dict):
+            return {}
+        return {
+            "title": info.get("title") or "",
+            "artist": info.get("uploader") or info.get("channel") or "",
+            "cover_url": info.get("thumbnail") or "",
+            "source_id": video_id,
+        }
+
     def get_stream_url(self, video_url: str, callback: Callable = None, error_callback: Callable = None, quality: str = "high"):
         """Extract direct audio stream URL from a YouTube video."""
         if not HAS_YTDLP:
@@ -616,7 +686,7 @@ class YouTubeService(BaseMusicService):
                                 error_callback("Не удалось прочитать куки браузера. Закройте браузер или используйте cookies.txt")
                             return None
 
-                        if any(k in err_lower for k in ("bot", "sign in", "confirm you", "drm")):
+                        if any(k in err_lower for k in _YT_GATING_MARKS):
                             logger.info("YouTube bot/auth challenge detected, triggering fast fallback.")
                             try:
                                 info = self._extract_info_safe(video_url, quality, fallback=True)
