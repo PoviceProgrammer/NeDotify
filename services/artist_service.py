@@ -391,8 +391,12 @@ class ArtistService(BaseMusicService):
                 url = ""
                 try:
                     hits = yt.search(name, filter="artists", limit=3) or []
-                except Exception:
-                    logger.warning("Avatar search failed for %r", name, exc_info=True)
+                except Exception as exc:
+                    # Artist avatars are cosmetic and this endpoint routinely
+                    # times out, so log the reason compactly instead of dumping
+                    # a 40-line traceback per track into the app log.
+                    logger.debug("Avatar lookup unavailable for %r: %s: %s",
+                                 name, type(exc).__name__, str(exc)[:80])
                     hits = []
                 target = name.lower()
                 best_item = None

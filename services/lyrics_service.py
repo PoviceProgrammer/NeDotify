@@ -115,6 +115,22 @@ _VARIANT_TOKENS = frozenset("""
 # rather than decoration ("(I Love You)").
 _MAX_VARIANT_WORDS = 5
 
+# Words that on their own do NOT make a group a variant marker: either they name
+# a style rather than a particular version (hardstyle, house), or they are
+# ordinary words that can legitimately appear inside a real title ("radio" in
+# "(Radio Ga Ga)"). They only take part when a strong marker is present too, so
+# "(Radio Edit)" is still stripped while "(Radio Ga Ga)" is not.
+_WEAK_VARIANT_TOKENS = frozenset("""
+    hardstyle rawstyle headhunter gabber uplift euphoria hardtrance house
+    techno trance edm dnb drum and bass reverse progressive psy psytrance
+    electro electrohouse dance future futurebass garage radio
+""".split())
+
+# Everything else in the known set is an unambiguous version marker, so a group
+# containing one of these is stripped even when it also holds words we do not
+# know -- typically the remixer's name, as in "Song (SWEEQTY hardstyle remix)".
+_STRONG_VARIANT_TOKENS = _VARIANT_TOKENS - _WEAK_VARIANT_TOKENS
+
 
 def _strip_variant_qualifiers(title: str) -> str:
     """Drop parenthesised/bracketed groups that consist only of variant words.
@@ -128,19 +144,22 @@ def _strip_variant_qualifiers(title: str) -> str:
         return title
 
     def _is_variant_group(inner: str) -> bool:
-        words = re.findall(r'[0-9]+(?:[._][0-9]+)?[a-z]*|[a-z]+', inner.lower())
+        words = re.findall(r'[0-9]+(?:[._][0-9]+)?[a-z]+|[0-9]{4}|[a-z]+', inner.lower())
         if not words or len(words) > _MAX_VARIANT_WORDS:
             return False
+        saw_strong = False
         for w in words:
             # A year inside the qualifier ("(Remastered 2009)") is not a variant
             # word, but it must not veto the group either.
             if w.isdigit() and len(w) == 4 and 1900 <= int(w) <= 2099:
                 continue
             # "1.5x" and "1_5x" are the same token.
-            if w.replace('.', '_') in _VARIANT_TOKENS:
-                continue
-            return False
-        return True
+            if w.replace('.', '_') in _STRONG_VARIANT_TOKENS:
+                saw_strong = True
+        # A strong marker is required. Unknown words and genre-only groups are
+        # left alone, so neither the remixer's name nor a genuine title fragment
+        # gets mistaken for decoration.
+        return saw_strong
 
     def _strip_bracketed(m):
         return "" if _is_variant_group(m.group(1)) else m.group(0)
