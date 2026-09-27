@@ -110,6 +110,27 @@ export function resetLyricsOffset() {
     updateLyricsPosition(lastPosMs);
 }
 
+// The offset only means something for timed lyrics: updateLyricsPosition()
+// returns immediately when parsedLyrics is empty, so on plain lyrics the buttons
+// moved the badge and did nothing else. Disable them instead of shipping a
+// control that silently does nothing.
+export function setOffsetControlsEnabled(enabled) {
+    const ids = [
+        'btn-lyrics-offset-minus', 'btn-lyrics-offset-reset', 'btn-lyrics-offset-plus',
+        'btn-lyrics-offset-minus-page', 'btn-lyrics-offset-reset-page', 'btn-lyrics-offset-plus-page'
+    ];
+    ids.forEach(id => {
+        const b = document.getElementById(id);
+        if (!b) return;
+        b.disabled = !enabled;
+        b.style.opacity = enabled ? '' : '0.4';
+        b.style.cursor = enabled ? '' : 'not-allowed';
+        b.title = enabled
+            ? 'Сдвинуть текст по времени'
+            : 'Смещение доступно только для синхронизированного текста';
+    });
+}
+
 export function adjustLyricsOffset(deltaMs) {
     currentOffsetMs += deltaMs;
     updateOffsetBadges();
@@ -145,6 +166,7 @@ export function initLyrics() {
     window.NeDotify.updateLyricsPosition = updateLyricsPosition;
     window.NeDotify.adjustLyricsOffset = adjustLyricsOffset;
     window.NeDotify.resetLyricsOffset = resetLyricsOffset;
+    window.NeDotify.setOffsetControlsEnabled = setOffsetControlsEnabled;
     window.NeDotify.toggleTranslation = toggleTranslation;
 
     // Purge stale unbounded global offset from previous buggy sessions
@@ -205,14 +227,39 @@ export function initLyrics() {
     const btnPlusPage = document.getElementById('btn-lyrics-offset-plus-page');
     const btnTransPage = document.getElementById('btn-toggle-lyrics-translation-page');
 
-    if (btnMinus) btnMinus.addEventListener('click', () => adjustLyricsOffset(-500));
-    if (btnReset) btnReset.addEventListener('click', () => resetLyricsOffset());
-    if (btnPlus) btnPlus.addEventListener('click', () => adjustLyricsOffset(500));
-    if (btnTrans) btnTrans.addEventListener('click', () => toggleTranslation());
+    // Hold-to-repeat. Each click is only 0.5s, so reaching a usable offset takes
+    // many clicks; holding accelerates after a short delay, the way volume
+    // controls do. Disabled buttons ignore the press entirely.
+    const bindOffsetRepeat = (button, stepMs) => {
+        if (!button) return;
+        let holdTimer = null, repeatTimer = null;
+        const stop = () => {
+            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
+        };
+        button.addEventListener('pointerdown', (e) => {
+            if (button.disabled) return;
+            e.preventDefault();
+            adjustLyricsOffset(stepMs);
+            holdTimer = setTimeout(() => {
+                repeatTimer = setInterval(() => adjustLyricsOffset(stepMs), 90);
+            }, 450);
+        });
+        ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev =>
+            button.addEventListener(ev, stop));
+        // Keyboard activation must not leave a repeat running.
+        button.addEventListener('keyup', stop);
+        button.addEventListener('blur', stop);
+    };
 
-    if (btnMinusPage) btnMinusPage.addEventListener('click', () => adjustLyricsOffset(-500));
+    bindOffsetRepeat(btnMinus, -500);
+    bindOffsetRepeat(btnPlus, 500);
+    bindOffsetRepeat(btnMinusPage, -500);
+    bindOffsetRepeat(btnPlusPage, 500);
+
+    if (btnReset) btnReset.addEventListener('click', () => resetLyricsOffset());
     if (btnResetPage) btnResetPage.addEventListener('click', () => resetLyricsOffset());
-    if (btnPlusPage) btnPlusPage.addEventListener('click', () => adjustLyricsOffset(500));
+    if (btnTrans) btnTrans.addEventListener('click', () => toggleTranslation());
     if (btnTransPage) btnTransPage.addEventListener('click', () => toggleTranslation());
 
     // Listen to track/position events dispatched by events.js via custom events
@@ -399,12 +446,17 @@ export function renderLyrics(data) {
             });
             // Update position immediately to highlight matching line
             updateLyricsPosition(lastPosMs);
+            setOffsetControlsEnabled(true);
             return;
         }
     }
 
     // Fallback to plain lyrics
     parsedLyrics = [];
+    // Without timestamps there is no active line, so the offset had nothing to
+    // act on: the buttons still responded and the badge changed, which read as a
+    // broken control. Disable them and say why.
+    setOffsetControlsEnabled(false);
     containers.forEach(c => {
         c.innerHTML = '';
         const lines = cleanPlainLyrics(normalizedData.plainLyrics);

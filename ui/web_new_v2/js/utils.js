@@ -864,10 +864,23 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
                 showToast(`Функция пока недоступна (Кэшировать)`, 'info');
                 break;
             case 'pin':
+                // Category must be 'personalization': that is what the profile
+                // view reads (main.js: personalization?.pinned_track ||
+                // app?.pinned_track), and 'profile' is not even one of the
+                // categories get_settings() returns -- so the pin was stored
+                // where nothing ever looked for it and the profile stayed empty.
                 if (window.pywebview?.api?.save_setting) {
-                    window.pywebview.api.save_setting('pinned_track', track, 'profile');
+                    window.pywebview.api.save_setting('pinned_track', track, 'personalization');
                 }
                 showToast(`'${track.title || ''}' закреплен в профиле!`, 'success');
+                // Reflect the change immediately instead of waiting for a
+                // restart / profile re-render.
+                window.settings = window.settings || {};
+                window.settings.personalization = window.settings.personalization || {};
+                window.settings.personalization.pinned_track = track;
+                window.dispatchEvent(new CustomEvent('nedotify:settings_changed', {
+                    detail: { category: 'personalization', key: 'pinned_track', value: track }
+                }));
                 break;
             case 'edit_tags':
                 openEditTagsModal(track);
