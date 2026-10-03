@@ -2275,7 +2275,14 @@ class AppApi:
                         )
                         exe_path = f'"{sys.executable}" "{main_py}"'
                     winreg.SetValueEx(key, AUTOSTART_RUN_VALUE, 0, winreg.REG_SZ, exe_path)
-                for name in (AUTOSTART_RUN_VALUE,) + tuple(AUTOSTART_RUN_LEGACY_VALUES):
+                # Only the legacy names are dropped on the enable path: the value
+                # just written above must survive. On disable, the current name
+                # goes too, otherwise the toggle could never turn autostart off.
+                stale_names = (
+                    AUTOSTART_RUN_LEGACY_VALUES if enabled
+                    else (AUTOSTART_RUN_VALUE,) + tuple(AUTOSTART_RUN_LEGACY_VALUES)
+                )
+                for name in stale_names:
                     try:
                         winreg.DeleteValue(key, name)
                     except (FileNotFoundError, OSError):
