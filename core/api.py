@@ -44,6 +44,92 @@ BRIDGE_SYNC_BUDGET = 6.0
 MAIN_WINDOW_SIZE = (1100, 800)
 MINI_WINDOW_SIZE = (380, 110)
 
+# Cover image formats the tag editor and the /api/cover proxy both accept.
+# A cached cover MUST keep its real extension: core/proxy.py serves the file
+# with mimetypes.guess_type(<path>), so PNG/WebP bytes under a ".jpg" name were
+# published as image/jpeg and the browser refused to decode them.
+_COVER_MIME_BY_EXT = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
+_COVER_EXT_BY_MIME = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+
+
+# DNS verdicts are cached because the check itself is the expensive part and it
+# runs on every proxied request (core/proxy.py do_GET), on every open_url /
+# import_external_playlist call and on every SafeRedirectHandler hop. main.py
+# patches socket.getaddrinfo with a DoH fallback over 3 endpoints at 2s each, so
+# a single unresolvable host could block a proxy thread for ~6s - precisely in
+# the blocked-network scenario that fallback exists for.
+_SSRF_CACHE_TTL = 120.0
+_SSRF_CACHE_MAX = 512
+_ssrf_cache: dict = {}
+_ssrf_cache_lock = threading.Lock()
+
+
+def _reset_ssrf_cache():
+    """Drop all memoized DNS verdicts (tests and explicit invalidation)."""
+    with _ssrf_cache_lock:
+        _ssrf_cache.clear()
+
+
+def _ssrf_cache_get(hostname: str):
+    """Memoized verdict for `hostname`, or None when absent/expired."""
+    with _ssrf_cache_lock:
+        entry = _ssrf_cache.get(hostname)
+        if entry is None:
+            return None
+        expires, verdict = entry
+        if time.monotonic() >= expires:
+            _ssrf_cache.pop(hostname, None)
+            return None
+        return verdict
+
+
+def _ssrf_cache_put(hostname: str, verdict: bool):
+    with _ssrf_cache_lock:
+        if hostname not in _ssrf_cache and len(_ssrf_cache) >= _SSRF_CACHE_MAX:
+            # Bounded memory: evict the entry closest to expiry.
+            oldest = min(_ssrf_cache, key=lambda h: _ssrf_cache[h][0])
+            _ssrf_cache.pop(oldest, None)
+        _ssrf_cache[hostname] = (time.monotonic() + _SSRF_CACHE_TTL, verdict)
+
+
+def _dns_resolves_to_public_ip(hostname: str) -> bool:
+    """Resolve `hostname` and report whether every address is publicly routable.
+
+    Memoized per host: the decision depends only on the hostname, so caching on
+    it cannot mix up two different URLs pointing at different hosts.
+    """
+    cached = _ssrf_cache_get(hostname)
+    if cached is not None:
+        return cached
+
+    verdict = True
+    try:
+        addr_info = socket.getaddrinfo(hostname, None)
+        for family, socktype, proto, canonname, sockaddr in addr_info:
+            ip_str = sockaddr[0]
+            ip = ipaddress.ip_address(ip_str)
+            if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+                verdict = False
+                break
+    except Exception:
+        # If DNS resolution fails, fallback string check
+        if hostname.startswith("169.254.") or hostname.startswith("10.") or hostname.startswith("192.168.") or hostname.startswith("127."):
+            verdict = False
+
+    _ssrf_cache_put(hostname, verdict)
+    return verdict
+
 
 def _is_ssrf_safe_url(url: str) -> bool:
     """SSRF Protection: Validates URLs to prevent internal network scanning and SSRF."""
@@ -76,19 +162,8 @@ def _is_ssrf_safe_url(url: str) -> bool:
         except Exception:
             logger.debug("_is_ssrf_safe_url: suppressed exception", exc_info=True)
 
-        # Resolve all DNS records (IPv4 & IPv6)
-        try:
-            addr_info = socket.getaddrinfo(hostname, None)
-            for family, socktype, proto, canonname, sockaddr in addr_info:
-                ip_str = sockaddr[0]
-                ip = ipaddress.ip_address(ip_str)
-                if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
-                    return False
-        except Exception:
-            # If DNS resolution fails, fallback string check
-            if hostname.startswith("169.254.") or hostname.startswith("10.") or hostname.startswith("192.168.") or hostname.startswith("127."):
-                return False
-        return True
+        # Resolve all DNS records (IPv4 & IPv6), memoized per host.
+        return _dns_resolves_to_public_ip(hostname)
     except Exception:
         return False
 
@@ -118,6 +193,92 @@ def _extract_first_url(raw: str) -> str:
     return match.group(0).rstrip('.,;:!?)]}"\'')
 
 
+def _as_float(value):
+    """Best-effort float conversion; None when the value is not numeric."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+# A bare number above this bound passed positionally to set_cache_quota() is
+# megabytes, not gigabytes: the settings dropdown never offers a stream cache
+# bigger than a few GB, while older builds wrote storage.cache_size_mb.
+_POSITIONAL_MB_THRESHOLD = 64.0
+
+
+def _normalize_cache_quota(quota_gb=None, cache_size_mb=None, cache_quota_gb=None, **kwargs):
+    """Fold the accepted quota spellings into one (gigabytes, megabytes) pair.
+
+    Pure function - no settings, no I/O - so this precedence table is directly
+    testable:
+
+    ==========================================  ======================
+    input                                      result (GB, MB)
+    ==========================================  ======================
+    nothing at all                             ``(None, None)``
+    ``cache_quota_gb=5`` (frontend key, GB)    ``(5.0, 5120.0)``
+    ``cache_size_mb=2048`` (legacy key, MB)    ``(2.0, 2048.0)``
+    both given (GB wins)                       ``(5.0, 5120.0)``
+    ``quota_gb=500`` (bare, > 64 -> MB)         ``(0.48828125, 500.0)``
+    ``quota_gb=0``                             ``(0.0, 0.0)``
+    ``quota_gb=-3`` (clamped)                  ``(0.0, 0.0)``
+    non-numeric junk                           ``(None, None)``
+    ==========================================  ======================
+
+    A bare number is only reinterpreted as MB when BOTH unit-carrying keys are
+    absent, because any explicit key already states its own unit.
+    """
+    if cache_quota_gb is None:
+        cache_quota_gb = kwargs.get("cache_quota_gb")
+    if cache_size_mb is None:
+        cache_size_mb = kwargs.get("cache_size_mb")
+
+    val_gb = _as_float(quota_gb)
+    if val_gb is None:
+        val_gb = _as_float(cache_quota_gb)
+    size_mb = _as_float(cache_size_mb)
+
+    if val_gb is None and size_mb is None:
+        # Nothing usable: keep looking for a bare positional number.
+        bare = _as_float(quota_gb)
+        if bare is None:
+            bare = _as_float(cache_quota_gb)
+        if bare is None:
+            return None, None
+        val_gb, size_mb = bare, None
+
+    # Heuristic: a bare number > 64 with no explicit unit key is MB, not GB.
+    if size_mb is None and val_gb is not None and val_gb > _POSITIONAL_MB_THRESHOLD:
+        size_mb = val_gb
+        val_gb = None
+
+    if val_gb is None:
+        if size_mb is None:
+            return None, None
+        val_gb = size_mb / 1024.0
+    else:
+        # An explicit gigabyte value wins: cache_size_mb is then re-derived from
+        # it, so the two persisted keys can never disagree.
+        size_mb = val_gb * 1024.0
+
+    return max(0.0, val_gb), max(0.0, size_mb)
+
+
+def _missing_local_file_message(track, file_path=None) -> str:
+    """Human-readable reason a local track cannot be played."""
+    label = "Трек"
+    if isinstance(track, dict):
+        title = str(track.get("title") or "").strip()
+        artist = str(track.get("artist") or "").strip()
+        if title:
+            label = f"«{title}»" + (f" — {artist}" if artist else "")
+    where = f" ({file_path})" if file_path else ""
+    return f"{label}: аудиофайл не найден{where}"
+
+
 class AppApi:
     """JS Bridge API passed to PyWebView create_window(js_api=...)."""
 
@@ -142,6 +303,12 @@ class AppApi:
         # Connect engine event callbacks
         if hasattr(self._core, "engine") and self._core.engine:
             self._core.engine._on_track_changed = self._on_track_changed
+            # H-5: this hook existed on the engine but nothing ever assigned it,
+            # so reaching the end of the queue produced neither an event nor any
+            # autoplay. Wired up here; the frontend handles the track end by
+            # calling next_track(), whose None result it already treats as
+            # "stopped", so this only publishes the backend-side fact.
+            self._core.engine._on_queue_end = self._on_queue_end
             if hasattr(self._core.engine, "on_error"):
                 self._core.engine.on_error(self._on_audio_error)
 
@@ -751,6 +918,17 @@ class AppApi:
         if getattr(self, "_tray", None):
             self._tray.update_state(track=track_copy, force=True)
 
+    def _on_queue_end(self):
+        """Publish that the queue was exhausted (repeat off, last track).
+
+        PlaybackQueue.next_track() returns None there, and AudioEngine.next_track()
+        calls this hook instead of advancing. Nothing else in the backend reacts,
+        so the event is the only place the UI learns the backend agrees that
+        playback has reached the end.
+        """
+        logger.info("api.py -> queue ended")
+        self._emit("queue_ended", {"reason": "queue_exhausted"})
+
     def _on_audio_error(self, err):
         """Callback invoked when audio engine encounters playback error."""
         err_msg = str(err)
@@ -800,6 +978,9 @@ class AppApi:
 
     def report_state(self, state: str, elapsed_ms: int = 0):
         """Report playback state update (playing, paused, stopped)."""
+        # Remembered so play_pause() can answer with the real last state instead
+        # of pretending it performed a pause/resume it cannot do.
+        self._last_reported_state = state
         if state == "playing":
             self.maybe_log_history()
         elif state == "stopped":
@@ -927,7 +1108,7 @@ class AppApi:
                     return False
 
             fp = target_track.get("file_path") if isinstance(target_track, dict) else None
-            if source == "local" or _fp_usable(fp):
+            if _fp_usable(fp):
                 logger.info(f"api.py -> play_track fast path: source={source}, file_path={str(fp)[:80] if fp else None}")
                 self._core.engine.play_queue(track_list, safe_index)
                 self._notify_queue_updated()
@@ -971,6 +1152,14 @@ class AppApi:
                     self._core.engine.play_queue(track_list, safe_index)
                     self._notify_queue_updated()
                     return
+
+            # A "local" track whose file is gone must fail loudly. The online
+            # resolution cascade below can never produce a stream for it, so the
+            # old `source == "local" or ...` fast path used to start playback
+            # against a missing path and the user only got silence.
+            if source == "local":
+                self._on_audio_error(_missing_local_file_message(target_track, fp))
+                return
 
             # Start queue playback immediately (frontend shows loading state),
             # resolve the target stream in background and notify again when ready.
@@ -1059,7 +1248,7 @@ class AppApi:
                             track["file_path"] = fp
                             break
 
-        if source == "local" or _fp_usable(fp):
+        if _fp_usable(fp):
             logger.info(f"api.py -> _resolve_track fast path: source={source}, file_path={str(fp)[:80] if fp else None}")
             _deliver()
             return
@@ -1096,6 +1285,13 @@ class AppApi:
                     _deliver()
                     return
 
+        if source == "local":
+            # Neither the file nor either cache can produce a stream for a local
+            # source, so the resolution cascade below would only ever end in
+            # "Не удалось найти поток". Report the real cause instead.
+            self._on_audio_error(_missing_local_file_message(track, fp))
+            return
+
         # Re-resolve stream url asynchronously
         cur_start = self._core.engine.queue.current_track
 
@@ -1129,13 +1325,20 @@ class AppApi:
 
         self._core.re_resolve_stream_url_async(source, source_id, callback=on_resolved, on_error=on_resolve_error, track=track)
 
-    def stop_track(self):
-        """Stop audio playback."""
-        pass # Handled by frontend
+    def play_pause(self) -> str:
+        """Report the last playback state the frontend observed.
 
-    def play_pause(self):
-        """Toggle play/pause audio state."""
-        pass # Handled by frontend
+        The audio element lives in the frontend, so the backend cannot pause or
+        resume it - and it must not guess: it receives no argument telling it
+        whether the user asked to play or to pause, so any state change here
+        would desync the UI. The frontend drives <audio> itself (its own
+        togglePlayPause) and reports the result through report_state(). This
+        method is still called from the library "play all" buttons and the
+        mediaSession handlers, so it answers with the truth instead of None:
+        "playing", "paused", "stopped", or "" when nothing was reported yet.
+        """
+        state = getattr(self, "_last_reported_state", "") or ""
+        return state
 
     def next_track(self):
         """Play next track in queue. Returns the next track or None at queue end."""
@@ -1327,12 +1530,44 @@ class AppApi:
         return self._core.settings.get("audio", "volume", 70)
 
     def toggle_mute(self):
-        """Toggle audio mute state."""
-        return False # Handled by frontend
+        """Toggle the persisted mute state and return the NEW state.
 
-    def set_position(self, pos_ms: int):
-        """Seek playback position in milliseconds."""
-        pass # Handled by frontend
+        The HTML5 element on the frontend does the actual attenuation; the
+        backend owns the flag so the value is consistent and truthful instead of
+        the old hardcoded ``return False`` (which read as "sound is on" no matter
+        what the user had muted). DEFAULT_SETTINGS already ships ``audio.muted``
+        and nothing used to read or write it.
+
+        Returns True when audio is muted from now on, False when unmuted.
+        """
+        settings = getattr(self._core, "settings", None)
+        if settings is None:
+            # Without a settings store there is nothing truthful to report.
+            return False
+        try:
+            current = bool(settings.get("audio", "muted", False))
+        except Exception:
+            logger.debug("toggle_mute: could not read audio.muted", exc_info=True)
+            current = False
+        new_state = not current
+        try:
+            settings.set("audio", "muted", new_state)
+        except Exception as e:
+            logger.error(f"toggle_mute: could not persist audio.muted: {e}")
+            return current
+        self._emit("mute_changed", {"muted": new_state})
+        return new_state
+
+    def is_muted(self) -> bool:
+        """Return the persisted mute state without changing it."""
+        settings = getattr(self._core, "settings", None)
+        if settings is None:
+            return False
+        try:
+            return bool(settings.get("audio", "muted", False))
+        except Exception:
+            logger.debug("is_muted: suppressed exception", exc_info=True)
+            return False
 
     def toggle_shuffle(self):
         """Toggle queue shuffle mode."""
@@ -1349,12 +1584,26 @@ class AppApi:
     def get_next_track(self, *args, **kwargs):
         """Return metadata and stream URL for the upcoming track in the queue without advancing index."""
         try:
-            if not self._core.engine.queue.tracks:
+            queue = self._core.engine.queue
+            tracks = queue.tracks
+            if not tracks:
                 return None
-            current_idx = self._core.engine.queue._current_index
-            next_idx = (current_idx + 1) % len(self._core.engine.queue.tracks)
-            if next_idx < len(self._core.engine.queue.tracks):
-                raw_track = self._core.engine.queue.tracks[next_idx]
+            current_idx = queue.current_index
+            # current_index is -1 for an empty queue and can only be meaningful
+            # once something is actually current; there is no "next" to preview.
+            if current_idx < 0:
+                return None
+            # PlaybackQueue.next_track() returns None at the end of the queue
+            # unless repeat == "all", in which case it wraps to index 0. The old
+            # unconditional (current_idx + 1) % len(tracks) wrapped anyway, so a
+            # preloading frontend cached the FIRST track in vain on the last
+            # track (and always with a single-track queue).
+            at_end = current_idx >= len(tracks) - 1
+            if at_end and queue.repeat != "all":
+                return None
+            next_idx = 0 if at_end else current_idx + 1
+            if 0 <= next_idx < len(tracks):
+                raw_track = tracks[next_idx]
                 if not raw_track or not isinstance(raw_track, dict):
                     return None
                 
@@ -2162,15 +2411,56 @@ class AppApi:
             self._emit("storage_info", err_res)
             return err_res
 
-    def clear_storage(self, storage_type: str = "cache"):
-        """Clear cache or storage folder."""
+    def clear_storage(self, storage_type: str = "cache") -> bool:
+        """Clear cached data. ``storage_type``:
+
+        - ``"cache"``: clear the cache manager (covers, stream cache, temp).
+        - ``"all"``: additionally delete the audio files of downloaded tracks.
+
+        Downloaded tracks are user-owned music, so "all" also drops those files
+        from disk. That is why the value is validated strictly here instead of
+        silently doing what "cache" does: the old implementation accepted "all"
+        and only cleared the cache, so the caller could believe the downloads
+        were gone while the files stayed.
+
+        Returns False (never raises) for an unknown storage_type so a bad value
+        cannot wipe something unintended.
+        """
         try:
-            if storage_type in ("cache", "all"):
-                self._core.cache.clear_all()
+            storage_type = str(storage_type or "cache").strip().lower()
+            if storage_type not in ("cache", "all"):
+                logger.warning("clear_storage: unsupported storage_type %r", storage_type)
+                return False
+            cache = getattr(self._core, "cache", None)
+            if cache is None:
+                logger.error("clear_storage: cache manager unavailable")
+                return False
+            cache.clear_all()
+            if storage_type == "all":
+                removed = self._delete_downloaded_files()
+                logger.info("clear_storage: removed %d downloaded file(s)", removed)
             return True
         except Exception as e:
             logger.error(f"Clear storage failed: {e}")
             return False
+
+    def _delete_downloaded_files(self) -> int:
+        """Delete every downloaded track file from disk. Returns files removed."""
+        removed = 0
+        tracks = self._core.db.get_downloaded_tracks() or []
+        for t in tracks:
+            if not isinstance(t, dict):
+                continue
+            fp = t.get("file_path")
+            if not fp:
+                continue
+            try:
+                if os.path.isfile(fp):
+                    os.remove(fp)
+                    removed += 1
+            except OSError as e:
+                logger.warning("clear_storage: could not remove %s: %s", fp, e)
+        return removed
 
     def get_wrapped_stats(self, period: str = "week"):
         """Get NeDotify Wrapped analytics stats (top 5 tracks/artists, total minutes, activity graph)."""
@@ -2661,10 +2951,15 @@ class AppApi:
             if hasattr(self._core, "downloader"):
                 self._core.downloader.start_batch(len(to_download))
 
+            # Announce the batch BEFORE anything is queued: with a fast pool the
+            # per-track batch_download_progress events emitted by
+            # queue_download() used to reach the frontend first, and a UI that
+            # initializes its counter from batch_download_started then reset it
+            # to the progress values.
+            self._emit("batch_download_started", {"total": len(to_download), "current": 0})
+
             for track in to_download:
                 self.download_track(track)
-
-            self._emit("batch_download_started", {"total": len(to_download), "current": 0})
 
             return {
                 "success": True,
@@ -2862,15 +3157,20 @@ class AppApi:
                 try:
                     with open(new_cover_path, "rb") as cf:
                         cover_bytes = cf.read()
-                    if new_cover_path.lower().endswith(".png"):
-                        cover_mime = "image/png"
-                    elif new_cover_path.lower().endswith(".webp"):
-                        cover_mime = "image/webp"
+                    # Extension and MIME must agree: the proxy guesses the
+                    # Content-Type of /api/cover from the file name, so PNG/WebP
+                    # bytes stored as "<id>.jpg" were served as image/jpeg and
+                    # refused by the browser's image decoder.
+                    src_ext = os.path.splitext(new_cover_path)[1].lower()
+                    cover_mime = _COVER_MIME_BY_EXT.get(src_ext, "image/jpeg")
+                    cover_ext = _COVER_EXT_BY_MIME.get(cover_mime, ".jpg")
 
-                    # Save copy to ~/.nedotify/covers/ for fast UI loading
+                    # Save copy to ~/.nedotify/covers/ for fast UI loading.
+                    # The proxy serves every COVER_EXTENSIONS entry from this
+                    # directory, so the real extension is served correctly.
                     covers_dir = os.path.join(os.path.expanduser("~"), ".nedotify", "covers")
                     os.makedirs(covers_dir, exist_ok=True)
-                    cached_cover = os.path.join(covers_dir, f"{track_id}.jpg")
+                    cached_cover = os.path.join(covers_dir, f"{track_id}{cover_ext}")
                     with open(cached_cover, "wb") as f:
                         f.write(cover_bytes)
                     cover_path = cached_cover
@@ -2954,51 +3254,35 @@ class AppApi:
           - frontend sends ``cache_quota_gb`` (GB, select-cache-quota),
           - older settings schema used ``storage.cache_size_mb`` (MB).
         Accepts either (GB wins when both are given) so callers never silently
-        write a key the reader ignores.
+        write a key the reader ignores. See _normalize_cache_quota() for the
+        full precedence table.
+
+        A quota of 0 is rejected instead of being handed to
+        CacheManager.purge_stream_cache(quota_bytes=0): the cache manager
+        treats 0 as "unlimited" and skips purging, while any other manager
+        implementation reads it as "delete everything". Refusing keeps a
+        mis-sent 0 from silently wiping the stream cache.
         """
         try:
-            # Alias handling: explicit kwargs / alternate kw names.
-            if cache_quota_gb is None:
-                cache_quota_gb = kwargs.get("cache_quota_gb")
-            if cache_size_mb is None:
-                cache_size_mb = kwargs.get("cache_size_mb")
-            # Positional compat: set_cache_quota(500) historically meant MB in
-            # some builds; values > 64 are almost certainly MB, not GB.
-            quota_val_gb = None
-            if quota_gb is not None:
-                try:
-                    quota_val_gb = float(quota_gb)
-                except (TypeError, ValueError):
-                    quota_val_gb = None
-            if cache_quota_gb is not None and quota_val_gb is None:
-                try:
-                    quota_val_gb = float(cache_quota_gb)
-                except (TypeError, ValueError):
-                    quota_val_gb = None
-            size_mb = None
-            if cache_size_mb is not None:
-                try:
-                    size_mb = float(cache_size_mb)
-                except (TypeError, ValueError):
-                    size_mb = None
-            if quota_val_gb is None and size_mb is not None:
-                quota_val_gb = size_mb / 1024.0
-            if quota_val_gb is None:
+            val_gb, size_mb = _normalize_cache_quota(
+                quota_gb=quota_gb,
+                cache_size_mb=cache_size_mb,
+                cache_quota_gb=cache_quota_gb,
+                **kwargs,
+            )
+            if val_gb is None:
                 return {"success": False, "error": "quota not specified"}
-            # Heuristic: a bare number > 64 passed positionally is MB, not GB
-            # (nobody sets a 500 GB stream cache from the settings dropdown).
-            if cache_quota_gb is None and size_mb is None and quota_val_gb > 64:
-                size_mb = quota_val_gb
-                quota_val_gb = size_mb / 1024.0
-            quota_val = max(0, int(round(quota_val_gb)))
-            size_mb_val = int(round(quota_val * 1024)) if quota_val else (int(size_mb) if size_mb else 0)
+            if val_gb <= 0:
+                return {"success": False, "error": "quota must be greater than 0 GB"}
+            quota_val = max(0, int(round(val_gb)))
+            size_mb_val = int(round(size_mb))
             if hasattr(self._core, "settings") and self._core.settings:
                 self._core.settings.set("storage", "cache_quota_gb", quota_val)
                 self._core.settings.set("storage", "cache_size_mb", size_mb_val)
 
             freed = 0
             if hasattr(self._core, "cache") and self._core.cache:
-                freed = self._core.cache.purge_stream_cache(quota_bytes=quota_val * 1024 * 1024 * 1024 if quota_val > 0 else 0)
+                freed = self._core.cache.purge_stream_cache(quota_bytes=quota_val * 1024 * 1024 * 1024)
                 details = self._core.cache.get_storage_details()
             else:
                 details = {"quota_gb": quota_val, "used_bytes": 0}
