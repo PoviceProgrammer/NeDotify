@@ -1,5 +1,5 @@
 """
-AURA Music - Discord Rich Presence Service
+NeDotify - Discord Rich Presence Service
 Integrates local playback metadata (track title, artist, progress, playing state) with Discord RPC.
 """
 
@@ -112,7 +112,7 @@ class DiscordRPCService:
 
             try:
                 title = (track_title or "Неизвестный трек").strip()
-                artist = (track_artist or "AURA Music").strip()
+                artist = (track_artist or "NeDotify").strip()
                 now = int(time.time())
 
                 # Track change reset
@@ -125,13 +125,13 @@ class DiscordRPCService:
                     # Construct Rich Presence payload
                     payload = {
                         "details": title[:128],
-                        "state": f"от {artist}"[:128] if artist else "AURA Music Player",
+                        "state": f"от {artist}"[:128] if artist else "NeDotify Player",
                         "large_image": "aura_logo",
                         "large_text": "AURA Music Player",
                         "small_image": "play",
                         "small_text": "Воспроизводится",
                         "buttons": [
-                            {"label": "AURA Music", "url": "https://github.com/PoviceProgrammer/NeDotify"}
+                            {"label": "NeDotify", "url": "https://github.com/PoviceProgrammer/NeDotify"}
                         ]
                     }
 
@@ -150,11 +150,11 @@ class DiscordRPCService:
                         details=title[:128],
                         state=f"от {artist} (На паузе)"[:128],
                         large_image="aura_logo",
-                        large_text="AURA Music Player",
+                        large_text="NeDotify Player",
                         small_image="pause",
                         small_text="На паузе",
                         buttons=[
-                            {"label": "AURA Music", "url": "https://github.com/PoviceProgrammer/NeDotify"}
+                            {"label": "NeDotify", "url": "https://github.com/PoviceProgrammer/NeDotify"}
                         ]
                     )
             except Exception as e:

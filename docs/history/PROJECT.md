@@ -1,5 +1,23 @@
 # Project: AURA Music
 
+> **ИСТОРИЧЕСКИЙ ДОКУМЕНТ. НЕ СООТВЕТСТВУЕТ ТЕКУЩЕЙ РЕАЛИЗАЦИИ.**
+>
+> Это план проекта, а не описание кода. Он расходится с тем, что в коде:
+>
+> | Утверждение здесь | Как на самом деле (проверено 2026-10-03) |
+> |---|---|
+> | Событие загрузки `track_downloaded` с `{"track_id", "file_path"}` (§Interface Contracts 2) | Эмитится `download_complete` с `{"track_id": ...}` **без** `file_path` (`core/downloader.py:521`) |
+> | `ThreadPoolExecutor(max_workers=5)`, таймаут 4.0 с на провайдера (§Interface Contracts 3) | `max_workers=6`, `thread_name_prefix="SearchWorker"`, `PROVIDER_SEARCH_TIMEOUT = 6.0` (8.0 с для SoundCloud) |
+> | TTL кэша потока 3 ч (фича 3) | Три разных TTL: 1 ч (in-memory резолвера), 4 ч (DB `stream_cache`), 6 ч (`BaseMusicService._STREAM_CACHE_TTL`) |
+> | `utils/path_utils.py` — санитизация имён (§Code Layout, фича 10) | Такого файла **нет**. В `utils/` только `file_scanner.py`, `cache_manager.py`, `tag_parser.py` |
+> | `events.js` — «Python-to-JS SSE/Event Listener» | SSE в проекте **нет**. События идут через `window.onPythonEvent(name, payload)` (`core/api.py: AppApi._emit`) |
+> | Фича 12 «Restore Yandex Search Provider» | Поиск Yandex/VK **намеренно отключён** (`DISABLED_UI_PROVIDERS` в `core/api.py`) |
+> | UI в `ui/web_new/` | UI по умолчанию — `ui/web_new_v2/`; `web_new` включается только флагом `--ui-v1` |
+> | Статусы милестоунов `PLANNED`, «publish TEST_READY.md» | Фактическое состояние описано в `STATUS.md`, итог аудита — в `docs/AUDIT.md` |
+
+> Документ сохранён без изменений (кроме этой шапки), чтобы был виден
+> исходный план и расхождение с реализацией.
+
 ## Architecture
 AURA Music is a desktop music application built with Python backend, SQLite database, pywebview UI layer (HTML5 Audio), local HTTP audio proxy, multi-provider search/stream engine (YouTube, SoundCloud, Spotify, Yandex), and track downloader.
 

@@ -909,10 +909,17 @@ export function applySettingsFromBackend(settings) {
             }
         }
         
-        setYandexWarning(!!settings.auth.yandex_auth_error);
+        // NOTE (audit H-3): `settings.auth.yandex_auth_error` used to be read
+        // here. No such key exists in DEFAULT_SETTINGS (core/settings.py) and
+        // the backend never emits a `yandex_auth_error` event, so the banner
+        // could only ever stay hidden. The real Yandex flow reports through
+        // `yandex_device_auth_*`, handled in js/events.js.
     }
 }
 
+// Kept exported on purpose: js/events.js imports the symbol (a missing ESM
+// named export breaks the whole module graph) and #yandex-auth-warning still
+// exists in index.html for a future, real `yandex_auth_error` backend event.
 export function setYandexWarning(visible) {
     const warning = document.getElementById('yandex-auth-warning');
     if (warning) {

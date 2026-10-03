@@ -233,6 +233,13 @@ DEFAULT_SETTINGS = {
         "shuffle": False,
         "repeat": "off",
     },
+    # UNUSED - do not wire anything up to this block.
+    # The subscription/licensing feature is not planned: the UI has no input
+    # and no validation call path (AppApi.validate_subscription_key and
+    # AppApi.get_subscription_info have zero callers), so an empty key can
+    # never unlock anything. Kept only so settings.json files written by older
+    # builds still load (unknown keys are preserved, not dropped) and so the
+    # schema does not shift. See STATUS.md "Licensing" and docs/AUDIT.md.
     "subscription": {
         "key": "",
         "valid_until": None,

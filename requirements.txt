@@ -1,5 +1,6 @@
 # NeDotify (AURA Music) - runtime dependencies
-# Requires Python 3.12+
+# Requires Python 3.14+ (matches .venv_win; floor raised from 3.12 after the
+# audit — the pinned WebView2/CLRuntime stack is only tested on 3.14).
 # Versions are capped at the next major to keep installs reproducible while
 # still allowing patch/minor updates. Bump caps deliberately, not silently.
 pywebview>=5.0.0,<6
@@ -10,7 +11,6 @@ pyloudnorm>=0.1.1,<0.2
 pypresence>=4.3.0,<5
 pystray>=0.19.5,<0.21
 requests>=2.31.0,<3
-python-dotenv>=1.0.0,<2
 yandex-music>=3.0.0,<4
 ytmusicapi>=1.12.0,<2
 miniaudio>=1.60,<2
