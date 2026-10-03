@@ -500,3 +500,39 @@ def test_border_radius_raises_on_a_non_numeric_value():
 
     with pytest.raises(ValueError):
         sm.border_radius
+
+
+# --------------------------------------------------------------------------- #
+# properties vs. the keys the app actually writes
+# --------------------------------------------------------------------------- #
+
+def test_the_font_family_property_reads_a_category_nobody_writes():
+    """Pinned drift: ui/web_new_v2/js/settings.js:160 and :584 save font_family
+    into the *theme* category (and :746 reads it back from there), while this
+    property reads interface.font_family.
+
+    DEFAULT_SETTINGS declares font_family in BOTH theme and interface, so both
+    lookups succeed and neither errors - the property just keeps reporting the
+    interface default forever, whatever the user picks.
+    """
+    sm = _manager()
+    sm.set("theme", "font_family", "Inter")
+
+    assert sm.get("theme", "font_family") == "Inter", "the frontend's key"
+    assert sm.font_family == DEFAULT_SETTINGS["interface"]["font_family"], (
+        "the property never sees it"
+    )
+
+
+def test_the_theme_mode_property_reads_a_different_key_than_the_frontend():
+    """Same drift: settings.js:1489 saves ``theme_mode`` and :673-676 reads
+    ``settings.theme.theme_mode``, but this property reads ``theme.mode`` -
+    a second, parallel key (DEFAULT_SETTINGS['theme'] has both 'mode' and
+    'theme_mode')."""
+    sm = _manager()
+    sm.set("theme", "theme_mode", "light")
+
+    assert sm.get("theme", "theme_mode") == "light", "the frontend's key"
+    assert sm.theme_mode == DEFAULT_SETTINGS["theme"]["mode"], (
+        "the property still reports the untouched 'mode' key"
+    )
