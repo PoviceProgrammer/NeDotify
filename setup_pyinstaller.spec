@@ -2,6 +2,9 @@
 """
 NeDotify - PyInstaller Build Specification
 Run: pyinstaller setup_pyinstaller.spec
+
+Both UI trees are still bundled (main.py picks web_new_v2 by default and
+web_new only with --v1), so nothing here may be removed while that flag lives.
 """
 
 import os
@@ -9,6 +12,22 @@ import os
 from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
+
+
+def _is_ui_cover_cache(path: str) -> bool:
+    """True for a runtime album-art cache under any ui/*/covers/ tree.
+
+    web_new/covers/ and web_new_v2/covers/ are written by the proxy/cover
+    endpoints while the app runs. The old filter matched the literal
+    'web_new/covers/', which is not a substring of 'web_new_v2/covers/' - so the
+    active UI's cover cache was shipped inside the exe (it is the directory that
+    actually grows during normal use). Matching '/covers/' inside 'ui/' catches
+    every current and future variant, both separators, and cannot match a
+    directory that merely starts with "covers".
+    """
+    norm = '/' + path.replace('\\', '/').lstrip('/')
+    return '/ui/' in norm and '/covers/' in norm
+
 
 extra_datas = [('ui/web_new', 'ui/web_new'), ('ui/web_new_v2', 'ui/web_new_v2')] + collect_data_files('ytmusicapi')
 for extra_folder in ['zapret', 'bin']:
@@ -68,8 +87,8 @@ a = Analysis(
     noarchive=False,
 )
 
-# ui/web_new/covers/ is a runtime-generated album-art cache - never ship it in the exe
-a.datas = [d for d in a.datas if 'web_new/covers/' not in d[0].replace(os.sep, '/')]
+# Never ship the runtime cover caches of either UI tree (see _is_ui_cover_cache).
+a.datas = [d for d in a.datas if not _is_ui_cover_cache(d[0])]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 

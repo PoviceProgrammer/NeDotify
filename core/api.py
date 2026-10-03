@@ -25,9 +25,32 @@ logger = logging.getLogger(__name__)
 # Captured once: evaluate_js must never be awaited on this thread (see _emit).
 _MAIN_THREAD = threading.main_thread()
 
-# Temporary feature flag: license validation and VK-based activation are disabled
-# until they are replaced with a remote, server-owned licensing service.
+# --- Licensing (Q3 decision: no subscription is planned) -------------------
+# License/subscription validation is intentionally disabled and stays dead code:
+# nothing in the UI calls validate_subscription_key / get_subscription_info, and
+# the flag below has no consumer other than those two stubs. They are kept (not
+# deleted) as the documented seam where a server-owned licensing service would
+# plug in, so nobody re-adds a client-side key check later. Do not wire any new
+# UI to them.
 LICENSE_VALIDATION_ENABLED = False
+
+# --- Autostart: the Windows "Run" value name --------------------------------
+# Single source of truth for the value name written to
+#   HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+# installer.iss writes the SAME name in its [Registry] section. Inno Setup
+# cannot read a Python constant, so the literal "NeDotify" is repeated there;
+# tests/test_build_and_brand.py fails the build when the two sides diverge.
+# Hive, key path and value name must match on both sides: while this method
+# wrote "AURA Music" and the installer wrote "NeDotify", Windows logged the user
+# in, started the app twice and no single toggle could switch both entries off.
+AUTOSTART_RUN_VALUE = "NeDotify"
+AUTOSTART_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"  # under HKCU
+
+# Run value names written by earlier builds. They have to be deleted on EVERY
+# toggle, not only when autostart is switched off: a leftover "AURA Music"
+# entry keeps launching whatever path it points at, so enabling autostart with
+# the stale entry still around produced a second launch at logon.
+AUTOSTART_RUN_LEGACY_VALUES = ("AURA Music",)
 
 # Hard per-provider search deadline. Raised from 4.0 to 6.0: yt-dlp socket_timeout
 # is 6s and YTMusic session timeout is 15s; a 4s bridge deadline forced a
@@ -2224,36 +2247,44 @@ class AppApi:
         return True
 
     def update_autostart(self, enabled: bool):
-        """Toggle app autostart registry entry on Windows."""
+        """Toggle the app autostart registry entry on Windows.
+
+        Writes AUTOSTART_RUN_VALUE under AUTOSTART_RUN_KEY in HKCU - the exact
+        hive/key/value-name triple that installer.iss writes, so enabling
+        autostart leaves ONE Run entry instead of two. Legacy names from
+        pre-NeDotify builds (AUTOSTART_RUN_LEGACY_VALUES, i.e. "AURA Music")
+        are removed on both the enable and the disable path: they survived
+        enabling (second launch at logon) and only the old code, on disable,
+        removed the pair.
+        """
         if sys.platform != "win32":
             return False
         try:
             import winreg
-            key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
-            app_name = "AURA Music"
-            if enabled:
-                if getattr(sys, 'frozen', False):
-                    exe_path = f'"{sys.executable}"'
-                else:
-                    # Anchor to this file, not the CWD: launching the app from a
-                    # different working directory used to register a broken
-                    # autostart entry.
-                    main_py = os.path.join(
-                        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py"
-                    )
-                    exe_path = f'"{sys.executable}" "{main_py}"'
-                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, exe_path)
-            else:
-                for name in (app_name, "NeDotify"):
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, AUTOSTART_RUN_KEY, 0, winreg.KEY_SET_VALUE)
+            try:
+                if enabled:
+                    if getattr(sys, 'frozen', False):
+                        exe_path = f'"{sys.executable}"'
+                    else:
+                        # Anchor to this file, not the CWD: launching the app from a
+                        # different working directory used to register a broken
+                        # autostart entry.
+                        main_py = os.path.join(
+                            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py"
+                        )
+                        exe_path = f'"{sys.executable}" "{main_py}"'
+                    winreg.SetValueEx(key, AUTOSTART_RUN_VALUE, 0, winreg.REG_SZ, exe_path)
+                for name in (AUTOSTART_RUN_VALUE,) + tuple(AUTOSTART_RUN_LEGACY_VALUES):
                     try:
                         winreg.DeleteValue(key, name)
                     except (FileNotFoundError, OSError):
                         pass
-            try:
-                winreg.CloseKey(key)
-            except OSError:
-                logger.debug("Registry key close failed", exc_info=True)
+            finally:
+                try:
+                    winreg.CloseKey(key)
+                except OSError:
+                    logger.debug("Registry key close failed", exc_info=True)
             self._core.settings.set("general", "autostart", enabled)
             self._core.settings.set("app", "autostart", enabled)
             return True
@@ -2262,12 +2293,15 @@ class AppApi:
             return False
 
     def validate_subscription_key(self, key: str):
-        """Report licence status for `key`.
+        """Report licence status for `key`. Validation intentionally disabled.
 
-        Licensing is not enforced in this build (LICENSE_VALIDATION_ENABLED is False),
-        so every key is reported as valid. The flag is honoured here rather than the
-        result being hardcoded, so enabling it cannot be forgotten: with validation on
-        and no remote service wired up, access is denied instead of silently granted.
+        Licensing is not enforced in this build: LICENSE_VALIDATION_ENABLED is
+        False and no caller exists (the UI never asks), so every key is reported
+        as valid. The stub is kept on purpose - it is the documented seam for a
+        remote, server-owned licensing service - and the flag is honoured here
+        rather than the result being hardcoded, so flipping it cannot be
+        forgotten: with validation on and no service wired up, access is denied
+        instead of silently granted. Do not add UI that calls this.
         """
         if not LICENSE_VALIDATION_ENABLED:
             return {"valid": True, "is_valid": True, "success": True, "expire": "never", "valid_until": 0}
@@ -2276,7 +2310,11 @@ class AppApi:
                 "error": "Сервис проверки лицензий недоступен", "valid_until": 0}
 
     def get_subscription_info(self):
-        """Return current licence information. See validate_subscription_key."""
+        """Return current licence information. Validation intentionally disabled.
+
+        See validate_subscription_key: the stub exists for a future server-side
+        licensing service and has no caller today.
+        """
         if not LICENSE_VALIDATION_ENABLED:
             return {"valid": True, "is_valid": True, "success": True, "expire": "never",
                     "valid_until": 0, "key": "OPEN-SOURCE"}
