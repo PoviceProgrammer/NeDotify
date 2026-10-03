@@ -45,7 +45,8 @@ class _Db:
 
 class _Youtube:
     def __init__(self, stream=None, meta=None, error=None, results=None,
-                 search_error=None, raises=False, log=None, clock=None, cost=0.0):
+                 search_error=None, raises=False, log=None, clock=None, cost=0.0,
+                 streams=None):
         self.stream = stream
         self.meta = meta
         self.error = error
@@ -55,6 +56,11 @@ class _Youtube:
         self.log = log
         self.clock = clock
         self.cost = cost
+        # Per-video-id answers. The cascade extracts twice for the same stub -
+        # once for the row's own id (tier 0, must fail) and once for the id the
+        # tier-2 search returns (must succeed) - which a single stream/error pair
+        # cannot express.
+        self.streams = streams
         self.stream_calls = []
         self.search_calls = []
 
@@ -66,6 +72,14 @@ class _Youtube:
             self.clock.advance(self.cost)
         if self.raises:
             raise RuntimeError("yt-dlp exploded")
+        if self.streams is not None and video_url in self.streams:
+            answer = self.streams[video_url]
+            if answer:
+                if callback:
+                    callback(answer, self.meta)
+            elif error_callback:
+                error_callback("no stream for this id")
+            return None
         if self.error is not None:
             if error_callback:
                 error_callback(self.error)
@@ -300,14 +314,30 @@ def test_source_id_falls_back_to_the_row_id():
     assert resolver.resolved == [("youtube", 4242)]
 
 
-def test_source_id_is_built_from_artist_and_title_when_missing():
-    """A title-only track gets 'artist title' - which contains a space and is
-    therefore not a candidate for direct extraction (see below)."""
+def test_row_id_shadows_the_artist_title_derivation():
+    """Pinned precedence: a present (truthy) ``id`` wins over "artist title".
+
+    audio/engine.py:126 takes ``source_id or id`` FIRST, so the derivation on
+    line 132 can only ever run for a track that has neither - a dict straight
+    from a search result, never a DB row (which always carries its id).
+    """
     resolver = _RecordingResolver()
     engine = _engine(_core(resolver=resolver,
                            youtube=_Youtube(error="no stream")))
 
     engine.resolve_stream_url({"id": 1, "source": "youtube", "title": "Song", "artist": "Artist"})
+
+    assert resolver.resolved == [("youtube", 1)]
+
+
+def test_source_id_is_built_from_artist_and_title_when_missing():
+    """No source_id AND no id: 'artist title' is derived, which contains a
+    space and is therefore not a candidate for direct extraction (see below)."""
+    resolver = _RecordingResolver()
+    engine = _engine(_core(resolver=resolver,
+                           youtube=_Youtube(error="no stream")))
+
+    engine.resolve_stream_url({"source": "youtube", "title": "Song", "artist": "Artist"})
 
     assert resolver.resolved == [("youtube", "Artist Song")]
 
@@ -317,7 +347,7 @@ def test_source_id_built_from_title_only_has_no_leading_space():
     engine = _engine(_core(resolver=resolver,
                            youtube=_Youtube(error="no stream")))
 
-    engine.resolve_stream_url({"id": 1, "source": "youtube", "title": "Song"})
+    engine.resolve_stream_url({"source": "youtube", "title": "Song"})
 
     assert resolver.resolved == [("youtube", "Song")]
 
@@ -583,22 +613,48 @@ def test_soundcloud_fallback_caches_without_a_track_id():
 
 def test_soundcloud_fallback_failure_moves_to_the_next_candidate():
     sc = _SoundCloud(results=[{"source_id": "77"}], error="preview only")
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}], stream="http://yt/tier2")
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+                  streams={"newvid": "http://yt/tier2"})
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
     assert engine.resolve_stream_url(_yt_track()) == "http://yt/tier2"
-    assert len(sc.search_calls) == 3, "all three candidates are tried"
-    assert len(sc.stream_calls) == 3
+    assert [q for q, _ in sc.search_calls] == ["Artist Song", "Song"], (
+        "two distinct candidates for artist 'Artist' + title 'Song' (the raw "
+        "re-concatenation de-duplicates against the first one)"
+    )
+    assert len(sc.stream_calls) == 2
 
 
 def test_soundcloud_stage_is_skipped_when_the_provider_is_missing():
     """No soundcloud service => no SoundCloud search, straight to tier 2."""
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}], stream="http://yt/tier2")
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+                  streams={"newvid": "http://yt/tier2"})
     engine = _engine(_core(youtube=yt, soundcloud=None))
     engine.app_core.soundcloud = None
 
     assert engine.resolve_stream_url(_yt_track()) == "http://yt/tier2"
     assert yt.search_calls, "tier 2 must still run"
+
+
+def test_a_missing_soundcloud_provider_does_not_burn_the_stage_timeout():
+    """An unconfigured provider never calls back, so the stage must not wait.
+
+    Every callback in this suite is synchronous, so the whole cascade should
+    finish in well under a millisecond of real waiting; the unfixed engine sat
+    in ``sc_event.wait(timeout=2.5)`` once per candidate instead (5s for a
+    2-candidate track) - 2.5s x N of pure dead time on every resolve, for every
+    user who has no SoundCloud service configured.
+    """
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+                  streams={"newvid": "http://yt/tier2"})
+    engine = _engine(_core(youtube=yt, soundcloud=None))
+    engine.app_core.soundcloud = None
+
+    started = time.monotonic()
+    assert engine.resolve_stream_url(_yt_track()) == "http://yt/tier2"
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 1.0, f"a synchronous cascade took {elapsed:.2f}s of real waiting"
 
 
 def test_soundcloud_search_that_raises_is_survived():
@@ -608,7 +664,8 @@ def test_soundcloud_search_that_raises_is_survived():
         raise RuntimeError("provider exploded")
 
     sc.search = _boom
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}], stream="http://yt/tier2")
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+                  streams={"newvid": "http://yt/tier2"})
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
     assert engine.resolve_stream_url(_yt_track()) == "http://yt/tier2"
@@ -637,7 +694,10 @@ def test_fallback_queries_split_an_artist_dash_title():
 
     engine.resolve_stream_url(_yt_track(title="BB - CC (Official)", artist="AA"))
 
-    assert [q for q, _ in sc.search_calls] == ["BB CC", "CC", "AA BB CC"]
+    assert [q for q, _ in sc.search_calls] == ["BB CC", "CC", "AA BB - CC"], (
+        "the 4th candidate ('BB - CC') is dropped by the [:3] cap, so the raw "
+        "'AA BB - CC' third query is what the caller actually sees"
+    )
 
 
 def test_fallback_queries_drop_an_artist_already_present_in_the_title():
@@ -663,7 +723,8 @@ def test_soundcloud_stage_requests_at_most_three_hits():
 # --------------------------------------------------------------------------- #
 
 def test_tier2_search_query_and_extraction_of_the_new_id():
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}], stream="http://yt/tier2")
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+                  streams={"newvid": "http://yt/tier2"})
     sc = _SoundCloud(error="no stream")
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
@@ -712,7 +773,8 @@ def test_tier2_does_not_cache_the_url_it_finds():
     """Tier 2 is the last resort: its URL is not written to stream_cache
     (only the SoundCloud stage persists), so the next resolve re-runs."""
     db = _Db()
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}], stream="http://yt/tier2")
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+                  streams={"newvid": "http://yt/tier2"})
     engine = _engine(_core(youtube=yt, soundcloud=_SoundCloud(error="no stream"), db=db))
 
     assert engine.resolve_stream_url(_yt_track()) == "http://yt/tier2"
@@ -746,45 +808,54 @@ def test_an_exhausted_budget_skips_every_fallback_stage(monkeypatch):
 
 
 def test_the_budget_is_shared_between_the_two_fallback_stages(monkeypatch):
-    """Each SoundCloud search costs 5 fake seconds: 20s of budget fits three
-    candidates, and tier 2 is then skipped because it runs out of time."""
+    """One shared 20s deadline, and it starts *after* tier 0 (line 274).
+
+    tier 0 costs 5 fake seconds, so the deadline is 1025; tier 1 has two
+    candidates at 11s each, which lands at 1027 and leaves tier 2 nothing. A
+    per-stage budget would let the tier-2 search run.
+    """
     clock = _fake_clock(monkeypatch)
 
-    sc = _SoundCloud(error="no stream", clock=clock, cost=5.0)
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}], stream="http://yt/tier2",
+    sc = _SoundCloud(error="no stream", clock=clock, cost=11.0)
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+                  streams={"newvid": "http://yt/tier2"},
                   clock=clock, cost=5.0)
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
     assert engine.resolve_stream_url(_yt_track()) is None
-    assert len(sc.search_calls) == 3
-    assert yt.search_calls == [], "5s x 4 calls must not fit into the 20s budget"
+    assert len(sc.search_calls) == 2
+    assert yt.search_calls == [], "5s + 11s + 11s must not fit into the 20s budget"
 
 
 def test_a_fast_cascade_still_reaches_tier_two(monkeypatch):
     clock = _fake_clock(monkeypatch)
 
     sc = _SoundCloud(error="no stream", clock=clock, cost=4.0)
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}], stream="http://yt/tier2",
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+                  streams={"newvid": "http://yt/tier2"},
                   clock=clock)
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
     assert engine.resolve_stream_url(_yt_track()) == "http://yt/tier2"
-    assert len(sc.search_calls) == 3
+    assert len(sc.search_calls) == 2
     assert yt.search_calls == [("Artist Song audio", 1)]
 
 
 def test_the_budget_covers_the_stream_extraction_step_too(monkeypatch):
     """A SoundCloud *search* that is fast but whose stream extraction eats the
-    remaining budget must not start the next candidate."""
+    remaining budget must not start the next candidate (the loop re-checks the
+    deadline before every candidate, audio/engine.py:277)."""
     clock = _fake_clock(monkeypatch)
 
-    sc = _SoundCloud(results=[{"source_id": "77"}], clock=clock, cost=12.0)
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}], stream="http://yt/tier2",
+    sc = _SoundCloud(results=[{"source_id": "77"}], clock=clock, cost=5.0)
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+                  streams={"newvid": "http://yt/tier2"},
                   clock=clock)
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
     assert engine.resolve_stream_url(_yt_track()) is None
-    assert len(sc.search_calls) == 2, "12s + 12s no longer fit into 20s"
+    assert len(sc.search_calls) == 2, "search (5s) + extraction (5s) x 2 = the 20s budget"
+    assert len(sc.stream_calls) == 2, "both candidates were searched AND extracted"
     assert yt.search_calls == []
 
 
@@ -825,8 +896,9 @@ def test_missing_title_triggers_exactly_one_oembed_lookup(monkeypatch):
     assert len(requested) == 1
     assert "oembed" in requested[0][0] and "v=dQw4w9WgXcQ" in requested[0][0]
     assert requested[0][1] == 3.0, "the lookup is capped at 3s"
-    assert [q for q, _ in sc.search_calls] == ["Real Artist Real Title", "Real Title",
-                                               "Real Artist Real Title"]
+    assert [q for q, _ in sc.search_calls] == ["Real Artist Real Title", "Real Title"], (
+        "title+author come from oEmbed; the raw re-concatenation de-duplicates"
+    )
 
 
 def test_oembed_failure_falls_back_to_the_raw_metadata(monkeypatch):
@@ -840,7 +912,10 @@ def test_oembed_failure_falls_back_to_the_raw_metadata(monkeypatch):
     assert engine.resolve_stream_url({"id": 1, "source": "youtube",
                                       "source_id": "dQw4w9WgXcQ",
                                       "title": "Hashy", "artist": "Artist"}) is None
-    assert sc.search_calls == [], "'Hashy' is 5 chars: no oEmbed, no usable query"
+    assert [q for q, _ in sc.search_calls] == ["Artist Hashy", "Hashy"], (
+        "a 5-char title is neither empty, equal to source_id nor 11 chars long, "
+        "so no oEmbed runs - and a short title is still a usable search query"
+    )
 
 
 def test_hash_like_title_triggers_the_oembed_lookup(monkeypatch):
@@ -855,9 +930,9 @@ def test_hash_like_title_triggers_the_oembed_lookup(monkeypatch):
     sc = _SoundCloud(error="no stream")
     engine = _engine(_core(youtube=_Youtube(error="no stream"), soundcloud=sc))
 
-    engine.resolve_stream_url(_yt_track(title="dQw4w9WgXc", artist="Artist"))
+    engine.resolve_stream_url(_yt_track(title="Xk3p9Q2mZ1a", artist="Artist"))
 
-    assert len(requested) == 1
+    assert len(requested) == 1, "an 11-char space-less title is treated as a video id"
     assert [q for q, _ in sc.search_calls] == ["Artist Real Title", "Real Title"]
 
 
@@ -993,11 +1068,12 @@ def test_yandex_branch_failure_returns_none():
 
 
 def test_yandex_branch_without_a_service_returns_none():
+    """An unconfigured yandex service must be a silent miss, like every other
+    unconfigured provider here - the AttributeError is caught on line 483."""
     engine = _engine(_core(youtube=_Youtube(error="must not run")))
 
     track = {"id": 9, "source": "yandex", "source_id": "12345", "title": "T", "artist": "A"}
-    with pytest.raises(AttributeError):
-        engine.resolve_stream_url(track)
+    assert engine.resolve_stream_url(track) is None
 
 
 # --------------------------------------------------------------------------- #
@@ -1006,10 +1082,12 @@ def test_yandex_branch_without_a_service_returns_none():
 
 @pytest.mark.xfail(
     strict=True,
-    reason="BUG audio/engine.py:172 - `len(source_id)` is called on a value that "
-           "falls back to tracks.id (an INTEGER). A DB row whose source_id is NULL "
-           "makes resolve_stream_url() raise TypeError instead of resolving; with a "
-           "resolver attached the error is swallowed and the track silently never plays",
+    reason="BUG audio/engine.py:126 - `source_id` falls back to `track['id']`, a DB "
+           "row id, which is not a video id. The cascade therefore has nothing to "
+           "extract and can only reach the track through the SoundCloud/YouTube "
+           "search fallbacks; a row whose source_id is NULL silently never plays. "
+           "(The TypeError this used to raise on len(int) is fixed: direct "
+           "extraction is now skipped for a non-str source_id.)",
 )
 def test_int_source_id_must_resolve_instead_of_raising():
     engine = _engine(_core(youtube=_Youtube(stream="http://yt/stream")))
@@ -1017,6 +1095,18 @@ def test_int_source_id_must_resolve_instead_of_raising():
     assert engine.resolve_stream_url(
         {"id": 12345, "source": "youtube", "title": "Song", "artist": "Artist"}
     ) == "http://yt/stream"
+
+
+def test_int_source_id_does_not_reach_the_youtube_extractor():
+    """A row id is not a video id: it must not be turned into a watch?v= URL
+    (a real yt-dlp call for a video that cannot exist)."""
+    yt = _Youtube(stream="http://yt/stream")
+    engine = _engine(_core(youtube=yt))
+
+    assert engine.resolve_stream_url(
+        {"id": 12345, "source": "youtube", "title": "Song", "artist": "Artist"}
+    ) is None
+    assert yt.stream_calls == []
 
 
 def test_int_source_id_is_swallowed_by_the_resolver():
@@ -1031,12 +1121,17 @@ def test_int_source_id_is_swallowed_by_the_resolver():
     assert yt.stream_calls == [], "the cascade died before reaching the provider"
 
 
-def test_int_source_id_is_fine_for_the_soundcloud_branch():
-    """Only the YouTube branch calls len(): SoundCloud str()s the target."""
+def test_soundcloud_branch_ignores_the_row_id_for_its_target():
+    """Only the YouTube branch reuses ``track['id']`` as a source_id.
+
+    The SoundCloud branch looks at source_id/source_url/url only
+    (audio/engine.py:398), so a row without any of them is searched by
+    "artist title" instead of by its own id - the row id is not a permalink.
+    """
     sc = _SoundCloud(stream="http://sc/stream")
     engine = _engine(_core(youtube=_Youtube(error="must not run"), soundcloud=sc))
 
     assert engine.resolve_stream_url(
         {"id": 12345, "source": "soundcloud", "title": "Song", "artist": "Artist"}
     ) == "http://sc/stream"
-    assert sc.stream_calls == ["12345"]
+    assert sc.stream_calls == ["Artist Song"]

@@ -169,7 +169,12 @@ class AudioEngine:
         if source == "youtube":
             import threading
             url = None
-            if source_id and len(source_id) > 3 and " " not in source_id:
+            # ``source_id`` above falls back to ``track['id']`` (a row id), so it
+            # is not necessarily a str: len()/"in" on an int raised TypeError and
+            # killed the whole cascade before the fallbacks could run. A row id is
+            # not a video id either, so only a real string qualifies here.
+            direct_id = source_id if isinstance(source_id, str) else ""
+            if len(direct_id) > 3 and " " not in direct_id:
                 event = threading.Event()
 
                 def cb(*args):
@@ -283,6 +288,11 @@ class AudioEngine:
                 try:
                     if hasattr(self.app_core, "soundcloud") and self.app_core.soundcloud:
                         self.app_core.soundcloud.search(sc_query, max_results=3, callback=sc_cb, error_callback=lambda e: sc_event.set())
+                    else:
+                        # No provider: no callback will ever arrive, so waiting
+                        # below would burn min(2.5, budget) per candidate on a
+                        # stage that cannot run at all.
+                        sc_event.set()
                 except Exception as ex:
                     logger.debug(f"SoundCloud fallback search error: {ex}")
                     sc_event.set()
