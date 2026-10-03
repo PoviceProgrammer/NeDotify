@@ -4,22 +4,38 @@ Queues and manages downloading audio files and metadata.
 """
 
 import os
-import time
 import logging
 import threading
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
 logger = logging.getLogger(__name__)
+
+# Provider threads: kept in sync with the pool width so the queue processor can
+# apply backpressure (a bounded number of accepted-but-unfinished tasks).
+_MAX_INFLIGHT = 2
+
+# Sources ``_download_worker`` knows how to fetch. Anything else (e.g. 'vk',
+# which has no download provider yet) fails with a source-specific error
+# instead of the generic "returned None or file missing" one.
+_SUPPORTED_SOURCES = frozenset({'youtube', 'soundcloud', 'yandex', 'spotify', 'spotify_album'})
+
 
 class DownloadManager:
     def __init__(self, app_core):
         self._core = app_core
-        self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='download_worker')
+        self._pool = ThreadPoolExecutor(max_workers=_MAX_INFLIGHT, thread_name_prefix='download_worker')
         self._running = True
         self._queue = []
         self._queue_lock = threading.Lock()
         self._queue_event = threading.Event()
         self._lock = threading.Lock()  # guards batch counters (_batch_active/_batch_completed/_batch_total/_batch_failed)
+
+        # Cooperative cancellation: cancel_batch()/stop() bump the epoch, so every
+        # task queued *before* that bump is recognised as stale and aborts instead
+        # of downloading (ThreadPoolExecutor.Future.cancel cannot stop a task the
+        # pool has already accepted).
+        self._cancel_epoch = 0
 
         self._batch_total = 0
         self._batch_completed = 0
@@ -56,6 +72,7 @@ class DownloadManager:
 
     def _decrement_batch_total_for_dedup(self):
         """Shrink the batch denominator when a queued item turns out to be a duplicate."""
+        finished_payload = None
         with self._lock:
             if not self._batch_active:
                 return
@@ -64,11 +81,15 @@ class DownloadManager:
             if self._batch_total == 0 or self._batch_completed >= self._batch_total:
                 if self._batch_total == 0:
                     self._batch_active = False
-                    self._emit('batch_download_finished', {
+                    finished_payload = {
                         'total': 0,
                         'completed': self._batch_completed,
                         'failed': self._batch_failed,
-                    })
+                    }
+        # Emit outside both _lock and (when called from queue_download) _queue_lock:
+        # _emit crosses the pywebview bridge and must not run under our locks.
+        if finished_payload is not None:
+            self._emit('batch_download_finished', finished_payload)
 
     def _on_batch_task_done(self, track_id, success: bool):
         """Account for one finished worker (success or failure) and emit progress."""
@@ -99,16 +120,28 @@ class DownloadManager:
             })
 
     def cancel_batch(self):
-        """Cancel ongoing batch download and clear queue."""
+        """Cancel ongoing batch download and clear queue.
+
+        The pool cannot cancel work it has already accepted, so cancellation is
+        cooperative: the epoch bump marks every already-queued task as stale and
+        the workers abort at their next stage check. Tasks queued *after* this
+        call carry the new epoch and run normally.
+        """
+        self._cancel_epoch += 1
         with self._queue_lock:
             self._queue.clear()
         with self._futures_lock:
+            survivors = []
             for fut in list(self._futures):
                 try:
-                    fut.cancel()
+                    if fut.cancel():
+                        continue  # never started: drop it from the in-flight list
                 except Exception:
                     pass
-            self._futures.clear()
+                survivors.append(fut)
+            # Keep accepted-but-unfinished futures so backpressure and stop()
+            # still see the downloads that are really running.
+            self._futures = survivors
         with self._lock:
             self._batch_active = False
             self._batch_total = 0
@@ -210,24 +243,54 @@ class DownloadManager:
                 self._decrement_batch_total_for_dedup()
                 return False
 
+        duplicate = False
         with self._queue_lock:
             if not any(item['track_id'] == track_id for item in self._queue):
                 self._queue.append({
                     'track_id': track_id,
                     'source': source,
                     'source_id': source_id,
+                    # Cancellation generation: items queued before a cancel_batch()
+                    # bump must abort instead of downloading.
+                    'epoch': self._cancel_epoch,
                 })
                 self._queue_event.set()
             else:
-                # In-memory duplicate: shrink batch denominator so the batch can finish.
-                self._decrement_batch_total_for_dedup()
-                return False
+                duplicate = True
+        if duplicate:
+            # In-memory duplicate: shrink the batch denominator so the batch can
+            # finish. Called outside _queue_lock because it emits an event.
+            self._decrement_batch_total_for_dedup()
+            return False
         logger.info(f'Queued download for track {track_id} from {source}:{source_id}')
         return True
+
+    def _running_futures(self):
+        """Prune finished futures and return the ones still in flight."""
+        with self._futures_lock:
+            self._futures = [f for f in self._futures if not f.done()]
+            return list(self._futures)
+
+    def _wait_for_free_slot(self):
+        """Backpressure: never let more than _MAX_INFLIGHT tasks wait in the pool.
+
+        Without this the processor drains the whole queue into the pool as fast
+        as it can, so a large batch keeps downloading even after a cancel.
+        """
+        while self._running:
+            pending = self._running_futures()
+            if len(pending) < _MAX_INFLIGHT:
+                return
+            # Wait for the next completion instead of polling; the timeout only
+            # bounds the wait so stop() is noticed promptly.
+            wait(pending, timeout=0.2, return_when=FIRST_COMPLETED)
 
     def _process_queue(self):
         """Background thread checking the queue."""
         while self._running:
+            self._wait_for_free_slot()
+            if not self._running:
+                break
             item = None
             with self._queue_lock:
                 if self._queue:
@@ -282,11 +345,10 @@ class DownloadManager:
         except Exception as e:
             logger.debug(f'Spotify resolve: failed to load track {track_id} metadata: {e}')
 
-        # If the queue payload had no usable title, try parsing "Artist - Title"
-        # out of a non-ytsearch source_id before giving up.
-        query_hint = sid
-        if not title and sid and not sid.startswith('spotify_'):
-            query_hint = sid
+        # Query used when the DB has no title/artist: the queue source_id itself
+        # (e.g. "Artist - Title" for a non-ytsearch payload). A "spotify_<id>"
+        # payload carries no searchable text, so it is useless as a query.
+        query_hint = '' if sid.startswith('spotify_') else sid
 
         # 1. Preferred path: TrackResolver (local -> soundcloud -> youtube).
         try:
@@ -313,28 +375,68 @@ class DownloadManager:
             logger.debug(f'Spotify TrackResolver fallback for track {track_id}: {e}')
 
         # 2. Fallback: direct YouTube search, then download top hit.
+        if title or artist:
+            query = f"{artist} {title}".strip()
+        else:
+            query = query_hint.strip()
+        if not query:
+            raise Exception('No title/artist metadata to resolve Spotify track')
+        results = self._core.youtube.search_sync(query, limit=1)
+        if results:
+            top_id = str(results[0].get('source_id') or '').strip()
+            if top_id:
+                return self._core.youtube.download_audio_sync(top_id, download_dir)
+        # Last resort: let yt-dlp handle the ytsearch query itself.
+        return self._core.youtube.download_audio_sync(f"ytsearch1: {query}", download_dir)
+
+    def _mark_queue_cancelled(self, track_id):
+        """Flag a queue row as cancelled so it never stays 'downloading' forever."""
         try:
-            if title or artist:
-                query = f"{artist} {title}".strip()
-            else:
-                query = query_hint.strip()
-            if not query:
-                raise Exception('No title/artist metadata to resolve Spotify track')
-            results = self._core.youtube.search_sync(query, limit=1)
-            if results:
-                top_id = str(results[0].get('source_id') or '').strip()
-                if top_id:
-                    return self._core.youtube.download_audio_sync(top_id, download_dir)
-            # Last resort: let yt-dlp handle the ytsearch query itself.
-            return self._core.youtube.download_audio_sync(f"ytsearch1: {query}", download_dir)
+            if hasattr(self._core.db, 'download_queue_set_status'):
+                self._core.db.download_queue_set_status(track_id, 'cancelled')
+                return
         except Exception:
-            raise
+            return
+        try:
+            with self._core.db._write_lock:
+                with self._core.db.conn:
+                    self._core.db.conn.execute(
+                        "UPDATE download_queue SET status = 'cancelled' "
+                        "WHERE track_id = ? AND status != 'completed'",
+                        (track_id,),
+                    )
+        except Exception:
+            pass
+
+    def _is_cancelled(self, epoch) -> bool:
+        """True when this task belongs to a cancelled generation.
+
+        Items queued before cancel_batch()/stop() carry an older epoch and abort
+        at every stage boundary instead of downloading.
+        """
+        return epoch != self._cancel_epoch
+
+    def _abort_cancelled(self, track_id, epoch, stage):
+        """Abort a stale task: unblock the batch accounting, close the queue row."""
+        if not self._is_cancelled(epoch):
+            return False
+        logger.info(f'Download for track {track_id} aborted at stage "{stage}" (cancelled)')
+        self._mark_queue_cancelled(track_id)
+        # Account for the batch. Right after a cancel_batch() the batch is already
+        # closed (_batch_active False), so this is a no-op and emits nothing: the
+        # single progress terminator stays batch_download_cancelled.
+        self._on_batch_task_done(track_id, success=False)
+        return True
 
     def _download_worker(self, item):
         """Actual download execution."""
         track_id = item['track_id']
         source = item['source']
         source_id = item['source_id']
+        epoch = int(item.get('epoch', 0) or 0)
+
+        if self._abort_cancelled(track_id, epoch, 'before-start'):
+            return
 
         try:
             if hasattr(self._core.db, 'download_queue_get_status'):
@@ -348,6 +450,8 @@ class DownloadManager:
             if status == 'completed':
                 # Already done: still account for the batch so it can finish.
                 self._on_batch_task_done(track_id, success=True)
+                return
+            if self._abort_cancelled(track_id, epoch, 'before-db-mark'):
                 return
             if hasattr(self._core.db, 'download_queue_set_downloading'):
                 self._core.db.download_queue_set_downloading(track_id)
@@ -366,6 +470,9 @@ class DownloadManager:
 
         download_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'downloads')
         os.makedirs(download_dir, exist_ok=True)
+
+        if self._abort_cancelled(track_id, epoch, 'before-provider'):
+            return
 
         try:
             file_path = None
@@ -386,6 +493,9 @@ class DownloadManager:
                 file_path = self._core.yandex.download_audio_sync(source_id, download_dir)
             elif source in ('spotify', 'spotify_album'):
                 file_path = self._download_spotify_track(source_id, track_id, download_dir)
+
+            if self._abort_cancelled(track_id, epoch, 'after-provider'):
+                return
 
             if file_path and os.path.exists(file_path):
                 logger.info(f'Download complete: {file_path}')
@@ -411,7 +521,12 @@ class DownloadManager:
                 self._emit('download_complete', {'track_id': track_id})
                 self._on_batch_task_done(track_id, success=True)
             else:
-                err_msg = 'Download returned None or file missing.'
+                if source in _SUPPORTED_SOURCES:
+                    err_msg = 'Download returned None or file missing.'
+                else:
+                    # No download provider is wired for this source yet (e.g. vk):
+                    # say so instead of blaming the provider for a missing file.
+                    err_msg = f"No download provider for source '{source}'."
                 logger.error(f'Download worker failed for {track_id}: {err_msg}')
                 if hasattr(self._core.db, 'download_queue_set_status'):
                     self._core.db.download_queue_set_status(track_id, 'failed')
@@ -442,7 +557,28 @@ class DownloadManager:
             self._emit('download_failed', {'track_id': track_id, 'error': str(e)})
             self._on_batch_task_done(track_id, success=False)
 
-    def stop(self):
+    def stop(self, drain_timeout: float = 5.0):
+        """Stop the queue processor and shut the download pool down.
+
+        ``core/app.py`` closes the database right after this call, so queued work
+        is cancelled cooperatively (epoch bump) and already running workers get a
+        bounded window to finish their database bookkeeping instead of writing to
+        a closed connection.
+        """
         self._running = False
+        self._cancel_epoch += 1
         self._queue_event.set()
+        with self._queue_lock:
+            self._queue.clear()
         self._pool.shutdown(wait=False)
+        deadline = time.monotonic() + max(0.0, float(drain_timeout))
+        for fut in self._running_futures():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                fut.result(timeout=remaining)
+            except Exception as e:
+                logger.debug(f'Download worker did not finish before shutdown: {e}')
+        with self._futures_lock:
+            self._futures = []
