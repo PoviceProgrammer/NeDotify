@@ -175,20 +175,16 @@ export async function initOnboarding() {
             if (settingsData.performance_preset === 'low') root.classList.add('perf-low');
         } catch(e) {}
 
+        // Capture the URL before the wizard is torn down, then close the
+        // wizard immediately so a long import never blocks the UI.
+        const urlInput = document.getElementById('ob-playlist-url');
+        const pendingUrl = (urlInput && urlInput.value ? urlInput.value.trim() : '');
+
         if (window.pywebview && window.pywebview.api) {
             try {
                 await window.pywebview.api.complete_onboarding(settingsData);
             } catch(e) {
                 console.error('complete_onboarding failed:', e);
-            }
-            
-            const urlInput = document.getElementById('ob-playlist-url');
-            if (urlInput && urlInput.value && !isSkip) {
-                try {
-                    window.pywebview.api.import_external_playlist(urlInput.value);
-                } catch(e) {
-                    console.error('import_external_playlist failed:', e);
-                }
             }
         }
 
@@ -197,6 +193,23 @@ export async function initOnboarding() {
         localStorage.setItem('nedotify_personalization_onboarding_completed', 'true');
         wizard.style.display = 'none';
         wizard.classList.add('hidden');
+
+        if (pendingUrl && !isSkip && window.pywebview?.api?.import_external_playlist) {
+            window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: '⏳ Импортирую плейлист...', type: 'info' } }));
+            try {
+                const res = await window.pywebview.api.import_external_playlist(pendingUrl);
+                if (res && res.success) {
+                    const plName = res.playlist_name || res.name || 'Импортированный';
+                    const count = res.imported_count ?? res.count ?? 0;
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Импортирован плейлист "${plName}" (${count} треков)`, type: 'success' } }));
+                } else {
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: res?.error || 'Не удалось импортировать плейлист', type: 'error' } }));
+                }
+            } catch(e) {
+                console.error('import_external_playlist failed:', e);
+                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка при импорте плейлиста', type: 'error' } }));
+            }
+        }
     }
 
     if (btnFinish) btnFinish.addEventListener('click', () => finishOnboarding(false));

@@ -236,7 +236,7 @@ function updateSimulation(playing, now, volScale, track) {
             }
             bar.target = Math.max(0.04, Math.min(1, target));
         } else {
-            bar.target = 0.015 + Math.sin(now * 0.4 + bar.phase) * 0.012;
+            bar.target = 0.05 + Math.sin(now * 0.4 + bar.phase) * 0.035;
         }
 
         const diff = bar.target - bar.current;
@@ -275,11 +275,9 @@ function draw(timestamp) {
     }
 
     if (!playing) {
-        if (hasDrawnIdle) {
-            animFrameId = null;
-            return;
-        }
-        hasDrawnIdle = true;
+        // Ambient idle loop: keep animating gently on pause instead of
+        // freezing after a single near-invisible frame.
+        animFrameId = requestAnimationFrame(draw);
     } else {
         hasDrawnIdle = false;
         animFrameId = requestAnimationFrame(draw);
@@ -328,7 +326,7 @@ function draw(timestamp) {
 
 function makeGradient(ctx, x1, y1, x2, y2, playing, primary, rgb) {
     const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-    const alpha = playing ? (primary ? 0.7 : 0.4) : 0.15;
+    const alpha = playing ? (primary ? 0.7 : 0.55) : 0.34;
     grad.addColorStop(0, `rgba(${rgb}, ${alpha * 0.3})`);
     grad.addColorStop(0.5, `rgba(${rgb}, ${alpha * 0.6})`);
     grad.addColorStop(1, `rgba(${rgb}, ${alpha})`);

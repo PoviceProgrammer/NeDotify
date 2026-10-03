@@ -86,11 +86,25 @@ export function formatListeningTime(ms) {
 export function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
     if (!container) return;
+    // Cap stacking: never more than 4 visible toasts.
+    while (container.children.length >= 4) {
+        container.firstElementChild?.remove();
+    }
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
     container.appendChild(toast);
     setTimeout(() => toast.remove(), 4000);
+}
+
+// Global bridge: most modules notify via
+// window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg, type } })).
+if (typeof window !== 'undefined' && !window.__nedotifyToastBridgeArmed) {
+    window.__nedotifyToastBridgeArmed = true;
+    window.addEventListener('nedotify:toast', (e) => {
+        const d = e?.detail || {};
+        showToast(d.msg || d.message || '', d.type || 'info');
+    });
 }
 
 export function extractDominantColor(imgEl) {

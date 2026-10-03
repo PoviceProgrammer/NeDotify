@@ -28,3 +28,29 @@ document.addEventListener('DOMContentLoaded', function () {
         window.lucide.createIcons();
     }
 });
+
+// Global toast bridge (early, no module dependency): renders every
+// window 'nedotify:toast' event into #toast-container. Without this,
+// the ~50 dispatch sites across js/ are silent.
+(function () {
+    if (window.__nedotifyToastBridgeArmed) return;
+    window.__nedotifyToastBridgeArmed = true;
+    function renderToast(msg, type) {
+        if (!msg) return;
+        var container = document.getElementById('toast-container');
+        if (!container) return;
+        while (container.children.length >= 4) {
+            if (container.firstElementChild) container.firstElementChild.remove();
+            else break;
+        }
+        var toast = document.createElement('div');
+        toast.className = 'toast ' + (type || 'info');
+        toast.textContent = msg;
+        container.appendChild(toast);
+        setTimeout(function () { try { toast.remove(); } catch (e) {} }, 4000);
+    }
+    window.addEventListener('nedotify:toast', function (e) {
+        var d = (e && e.detail) || {};
+        renderToast(d.msg || d.message, d.type);
+    });
+})();

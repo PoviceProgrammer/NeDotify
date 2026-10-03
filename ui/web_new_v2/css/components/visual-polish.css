@@ -150,9 +150,9 @@
     background: rgba(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)), 0.5);
 }
 
-/* ── 10. Toasts: glass ── */
+/* ── 10. Toasts: glass (opaque enough to stay readable on light themes) ── */
 .toast {
-    background: color-mix(in srgb, var(--bg-surface, #14141d) 85%, transparent);
+    background: color-mix(in srgb, var(--bg-surface, #14141d) 92%, transparent);
     backdrop-filter: blur(var(--blur-md)) saturate(160%);
     -webkit-backdrop-filter: blur(var(--blur-md)) saturate(160%);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), var(--edge-highlight);

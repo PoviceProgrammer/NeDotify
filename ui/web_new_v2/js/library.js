@@ -108,9 +108,14 @@ export function initLibrary() {
                         if (window.pywebview.api.get_storage_info) {
                             window.pywebview.api.get_storage_info();
                         }
+                    } else if (res && res.cancelled) {
+                        // User closed the dialog — stay silent.
+                    } else {
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: res?.error || 'Не удалось импортировать файлы', type: 'warning' } }));
                     }
                 } catch (e) {
                     console.error('Import error:', e);
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка при импорте файлов', type: 'error' } }));
                 }
             }
         });
@@ -196,10 +201,12 @@ export function initLibrary() {
         if (window.pywebview?.api?.create_playlist) {
             try {
                 await window.pywebview.api.create_playlist(name);
+                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Плейлист "${name}" создан`, type: 'success' } }));
                 if (plInput) plInput.value = '';
                 loadPlaylists();
             } catch (e) {
                 console.error("Create playlist error:", e);
+                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Не удалось создать плейлист', type: 'error' } }));
             }
         }
     };
@@ -938,7 +945,16 @@ async function loadPlaylistMenuItems(items, menu) {
                 btn.innerHTML = `<i data-lucide="list-music" style="width:14px;height:14px;color:var(--text-sec)"></i> ${escapeHtml(pl.name)}`;
                 btn.addEventListener('click', async () => {
                     const plId = pl.id !== undefined ? pl.id : pl.ID;
-                    await window.pywebview.api.add_to_playlist(plId, currentContextTrack);
+                    try {
+                        const res = await window.pywebview.api.add_to_playlist(plId, currentContextTrack);
+                        if (res && res.success === false) {
+                            window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: res.error || 'Не удалось добавить трек', type: 'error' } }));
+                        } else {
+                            window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Трек добавлен в "${pl.name}"`, type: 'success' } }));
+                        }
+                    } catch (e) {
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка добавления в плейлист', type: 'error' } }));
+                    }
                     menu.classList.remove('visible');
                     loadPlaylists();
                 });

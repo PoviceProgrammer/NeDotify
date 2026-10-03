@@ -247,8 +247,15 @@ export function initSettings() {
         scanDuplicatesBtn.addEventListener('click', async () => {
             duplicatesContainer.innerHTML = '<div style="font-size:12px; color:var(--text-sec); display:flex; align-items:center; gap:8px;"><div class="spinner" style="width:14px;height:14px;"></div> Сканирование медиатеки на дубликаты...</div>';
             if (window.pywebview?.api?.find_duplicate_tracks) {
-                const groups = await window.pywebview.api.find_duplicate_tracks();
-                renderDuplicateGroups(groups, duplicatesContainer);
+                try {
+                    const groups = await window.pywebview.api.find_duplicate_tracks();
+                    renderDuplicateGroups(groups, duplicatesContainer);
+                    const n = Array.isArray(groups) ? groups.length : 0;
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: n === 0 ? 'Дубликатов не найдено' : `Найдено групп дубликатов: ${n}`, type: n === 0 ? 'success' : 'info' } }));
+                } catch (e) {
+                    duplicatesContainer.innerHTML = '<div style="font-size:12px; color:var(--text-sec);">Ошибка сканирования</div>';
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка сканирования дубликатов', type: 'error' } }));
+                }
             } else {
                 duplicatesContainer.innerHTML = '<div style="font-size:12px; color:var(--text-sec);">Сканирование недоступно</div>';
             }
@@ -290,7 +297,7 @@ export function initSettings() {
     const statusImport = document.getElementById('import-playlist-status');
 
     if (btnImport && inputImportUrl) {
-        btnImport.addEventListener('click', () => {
+        btnImport.addEventListener('click', async () => {
             const url = inputImportUrl.value.trim();
             const name = inputImportName ? inputImportName.value.trim() : '';
             if (!url) {
@@ -303,15 +310,25 @@ export function initSettings() {
             }
             btnImport.disabled = true;
 
-            if (window.pywebview?.api?.import_external_playlist) {
-                window.pywebview.api.import_external_playlist(url, name);
-            }
-            setTimeout(() => {
+            try {
+                if (window.pywebview?.api?.import_external_playlist) {
+                    const res = await window.pywebview.api.import_external_playlist(url, name);
+                    if (res && res.success) {
+                        const plName = res.playlist_name || res.name || 'Импортированный';
+                        const count = res.imported_count ?? res.count ?? 0;
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Импортирован плейлист "${plName}" (${count} треков)`, type: 'success' } }));
+                        inputImportUrl.value = '';
+                        if (inputImportName) inputImportName.value = '';
+                    } else {
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: res?.error || 'Не удалось импортировать плейлист', type: 'error' } }));
+                    }
+                }
+            } catch (e) {
+                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка при импорте плейлиста', type: 'error' } }));
+            } finally {
                 btnImport.disabled = false;
                 if (statusImport) statusImport.style.display = 'none';
-                inputImportUrl.value = '';
-                if (inputImportName) inputImportName.value = '';
-            }, 4000);
+            }
         });
     }
 
