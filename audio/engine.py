@@ -31,16 +31,6 @@ class AudioEngine:
 
         self.app_core = None
 
-
-
-
-
-    def cleanup(self):
-        pass
-
-
-
-
     def play_track(self, track: dict) -> None:
         if not track:
             return None
