@@ -20,8 +20,56 @@ function isPageVisible(pageId) {
 // O-5: debounce (300ms) library refresh bursts (e.g. batch downloads) into a single re-render
 let libraryRefreshTimer = null;
 
+// P1-8: order-independent bridge-event registry.
+// The backend calls window.onPythonEvent(name, payload) (see core/api.py::_emit),
+// so any module that decorates that global only works if it happens to run after
+// whoever installed it — reordering imports or a failed init silently dropped the
+// listeners. Everything now registers here instead, and the dispatcher below is
+// installed at module evaluation, before any init() can race it.
+const pythonEventHandlers = [];
+
+/**
+ * Subscribe to Python bridge events. Returns an unsubscribe function.
+ * @param {(eventName: string, data: any) => void} fn
+ * @returns {() => void}
+ */
+export function addPythonEventHandler(fn) {
+    if (typeof fn !== 'function') return () => {};
+    pythonEventHandlers.push(fn);
+    return () => {
+        const idx = pythonEventHandlers.indexOf(fn);
+        if (idx !== -1) pythonEventHandlers.splice(idx, 1);
+    };
+}
+
+// Installed by initEvents(); null before that so the registry stays usable even
+// if initEvents() throws or is never reached.
+let coreEventHandler = null;
+
+function dispatchPythonEvent(eventName, data) {
+    if (coreEventHandler) {
+        try {
+            coreEventHandler(eventName, data);
+        } catch (err) {
+            console.error('Core Python event handler failed:', err);
+        }
+    }
+    for (const fn of pythonEventHandlers.slice()) {
+        try {
+            fn(eventName, data);
+        } catch (err) {
+            console.error('Python event subscriber failed:', err);
+        }
+    }
+}
+
+// Stable reference: re-assigning it is a no-op, and every subscriber survives
+// regardless of when it registered.
+window.onPythonEvent = dispatchPythonEvent;
+
 export function initEvents() {
-    window.onPythonEvent = function(eventName, data) {
+    window.onPythonEvent = dispatchPythonEvent;
+    coreEventHandler = function(eventName, data) {
         console.log('Python Event:', eventName, data);
 
         switch (eventName) {
@@ -31,13 +79,14 @@ export function initEvents() {
                 document.dispatchEvent(new CustomEvent('nedotify:track_changed', { detail: data }));
                 break;
 
-            case 'state_changed':
+            case 'state_changed': {
                 // Normalize payload which could be string or { state: "..." }
                 const state = (typeof data === 'object' && data !== null && 'state' in data) ? data.state : data;
                 onStateChanged(state);
                 break;
+            }
 
-            case 'position_changed':
+            case 'position_changed': {
                 // Pos and duration should be normalized to milliseconds for onPositionChanged
                 let posMs = data.position_ms !== undefined ? data.position_ms : (data.pos !== undefined ? Math.round(data.pos * 1000) : 0);
                 let durationMs = data.duration_ms !== undefined ? data.duration_ms : (data.duration !== undefined ? Math.round(data.duration * 1000) : 0);
@@ -55,6 +104,7 @@ export function initEvents() {
                     } 
                 }));
                 break;
+            }
 
             case 'search_results':
                 onSearchResults(data);
@@ -81,12 +131,13 @@ export function initEvents() {
                 }
                 break;
                 
-            case 'authentic_home_error':
+            case 'authentic_home_error': {
                 const authContainer = document.getElementById('home-authentic-feed');
                 if (authContainer) {
                     authContainer.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-sec);">Ошибка: ${escapeHtml(data.error)}</div>`;
                 }
                 break;
+            }
 
             case 'popular_results':
                 clearFeedTimeout('home-popular');
@@ -248,12 +299,28 @@ export function initEvents() {
                 onStorageInfo(data);
                 break;
 
-            case 'error':
+            case 'error': {
                 console.error('Backend Error:', data);
                 const cleanErr = (data || 'Неизвестная ошибка').toString().replace(/\x1b\[[0-9;]*m/g, '');
                 showToast('Ошибка: ' + cleanErr, 'error');
                 onStateChanged('stopped');
                 break;
+            }
+
+            // P0-4: core/api.py::_install_bridge_error_logging pushes this right
+            // before re-raising, so the caller's promise also rejects. Without a
+            // case here it only reached console.log('Unknown event') and the
+            // button looked like it silently does nothing.
+            case 'api_error': {
+                const apiMethod = (data && data.method) ? String(data.method) : '';
+                const cleanApiErr = ((data && data.error) || 'Неизвестная ошибка').toString().replace(/\x1b\[[0-9;]*m/g, '');
+                console.error('Bridge API Error:', apiMethod, cleanApiErr, data);
+                showToast(
+                    apiMethod ? ('Ошибка: ' + apiMethod + ' — ' + cleanApiErr) : ('Ошибка: ' + cleanApiErr),
+                    'error'
+                );
+                break;
+            }
 
             case 'lyrics_ready':
                 document.dispatchEvent(new CustomEvent('nedotify:lyrics_ready', { detail: data }));
@@ -281,12 +348,13 @@ export function initEvents() {
                 document.dispatchEvent(new CustomEvent('nedotify:yandex_device_auth_result', { detail: data }));
                 break;
 
-            case 'audio_error':
+            case 'audio_error': {
                 const cleanAudioErr = (data?.message || '').toString().replace(/\x1b\[[0-9;]*m/g, '');
                 showToast('Ошибка воспроизведения: ' + cleanAudioErr, 'error');
                 window._pendingResolveKey = null;
                 onStateChanged('stopped');
                 break;
+            }
 
             case 'theme_changed':
                 window.dispatchEvent(new CustomEvent('nedotify:theme_changed', { detail: data }));
