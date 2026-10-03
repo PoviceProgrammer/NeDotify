@@ -314,7 +314,7 @@ function renderResults(tracks) {
                     playlistMap.set(key, {
                         id: t.id || `playlist_${idx}`,
                         title: t.title || 'Плейлист',
-                        author: t.artist || t.author || 'AURA Music',
+                        author: t.artist || t.author || 'NeDotify',
                         cover_url: t.cover_url || t.cover_path || '',
                         source: t.source || 'youtube',
                         source_id: t.source_id || '',
@@ -679,7 +679,7 @@ export function renderPlaylistGrid(playlists, container) {
 
     playlists.forEach((pl, idx) => {
         const title = pl.title || pl.name || 'Плейлист';
-        const author = pl.author || pl.artist || 'AURA Music';
+        const author = pl.author || pl.artist || 'NeDotify';
         const cover = pl.cover_url || pl.cover_path || pl.cover || '';
         const trackCount = pl.track_count || 10;
         const trackCountStr = typeof trackCount === 'number' ? `${trackCount} треков` : 'Плейлист';
@@ -810,7 +810,7 @@ export async function openPlaylistModal(playlist) {
                 <img src="${escapeHtml(playlist.cover_url || playlist.cover || playlist.cover_path || '')}" alt="" onerror="this.onerror=null;this.style.display='none'" style="width:110px; height:110px; border-radius:12px; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
                 <div style="display:flex; flex-direction:column; gap:6px; flex:1; overflow:hidden;">
                     <div style="font-size:20px; font-weight:800; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(playlist.title || playlist.name || 'Плейлист')}</div>
-                    <div style="font-size:14px; color:var(--text-sec);">${escapeHtml(playlist.author || playlist.artist || 'AURA Music')}</div>
+                    <div style="font-size:14px; color:var(--text-sec);">${escapeHtml(playlist.author || playlist.artist || 'NeDotify')}</div>
                     <div style="font-size:12px; color:var(--text-sec); opacity:0.8;">${playlist.track_count ? playlist.track_count + ' треков' : 'Плейлист'}</div>
                     <div style="margin-top:8px; display:flex; gap:10px;">
                         <button id="btn-play-full-playlist" style="padding:8px 18px; border-radius:24px; border:none; background:var(--primary); color:#fff; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;">

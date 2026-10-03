@@ -1,5 +1,5 @@
 """
-NeDotify / AURA Music - Last.fm Service Wrapper
+NeDotify - Last.fm Service Wrapper
 Provides Last.fm open API querying with API key rotation, multi-TTL caching,
 SQLite response caching, rate-limiting resilience, and graceful offline/error handling.
 """
@@ -154,7 +154,7 @@ class LastFMService(BaseMusicService):
         session = getattr(self._session_local, 'session', None)
         if session is None:
             session = requests.Session()
-            session.headers.update({'User-Agent': 'AURA-Music/1.0 (RecommendationEngine)'})
+            session.headers.update({'User-Agent': 'NeDotify/1.0 (RecommendationEngine)'})
             self._session_local.session = session
         return session
 

@@ -56,7 +56,7 @@
 ## 🚀 Быстрый запуск
 
 ### Требования
-- Python 3.10 или новее
+- Python 3.14 или новее (проверено на 3.14.7 — это минимум, см. шапку `requirements.txt`)
 - Windows 10 / 11
 
 ### Запуск из исходников
@@ -66,9 +66,10 @@
    cd NeDotify
    ```
 
-2. Установите зависимости:
+2. Создайте виртуальное окружение и установите зависимости:
    ```bash
-   pip install -r requirements.txt
+   python -m venv .venv_win
+   .venv_win\Scripts\python.exe -m pip install -r requirements.txt
    ```
 
 3. Запустите плеер:

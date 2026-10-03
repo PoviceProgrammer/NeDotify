@@ -4,6 +4,8 @@ The autostart tests drive core.api.update_autostart against an in-memory fake
 winreg, so the real HKCU\\...\\Run key is never touched.
 """
 import os
+import shutil
+import subprocess
 import sys
 import types
 
@@ -12,6 +14,11 @@ import pytest
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+
+def _read(path):
+    """Read a repo file as UTF-8 (the sources carry Cyrillic)."""
+    return open(path, encoding="utf-8").read()
 
 from core import api as api_module  # noqa: E402
 
@@ -140,6 +147,201 @@ def test_installer_output_name_matches_readme():
         pytest.skip("installer.iss not present")
     text = open(ISS, encoding="utf-8").read()
     assert "OutputBaseFilename=NeDotify_Setup" in text
+
+
+# --- the deleted PyInstaller GUI-installer pipeline stays deleted ------------
+
+DEAD_INSTALLER_SCRIPTS = ("build_installer.py", "installer_gui.py", "uninstaller_gui.py")
+
+
+@pytest.mark.parametrize("name", DEAD_INSTALLER_SCRIPTS)
+def test_gui_installer_pipeline_is_deleted(name):
+    """installer.iss is the canonical installer.
+
+    The removed scripts emitted three byte-identical setup exes
+    (NeDotify_Setup.exe / NeDotify_v2.exe / NeDotify_beta5_Setup.exe) and a
+    second uninstaller that competed with Inno Setup's. Their mere presence
+    invites a rebuild that resurrects the duplicate artifacts.
+    """
+    path = os.path.join(PROJECT_ROOT, name)
+    assert not os.path.exists(path), (
+        f"{name} was deleted because installer.iss is the canonical installer; "
+        "it only produced duplicate setup exes and a competing uninstaller"
+    )
+
+
+@pytest.mark.parametrize(
+    "doc",
+    [
+        "README.md",
+        "CLAUDE.md",
+        os.path.join(".claude", "skills", "aura-build", "SKILL.md"),
+    ],
+)
+def test_no_doc_points_at_a_deleted_installer_script(doc):
+    """A doc that still tells the reader to run build_installer.py is a
+    dead link: following it fails with 'not recognized as a cmdlet'.
+
+    AGENTS.md is deliberately NOT covered: it is out of this task's file
+    ownership and still documents the old pipeline (see the audit report).
+    """
+    path = os.path.join(PROJECT_ROOT, doc)
+    if not os.path.exists(path):
+        pytest.skip(f"{doc} not present")
+    text = open(path, encoding="utf-8").read()
+    stale = [name for name in DEAD_INSTALLER_SCRIPTS if name in text]
+    assert not stale, f"{doc} still references the deleted {stale}"
+
+
+def test_agents_md_known_stale_installer_reference():
+    """Not an assertion about AGENTS.md being correct - it records the known
+    gap so the deletion cannot be silently forgotten. Flipped to a plain
+    assert once AGENTS.md is updated."""
+    path = os.path.join(PROJECT_ROOT, "AGENTS.md")
+    if not os.path.exists(path):
+        pytest.skip("AGENTS.md not present")
+    stale = [n for n in DEAD_INSTALLER_SCRIPTS if n in _read(path)]
+    assert stale, (
+        "AGENTS.md no longer mentions the deleted scripts - the known stale "
+        "reference has been fixed; delete this test and fold AGENTS.md into "
+        "test_no_doc_points_at_a_deleted_installer_script"
+    )
+
+
+# --- README must describe the build that actually exists --------------------
+
+README = os.path.join(PROJECT_ROOT, "README.md")
+
+
+def test_readme_advertises_the_canonical_setup_exe():
+    text = _read(README)
+    assert "NeDotify_Setup.exe" in text, (
+        "README must name the file the release actually contains; "
+        "installer.iss OutputBaseFilename=NeDotify_Setup"
+    )
+
+
+@pytest.mark.parametrize("stale", ["NeDotify_v2.exe", "beta5_Setup.exe", "Beta5_Setup.exe"])
+def test_readme_does_not_advertise_a_duplicate_setup(stale):
+    """These names came from the deleted pipeline; three identical exes with
+    three names is a support trap."""
+    assert stale not in _read(README)
+
+
+def test_readme_python_floor_is_314():
+    """requirements.txt declares 3.14+; README claiming 3.10 sends users into
+    an unsupported interpreter."""
+    readme = _read(README)
+    assert "Python 3.14" in readme, "README must state the real minimum Python"
+    assert "3.10" not in readme, "README still advertises the stale 3.10 floor"
+
+
+def test_readme_run_command_matches_the_entrypoint():
+    """`python main.py` only works because main.py has the __main__ guard."""
+    readme = _read(README)
+    assert "python main.py" in readme
+    main_py = _read(os.path.join(PROJECT_ROOT, "main.py"))
+    assert 'if __name__ == "__main__":' in main_py
+
+
+# --- branding: user-visible strings say NeDotify ----------------------------
+
+BRANDED_FILES = {
+    "services/lyrics_service.py": "lrclib User-Agent",
+    "services/lastfm_service.py": "Last.fm User-Agent",
+    "services/recommendation_service.py": "generated-playlist artist fallback",
+    os.path.join("ui", "web_new_v2", "js", "search.js"): "playlist author fallback",
+    os.path.join("ui", "web_new_v2", "index.html"): "onboarding / autostart / icon-pack labels",
+}
+
+
+@pytest.mark.parametrize("rel", sorted(BRANDED_FILES))
+def test_no_brand_leak_in_user_visible_strings(rel):
+    """These strings reach the user: HTTP User-Agent headers, the artist shown
+    on generated playlists, onboarding copy, the autostart label."""
+    path = os.path.join(PROJECT_ROOT, rel)
+    if not os.path.exists(path):
+        pytest.skip(f"{rel} not present")
+    text = _read(path)
+    for needle in ("AURA Music", "AURA-Music", "AURA-Music/"):
+        assert needle not in text, f"{rel} still says {needle!r} ({BRANDED_FILES[rel]})"
+
+
+def test_user_agents_are_neutral():
+    """lrclib/Last.fm only need a stable identifier; nothing in the repo
+    compares the old value, so a neutral one is safe."""
+    lyrics = _read(os.path.join(PROJECT_ROOT, "services", "lyrics_service.py"))
+    assert lyrics.count("'User-Agent': 'NeDotify/1.0'") == 2, (
+        "both lrclib calls (exact + search) must send the neutral User-Agent"
+    )
+    lastfm = _read(os.path.join(PROJECT_ROOT, "services", "lastfm_service.py"))
+    assert "'User-Agent': 'NeDotify/1.0 (RecommendationEngine)'" in lastfm
+
+
+# --- branding control: persistent identifiers must NOT have been renamed ------
+
+PERSISTENT_KEYS = [
+    # (relpath, needle, why renaming is destructive)
+    (os.path.join("ui", "web_new_v2", "js", "settings.js"), "aura_orbs_enabled",
+     "settings key stored in the DB; renaming resets the user's toggle"),
+    (os.path.join("ui", "web_new_v2", "js", "onboarding.js"), "aura_onboarding_done",
+     "localStorage flag; renaming re-runs onboarding for everyone"),
+    (os.path.join("ui", "web_new_v2", "index.html"), 'data-id="aura_neon"',
+     "icon-pack id; renaming orphans the saved selection and its artwork"),
+    (os.path.join("ui", "web_new_v2", "js", "settings.js"), "aura_neon",
+     "PACK_ICON_MAPS key for the icon pack"),
+    (os.path.join("core", "services", "discord_rpc.py"), "aura_logo",
+     "Discord-side asset key; renaming blanks the presence image"),
+    ("core/plugins.py", "aura_plugins", "importlib namespace for plugins"),
+    ("main.py", "/__aura_close", "route called from main.js on both sides"),
+    ("services/base_service.py", "aura-shared", "thread_name_prefix"),
+    ("utils/tag_parser.py", "aura_tag_backup_", "tag backup file prefix"),
+]
+
+
+@pytest.mark.parametrize("rel,needle,why", PERSISTENT_KEYS, ids=[p[1] for p in PERSISTENT_KEYS])
+def test_persistent_aura_identifiers_are_untouched(rel, needle, why):
+    """Positive control for the brand sweep above: the sweep only targets
+    strings the user reads. Anything persisted or cross-process must keep its
+    name, otherwise this test is a false-negative generator."""
+    path = os.path.join(PROJECT_ROOT, rel)
+    if not os.path.exists(path):
+        pytest.skip(f"{rel} not present")
+    assert needle in _read(path), f"{needle!r} must stay in {rel}: {why}"
+
+
+def test_onboarding_localstorage_key_is_both_read_and_written():
+    """Both the guard and the completion path live in onboarding.js; if only
+    one side keeps the old key, every launch re-runs the wizard."""
+    path = os.path.join(PROJECT_ROOT, "ui", "web_new_v2", "js", "onboarding.js")
+    if not os.path.exists(path):
+        pytest.skip("onboarding.js not present")
+    text = _read(path)
+    assert "localStorage.getItem('aura_onboarding_done')" in text, "read side lost the key"
+    assert "localStorage.setItem('aura_onboarding_done', 'true')" in text, "write side lost the key"
+
+
+# --- syntax gate for the edited .js (skipped when node is unavailable) ------
+
+EDITED_JS = [
+    os.path.join("ui", "web_new_v2", "js", "search.js"),
+]
+
+
+@pytest.mark.parametrize("rel", EDITED_JS)
+def test_edited_js_parses(rel):
+    """The brand sweep rewrote JS string literals inside template
+    expressions; a stray quote would only show up in the browser."""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not available")
+    path = os.path.join(PROJECT_ROOT, rel)
+    if not os.path.exists(path):
+        pytest.skip(f"{rel} not present")
+    result = subprocess.run(
+        [node, "--check", path], capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, f"node --check failed for {rel}: {result.stderr}"
 
 
 # --- PyInstaller spec: covers cache must be stripped from BOTH UI copies -----
