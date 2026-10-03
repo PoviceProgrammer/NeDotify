@@ -5,8 +5,7 @@ secrets/
 
 # Python & Virtual Environments
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 *.pyd
 *.egg-info/
 # Covers every local variant: .venv, .venv_win, .venv_win_backup, venv.
@@ -14,6 +13,11 @@ __pycache__/
 .venv*/
 venv/
 .pytest_cache/
+# pytest-cov is not a project dependency, but a one-off `pytest --cov` run
+# would otherwise drop a binary .coverage in the root.
+.coverage
+.coverage.*
+htmlcov/
 
 # Builds & Binaries
 dist/

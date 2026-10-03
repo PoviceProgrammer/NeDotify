@@ -1,17 +1,20 @@
 Guidelines for this repo live in @AGENTS.md (Python/concurrency, pywebview bridge,
-SQLite integrity, testing, packaging rules) and the architecture, feature inventory
-and interface contracts in @PROJECT.md. Follow both.
+SQLite integrity, testing, packaging rules). What the code actually does is in
+@STATUS.md; what the 2026-10-03 audit changed is in @docs/AUDIT.md.
 
 ## Quick reference
 
-- Always use the venv interpreter: `& ".venv\Scripts\python.exe"` — bare `python`
-  lacks pywebview/yt-dlp. Windows + PowerShell.
-- Tests: `& ".venv\Scripts\python.exe" -m pytest` (`pytest.ini` deselects the
+- Always use the venv interpreter: `& ".venv_win\Scripts\python.exe"` — bare
+  `python` lacks pywebview/yt-dlp. Windows + PowerShell. `.venv\` and
+  `.venv_win_backup\` were removed on 2026-10-03; only `.venv_win\` exists.
+- Tests: `& ".venv_win\Scripts\python.exe" -m pytest` (`pytest.ini` deselects the
   `network` marker by default). See the `aura-test` skill.
-- Run the app: `& ".venv\Scripts\python.exe" main.py` — blocking GUI process.
+- Run the app: `& ".venv_win\Scripts\python.exe" main.py` — blocking GUI process.
   See the `aura-run` skill.
-- Perf harness in `scripts/` + `benchmarks/`: see the `aura-perf` skill.
-- Packaging: `build_installer.py` / `setup_pyinstaller.spec`: see `aura-build`.
+- The perf harness that used to live in `scripts/` + `benchmarks/` was removed
+  from git (`a3425eb`); neither directory is tracked.
+- Packaging: `pyinstaller setup_pyinstaller.spec` then `iscc installer.iss`
+  (the canonical installer). See the `aura-build` skill.
 
 ## Non-obvious constraints
 
@@ -22,6 +25,10 @@ and interface contracts in @PROJECT.md. Follow both.
   the race and causes an `/assets/*.png` 404 storm.
 - The audio proxy must swallow `WinError 10053`, `BrokenPipeError` and
   `ConnectionResetError` on `wfile.write()` rather than 500.
-- Sanitize Cyrillic and illegal Windows characters for every path written to
-  `.cache/streams/` or `.cache/downloads/` (`utils/path_utils.py`).
-- Do not delete `aura.db` or `.cache/` to get a clean state without asking.
+- There is **no** `utils/path_utils.py`. Cache *file names* are reduced to
+  `[A-Za-z0-9_-]` inline (`re.sub(r'[^a-zA-Z0-9_-]', '_', ...)`) in
+  `services/youtube_service.py`, `core/api.py` and `core/proxy.py`; downloads
+  are written as `yt_<safe_id>_<ts>.<ext>`. If you add a human-readable
+  `<artist> - <title>.mp3`, add forbidden-character filtering with it.
+- Do not delete the profile tree `~/.nedotify/` (or the SQLite DB inside it) to
+  get a clean state without asking.
