@@ -1,5 +1,5 @@
 """
-NeDotify / AURA Music - Recommendation Service
+NeDotify - Recommendation Service
 Completely decoupled from YTMusic. Uses LastFMService, UserTasteProfile, and TrackResolver
 to generate personalized smart feeds, time-of-day contextual recommendations, and curated mixes.
 """
@@ -558,7 +558,7 @@ class RecommendationService(BaseMusicService):
                         mixes.append({
                             'type': 'custom_playlist',
                             'title': 'Из лайков и загрузок',
-                            'artist': 'AURA Music',
+                            'artist': 'NeDotify',
                             'cover_url': sequenced_local[0].get('cover_url') or '',
                             'tracks': sequenced_local,
                         })
@@ -593,7 +593,7 @@ class RecommendationService(BaseMusicService):
                     mixes.append({
                         'type': 'custom_playlist',
                         'title': f'Микс: {artist}',
-                        'artist': 'AURA Music',
+                        'artist': 'NeDotify',
                         'cover_url': sequenced_tracks[0].get('cover_url') or '',
                         'tracks': sequenced_tracks,
                     })
@@ -625,7 +625,7 @@ class RecommendationService(BaseMusicService):
                     mixes.append({
                         'type': 'custom_playlist',
                         'title': f'Мой поток: {ctx["title"]}',
-                        'artist': 'AURA Music Flow',
+                        'artist': 'NeDotify Flow',
                         'cover_url': sequenced_flow[0].get('cover_url') or '',
                         'tracks': sequenced_flow,
                     })
@@ -711,7 +711,7 @@ class RecommendationService(BaseMusicService):
                         mix_items.append({
                             'type': 'custom_playlist',
                             'title': 'Из лайков и загрузок',
-                            'artist': 'AURA Music',
+                            'artist': 'NeDotify',
                             'cover_url': seq[0].get('cover_url') or '',
                             'source': seq[0].get('source') or 'local',
                             'source_id': seq[0].get('source_id') or '',
@@ -737,7 +737,7 @@ class RecommendationService(BaseMusicService):
                     mix_items.append({
                         'type': 'custom_playlist',
                         'title': f'Микс: {artist}',
-                        'artist': 'AURA Music',
+                        'artist': 'NeDotify',
                         'cover_url': seq_mix[0].get('cover_url') or '',
                         'source': seq_mix[0].get('source') or 'soundcloud',
                         'source_id': seq_mix[0].get('source_id') or '',

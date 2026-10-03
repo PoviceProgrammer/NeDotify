@@ -11,7 +11,7 @@ and interface contracts in @PROJECT.md. Follow both.
 - Run the app: `& ".venv\Scripts\python.exe" main.py` — blocking GUI process.
   See the `aura-run` skill.
 - Perf harness in `scripts/` + `benchmarks/`: see the `aura-perf` skill.
-- Packaging: `build_installer.py` / `setup_pyinstaller.spec`: see `aura-build`.
+- Packaging: `setup_pyinstaller.spec` + `installer.iss`: see `aura-build`.
 
 ## Non-obvious constraints
 

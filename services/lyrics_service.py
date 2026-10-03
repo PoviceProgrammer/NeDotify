@@ -1,5 +1,5 @@
 """
-AURA Music - Lyrics Service
+NeDotify - Lyrics Service
 Fetches synced and plain lyrics using 6 databases with a race condition weight system.
 """
 
@@ -420,7 +420,7 @@ class LyricsService:
         # 1. Try exact /api/get
         try:
             url = f"https://lrclib.net/api/get?artist_name={urllib.parse.quote(c_artist)}&track_name={urllib.parse.quote(c_track)}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'AURA-Music/1.0'})
+            req = urllib.request.Request(url, headers={'User-Agent': 'NeDotify/1.0'})
             with self._open_url(req, timeout=3.5) as resp:
                 data = json.loads(resp.read().decode('utf-8', errors='ignore'))
                 res = self._make_result(data.get("syncedLyrics"), data.get("plainLyrics"))
@@ -433,7 +433,7 @@ class LyricsService:
         try:
             q = f"{c_artist} {c_track}".strip()
             url = f"https://lrclib.net/api/search?q={urllib.parse.quote(q)}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'AURA-Music/1.0'})
+            req = urllib.request.Request(url, headers={'User-Agent': 'NeDotify/1.0'})
             with self._open_url(req, timeout=3.5) as resp:
                 results = json.loads(resp.read().decode('utf-8', errors='ignore'))
                 if isinstance(results, list) and results:
