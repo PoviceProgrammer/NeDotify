@@ -9,7 +9,9 @@ __pycache__/
 *.pyo
 *.pyd
 *.egg-info/
-.venv/
+# Covers every local variant: .venv, .venv_win, .venv_win_backup, venv.
+# `.venv/` alone let the two Windows copies show up as untracked noise.
+.venv*/
 venv/
 .pytest_cache/
 
@@ -20,7 +22,10 @@ build/
 *.zip
 *.pkg
 *.msi
+# Generated PyInstaller specs are noise, but the project's own build spec must
+# stay versioned or releases cannot be rebuilt.
 *.spec
+!setup_pyinstaller.spec
 
 # Database & Runtime files
 *.db
@@ -31,8 +36,9 @@ restored_sources/
 backups/
 
 # Tests, Audits, Benchmarks & Reports
-tests/
-run_tests.py
+# NOTE: `tests/` and `run_tests.py` were listed here, which silently kept the
+# whole pytest suite out of version control. They are tracked on purpose now:
+# every regression test must survive a fresh clone.
 .test_runs/
 .jscheck/
 .audit/
