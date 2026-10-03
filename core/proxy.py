@@ -29,6 +29,15 @@ HOP_BY_HOP = frozenset({'trailer', 'upgrade', 'proxy-authenticate', 'proxy-autho
 # Query parameter carrying the per-session proxy token.
 AUTH_PARAM = 'k'
 
+# Paths the proxy actually serves. The catch-all branch in do_GET() falls back
+# to engine.resolve_stream_url() with whatever metadata the query carried, and
+# for an empty query that means source='soundcloud' with an empty target - a
+# real SoundCloud request that blocks the request thread on event.wait(15).
+# Anything outside this set ('/favicon.ico', a typo'd endpoint) is refused here
+# instead. '/' is listed because it IS the generic proxying endpoint emitted by
+# LocalProxyManager.get_proxy_url() and engine._notify_track_changed().
+KNOWN_PROXY_PATHS = ('/', '/api/cover', '/api/avatar', '/api/stream')
+
 # Upstream credentials are attached ONLY when the target host belongs to the
 # provider that owns them. Without this, a caller could point ?url= at any host
 # and have the user's Yandex OAuth token or provider cookies forwarded to it.
@@ -89,6 +98,16 @@ def _is_loopback_origin(origin: str) -> bool:
 AVATAR_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
 # Extensions a client may fetch through /api/cover.
 COVER_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+# Extensions a client may fetch through /api/stream when the target is a local
+# file. /api/stream used to hand out ANY file it could open, which turned a
+# token-bearing request into an arbitrary file-read primitive over the disk.
+# The container formats come first; the tail mirrors utils/file_scanner.py's
+# AUDIO_EXTENSIONS, so a file the library can legitimately hold never becomes
+# unplayable.
+AUDIO_EXTENSIONS = {
+    '.mp3', '.m4a', '.aac', '.flac', '.wav', '.ogg', '.opus', '.webm',
+    '.wma', '.alac', '.aiff',
+}
 
 
 def _avatars_root() -> str:
@@ -96,14 +115,21 @@ def _avatars_root() -> str:
     return os.path.normpath(os.path.join(os.path.expanduser('~'), '.nedotify', 'avatars'))
 
 
+def _nedotify_root() -> str:
+    """The application's own data tree: covers, avatars, streams, downloads."""
+    return os.path.normpath(os.path.join(os.path.expanduser('~'), '.nedotify'))
+
+
 def _cover_roots() -> list:
     """Directories /api/cover is allowed to serve files from.
 
     Every cover_path written by the app lands in ~/.nedotify/covers (file
     scanner, tag editor); avatars live next door and are harmless images too.
-    Older DB rows (and the dev scanner) also reference the bundled UI covers
-    folders (ui/web_new*/covers), so those are served as well - still strictly
-    image extensions, still realpath-contained.
+    Older DB rows (and the dev scanner) may also reference the bundled UI
+    covers folders (ui/web_new*/covers), so those are served as well when the
+    bundle actually ships one - still strictly image extensions, still
+    realpath-contained. Roots that do not exist are dropped: they can never
+    match a file and only cost a realpath() per request in the cover hot path.
     """
     nedotify = os.path.normpath(os.path.expanduser('~/.nedotify'))
     roots = [
@@ -116,10 +142,25 @@ def _cover_roots() -> list:
             os.path.dirname(os.path.abspath(__file__))
         )
         for ui_name in ('web_new', 'web_new_v2'):
-            roots.append(os.path.join(base, 'ui', ui_name, 'covers'))
+            ui_covers = os.path.join(base, 'ui', ui_name, 'covers')
+            if os.path.isdir(ui_covers):
+                roots.append(ui_covers)
     except Exception:
         logger.debug('_cover_roots: UI covers roots unavailable', exc_info=True)
     return roots
+
+
+def _is_inside_roots(resolved: str, roots) -> bool:
+    """True when `resolved` (already realpath'd) sits inside one of `roots`."""
+    for root in roots:
+        resolved_root = os.path.realpath(root)
+        try:
+            if os.path.commonpath([resolved, resolved_root]) == resolved_root:
+                return True
+        except ValueError:
+            # Different drives on Windows -> commonpath raises.
+            continue
+    return False
 
 
 def _resolve_inside_roots(raw_path: str, roots, extensions) -> str:
@@ -141,19 +182,68 @@ def _resolve_inside_roots(raw_path: str, roots, extensions) -> str:
         if ext not in extensions:
             return ''
         resolved = os.path.realpath(candidate)
-        for root in roots:
-            resolved_root = os.path.realpath(root)
-            try:
-                if os.path.commonpath([resolved, resolved_root]) != resolved_root:
-                    continue
-            except ValueError:
-                # Different drives on Windows -> commonpath raises.
-                continue
-            if os.path.isfile(resolved):
-                return resolved
-            return ''
+        if _is_inside_roots(resolved, roots):
+            return resolved if os.path.isfile(resolved) else ''
     except Exception:
         logger.debug('_resolve_inside_roots rejected %r', raw_path, exc_info=True)
+    return ''
+
+
+def _referenced_by_library(candidates, db) -> bool:
+    """True when any of `candidates` is a file_path/cover_path in `tracks`.
+
+    A local library may live in any folder the user imported, so a folder
+    whitelist alone would break playback. The database row is what makes a
+    local path legitimate; paths are compared case-insensitively because the
+    stored spelling may differ from the one the client sent.
+    """
+    conn = getattr(db, 'conn', None)
+    if conn is None:
+        return False
+    queries = (
+        'SELECT id FROM tracks WHERE LOWER(file_path) = LOWER(?) LIMIT 1',
+        'SELECT id FROM tracks WHERE LOWER(cover_path) = LOWER(?) LIMIT 1',
+    )
+    for candidate in candidates:
+        if not candidate:
+            continue
+        for sql in queries:
+            try:
+                row = conn.execute(sql, (candidate,)).fetchone()
+            except Exception:
+                logger.debug('_referenced_by_library lookup failed for %r', candidate, exc_info=True)
+                row = None
+            if row:
+                return True
+    return False
+
+
+def _safe_stream_local_path(raw_path, db) -> str:
+    """Resolve `raw_path` to a local audio file /api/stream is allowed to serve.
+
+    Returns '' unless the path is an existing, allow-listed audio file that
+    either lives inside a managed application root (~/.nedotify/..., where the
+    stream cache and downloads are) or is referenced by a row in the `tracks`
+    table (an imported local library). Everything else is refused, so a
+    token-bearing request cannot read arbitrary files off the disk.
+    """
+    try:
+        if not raw_path:
+            return ''
+        candidate = os.path.normpath(str(raw_path))
+        if os.path.splitext(candidate)[1].lower() not in AUDIO_EXTENSIONS:
+            return ''
+        resolved = os.path.realpath(candidate)
+        if not os.path.isfile(resolved):
+            return ''
+        if _is_inside_roots(resolved, [_nedotify_root()]):
+            return resolved
+        if _referenced_by_library((candidate, resolved), db):
+            return resolved
+        logger.warning('Refused /api/stream read of unlisted local file: %s', candidate)
+        return ''
+    except Exception:
+        logger.debug('_safe_stream_local_path rejected %r', raw_path, exc_info=True)
     return ''
 
 
@@ -200,6 +290,56 @@ def _ext_for_response(resp) -> str:
         return '.m4a'
 
 
+def _parse_byte_range(range_header, file_size):
+    """Parse a single-range `Range: bytes=...` header per RFC 7233.
+
+    Returns ``(kind, start, end)`` where kind is:
+
+    * ``'range'``  - a satisfiable single range; answer 206 with that slice.
+    * ``'full'``   - no Range, an unparsable one, or a multi-range request;
+      answer 200 with the whole entity (RFC 7233 explicitly allows ignoring a
+      Range header it cannot satisfy at the syntax level).
+    * ``'invalid'``- syntactically valid but unsatisfiable (start beyond EOF,
+      end before start, zero-length suffix); answer 416.
+
+    The old parser read the field positionally, so a suffix range
+    (``bytes=-500``, what HTML5 audio sends) was answered as 0-500 and an
+    unsatisfiable range was silently clamped into a *different* range.
+    """
+    size = int(file_size or 0)
+    if not range_header:
+        return ('full', 0, max(size - 1, 0))
+    header = str(range_header).strip()
+    unit, sep, spec = header.partition('=')
+    if not sep or unit.strip().lower() != 'bytes':
+        return ('full', 0, max(size - 1, 0))
+    spec = spec.strip()
+    if not spec or ',' in spec or '-' not in spec:
+        # Multipart ranges are legal to ignore.
+        return ('full', 0, max(size - 1, 0))
+    first, _, last = spec.partition('-')
+    first, last = first.strip(), last.strip()
+    try:
+        if not first:
+            # Suffix form: the final N bytes of the entity.
+            if not last:
+                return ('full', 0, max(size - 1, 0))
+            suffix_len = int(last)
+            if suffix_len < 0:
+                # e.g. `bytes=--5`: not a range we can even name.
+                return ('full', 0, max(size - 1, 0))
+            if suffix_len == 0 or size <= 0:
+                return ('invalid', None, None)
+            return ('range', max(0, size - suffix_len), size - 1)
+        start = int(first)
+        end = int(last) if last else size - 1
+    except (TypeError, ValueError):
+        return ('full', 0, max(size - 1, 0))
+    if start < 0 or end < start or start >= size:
+        return ('invalid', None, None)
+    return ('range', start, min(end, size - 1))
+
+
 class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Custom redirect handler that validates all redirect destinations against SSRF protection."""
     def __init__(self, max_redirects=5):
@@ -226,6 +366,11 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     Multi-threaded HTTP server holding a reference to the application core.
     """
     block_on_close = False
+    # socketserver.ThreadingMixIn.daemon_threads defaults to False, and nothing
+    # in the app overrode it, so every in-flight request thread was a
+    # non-daemon: sys.exit() blocked on the interpreter's atexit join while a
+    # buffered track was still being served, and the app could not close.
+    daemon_threads = True
 
     def __init__(self, server_address, RequestHandlerClass, app_core, auth_token=''):
         self.app_core = app_core
@@ -234,8 +379,7 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
         super().__init__(server_address, RequestHandlerClass)
 
     def process_request(self, request, client_address):
-        thread_cls = get_real_thread_class()
-        t = thread_cls(target=self.process_request_thread, args=(request, client_address))
+        t = threading.Thread(target=self.process_request_thread, args=(request, client_address))
         t.daemon = self.daemon_threads
         with self._threads_lock:
             if self._threads is None or not isinstance(self._threads, list):
@@ -293,15 +437,29 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         The loopback proxy forwards provider credentials and serves cached audio,
         so an unauthenticated port is readable by any local process or by any web
         page that guesses the port. Every request must carry ?k=<token>.
+
+        An unset token fails CLOSED. LocalProxyManager.start() always mints one
+        and, when the server cannot be built, no port is ever announced - so an
+        empty token can only mean "not configured", and serving anyway would
+        expose the proxy with no bearer at all.
         """
         expected = getattr(self.server, 'auth_token', '') or ''
         if not expected:
-            return True  # token generation failed; fail open rather than break playback
+            logger.error('Proxy token is not configured - refusing request (fail-closed)')
+            return False
         supplied = (query_params.get(AUTH_PARAM) or [''])[0]
         # Legacy alias some frontend helpers still send.
         if not supplied:
             supplied = (query_params.get('auth_token') or [''])[0]
         return hmac.compare_digest(str(supplied), str(expected))
+
+    def _authenticate(self, parsed_path, query_params) -> bool:
+        """Entry gate shared by GET and HEAD: reject unauthenticated callers."""
+        if not self._authorized(query_params):
+            logger.warning('Rejected unauthenticated proxy request: %s', parsed_path.path)
+            self._reject_unauthorized()
+            return False
+        return True
 
     def _reject_unauthorized(self):
         self.send_response(403)
@@ -321,46 +479,22 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             self.send_header('Vary', 'Origin')
 
     def serve_local_file(self, file_path):
-        file_size = os.path.getsize(file_path)
+        try:
+            file_size = os.path.getsize(file_path)
+        except OSError:
+            # Callers check os.path.isfile() first, but the file can still
+            # vanish in between (scanner, user, cache eviction). Unguarded,
+            # that race answered 500 with a traceback.
+            self._safe_send_error(404, 'File not found')
+            return None
         content_type, _ = mimetypes.guess_type(file_path)
         if not content_type:
             content_type = 'audio/mp4'
-        range_header = self.headers.get('Range', None)
-        if range_header and range_header.startswith('bytes='):
-            try:
-                range_match = range_header.replace('bytes=', '').split('-')
-                start_byte = int(range_match[0]) if range_match[0] else 0
-                end_byte = int(range_match[1]) if len(range_match) > 1 and range_match[1] else file_size - 1
-                end_byte = min(end_byte, file_size - 1)
-                start_byte = max(0, min(start_byte, end_byte))
-                length = end_byte - start_byte + 1
-                self.send_response(206)
-                self.send_header('Content-Type', content_type)
-                self.send_header('Accept-Ranges', 'bytes')
-                self.send_header('Content-Range', f'bytes {start_byte}-{end_byte}/{file_size}')
-                self.send_header('Content-Length', str(length))
-                self._send_cors_headers()
-                self.end_headers()
-                with open(file_path, 'rb') as f:
-                    f.seek(start_byte)
-                    chunk_size = 8192
-                    bytes_sent = 0
-                    while bytes_sent < length:
-                        read_size = min(chunk_size, length - bytes_sent)
-                        data = f.read(read_size)
-                        if not data:
-                            break
-                        self.wfile.write(data)
-                        bytes_sent += len(data)
-            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
-                return None
-            except Exception as e:
-                logger.error(f'Error serving Range request: {e}')
-                try:
-                    self._safe_send_error(500, 'Range processing error')
-                except Exception:
-                    logger.debug("serve_local_file: suppressed exception", exc_info=True)
-        else:
+        range_kind, start_byte, end_byte = _parse_byte_range(self.headers.get('Range'), file_size)
+        if range_kind == 'invalid':
+            self._send_range_not_satisfiable(file_size)
+            return None
+        if range_kind == 'full':
             self.send_response(200)
             self.send_header('Content-Type', content_type)
             self.send_header('Accept-Ranges', 'bytes')
@@ -373,6 +507,53 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     shutil.copyfileobj(f, self.wfile)
             except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as ce:
                 logger.debug("serve_local_file disconnect: %s", ce)
+            return None
+
+        length = end_byte - start_byte + 1
+        try:
+            self.send_response(206)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Accept-Ranges', 'bytes')
+            self.send_header('Content-Range', f'bytes {start_byte}-{end_byte}/{file_size}')
+            self.send_header('Content-Length', str(length))
+            self._send_cors_headers()
+            self.end_headers()
+            with open(file_path, 'rb') as f:
+                f.seek(start_byte)
+                chunk_size = 8192
+                bytes_sent = 0
+                while bytes_sent < length:
+                    read_size = min(chunk_size, length - bytes_sent)
+                    data = f.read(read_size)
+                    if not data:
+                        break
+                    self.wfile.write(data)
+                    bytes_sent += len(data)
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
+            return None
+        except Exception as e:
+            logger.error(f'Error serving Range request: {e}')
+            try:
+                self._safe_send_error(500, 'Range processing error')
+            except Exception:
+                logger.debug("serve_local_file: suppressed exception", exc_info=True)
+        return None
+
+    def _send_range_not_satisfiable(self, file_size):
+        """416 for a Range the RFC calls unsatisfiable, with the required
+        `Content-Range: bytes * /<size>` (RFC 7233 section 4.4)."""
+        try:
+            self.send_response(416)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Accept-Ranges', 'bytes')
+            self.send_header('Content-Range', f'bytes */{file_size}')
+            self.send_header('Content-Length', '0')
+            self._send_cors_headers()
+            self.end_headers()
+        except OSError:
+            pass
+        except Exception:
+            logger.debug('_send_range_not_satisfiable suppressed', exc_info=True)
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -381,13 +562,91 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization')
         self.end_headers()
 
+    def do_HEAD(self):
+        """Answer HEAD with GET's headers and no body (RFC 9110 9.3.2).
+
+        CORS advertises HEAD, but BaseHTTPRequestHandler has no do_HEAD and
+        answered 501. Only what GET can answer from local state is resolved
+        here: fetching an upstream stream purely to throw its body away would
+        be pure waste, so a HEAD that would need one reports 404.
+        """
+        parsed_path = urllib.parse.urlparse(self.path)
+        query_params = urllib.parse.parse_qs(parsed_path.query)
+
+        if not self._authenticate(parsed_path, query_params):
+            return None
+
+        if parsed_path.path not in KNOWN_PROXY_PATHS:
+            self._safe_send_error(404, 'Not Found')
+            return None
+
+        if parsed_path.path == '/api/cover':
+            self._send_local_head(_safe_cover_path(query_params.get('path', [''])[0] or ''))
+            return None
+
+        if parsed_path.path == '/api/avatar':
+            self._send_local_head(_safe_avatar_path(query_params.get('path', [''])[0] or ''))
+            return None
+
+        # '/' and /api/stream: same local-file gate GET applies.
+        self._send_local_head(self._resolve_stream_local_file(
+            query_params.get('url', [''])[0] or query_params.get('file_path', [''])[0] or ''
+        ))
+        return None
+
+    def _send_local_head(self, file_path):
+        """Emit the headers GET would send for `file_path` (or 404), no body."""
+        if not file_path:
+            self._safe_send_error(404, 'Local file not found')
+            return None
+        try:
+            file_size = os.path.getsize(file_path)
+        except OSError:
+            self._safe_send_error(404, 'File not found')
+            return None
+        content_type, _ = mimetypes.guess_type(file_path)
+        if not content_type:
+            content_type = 'audio/mp4'
+        range_kind, start_byte, end_byte = _parse_byte_range(self.headers.get('Range'), file_size)
+        if range_kind == 'invalid':
+            self._send_range_not_satisfiable(file_size)
+            return None
+        if range_kind == 'range':
+            self.send_response(206)
+            self.send_header('Content-Range', f'bytes {start_byte}-{end_byte}/{file_size}')
+            self.send_header('Content-Length', str(end_byte - start_byte + 1))
+        else:
+            self.send_response(200)
+            self.send_header('Content-Length', str(file_size))
+        self.send_header('Content-Type', content_type)
+        self.send_header('Accept-Ranges', 'bytes')
+        self._send_cors_headers()
+        self.end_headers()
+        return None
+
+    def _resolve_stream_local_file(self, local_path):
+        """The local audio file `/` and /api/stream may serve, or ''.
+
+        A local library can live in any folder the user imported, so the gate
+        is "managed app root OR referenced by a tracks row", never a fixed
+        folder list.
+        """
+        db = getattr(getattr(self.server, 'app_core', None), 'db', None)
+        return _safe_stream_local_path(local_path, db)
+
     def do_GET(self):
         parsed_path = urllib.parse.urlparse(self.path)
         query_params = urllib.parse.parse_qs(parsed_path.query)
 
-        if not self._authorized(query_params):
-            logger.warning('Rejected unauthenticated proxy request: %s', parsed_path.path)
-            self._reject_unauthorized()
+        if not self._authenticate(parsed_path, query_params):
+            return None
+
+        # Everything outside the served set is refused here: the catch-all
+        # branch below resolves with empty metadata, which for SoundCloud is a
+        # real network call that blocks the request thread for up to 15s.
+        if parsed_path.path not in KNOWN_PROXY_PATHS:
+            logger.info('Refusing unknown proxy path: %s', parsed_path.path)
+            self._safe_send_error(404, 'Not Found')
             return None
 
         if parsed_path.path == '/api/cover':
@@ -429,8 +688,9 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     local_path = urllib.request.url2pathname(local_path[7:])
                 elif local_path.startswith('file://'):
                     local_path = urllib.request.url2pathname(local_path[6:])
-                if (os.path.isabs(local_path) or os.path.exists(local_path)) and os.path.isfile(local_path):
-                    self.serve_local_file(local_path)
+                allowed_local = self._resolve_stream_local_file(local_path)
+                if allowed_local:
+                    self.serve_local_file(allowed_local)
                     return None
 
             int_track_id = None
@@ -468,8 +728,9 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                         local_path = urllib.request.url2pathname(local_path[7:])
                     elif local_path.startswith('file://'):
                         local_path = urllib.request.url2pathname(local_path[6:])
-                    if os.path.exists(local_path) and os.path.isfile(local_path):
-                        self.serve_local_file(local_path)
+                    allowed_local = self._resolve_stream_local_file(local_path)
+                    if allowed_local:
+                        self.serve_local_file(allowed_local)
                         return None
                 self.send_error(404, 'Local file not found')
                 return None
@@ -510,8 +771,9 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     local_path = urllib.request.url2pathname(local_path[7:])
                 elif local_path.startswith('file://'):
                     local_path = urllib.request.url2pathname(local_path[6:])
-                if (os.path.isabs(local_path) or os.path.exists(local_path)) and os.path.isfile(local_path):
-                    self.serve_local_file(local_path)
+                allowed_local = self._resolve_stream_local_file(local_path)
+                if allowed_local:
+                    self.serve_local_file(allowed_local)
                     return None
 
             # Same SSRF gate as the ?url= branch: a resolver or a poisoned DB cache
@@ -560,8 +822,9 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 )
 
                 if is_local_candidate:
-                    if (os.path.isabs(local_path) or os.path.exists(local_path)) and os.path.isfile(local_path):
-                        self.serve_local_file(local_path)
+                    allowed_local = self._resolve_stream_local_file(local_path)
+                    if allowed_local:
+                        self.serve_local_file(allowed_local)
                         return None
                     # If file doesn't exist on disk, attempt online resolution if track metadata present
                     if (source and source_id) or title:
@@ -600,8 +863,9 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     local_path = urllib.request.url2pathname(local_path[7:])
                 elif local_path.startswith('file://'):
                     local_path = urllib.request.url2pathname(local_path[6:])
-                if (os.path.isabs(local_path) or os.path.exists(local_path)) and os.path.isfile(local_path):
-                    self.serve_local_file(local_path)
+                allowed_local = self._resolve_stream_local_file(local_path)
+                if allowed_local:
+                    self.serve_local_file(allowed_local)
                     return None
 
             # Infer source if not specified
@@ -880,11 +1144,6 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         return None
 
 
-def get_real_thread_class():
-    import threading
-    return getattr(threading, '_original_Thread', threading.Thread)
-
-
 class LocalProxyManager:
     """
     Manages start/stop lifecycle of the local stream proxy on a dynamic port.
@@ -904,8 +1163,7 @@ class LocalProxyManager:
             self.token = secrets.token_urlsafe(24)
             self.server = ThreadingHTTPServer(('127.0.0.1', 0), StreamProxyHandler, self.app_core, self.token)
             self.port = self.server.server_port
-            thread_cls = get_real_thread_class()
-            self.thread = thread_cls(target=self.server.serve_forever, daemon=True)
+            self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
             self.thread.start()
             logger.info(f'Local HTTP stream proxy started on port {self.port}')
         except Exception as e:
