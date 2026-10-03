@@ -842,6 +842,17 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
 
             is_webpage = target_url and any(domain in target_url for domain in ('soundcloud.com', 'youtube.com', 'youtu.be'))
 
+            # '/' is a real endpoint (audio/engine.py builds direct-stream proxy
+            # URLs as http://127.0.0.1:<port>/?url=...), so it stays in
+            # KNOWN_PROXY_PATHS. But a request that carries neither a url nor any
+            # track metadata has nothing to resolve: falling through would call
+            # engine.resolve_stream_url with an empty target, and the SoundCloud
+            # branch then performs a real network round trip on a blank id and
+            # blocks this request thread for up to 15s.
+            if not target_url and not (source or source_id or title or artist):
+                self.send_error(400, "Missing 'url' query parameter")
+                return None
+
             if not target_url or is_webpage:
                 track_info = {
                     'source': source if source else 'soundcloud',

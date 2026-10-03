@@ -43,13 +43,37 @@ def test_unknown_path_with_stream_params_is_still_404(proxy, app_core):
 
 def test_root_path_still_proxies(proxy, app_core):
     """'/' is the generic proxy endpoint emitted by get_proxy_url() and
-    engine._notify_track_changed() - it must keep working."""
+    engine._notify_track_changed() - it must keep working.
+
+    It must be given real track metadata, exactly like engine.py does when it
+    builds `http://127.0.0.1:<port>/?url=...&source=...&source_id=...`. A request
+    carrying no metadata at all is refused with 400 before the resolver runs -
+    see test_root_path_without_metadata_does_not_reach_resolver.
+    """
     assert '/' in proxy_module.KNOWN_PROXY_PATHS
-    resp = proxy.get('/?' + qs(k=PROXY_TOKEN))
+    resp = proxy.get('/?' + qs(k=PROXY_TOKEN, source='soundcloud', source_id='12345'))
     assert resp.status != 404
     # The stub resolver answered '' -> do_GET reports "could not resolve".
     assert resp.status == 400
     assert app_core.engine.calls, "the '/' branch must still reach the resolver"
+    # ...and it must be reached with the metadata we supplied, not blanks.
+    assert app_core.engine.calls[0].get('source_id') == '12345'
+
+
+def test_root_path_without_metadata_does_not_reach_resolver(proxy, app_core):
+    """Regression: '/' with no url and no metadata must not hit the network.
+
+    Falling through to engine.resolve_stream_url with empty source/source_id
+    made the SoundCloud branch perform a real round trip on a blank id and block
+    the request thread for up to 15s.
+    """
+    app_core.engine.calls.clear()
+    resp = proxy.get('/?' + qs(k=PROXY_TOKEN))
+    assert app_core.engine.calls == [], (
+        "empty '/' request reached the resolver: "
+        f"{app_core.engine.calls!r}"
+    )
+    assert resp.status == 400
 
 
 def test_known_endpoints_still_served(proxy, nedotify_home, app_core):
