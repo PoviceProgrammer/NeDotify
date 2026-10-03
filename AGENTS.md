@@ -21,7 +21,7 @@ application for Windows.
   `build_installer.py`) + Inno Setup (`installer.iss`, `installer_gui.py`,
   `uninstaller_gui.py`). **Nuitka is not used** - there is no Nuitka config,
   no `--onefile` Nuitka build, and no Nuitka dependency anywhere.
-- **Testing**: pytest suite in `tests/` (318 tests), `run_tests.py`, `pytest.ini`.
+- **Testing**: pytest suite in `tests/` (566 tests), `run_tests.py`, `pytest.ini`.
   No Playwright/Selenium: the "E2E" tests are opaque-box Python tests against the
   real `AppApi`/`DownloadManager`/`DatabaseManager` with stub providers.
 
@@ -95,7 +95,7 @@ application for Windows.
 
 ### 4. Testing Protocols
 - Run `pytest -q` (or `python run_tests.py`). Baseline before the audit was 96
-  tests; the suite is now **318** - a regression is never acceptable.
+  tests; the suite is now **566** - a regression is never acceptable.
 - Network providers are stubbed (`ServiceStub` / `YouTubeService` stand-ins) or
   `monkeypatch`ed. No test may hit the network.
 - **Home isolation is mandatory**: `tests/conftest.py::redirect_home` redirects
