@@ -94,7 +94,10 @@ class DatabaseManager:
 
     def get(self, key_or_id: Any = None, default: Any = None, *args, **kwargs) -> Any:
         """Generic get helper supporting setting or track lookup."""
-        if isinstance(key_or_id, int):
+        # bool is a subclass of int, so without the explicit exclusion
+        # get(True) silently became get_track(1) and returned whatever track
+        # happens to hold rowid 1.
+        if isinstance(key_or_id, int) and not isinstance(key_or_id, bool):
             return self.get_track(key_or_id)
         if isinstance(key_or_id, str):
             val = self.get_setting("general", key_or_id) if hasattr(self, 'get_setting') else None
@@ -950,17 +953,22 @@ class DatabaseManager:
     def get_tracks_missing_cover(self, limit: int = 40) -> List[Dict[str, Any]]:
         """Rows whose artwork (or real title/artist) is still missing.
 
-        Also picks up rows that carry the 'Unknown Title' / 'Unknown Artist'
-        placeholders, because those were written when metadata extraction failed
-        and the provider can supply the real values.
+        A row qualifies when EITHER it has no artwork at all (neither cover_path
+        nor cover_url) OR it still carries the 'Unknown Title' / 'Unknown
+        Artist' placeholders written when metadata extraction failed. These are
+        deliberately separate OR'd branches: gating the placeholder branch on
+        cover_path IS NULL hid exactly the rows that need fixing, because
+        backfill_track_metadata() repairs the placeholder names whether or not
+        artwork was already stored. A row with artwork AND real names is
+        skipped, otherwise it would be re-resolved on every pass forever
+        (backfill writes cover_url, never cover_path).
         """
         cursor = self.conn.cursor()
         cursor.execute(
             """
             SELECT id, source, source_id FROM tracks
-            WHERE cover_path IS NULL
-              AND (
-                    cover_url IS NULL OR cover_url = ''
+            WHERE (
+                    (cover_path IS NULL AND (cover_url IS NULL OR cover_url = ''))
                  OR title IS NULL OR title IN ('', 'Unknown', 'Unknown Title')
                  OR artist IS NULL OR artist IN ('', 'Unknown', 'Unknown Artist')
               )
@@ -1183,6 +1191,9 @@ class DatabaseManager:
             with self.conn:
                 cursor = self.conn.cursor()
                 clean_name = (name or "").strip()
+                # Run before the lookup so the id handed back is always the one
+                # this cleanup keeps. Reentrant lock: safe to nest.
+                self._cleanup_duplicate_empty_system_playlists(cursor)
                 # If playlist with same name already exists (especially system names), reuse it
                 cursor.execute("SELECT id FROM playlists WHERE LOWER(name) = LOWER(?) LIMIT 1", (clean_name,))
                 row = cursor.fetchone()
@@ -1192,24 +1203,48 @@ class DatabaseManager:
                 cursor.execute("INSERT INTO playlists (name, description) VALUES (?, ?)", (clean_name, description))
                 return cursor.lastrowid
 
-    def get_playlists(self) -> List[Dict[str, Any]]:
-        cursor = self.conn.cursor()
-        # Clean up duplicate empty system playlists with exact same name
-        try:
-            cursor.execute("""
-                DELETE FROM playlists 
-                WHERE name IN ('Локальные', 'Локальные треки') 
-                AND id NOT IN (SELECT DISTINCT playlist_id FROM playlist_tracks)
-                AND id NOT IN (
-                    SELECT MIN(id) FROM playlists 
-                    WHERE name IN ('Локальные', 'Локальные треки') 
-                    GROUP BY name
-                )
-            """)
-            self.conn.commit()
-        except Exception:
-            pass
+    def _cleanup_duplicate_empty_system_playlists(self, cursor=None) -> int:
+        """Drop duplicate EMPTY system playlists ('Локальные'/'Локальные треки').
 
+        Those two names were historically created by several code paths, so a
+        database can hold several rows for one of them and the UI then lists
+        the same (empty) playlist two or three times. The oldest row per name
+        survives; rows that still hold tracks are never touched.
+
+        Lives here rather than in get_playlists(): that getter is called on
+        every playlist view render (and by import/export helpers), so a DELETE
+        plus a COMMIT on the calling thread's connection turned a read into a
+        write, ran outside ``_write_lock`` like every other writer does, and
+        could commit unrelated in-flight work on that thread's connection.
+        Playlist creation is the only event that can reintroduce the
+        duplicates, so that is where it runs.
+        """
+        sql = """
+            DELETE FROM playlists
+            WHERE name IN ('Локальные', 'Локальные треки')
+            AND id NOT IN (SELECT DISTINCT playlist_id FROM playlist_tracks)
+            AND id NOT IN (
+                SELECT MIN(id) FROM playlists
+                WHERE name IN ('Локальные', 'Локальные треки')
+                GROUP BY name
+            )
+        """
+        own_cursor = cursor is None
+        try:
+            if own_cursor:
+                with self._write_lock:
+                    with self.conn:
+                        return self.conn.execute(sql).rowcount
+            return cursor.execute(sql).rowcount
+        except Exception as e:
+            # Never let housekeeping break playlist creation / a view render;
+            # a stale duplicate is cosmetic, a raised error is not.
+            logger.warning("Failed to clean up duplicate system playlists: %s", e, exc_info=True)
+            return 0
+
+    def get_playlists(self) -> List[Dict[str, Any]]:
+        """All playlists with their track counts. Pure read: no writes, no commit."""
+        cursor = self.conn.cursor()
         cursor.execute(
             """
             SELECT p.*, COUNT(pt.track_id) as track_count
@@ -1552,32 +1587,6 @@ class DatabaseManager:
         cursor.execute("SELECT COALESCE(SUM(duration_ms), 0) FROM listening_stats")
         return cursor.fetchone()[0]
 
-    def ensure_download_queue_table(self) -> None:
-        """Create download_queue table + unique index (thread-safe)."""
-        with self._write_lock:
-            with self.conn:
-                cursor = self.conn.cursor()
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS download_queue (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        track_id INTEGER NOT NULL,
-                        source TEXT,
-                        source_id TEXT,
-                        status TEXT DEFAULT 'pending',
-                        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                cursor.execute("""
-                    DELETE FROM download_queue
-                    WHERE id NOT IN (
-                        SELECT MAX(id) FROM download_queue GROUP BY track_id
-                    )
-                """)
-                cursor.execute(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_download_queue_track "
-                    "ON download_queue(track_id)"
-                )
-
     def ensure_download_queue_table(self, cursor=None) -> None:
         """Create the download queue table + uniqueness guard, idempotently.
 
@@ -1698,20 +1707,22 @@ class DatabaseManager:
         scan workers) should call this when they finish so their page cache is
         released instead of living until process exit.
         """
-        for attr in ("connection", "conn"):
-            existing = getattr(self._local, attr, None)
-            if existing is None:
-                continue
-            try:
-                existing.close()
-            except Exception:
-                pass
-            try:
-                setattr(self._local, attr, None)
-            except Exception:
-                pass
-            with self._conns_lock:
-                self._all_conns.discard(existing)
+        # Only "connection" exists: _get_connection() is the single writer of
+        # the thread-local slot, so probing a second attribute name could only
+        # ever miss.
+        existing = getattr(self._local, "connection", None)
+        if existing is None:
+            return
+        try:
+            existing.close()
+        except Exception:
+            pass
+        try:
+            self._local.connection = None
+        except Exception:
+            pass
+        with self._conns_lock:
+            self._all_conns.discard(existing)
 
     def close(self) -> None:
         """Close all connections tracked by this database manager instance."""

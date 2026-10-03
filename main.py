@@ -483,10 +483,24 @@ def main():
                 env=env
             )
             _release_instance_lock()
+            # os._exit() below skips atexit, and the settings writer thread may
+            # still be asleep, so flush explicitly BEFORE cleanup() closes the
+            # database (cleanup() also flushes, but only after stopping the
+            # downloader/proxy, which is exactly when new settings appear).
+            try:
+                app_core.settings.sync_flush_now()
+            except Exception:
+                logging.debug("_startup_watchdog: settings flush failed", exc_info=True)
             try:
                 app_core.cleanup()
             except Exception:
                 logging.debug("_startup_watchdog: suppressed exception", exc_info=True)
+            # Last resort: cleanup() may have flushed nothing new, but a setting
+            # written during shutdown must not die with the process.
+            try:
+                app_core.settings.sync_flush_now()
+            except Exception:
+                logging.debug("_startup_watchdog: final settings flush failed", exc_info=True)
             os._exit(3)
         except Exception as e:
             logging.error(f"[startup] watchdog real restart failed: {e}")
