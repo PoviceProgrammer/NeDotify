@@ -7,7 +7,7 @@ import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlayli
 import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js';
 import { initParticles } from './particles.js';
 import { initVisualizer } from './visualizer.js';
-import { initEvents } from './events.js';
+import { initEvents, addPythonEventHandler } from './events.js';
 import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota, showToast, initBatchActionBar } from './utils.js';
 import { initLyrics } from './lyrics.js';
 import { initEqualizer } from './equalizer.js';
@@ -516,12 +516,13 @@ async function init() {
                 }
             }
 
-            const _origOnPythonEvent = window.onPythonEvent;
-            window.onPythonEvent = function(eventName, data) {
-                if (_origOnPythonEvent) _origOnPythonEvent(eventName, data);
+            // P1-8: subscribe instead of decorating window.onPythonEvent. The registry in
+            // events.js lives for the whole page lifetime, so these two run whether
+            // or not initEvents() has already been reached.
+            addPythonEventHandler((eventName, data) => {
                 _lyricsTrackSync(eventName, data);
                 _handleNetworkEvent(eventName, data);
-            };
+            });
         } catch (err) {
             console.error('Lyrics sync setup failed:', err);
         }
@@ -707,13 +708,11 @@ function setupProfileAndGreeting() {
     setInterval(updateGreeting, 5 * 60 * 1000);
 
     // Override the greeting when smart_home_ready replaces it
-    const origHomeReady = window.onPythonEvent;
-    window.onPythonEvent = function(eventName, data) {
-        if (origHomeReady) origHomeReady(eventName, data);
+    addPythonEventHandler((eventName) => {
         if (eventName === 'smart_home_ready' || eventName === 'authentic_home_ready') {
             updateGreeting(); // force it to our dynamic one instead of what backend says
         }
-    };
+    });
 
     // 2. Setup Profile UI
     const nicknameInput = document.getElementById('profile-name-input');

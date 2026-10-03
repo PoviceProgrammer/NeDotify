@@ -16,103 +16,9 @@ const covers = [
     'https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=300'  // Headphones
 ];
 
-// ─── Massive Predefined Mock Database (strictly YouTube & SoundCloud) ───
+// ─── Artist Track Fetching (real bridge only) ───
 
 let profileGenerationId = 0;
-
-const STATIC_TRACKS_PHARAOH = [
-    { id: "g0XKrUoI5XA", title: "Дико, например", artist: "PHARAOH", playCount: "16 млн", year: 2017 },
-    { id: "B4HYSzp6d_Q", title: "5 минут назад", artist: "PHARAOH", playCount: "31 млн", year: 2016 },
-    { id: "mJTC4eu_Stw", title: "Black Siemens", artist: "PHARAOH", playCount: "10 млн", year: 2015 },
-    { id: "UyIv7q8JSZE", title: "Лаллипап", artist: "PHARAOH", playCount: "24 млн", year: 2017 },
-    { id: "_mFzdPFEbZE", title: "Фруктовый", artist: "PHARAOH", playCount: "5 млн", year: 2017 },
-    { id: "YeGTEtdhHd0", title: "ИДОЛ", artist: "PHARAOH", playCount: "18 млн", year: 2017 },
-    { id: "l_nK8tsNMvY", title: "Black Siemens (Remix)", artist: "PHARAOH", playCount: "1.5 млн", year: 2017 },
-    { id: "X6-0P5N8C1I", title: "Champagne Squirt", artist: "PHARAOH", playCount: "33 млн", year: 2015 },
-    { id: "c5i3Y4K0yT8", title: "На луне", artist: "PHARAOH", playCount: "38 млн", year: 2017 },
-    { id: "K9s-n8zP2wA", title: "Одним целым", artist: "PHARAOH", playCount: "25 млн", year: 2020 },
-    { id: "p0Z-8jK9uL1", title: "Smart", artist: "PHARAOH", playCount: "25 млн", year: 2018 }
-];
-
-const STATIC_TRACKS_LANA = [
-    { id: "TdrL3QxjyVw", title: "Summertime Sadness", artist: "Lana Del Rey", playCount: "900 млн", year: 2012 },
-    { id: "cE6wxDqdOV0", title: "Video Games", artist: "Lana Del Rey", playCount: "350 млн", year: 2012 },
-    { id: "Bag1gUcwU0g", title: "Born To Die", artist: "Lana Del Rey", playCount: "550 млн", year: 2012 },
-    { id: "o_1aF54DO60", title: "Young and Beautiful", artist: "Lana Del Rey", playCount: "650 млн", year: 2013 },
-    { id: "1", title: "Blue Jeans", artist: "Lana Del Rey", playCount: "200 млн", year: 2012 },
-    { id: "2", title: "West Coast", artist: "Lana Del Rey", playCount: "150 млн", year: 2014 },
-    { id: "3", title: "Cinnamon Girl", artist: "Lana Del Rey", playCount: "100 млн", year: 2019 },
-    { id: "4", title: "Brooklyn Baby", artist: "Lana Del Rey", playCount: "120 млн", year: 2014 }
-];
-
-const STATIC_TRACKS_WEEKND = [
-    { id: "4NRXx6U8ABQ", title: "Blinding Lights", artist: "The Weeknd", playCount: "3.9 млрд", year: 2020 },
-    { id: "34Na4j8HLjc", title: "Starboy", artist: "The Weeknd", playCount: "2.5 млрд", year: 2016 },
-    { id: "yzTuBuRdAyA", title: "The Hills", artist: "The Weeknd", playCount: "2.2 млрд", year: 2015 },
-    { id: "1", title: "Save Your Tears", artist: "The Weeknd", playCount: "1.5 млрд", year: 2020 },
-    { id: "2", title: "Die For You", artist: "The Weeknd", playCount: "1.2 млрд", year: 2016 },
-    { id: "3", title: "Can't Feel My Face", artist: "The Weeknd", playCount: "1.4 млрд", year: 2015 },
-    { id: "4", title: "Call Out My Name", artist: "The Weeknd", playCount: "1 млрд", year: 2018 },
-    { id: "5", title: "Often", artist: "The Weeknd", playCount: "800 млн", year: 2015 }
-];
-
-function mapStaticTracks(staticArray, albumName) {
-    return staticArray.map((t, index) => {
-        const ytId = t.id && t.id.length > 5 ? t.id : '';
-        const realCover = ytId ? `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg` : null;
-        return {
-            id: t.id ? `ytsearch1: ${t.artist} - ${t.title}` : `track_${t.artist.replace(/\s+/g, '')}_${index}`,
-            title: t.title,
-            artist: t.artist,
-            album: albumName,
-            duration: 180000, 
-            release_date: `${t.year}-01-01`,
-            is_favorite: false,
-            source: "youtube",
-            source_id: `ytsearch1: ${t.artist} - ${t.title}`,
-            playCount: t.playCount,
-            cover_url: realCover,
-            is_search_query: true
-        };
-    });
-}
-
-// TODO: Replace this mock data with backend API calls once the backend implements artist profiles
-const MOCK_ARTISTS = {
-    'pharaoh': {
-        name: 'PHARAOH',
-        genres: 'Исполнитель',
-        avatarUrl: 'https://i.ytimg.com/vi/g0XKrUoI5XA/maxresdefault.jpg',
-        bio: 'PHARAOH (Глеб Геннадьевич Голубин, род. 11 августа 1996, Москва) — российский рэп-исполнитель и продюсер. Бывший участник коллектива Grindhouse и лидер Dead Dynasty.',
-        albums: [
-            { title: 'Pink Phloyd', year: 2017, cover: 'https://i.ytimg.com/vi/g0XKrUoI5XA/hqdefault.jpg' },
-            { title: 'Phlora', year: 2014, cover: 'https://i.ytimg.com/vi/mJTC4eu_Stw/hqdefault.jpg' }
-        ],
-        tracks: mapStaticTracks(STATIC_TRACKS_PHARAOH, 'Pink Phloyd')
-    },
-    'lana del rey': {
-        name: 'Lana Del Rey',
-        genres: 'Baroque Pop / Dream Pop',
-        avatarUrl: 'https://i.ytimg.com/vi/TdrL3QxjyVw/hqdefault.jpg',
-        bio: 'Lana Del Rey (Элизабет Вулридж Грант) — американская певица, автор песен и поэтесса. Её музыка известна своим меланхоличным звучанием.',
-        albums: [
-            { title: 'Born to Die', year: 2012, cover: 'https://i.ytimg.com/vi/TdrL3QxjyVw/hqdefault.jpg' }
-        ],
-        tracks: mapStaticTracks(STATIC_TRACKS_LANA, 'Born to Die')
-    },
-    'the weeknd': {
-        name: 'The Weeknd',
-        genres: 'R&B / Synthwave / Pop',
-        avatarUrl: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg',
-        bio: 'The Weeknd (Эйбел Макконен Тесфайе) — канадский певец, автор песен и продюсер. Известен своим темным R&B стилем.',
-        albums: [
-            { title: 'Starboy', year: 2016, cover: 'https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg' }
-        ],
-        tracks: mapStaticTracks(STATIC_TRACKS_WEEKND, 'Starboy')
-    }
-};
-
-MOCK_ARTISTS['pharaon'] = MOCK_ARTISTS['pharaoh'];
 
 function generateFallbackArtist(name) {
     return {
@@ -193,9 +99,9 @@ export async function fetchArtistTracks(artistName) {
                     }
                     resolve(uniqueTracks);
                 } else {
-                    const queryKey = artistName.toLowerCase().trim();
-                    let artistData = MOCK_ARTISTS[queryKey] ? JSON.parse(JSON.stringify(MOCK_ARTISTS[queryKey])) : generateFallbackArtist(artistName);
-                    resolve(artistData.tracks || []);
+                    // H-4: the backend found nothing — render an empty track list
+                    // instead of a hardcoded catalogue that looked like real data.
+                    resolve([]);
                 }
             };
 
@@ -228,11 +134,8 @@ export async function fetchArtistTracks(artistName) {
         });
     }
 
-    return new Promise((resolve) => {
-        const queryKey = artistName.toLowerCase().trim();
-        let artistData = MOCK_ARTISTS[queryKey] ? JSON.parse(JSON.stringify(MOCK_ARTISTS[queryKey])) : generateFallbackArtist(artistName);
-        resolve(artistData.tracks || []);
-    });
+    // No bridge (browser preview): there is no real catalogue to show.
+    return Promise.resolve([]);
 }
 
 // ─── Backend Bridge Artist Profile Fetcher ───
@@ -322,22 +225,55 @@ export async function fetchArtistProfileFromBridge(artistName, timeoutMs = 6000)
     });
 }
 
-// ─── API Avatar Fetcher (YouTube/SoundCloud logic simulation) ───
-export async function fetchArtistAvatarFromApi(artistName, source = 'youtube') {
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            const normalized = artistName.toLowerCase();
-            if (normalized.includes('pharaoh') || normalized.includes('pharaon')) {
-                resolve('https://i.ytimg.com/vi/g0XKrUoI5XA/hqdefault.jpg');
-            } else if (normalized.includes('del rey') || normalized.includes('lana')) {
-                resolve('https://i.ytimg.com/vi/TdrL3QxjyVw/hqdefault.jpg');
-            } else if (normalized.includes('weeknd')) {
-                resolve('https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg');
-            } else {
-                resolve('https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600&auto=format&fit=crop');
+// ─── Artist Avatar Fetcher (real bridge) ───
+// H-4: this used to map a few artist names to hardcoded YouTube thumbnails and
+// fall back to a stock concert photo, so profiles showed other people's faces.
+// It now asks the backend (core/api.py::get_artists_avatars, the same endpoint
+// home.js uses) and resolves null when there is nothing to show, which lets
+// ArtistPhotoComponent draw its silhouette placeholder.
+export async function fetchArtistAvatarFromApi(artistName, timeoutMs = 5000) {
+    const name = (artistName || '').trim();
+    if (!name || !window.pywebview?.api?.get_artists_avatars) {
+        return null;
+    }
+    const wanted = name.toLowerCase();
+
+    const url = await new Promise((resolve) => {
+        let done = false;
+        let timer = null;
+
+        const cleanup = () => {
+            window.removeEventListener('app:artists_avatars_ready', onAvatars);
+            if (timer) clearTimeout(timer);
+        };
+        const finish = (value) => {
+            if (done) return;
+            done = true;
+            cleanup();
+            resolve(value);
+        };
+        const onAvatars = (e) => {
+            const avatars = (e.detail && e.detail.avatars) || {};
+            for (const [key, value] of Object.entries(avatars)) {
+                if ((key || '').toLowerCase() === wanted) {
+                    finish(value || null);
+                    return;
+                }
             }
-        }, 300);
+        };
+
+        window.addEventListener('app:artists_avatars_ready', onAvatars);
+        timer = setTimeout(() => finish(null), timeoutMs);
+
+        try {
+            window.pywebview.api.get_artists_avatars([name]);
+        } catch (err) {
+            console.warn('Failed to call get_artists_avatars bridge:', err);
+            finish(null);
+        }
     });
+
+    return url || null;
 }
 
 // ─── Component 1: Artist Photo (Block 1) with Silhouette Fallback ───
@@ -350,16 +286,9 @@ export class ArtistPhotoComponent {
         const container = document.createElement('div');
         container.className = 'artist-photo-card';
         
-        const avatarUrl = this.artistData.avatarUrl || 'https://i.ytimg.com/vi/g0XKrUoI5XA/hqdefault.jpg';
-        const img = document.createElement('img');
-        img.src = avatarUrl;
-        img.alt = this.artistData.name;
-        img.style.width = '100%';
-        img.style.height = '100%';
-        img.style.objectFit = 'cover';
-        
-        img.onerror = () => {
-            img.style.display = 'none';
+        // H-4: no hardcoded default photo any more — without a real avatar the
+        // silhouette placeholder is drawn straight away.
+        const showSilhouette = () => {
             const silhouette = document.createElement('div');
             silhouette.className = 'fallback-silhouette';
             silhouette.style.cssText = 'position:absolute;inset:0;background:linear-gradient(135deg,#2a1b4e,#0f0c1b);display:flex;align-items:center;justify-content:center;';
@@ -369,19 +298,30 @@ export class ArtistPhotoComponent {
                 </svg>`;
             container.appendChild(silhouette);
         };
-        
-        container.appendChild(img);
-        
+
+        const avatarUrl = this.artistData.avatarUrl;
+        if (avatarUrl) {
+            const img = document.createElement('img');
+            img.src = avatarUrl;
+            img.alt = this.artistData.name;
+            img.style.width = '100%';
+            img.style.height = '100%';
+            img.style.objectFit = 'cover';
+            img.onerror = () => {
+                img.style.display = 'none';
+                showSilhouette();
+            };
+            container.appendChild(img);
+        } else {
+            showSilhouette();
+        }
+
         const overlay = document.createElement('div');
         overlay.className = 'artist-photo-overlay';
-        const isMock = this.artistData.isMock !== false;
-        const isDebug = window.APP_DEBUG || document.body.classList.contains('debug');
-        const mockBadge = (isMock && isDebug) ? `<span style="background:rgba(239, 68, 68, 0.8);color:white;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:6px;vertical-align:middle;text-transform:uppercase;letter-spacing:1px;font-weight:bold;" title="Данные артиста пока загружены из заглушки">MOCK (DEV)</span>` : '';
-        
+
         overlay.innerHTML = `
             <div style="display:flex;align-items:center;">
                 <span class="artist-genres-badge">${escapeHtml(this.artistData.genres)}</span>
-                ${mockBadge}
             </div>
             <h2 class="artist-name-title">${escapeHtml(this.artistData.name)}</h2>
             <div class="artist-hero-actions" style="margin-top:12px; display:flex; align-items:center; gap:10px; pointer-events:auto;">
@@ -824,7 +764,6 @@ export async function loadArtistProfile(artistName, targetContainer) {
     rightCol.appendChild(ArtistTracksComponent.renderSkeleton());
     renderIcons();
 
-    const queryKey = artistName.toLowerCase().trim();
     let artistData = null;
 
     try {
@@ -841,13 +780,12 @@ export async function loadArtistProfile(artistName, targetContainer) {
                 bio_ru: bridgeProfile.bio_ru || bridgeProfile.bio || null,
                 bio_original: bridgeProfile.bio_original || bridgeProfile.bio_en || null,
                 albums: bridgeProfile.albums || [],
-                tracks: bridgeProfile.tracks || [],
-                isMock: false
+                tracks: bridgeProfile.tracks || []
             };
 
             // If backend didn't provide avatar or tracks, fallback gracefully
             if (!artistData.avatarUrl) {
-                artistData.avatarUrl = await fetchArtistAvatarFromApi(artistData.name, 'youtube');
+                artistData.avatarUrl = await fetchArtistAvatarFromApi(artistData.name);
             }
             if (currentGen !== profileGenerationId) return;
 
@@ -856,12 +794,12 @@ export async function loadArtistProfile(artistName, targetContainer) {
             }
             if (currentGen !== profileGenerationId) return;
         } else {
-            // Step 2: Fallback to mock data or generated artist if bridge call returns empty/fails
-            const fallback = MOCK_ARTISTS[queryKey] ? JSON.parse(JSON.stringify(MOCK_ARTISTS[queryKey])) : generateFallbackArtist(artistName);
-            fallback.isMock = true;
+            // Step 2: the bridge has no profile for this artist — render an empty
+            // shell with whatever the search index can still supply (H-4: no mock DB).
+            const fallback = generateFallbackArtist(artistName);
 
             const [resolvedAvatar, tracks] = await Promise.all([
-                fetchArtistAvatarFromApi(fallback.name, 'youtube'),
+                fetchArtistAvatarFromApi(fallback.name),
                 fetchArtistTracks(fallback.name)
             ]);
             if (currentGen !== profileGenerationId) return;
