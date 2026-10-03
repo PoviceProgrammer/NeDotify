@@ -376,6 +376,28 @@ class SettingsManager:
             self._dirty.add((category, key))
         self._wake_writer()
 
+    def sync_flush_now(self) -> bool:
+        """Force every pending setting to the database, right now.
+
+        For hard-exit paths: os._exit() skips atexit handlers, and the writer
+        thread sits in a sleep before its own flush, so up to
+        FLUSH_INTERVAL_SECONDS of user changes would be lost. Call this
+        immediately before tearing the database down.
+
+        Returns True when the pending set was empty or was written in full;
+        False means some keys are still pending (the write failed, and the
+        keys were put back for the next flush).
+        """
+        try:
+            self.flush()
+        except Exception as e:
+            # flush() already restores the pending keys on a failed batch, but a
+            # teardown caller must never see this raise: the process is about to
+            # exit either way and losing the log line would hide the cause.
+            logger.error("sync_flush_now: settings flush raised: %s", e, exc_info=True)
+            return False
+        return not self._dirty
+
     def flush(self) -> None:
         """Persist every pending setting to the database right now.
 

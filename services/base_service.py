@@ -127,37 +127,68 @@ class BaseMusicService:
                 if time.time() - entry['ts'] > cls._STREAM_CACHE_TTL:
                     cls._stream_cache.pop(key, None)
                     return None
+                # Hit: re-insert with the ORIGINAL timestamp, so the entry
+                # becomes most-recently-used for eviction purposes only and the
+                # TTL is not extended by reading.
+                cls._cache_recent(cls._stream_cache, key, cls._MAX_CACHE_SIZE)
+                cls._stream_cache[key] = entry
                 return entry['data']
             return entry
 
     @classmethod
     def set_to_cache(cls, key: str, data: dict) -> None:
-        """Save an item to the stream cache with a TTL stamp, size-capped."""
+        """Save an item to the stream cache with a TTL stamp, size-capped (LRU)."""
         with cls._cache_lock:
-            if len(cls._stream_cache) >= cls._MAX_CACHE_SIZE and key not in cls._stream_cache:
-                oldest_key = next(iter(cls._stream_cache))
-                cls._stream_cache.pop(oldest_key, None)
+            cls._cache_recent(cls._stream_cache, key, cls._MAX_CACHE_SIZE)
             cls._stream_cache[key] = {'data': data, 'ts': time.time()}
+
+    @staticmethod
+    def _cache_recent(cache: Dict[str, Any], key: str, max_size: int) -> None:
+        """Prepare `cache` for `key = ...`, keeping insertion order == LRU order.
+
+        Dicts keep insertion order, and re-assigning an existing key leaves its
+        position untouched. So before every write the key must be dropped: on a
+        write that is what makes it most-recently-used, and on a hit (where the
+        stored timestamp must be preserved) the caller re-inserts it right
+        after. Without this the "oldest entry" was really the first-inserted
+        one -- FIFO -- so a key that had just been served from the cache was the
+        next to be evicted.
+
+        Keeping plain dicts (rather than OrderedDict) matters:
+        services/yandex_service.py::reset_client iterates these caches directly.
+        Must be called under _cache_lock.
+        """
+        cache.pop(key, None)
+        if len(cache) >= max_size:
+            cache.pop(next(iter(cache)), None)
 
     @classmethod
     def get_search_cache(cls, key: str) -> Optional[Any]:
-        """Retrieve an item from the search cache if it has not expired."""
+        """Retrieve an item from the search cache if it has not expired.
+
+        Symmetric with get_from_cache(): raw values placed directly into
+        _search_cache (tests, external code) are returned as-is instead of
+        raising KeyError on the missing 'ts'/'data' wrapper.
+        """
         with cls._cache_lock:
             entry = cls._search_cache.get(key)
             if entry is None:
                 return None
-            if time.time() - entry['ts'] > cls._SEARCH_CACHE_TTL:
-                cls._search_cache.pop(key, None)
-                return None
-            return entry['data']
+            if isinstance(entry, dict) and 'data' in entry and 'ts' in entry:
+                if time.time() - entry['ts'] > cls._SEARCH_CACHE_TTL:
+                    cls._search_cache.pop(key, None)
+                    return None
+                # Hit: re-insert with the ORIGINAL timestamp (recency only, TTL untouched).
+                cls._cache_recent(cls._search_cache, key, cls._SEARCH_CACHE_MAX_SIZE)
+                cls._search_cache[key] = entry
+                return entry['data']
+            return entry
 
     @classmethod
     def set_search_cache(cls, key: str, data: Any) -> None:
-        """Save an item to the search cache together with a timestamp (oldest entry evicted past the cap)."""
+        """Save an item to the search cache together with a timestamp (LRU eviction)."""
         with cls._cache_lock:
-            if len(cls._search_cache) >= cls._SEARCH_CACHE_MAX_SIZE and key not in cls._search_cache:
-                oldest_key = next(iter(cls._search_cache))
-                cls._search_cache.pop(oldest_key, None)
+            cls._cache_recent(cls._search_cache, key, cls._SEARCH_CACHE_MAX_SIZE)
             cls._search_cache[key] = {'data': data, 'ts': time.time()}
 
     @classmethod
