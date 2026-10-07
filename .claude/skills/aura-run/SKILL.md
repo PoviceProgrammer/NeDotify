@@ -10,7 +10,7 @@ description: Launch the AURA Music (NeDotify) desktop app to verify a change in 
 Always use the project venv interpreter — the system Python lacks pywebview/yt-dlp:
 
 ```powershell
-& ".venv\Scripts\python.exe" main.py
+& ".venv_win\Scripts\python.exe" main.py
 ```
 
 The app is a **blocking GUI process** (pywebview + WebView2). Run it with
@@ -38,11 +38,11 @@ behaviour, not a duplicate launch.
 
 | What | Where |
 |---|---|
-| Runtime logs | `~/.nedotify/logs/` |
+| Runtime logs | `~/.nedotify/logs/app.log` (rotating 2 MB × 3) |
 | Perf events | `~/.nedotify/logs/perf.jsonl` |
-| Database | `aura.db` (SQLite, WAL mode) |
-| Stream cache | `.cache/streams/` |
-| Downloads | `.cache/downloads/` |
+| Database | `~/.nedotify/nedotify_storage.db` (SQLite, WAL mode) |
+| Stream cache | `~/.nedotify/streams/` |
+| Downloads | `~/.nedotify/downloads/` |
 
 ## Shutdown
 
@@ -54,5 +54,6 @@ keeps the audio proxy port busy:
 Get-Process python, msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force
 ```
 
-Killing a stray process tree is fine; do not delete `aura.db` or `.cache/`
-to "get a clean state" without asking — that discards the user's library.
+Killing a stray process tree is fine; do not delete `~/.nedotify/` to "get a
+clean state" without asking — that discards the user's library, its SQLite
+database included.

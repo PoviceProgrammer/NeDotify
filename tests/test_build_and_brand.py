@@ -175,6 +175,7 @@ def test_gui_installer_pipeline_is_deleted(name):
     [
         "README.md",
         "CLAUDE.md",
+        "AGENTS.md",
         os.path.join(".claude", "skills", "aura-build", "SKILL.md"),
     ],
 )
@@ -182,8 +183,13 @@ def test_no_doc_points_at_a_deleted_installer_script(doc):
     """A doc that still tells the reader to run build_installer.py is a
     dead link: following it fails with 'not recognized as a cmdlet'.
 
-    AGENTS.md is deliberately NOT covered: it is out of this task's file
-    ownership and still documents the old pipeline (see the audit report).
+    Excluded by design: STATUS.md, docs/AUDIT.md and CODING_STANDARDS.md.
+    Those name the dead scripts deliberately, as a record of what was removed
+    and why. STATUS.md still lists them at one point and corrects itself
+    further down; CODING_STANDARDS.md carries the retired-folklore table.
+    A doc that reports a deletion is the opposite of the failure this gate
+    catches - a substring check cannot tell the two apart, so these stay out
+    and are excluded on purpose rather than by accident.
     """
     path = os.path.join(PROJECT_ROOT, doc)
     if not os.path.exists(path):
@@ -191,21 +197,6 @@ def test_no_doc_points_at_a_deleted_installer_script(doc):
     text = open(path, encoding="utf-8").read()
     stale = [name for name in DEAD_INSTALLER_SCRIPTS if name in text]
     assert not stale, f"{doc} still references the deleted {stale}"
-
-
-def test_agents_md_known_stale_installer_reference():
-    """Not an assertion about AGENTS.md being correct - it records the known
-    gap so the deletion cannot be silently forgotten. Flipped to a plain
-    assert once AGENTS.md is updated."""
-    path = os.path.join(PROJECT_ROOT, "AGENTS.md")
-    if not os.path.exists(path):
-        pytest.skip("AGENTS.md not present")
-    stale = [n for n in DEAD_INSTALLER_SCRIPTS if n in _read(path)]
-    assert stale, (
-        "AGENTS.md no longer mentions the deleted scripts - the known stale "
-        "reference has been fixed; delete this test and fold AGENTS.md into "
-        "test_no_doc_points_at_a_deleted_installer_script"
-    )
 
 
 # --- README must describe the build that actually exists --------------------
@@ -252,6 +243,12 @@ BRANDED_FILES = {
     "services/recommendation_service.py": "generated-playlist artist fallback",
     os.path.join("ui", "web_new_v2", "js", "search.js"): "playlist author fallback",
     os.path.join("ui", "web_new_v2", "index.html"): "onboarding / autostart / icon-pack labels",
+    # The Discord presence had two different app names in one payload - "AURA
+    # Music Player" while playing and "NeDotify Player" while paused - because
+    # this file was never listed here. `aura_logo` stays: that is the Discord-side
+    # asset key pinned by PERSISTENT_KEYS below, and it is not a user-visible
+    # string, so it does not trip this sweep.
+    os.path.join("core", "services", "discord_rpc.py"): "Discord Rich Presence large_text",
 }
 
 

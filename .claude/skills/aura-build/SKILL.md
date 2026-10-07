@@ -19,11 +19,11 @@ because it produced three byte-identical setup exes and an uninstaller that
 competed with Inno Setup's.
 
 A full build is slow and rewrites `build/` and `dist/`. For a spec-only
-iteration: `& ".venv\Scripts\python.exe" -m PyInstaller --clean setup_pyinstaller.spec`.
+iteration: `& ".venv_win\Scripts\python.exe" -m PyInstaller --clean setup_pyinstaller.spec`.
 
 ## Frozen-mode rules
 
-- Resolve every static asset (icons, `ui/web_new/**`, templates) through
+- Resolve every static asset (icons, `ui/web_new_v2/**`, templates) through
   `sys._MEIPASS` when frozen and `os.path.dirname(__file__)` in source mode.
   A path that works in `python main.py` and breaks in the exe is the single
   most common packaging regression here.
