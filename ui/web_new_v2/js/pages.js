@@ -12,12 +12,83 @@ const pageTitles = {
 
 let currentBasePage = 'home';
 
+const SIDEBAR_COLLAPSED_KEY = 'nedotify_sidebar_collapsed';
+
+/**
+ * Collapse the nav rail to icons only, or expand it back.
+ *
+ * The title in the rail head is the toggle: clicking "NeDotify" collapses to
+ * icons, and in the collapsed state the title is the initial "N", so clicking
+ * that expands again. The nav items are untouched throughout - they stay
+ * clickable while collapsed, which is the whole point of the rail.
+ *
+ * @param {boolean} [collapsed] Force a state; omit to toggle.
+ * @returns {boolean} the resulting collapsed state.
+ */
+export function setSidebarCollapsed(collapsed) {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return false;
+
+    const next = typeof collapsed === 'boolean'
+        ? collapsed
+        : !sidebar.classList.contains('is-collapsed');
+
+    sidebar.classList.toggle('is-collapsed', next);
+
+    const logo = document.getElementById('sidebar-logo');
+    if (logo) {
+        // The tooltip has to describe the action the click will perform, not the
+        // current state, and it is the only affordance left once collapsed.
+        logo.title = next ? 'Развернуть панель разделов' : 'Свернуть панель разделов';
+        logo.setAttribute('aria-expanded', String(!next));
+    }
+
+    try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, JSON.stringify(next));
+    } catch (e) { /* private mode / quota - the rail still works for this session */ }
+
+    return next;
+}
+
+export function isSidebarCollapsed() {
+    const sidebar = document.getElementById('sidebar');
+    return !!sidebar && sidebar.classList.contains('is-collapsed');
+}
+
+function initSidebarCollapse() {
+    const logo = document.getElementById('sidebar-logo');
+    if (!logo) return;
+
+    // Restore before paint of the first frame so the rail does not visibly jump
+    // from expanded to collapsed on launch.
+    let stored = null;
+    try {
+        stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    } catch (e) { /* ignore */ }
+    if (stored !== null) {
+        setSidebarCollapsed(JSON.parse(stored) === true);
+    } else {
+        setSidebarCollapsed(false);
+    }
+
+    logo.addEventListener('click', () => setSidebarCollapsed());
+    // Keyboard parity for the role="button" the markup declares.
+    logo.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setSidebarCollapsed();
+        }
+    });
+}
+
 export function initPages() {
     document.querySelectorAll('.nav-item[data-page]').forEach(item => {
         item.addEventListener('click', () => {
             showPage(item.dataset.page);
         });
     });
+
+    initSidebarCollapse();
 
     const settingsView = document.getElementById('view-settings');
     if (settingsView) {
@@ -117,6 +188,8 @@ export function closeSettings() {
 // Global accessors
 window.showPage = showPage;
 window.closeSettings = closeSettings;
+window.setSidebarCollapsed = setSidebarCollapsed;
+window.isSidebarCollapsed = isSidebarCollapsed;
 
 
 

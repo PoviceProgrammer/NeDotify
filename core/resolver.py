@@ -17,7 +17,7 @@ from typing import Callable, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 _MEM_TTL = 3600.0        # in-memory URL lifetime (seconds)
-_MEM_MAX_SIZE = 1024     # in-memory cache cap; oldest entry (insertion order) is evicted on overflow
+_MEM_MAX_SIZE = 1024     # in-memory cache cap; least recently used entry is evicted on overflow
 _RESOLVE_TIMEOUT = 12.0  # max wait for a single-flight resolution
 _DB_MAX_AGE = 14400      # DB stream_cache max age (seconds) — googlevideo URLs expire in ~6h
 
@@ -55,10 +55,18 @@ class StreamResolver:
         return (source, str(source_id))
 
     def _mem_set(self, key, value: Tuple[str, float]) -> None:
-        """Insert into the in-memory cache, evicting the oldest entry past the cap (dicts keep insertion order)."""
-        if len(self._mem) >= _MEM_MAX_SIZE and key not in self._mem:
-            oldest_key = next(iter(self._mem))
-            self._mem.pop(oldest_key, None)
+        """Insert into the in-memory cache, evicting the least recently used entry past the cap.
+
+        Plain dicts preserve insertion order, so the re-insert below is what
+        makes this LRU rather than FIFO: assigning an existing key keeps its
+        original position, which would let a key that is being hit constantly
+        be evicted first. Caller must hold ``self._lock``.
+        """
+        # Drop first: on an overwrite this makes the key most-recently-used, and
+        # on a fresh insert it stops it from counting against the cap itself.
+        self._mem.pop(key, None)
+        if len(self._mem) >= _MEM_MAX_SIZE:
+            self._mem.pop(next(iter(self._mem)), None)
         self._mem[key] = value
 
     @staticmethod
@@ -83,6 +91,10 @@ class StreamResolver:
             if entry and now - entry[1] <= self._mem_ttl:
                 if not self._url_expired(entry[0]):
                     self._stats["mem_hits"] += 1
+                    # Re-insert under the original timestamp: a hit makes the
+                    # entry most-recently-used for eviction purposes only, it
+                    # must not extend the TTL lifetime.
+                    self._mem_set(key, entry)
                     return entry[0]
                 self._mem.pop(key, None)
 
@@ -95,7 +107,7 @@ class StreamResolver:
                         return None
                     with self._lock:
                         self._mem_set(key, (cached["stream_url"], now))
-                    self._stats["db_hits"] += 1
+                        self._stats["db_hits"] += 1
                     return cached["stream_url"]
             except Exception as e:
                 logger.debug(f"DB stream cache lookup failed: {e}")
@@ -121,12 +133,17 @@ class StreamResolver:
                 flight = _Flight()
                 self._inflight[key] = flight
                 owner = True
+                # Counted here, inside the same critical section that decides
+                # who owns the flight, so the counter can never disagree with
+                # the single-flight bookkeeping (and stats() reads it under the
+                # very same lock). Was incremented after releasing the lock,
+                # which is a read-modify-write on a shared dict.
+                self._stats["network_cascades"] += 1
             else:
                 self._stats["single_flight_waits"] += 1
 
         if owner:
             try:
-                self._stats["network_cascades"] += 1
                 url, error = resolver_fn()
                 flight.url = url
                 flight.error = error
@@ -152,14 +169,7 @@ class StreamResolver:
         """Overwrite cached URL (e.g. after a successful re-resolution/reconnect)."""
         if not stream_url:
             return
-        key = self._key(source, source_id)
-        with self._lock:
-            self._mem_set(key, (stream_url, time.time()))
-        if self._db is not None:
-            try:
-                self._db.cache_stream(source, str(source_id), stream_url)
-            except Exception as e:
-                logger.debug(f"Failed to cache refreshed stream URL: {e}")
+        self._persist(source, source_id, stream_url)
 
     def invalidate(self, source: str, source_id) -> None:
         """Drop a dead URL from memory and clear it in the DB (keeps downloaded-file rows)."""

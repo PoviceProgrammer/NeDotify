@@ -7,26 +7,30 @@
          injected script would be remote code execution. 'unsafe-inline' is required
          for style attributes used throughout the UI, but script-src stays locked to
          same-origin files, so no inline or remote script can execute. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: http://127.0.0.1:*; media-src 'self' blob: http://127.0.0.1:* https:; connect-src 'self' http://127.0.0.1:* https:; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: http://127.0.0.1:*; media-src 'self' blob: http://127.0.0.1:* https:; connect-src 'self' http://127.0.0.1:* https:; object-src 'none'; base-uri 'none'; form-action 'none'">
     <title>NeDotify</title>
-    <!-- Fonts: Sora (Headings) + DM Sans (Body) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link id="gfonts-stylesheet" rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Sora:wght@600;700&display=swap" media="print" onload="this.media='all'">
-    <noscript>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Sora:wght@600;700&display=swap">
-    </noscript>
+    <!-- Fonts: Sora (Headings) + DM Sans (Body). Self-hosted WOFF2 cuts live in
+         assets/fonts/ and are declared by css/fonts.css, so no font CDN is
+         contacted at startup, which is why the CSP needs no font host. -->
+    <link rel="stylesheet" href="css/fonts.css?v=20261006_fonts">
     <script src="js/lucide.min.js"></script>
     <script src="js/hls.min.js" defer></script>
     <link rel="icon" type="image/png" href="logo.png">
     <link rel="stylesheet" href="css/tokens.css?v=20260827_blur">
-    <link rel="stylesheet" href="css/components/base.css?v=20260828_settings">
+    <link rel="stylesheet" href="css/components/base.css?v=20261005_rail4">
     <link rel="stylesheet" href="css/components/player-bar.css?v=20260828_queue4">
-    <link rel="stylesheet" href="css/components/player-view.css?v=20260827_blur">
+    <link rel="stylesheet" href="css/components/player-view.css?v=20261004_radius">
     <link rel="stylesheet" href="css/components/lyrics.css?v=20260827_blur">
     <link rel="stylesheet" href="css/components/home-view.css?v=20260827_blur">
     <link rel="stylesheet" href="css/components/track-table.css?v=20260827_blur">
     <link rel="stylesheet" href="css/themes.css?v=20260827_blur">
+    <!-- Must stay LAST: this is the polish/override layer. Its position here
+         mirrors the @import order in css/styles.css (tokens -> components ->
+         themes -> polish), and several of its rules deliberately override the
+         theme + component layers (e.g. the :focus-visible rings on
+         .nav-item / .track-item / .feed-card, which no other stylesheet
+         defines). Loading it earlier would let themes.css win over it. -->
+    <link rel="stylesheet" href="css/components/visual-polish.css?v=20261006_polish">
 </head>
 <body>
 
@@ -65,12 +69,12 @@
         <button id="btn-mini-player" title="Компактный мини-плеер" aria-label="Компактный мини-плеер"><i data-lucide="picture-in-picture-2" style="width:14px;height:14px"></i></button>
         <button id="btn-minimize" title="Свернуть" aria-label="Свернуть"><i data-lucide="minus" style="width:14px;height:14px"></i></button>
         <button id="btn-maximize" title="Развернуть" aria-label="Развернуть"><i data-lucide="square" style="width:12px;height:12px"></i></button>
-        <button id="btn-close" class="btn-close" title="Закрыть" aria-label="Close"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+        <button id="btn-close" class="btn-close" title="Закрыть" aria-label="Закрыть"><i data-lucide="x" style="width:14px;height:14px"></i></button>
     </div>
 </div>
 
 <!-- Toast Container -->
-<div id="toast-container"></div>
+<div id="toast-container" role="status" aria-live="polite"></div>
 
 <!-- Network Banner -->
 <div id="network-banner" class="network-banner hidden">
@@ -98,25 +102,25 @@
 
         <!-- Controls: Prev, Play/Pause, Next, Like, Minimize, Expand, Close -->
         <div class="mp-controls-row">
-            <button id="mp-btn-prev" class="btn-ctrl" title="Предыдущий" aria-label="Previous track">
+            <button id="mp-btn-prev" class="btn-ctrl" title="Предыдущий" aria-label="Предыдущий">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
             </button>
-            <button id="mp-btn-play" class="btn-ctrl btn-play-mini" title="Воспроизведение / Пауза" aria-label="Play or pause">
+            <button id="mp-btn-play" class="btn-ctrl btn-play-mini" title="Воспроизведение / Пауза" aria-label="Воспроизведение / Пауза">
                 <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
             </button>
-            <button id="mp-btn-next" class="btn-ctrl" title="Следующий" aria-label="Next">
+            <button id="mp-btn-next" class="btn-ctrl" title="Следующий" aria-label="Следующий">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
             </button>
-            <button id="mp-btn-like" class="icon-btn" title="В избранное" aria-label="Favorite">
+            <button id="mp-btn-like" class="icon-btn" title="В избранное" aria-label="В избранное">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>
             </button>
-            <button id="mp-btn-minimize" class="icon-btn" title="Свернуть в панель задач" aria-label="Minimize to mini player">
+            <button id="mp-btn-minimize" class="icon-btn" title="Свернуть в панель задач" aria-label="Свернуть в панель задач">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
-            <button id="mp-btn-expand" class="icon-btn" title="Развернуть окно плеера" aria-label="Restore full player">
+            <button id="mp-btn-expand" class="icon-btn" title="Развернуть окно плеера" aria-label="Развернуть окно плеера">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
             </button>
-            <button id="mp-btn-close" class="icon-btn btn-close" title="Закрыть приложение" aria-label="Close application">
+            <button id="mp-btn-close" class="icon-btn btn-close" title="Закрыть приложение" aria-label="Закрыть приложение">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
         </div>
@@ -125,7 +129,7 @@
     <!-- Duration Progress Bar -->
     <div class="mp-progress-row">
         <span id="mp-time-current" class="mp-time">0:00</span>
-        <div class="progress-track" id="mp-progress-track" role="slider" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+        <div class="progress-track" id="mp-progress-track" role="slider" aria-label="Позиция воспроизведения" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
             <div class="progress-fill" id="mp-progress-fill" style="transform: translateX(-100%)"></div>
         </div>
         <span id="mp-time-total" class="mp-time">0:00</span>
@@ -137,46 +141,61 @@
     
     <!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђ Sidebar в•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
     <aside id="sidebar">
-        <div class="sidebar-logo" style="display:flex; align-items:center; gap:10px;">
-            <img src="logo.png" style="width:28px;height:28px;border-radius:8px;object-fit:cover;">
-            NeDotify
+        <!-- Title doubles as the collapse/expand toggle. Both title variants live
+             in the DOM and CSS crossfades between them, so no JS textContent
+             swap can interrupt the animation. Keep .sidebar-logo-icon as a slot:
+             applyIconPack() in settings.js rewrites the icon and must not be
+             allowed to clobber the two .sidebar-logo-text siblings. -->
+        <!-- No inline `gap` here on purpose: an inline style outranks every CSS
+             rule, so a hard-coded gap silently defeated the collapsed state's
+             `gap: 0` and pushed the "N" off-centre. Width/gap/alignment for both
+             states live in base.css (.sidebar-logo / #sidebar.is-collapsed). -->
+        <div class="sidebar-logo" id="sidebar-logo" role="button" tabindex="0"
+             style="cursor:pointer;"
+             title="Свернуть панель разделов">
+            <span class="sidebar-logo-icon"><img src="logo.png" style="width:28px;height:28px;border-radius:8px;object-fit:cover;"></span>
+            <span class="sidebar-logo-text sidebar-logo-full">NeDotify</span>
+            <span class="sidebar-logo-text sidebar-logo-initial">N</span>
         </div>
 
         <span class="nav-section-label">Меню</span>
-        <div class="nav-item active" data-page="home">
+        <div class="nav-item active" data-page="home" title="Главная">
             <span class="nav-indicator"></span>
             <i data-lucide="home" style="width:18px;height:18px"></i>
-            Главная
+            <span class="nav-label">Главная</span>
         </div>
-        <div class="nav-item" data-page="search">
+        <div class="nav-item" data-page="search" title="Поиск">
             <span class="nav-indicator"></span>
             <i data-lucide="search" style="width:18px;height:18px"></i>
-            Поиск
+            <span class="nav-label">Поиск</span>
         </div>
-        <div class="nav-item" data-page="library">
+        <div class="nav-item" data-page="library" title="Библиотека">
             <span class="nav-indicator"></span>
             <i data-lucide="library" style="width:18px;height:18px"></i>
-            Библиотека
+            <span class="nav-label">Библиотека</span>
         </div>
-        <div class="nav-item" data-page="player">
+        <div class="nav-item" data-page="player" title="Плеер">
             <span class="nav-indicator"></span>
             <i data-lucide="disc-3" style="width:18px;height:18px"></i>
-            Плеер
+            <span class="nav-label">Плеер</span>
         </div>
+
+        <!-- The spacer lives above this group, not below it: as a flex child with
+             flex:1 it pushes Аккаунт & Опции to the very bottom of the rail while
+             Меню stays pinned under the title. -->
+        <div class="sidebar-spacer"></div>
 
         <span class="nav-section-label">Аккаунт & Опции</span>
-        <div class="nav-item" data-page="settings">
+        <div class="nav-item" data-page="settings" title="Настройки">
             <span class="nav-indicator"></span>
             <i data-lucide="settings" style="width:18px;height:18px"></i>
-            Настройки
+            <span class="nav-label">Настройки</span>
         </div>
-        <div class="nav-item" data-page="profile">
+        <div class="nav-item" data-page="profile" title="Профиль">
             <span class="nav-indicator"></span>
             <i data-lucide="user" style="width:18px;height:18px"></i>
-            Профиль
+            <span class="nav-label">Профиль</span>
         </div>
-
-        <div class="sidebar-spacer"></div>
     </aside>
 
     <!-- в•ђв•ђв•ђв•ђв•ђв•ђв•ђ Main Content в•ђв•ђв•ђв•ђв•ђв•ђв•ђ -->
@@ -322,12 +341,12 @@
                 <!-- Search capsule bar -->
                 <div class="search-capsule">
                     <i data-lucide="search" class="search-capsule-icon"></i>
-                    <input type="text" class="search-input" id="search-input" aria-label="Search" placeholder="Поиск..." autocomplete="off">
-                    <button class="search-clear" id="search-clear" title="Очистить"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+                    <input type="text" class="search-input" id="search-input" aria-label="Поиск" placeholder="Поиск..." autocomplete="off">
+                    <button class="search-clear" id="search-clear" title="Очистить" aria-label="Очистить"><i data-lucide="x" style="width:14px;height:14px"></i></button>
 
                     <!-- Platform Selector Dropdown -->
                     <div class="search-platform-wrapper">
-                        <button id="search-platform-btn" class="search-platform-btn" title="Источник поиска: Все площадки">
+                        <button id="search-platform-btn" class="search-platform-btn" title="Источник поиска: Все площадки" aria-label="Источник поиска">
                             <span id="search-platform-active-icon">
                                 <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#a855f7">
                                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
@@ -336,23 +355,23 @@
                         </button>
 
                         <div id="search-platform-dropdown" class="search-platform-dropdown hidden">
-                            <button class="platform-item active" data-source="all" title="Все площадки">
+                            <button class="platform-item active" data-source="all" title="Все площадки" aria-label="Источник поиска: все площадки">
                                 <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#a855f7">
                                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
                                 </svg>
                             </button>
-                            <button class="platform-item" data-source="youtube" title="YouTube Music">
+                            <button class="platform-item" data-source="youtube" title="YouTube Music" aria-label="Источник поиска: YouTube Music">
                                 <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20">
                                     <circle cx="12" cy="12" r="10" fill="#FF0000"/>
                                     <polygon points="9.5,7.5 16.5,12 9.5,16.5" fill="#FFFFFF"/>
                                 </svg>
                             </button>
-                            <button class="platform-item" data-source="soundcloud" title="SoundCloud">
+                            <button class="platform-item" data-source="soundcloud" title="SoundCloud" aria-label="Источник поиска: SoundCloud">
                                 <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#FF5500">
                                     <path d="M11.56 8.87c-.24 0-.47.02-.7.06A6.17 6.17 0 0 0 5 13.5c0 .17.01.34.03.51A4.24 4.24 0 0 0 1 18.25 4.25 4.25 0 0 0 5.25 22.5h13.5A5.25 5.25 0 0 0 24 17.25a5.24 5.24 0 0 0-4.05-5.11 6.17 6.17 0 0 0-8.39-3.27z"/>
                                 </svg>
                             </button>
-                            <button class="platform-item" data-source="spotify" title="Spotify">
+                            <button class="platform-item" data-source="spotify" title="Spotify" aria-label="Источник поиска: Spotify">
                                 <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#1DB954">
                                     <path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.02 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.48-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.3 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.18-1.2-.18-1.38-.72-.18-.6.18-1.2.72-1.38 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
                                 </svg>
@@ -420,13 +439,13 @@
                 <!-- Left Sidebar: Playlist Management -->
                 <div class="lib-left-sidebar">
                     <div class="lib-add-playlist-row">
-                        <button class="lib-add-btn" id="lib-btn-add-playlist" title=" ">
+                        <button class="lib-add-btn" id="lib-btn-add-playlist" title="Создать плейлист" aria-label="Создать плейлист">
                             <i data-lucide="plus" style="width:20px;height:20px"></i>
                         </button>
                     </div>
 
                     <div class="lib-input-group">
-                        <input type="text" id="lib-quick-pl-input" class="lib-sidebar-input" placeholder="Название плейлиста..." autocomplete="off">
+                        <input type="text" id="lib-quick-pl-input" class="lib-sidebar-input" aria-label="Название нового плейлиста" placeholder="Название плейлиста..." autocomplete="off">
                     </div>
 
                     <div class="lib-sidebar-actions">
@@ -475,13 +494,13 @@
                                             <div id="lib-batch-progress-bar" style="width:0%; height:100%; background:var(--primary); transition:width 0.2s ease;"></div>
                                         </div>
                                     </div>
-                                    <button id="lib-btn-batch-cancel" title="Отменить загрузку" class="icon-btn" style="width:24px;height:24px;color:#ef4444;background:transparent;border:none;cursor:pointer;"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+                                    <button id="lib-btn-batch-cancel" title="Отменить загрузку" aria-label="Отменить загрузку" class="icon-btn" style="width:24px;height:24px;color:#ef4444;background:transparent;border:none;cursor:pointer;"><i data-lucide="x" style="width:14px;height:14px"></i></button>
                                 </div>
                                 <button class="btn-ctrl" id="lib-btn-download-all" title="Скачать всё любимое для оффлайн прослушивания" style="display:none; padding:8px 14px; border-radius:10px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); font-size:12px; font-weight:600; color:#fff; gap:6px; align-items:center; cursor:pointer;">
                                     <i data-lucide="download-cloud" style="width:16px;height:16px"></i>
                                     <span>Скачать всё</span>
                                 </button>
-                                <button class="btn-play-large" id="lib-btn-play-all" title="Воспроизвести все" style="width:44px;height:44px">
+                                <button class="btn-play-large" id="lib-btn-play-all" title="Воспроизвести все" aria-label="Воспроизвести все" style="width:44px;height:44px">
                                     <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
                                 </button>
                             </div>
@@ -495,7 +514,7 @@
         <!-- в”Ђв”Ђв”Ђв”Ђв”Ђ PLAYLIST DETAILS PAGE в”Ђв”Ђв”Ђв”Ђв”Ђ -->
         <div id="view-playlist-details" class="view-page">
             <div style="display:flex; align-items:flex-end; gap:24px; margin-bottom: 24px;">
-                <button id="btn-back-library" class="icon-btn" style="position:absolute; top:24px; left:24px;"><i data-lucide="arrow-left" style="width:20px;height:20px"></i></button>
+                <button id="btn-back-library" class="icon-btn" aria-label="Назад в библиотеку" style="position:absolute; top:24px; left:24px;"><i data-lucide="arrow-left" style="width:20px;height:20px"></i></button>
                 <div style="width:160px; height:160px; border-radius:12px; background:var(--accent); display:flex; align-items:center; justify-content:center; box-shadow:0 8px 24px rgba(0,0,0,0.3)">
                     <i data-lucide="list-music" style="width:64px;height:64px;color:var(--text-sec)"></i>
                 </div>
@@ -504,7 +523,7 @@
                     <h1 class="page-title" id="pl-details-title" style="margin-bottom:8px; font-size:36px">Название</h1>
                     <div style="font-size:13px; color:var(--text-sec)" id="pl-details-count">0 треков</div>
                     <div style="margin-top:16px; display:flex; align-items:center; gap:12px;">
-                        <button class="btn-play-large" id="pl-btn-play" style="width:48px;height:48px" title="Воспроизвести"><i data-lucide="play" style="width:24px;height:24px;fill:currentColor"></i></button>
+                        <button class="btn-play-large" id="pl-btn-play" style="width:48px;height:48px" title="Воспроизвести" aria-label="Воспроизвести"><i data-lucide="play" style="width:24px;height:24px;fill:currentColor"></i></button>
                         <button class="filter-btn" id="pl-btn-export" style="padding:10px 18px; border-radius:24px; display:flex; align-items:center; gap:8px; cursor:pointer;" title="Экспорт в M3U8">
                             <i data-lucide="share" style="width:16px;height:16px"></i>
                             <span>Экспорт</span>
@@ -537,42 +556,48 @@
                     <!-- Progress Slider -->
                     <div class="pb-progress player-card-progress">
                         <span class="pb-time" id="pp-time-current">0:00</span>
-                        <div class="progress-track" id="pp-progress-track" role="slider" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" style="position: relative;">
+                        <div class="progress-track" id="pp-progress-track" role="slider" aria-label="Позиция воспроизведения" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" style="position: relative;">
                             <canvas id="pp-waveform-canvas" class="waveform-canvas hidden"></canvas>
                             <div class="progress-fill" id="pp-progress-fill" style="transform: translateX(-100%)"></div>
                         </div>
                         <span class="pb-time" id="pp-time-total">0:00</span>
                     </div>
 
-                    <!-- Mini Controls -->
+                    <!-- Mini Controls: two deliberate rows. Nine controls cannot fit the card's
+                     content width (~282px) on one line, so the old flat row
+                     silently wrapped its last button onto a second line. -->
                     <div class="player-full-controls player-card-controls">
-                        <button class="btn-ctrl" id="pp-btn-like" title="Лайк" aria-label="Like">
-                            <i data-lucide="heart" style="width:20px;height:20px"></i>
-                        </button>
-                        <button class="btn-ctrl" id="pp-btn-shuffle" title="Перемешать" aria-label="Shuffle">
-                            <i data-lucide="shuffle" style="width:20px;height:20px"></i>
-                        </button>
-                        <button class="btn-ctrl" id="pp-btn-repeat" title="Повтор" aria-label="Repeat">
-                            <i data-lucide="repeat" style="width:20px;height:20px"></i>
-                        </button>
-                        <button class="btn-ctrl active" id="pp-btn-flow" title="Бесконечная волна (Flow)" aria-label="Flow">
-                            <i data-lucide="radio" style="width:20px;height:20px"></i>
-                        </button>
-                        <button class="btn-ctrl" id="pp-btn-prev" title="Предыдущий" aria-label="Previous track">
-                            <i data-lucide="skip-back" style="width:20px;height:20px"></i>
-                        </button>
-                        <button class="btn-play-large" id="pp-btn-play" title="Воспроизведение" style="width:48px;height:48px;font-size:20px;" aria-label="Play or pause">
-                            <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
-                        </button>
-                        <button class="btn-ctrl" id="pp-btn-next" title="Следующий" aria-label="Next track">
-                            <i data-lucide="skip-forward" style="width:20px;height:20px"></i>
-                        </button>
-                        <button class="btn-ctrl" id="pp-btn-lyrics" title="Текст песни" aria-label="Lyrics">
-                            <i data-lucide="mic" style="width:20px;height:20px"></i>
-                        </button>
-                        <button class="btn-ctrl" id="pp-btn-queue" title="Очередь" aria-label="Queue">
-                            <i data-lucide="list-music" style="width:20px;height:20px"></i>
-                        </button>
+                        <div class="pcc-row pcc-row-secondary">
+                            <button class="btn-ctrl" id="pp-btn-like" title="Лайк" aria-label="Лайк">
+                                <i data-lucide="heart" style="width:20px;height:20px"></i>
+                            </button>
+                            <button class="btn-ctrl" id="pp-btn-shuffle" title="Перемешать" aria-label="Перемешать">
+                                <i data-lucide="shuffle" style="width:20px;height:20px"></i>
+                            </button>
+                            <button class="btn-ctrl" id="pp-btn-repeat" title="Повтор" aria-label="Повтор">
+                                <i data-lucide="repeat" style="width:20px;height:20px"></i>
+                            </button>
+                            <button class="btn-ctrl active" id="pp-btn-flow" title="Бесконечная волна (Flow)" aria-label="Бесконечная волна (Flow)">
+                                <i data-lucide="radio" style="width:20px;height:20px"></i>
+                            </button>
+                            <button class="btn-ctrl" id="pp-btn-lyrics" title="Текст песни" aria-label="Текст песни">
+                                <i data-lucide="mic" style="width:20px;height:20px"></i>
+                            </button>
+                            <button class="btn-ctrl" id="pp-btn-queue" title="Очередь" aria-label="Очередь">
+                                <i data-lucide="list-music" style="width:20px;height:20px"></i>
+                            </button>
+                        </div>
+                        <div class="pcc-row pcc-row-transport">
+                            <button class="btn-ctrl" id="pp-btn-prev" title="Предыдущий" aria-label="Предыдущий">
+                                <i data-lucide="skip-back" style="width:20px;height:20px"></i>
+                            </button>
+                            <button class="btn-play-large" id="pp-btn-play" title="Воспроизведение" style="width:48px;height:48px;font-size:20px;" aria-label="Воспроизведение">
+                                <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
+                            </button>
+                            <button class="btn-ctrl" id="pp-btn-next" title="Следующий" aria-label="Следующий">
+                                <i data-lucide="skip-forward" style="width:20px;height:20px"></i>
+                            </button>
+                        </div>
                     </div>
 
                 </div>
@@ -588,8 +613,8 @@
                             <button id="btn-lyrics-offset-plus-page" class="lyrics-offset-btn" title="Ускорить текст на 0.5s (вперёд)">+0.5s</button>
                         </div>
                     </div>
-                    <div class="player-lyrics-container" id="player-lyrics-scroll">
-                        <div class="player-lyrics-content" id="lyrics-content">
+                    <div class="player-lyrics-container lyrics-viewport" id="player-lyrics-scroll">
+                        <div class="player-lyrics-content lyrics-track" id="lyrics-content">
                             <div class="empty-state">Загрузка текста...</div>
                         </div>
                     </div>
@@ -600,7 +625,7 @@
         <!-- в”Ђв”Ђв”Ђв”Ђв”Ђ LYRICS OVERLAY в”Ђв”Ђв”Ђв”Ђв”Ђ -->
         <div id="lyrics-overlay" class="lyrics-overlay">
             <div class="lyrics-header">
-                <button id="btn-close-lyrics" class="icon-btn"><i data-lucide="chevron-down" style="width:24px;height:24px"></i></button>
+                <button id="btn-close-lyrics" class="icon-btn" aria-label="Закрыть текст песни"><i data-lucide="chevron-down" style="width:24px;height:24px"></i></button>
                 <div class="lyrics-title" id="lyrics-title">Текст песни</div>
                 <div class="lyrics-offset-controls" style="display:flex;align-items:center;gap:6px;margin-left:auto;margin-right:16px;">
                     <button id="btn-toggle-lyrics-translation" class="btn-sm text-xs" style="padding:4px 10px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Включить двуязычный режим (Перевод)">🌐 Перевод</button>
@@ -609,8 +634,8 @@
                     <button id="btn-lyrics-offset-plus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Ускорить текст на 0.5s (вперёд)">+0.5s</button>
                 </div>
             </div>
-            <div class="lyrics-scroll-container" id="lyrics-container">
-                <div class="lyrics-content" id="overlay-lyrics-content">
+            <div class="lyrics-scroll-container lyrics-viewport" id="lyrics-container">
+                <div class="lyrics-content lyrics-track" id="overlay-lyrics-content">
                     <div class="empty-state">Загрузка текста...</div>
                 </div>
             </div>
@@ -626,8 +651,8 @@
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 4px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="text" id="profile-name-input" class="profile-name" value="Пользователь NeDotify" style="background: transparent; border: none; color: white; font-family: inherit; font-size: inherit; font-weight: inherit; outline: none; border-bottom: 1px dashed rgba(255,255,255,0.3); width: 200px;" title="Нажмите, чтобы изменить имя" />
-                        <button id="btn-save-nickname" class="btn-ctrl" style="display:none;" title="Сохранить имя">
+                        <input type="text" id="profile-name-input" class="profile-name" aria-label="Имя профиля" value="Пользователь NeDotify" style="background: transparent; border: none; color: white; font-family: inherit; font-size: inherit; font-weight: inherit; outline: none; border-bottom: 1px dashed rgba(255,255,255,0.3); width: 200px;" title="Нажмите, чтобы изменить имя" />
+                        <button id="btn-save-nickname" class="btn-ctrl" style="display:none;" title="Сохранить имя" aria-label="Сохранить имя">
                             <i data-lucide="check" style="width:16px;height:16px;color:var(--primary)"></i>
                         </button>
                     </div>
@@ -683,7 +708,7 @@
                     <h1 class="page-title" style="margin-bottom:0">Настройки</h1>
                     <div class="settings-search-wrap">
                         <i data-lucide="search"></i>
-                        <input type="text" id="settings-search" class="settings-search-input" placeholder="Поиск настроек..." autocomplete="off">
+                        <input type="text" id="settings-search" class="settings-search-input" aria-label="Поиск настроек" placeholder="Поиск настроек..." autocomplete="off">
                     </div>
                 </div>
 
@@ -776,45 +801,45 @@
                             <!-- Custom Theme Creator -->
                             <div class="custom-theme-box">
                                 <div class="custom-theme-header">
-                                    <input type="text" id="input-custom-theme-name" class="text-input" placeholder="Моя тема" style="max-width:260px">
+                                    <input type="text" id="input-custom-theme-name" class="text-input" aria-label="Название своей темы" placeholder="Моя тема" style="max-width:260px">
                                     <div style="display:flex; gap:8px">
-                                        <button class="icon-btn" id="btn-random-theme" title="  " style="width:36px;height:36px"><i data-lucide="sparkles" style="width:16px;height:16px"></i></button>
-                                        <button class="icon-btn" id="btn-save-custom-theme" title=" " style="width:36px;height:36px"><i data-lucide="save" style="width:16px;height:16px"></i></button>
+                                        <button class="icon-btn" id="btn-random-theme" title="Случайные цвета" aria-label="Случайные цвета" style="width:36px;height:36px"><i data-lucide="sparkles" style="width:16px;height:16px"></i></button>
+                                        <button class="icon-btn" id="btn-save-custom-theme" title="Сохранить тему" aria-label="Сохранить тему" style="width:36px;height:36px"><i data-lucide="save" style="width:16px;height:16px"></i></button>
                                     </div>
                                 </div>
 
                                 <div class="custom-theme-colors-grid">
                                     <div class="custom-color-row">
                                         <span class="custom-color-label">Основной</span>
-                                        <input type="color" id="picker-color-primary" value="#3b82f6" class="color-picker-dot">
+                                        <input type="color" id="picker-color-primary" value="#3b82f6" class="color-picker-dot" aria-label="Основной цвет темы">
                                     </div>
                                     <div class="custom-color-row">
                                         <span class="custom-color-label">Акцентный</span>
-                                        <input type="color" id="picker-color-accent" value="#8b5cf6" class="color-picker-dot">
+                                        <input type="color" id="picker-color-accent" value="#8b5cf6" class="color-picker-dot" aria-label="Акцентный цвет темы">
                                     </div>
                                     <div class="custom-color-row">
                                         <span class="custom-color-label">Фон</span>
-                                        <input type="color" id="picker-color-bg" value="#0f172a" class="color-picker-dot">
+                                        <input type="color" id="picker-color-bg" value="#0f172a" class="color-picker-dot" aria-label="Цвет фона темы">
                                     </div>
                                     <div class="custom-color-row">
                                         <span class="custom-color-label">Текст</span>
-                                        <input type="color" id="picker-color-text" value="#ffffff" class="color-picker-dot">
+                                        <input type="color" id="picker-color-text" value="#ffffff" class="color-picker-dot" aria-label="Цвет текста темы">
                                     </div>
                                     <div class="custom-color-row">
                                         <span class="custom-color-label">Карточка</span>
-                                        <input type="color" id="picker-color-card" value="#1e293b" class="color-picker-dot">
+                                        <input type="color" id="picker-color-card" value="#1e293b" class="color-picker-dot" aria-label="Цвет карточки темы">
                                     </div>
                                     <div class="custom-color-row">
                                         <span class="custom-color-label">Граница</span>
-                                        <input type="color" id="picker-color-border" value="#334155" class="color-picker-dot">
+                                        <input type="color" id="picker-color-border" value="#334155" class="color-picker-dot" aria-label="Цвет границы темы">
                                     </div>
                                     <div class="custom-color-row">
                                         <span class="custom-color-label">Приглушенный</span>
-                                        <input type="color" id="picker-color-dim" value="#64748b" class="color-picker-dot">
+                                        <input type="color" id="picker-color-dim" value="#64748b" class="color-picker-dot" aria-label="Приглушенный цвет темы">
                                     </div>
                                     <div class="custom-color-row">
                                         <span class="custom-color-label">Фокус</span>
-                                        <input type="color" id="picker-color-focus" value="#f59e0b" class="color-picker-dot">
+                                        <input type="color" id="picker-color-focus" value="#f59e0b" class="color-picker-dot" aria-label="Цвет фокуса темы">
                                     </div>
                                 </div>
                             </div>
@@ -833,7 +858,7 @@
                                 <button class="font-cat-btn" data-cat="hand">Hand</button>
                                 <button class="font-cat-btn" data-cat="deco">Deco</button>
                                 <button class="font-cat-btn" data-cat="game">Game</button>
-                                <button class="icon-btn" id="btn-export-font" title="Экспорт" style="margin-left:auto;width:32px;height:32px"><i data-lucide="share" style="width:14px;height:14px"></i></button>
+                                <button class="icon-btn" id="btn-export-font" title="Экспорт" aria-label="Экспорт" style="margin-left:auto;width:32px;height:32px"><i data-lucide="share" style="width:14px;height:14px"></i></button>
                             </div>
 
                             <!-- Font Cards Grid -->
@@ -847,7 +872,7 @@
                                 </div>
                                 <div style="display:flex; align-items:center; gap:12px;">
                                     <span style="font-size:11px; color:var(--text-sec)">A</span>
-                                    <input type="range" id="slider-font-size" class="slider-input" min="12" max="22" value="16" style="flex:1">
+                                    <input type="range" id="slider-font-size" class="slider-input" min="12" max="22" value="16" aria-label="Размер шрифта интерфейса" style="flex:1">
                                     <span style="font-size:16px; font-weight:700; color:var(--text-sec)">A</span>
                                 </div>
                             </div>
@@ -859,14 +884,14 @@
                                     <div class="setting-label">Включить полупрозрачность</div>
                                     <div class="setting-sublabel">Делает фон приложения слегка прозрачным</div>
                                 </div>
-                                <button class="toggle-switch" id="toggle-transparency"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch" id="toggle-transparency" aria-label="Включить полупрозрачность"><div class="toggle-dot"></div></button>
                             </div>
                             <div class="setting-row">
                                 <div>
                                     <div class="setting-label">Уровень прозрачности: <span id="label-transparency-level">80%</span></div>
                                     <div class="setting-sublabel">Прозрачность фона (от 10% до 100%)</div>
                                 </div>
-                                <input type="range" class="slider-input" id="slider-transparency-level" min="10" max="100" value="80" style="width:140px">
+                                <input type="range" class="slider-input" id="slider-transparency-level" min="10" max="100" value="80" aria-label="Уровень прозрачности фона, в процентах" style="width:140px">
                             </div>
                         </div>
 
@@ -877,7 +902,7 @@
                                     <div class="setting-label">Размытие (Blur): <span id="label-glass-blur">20px</span></div>
                                     <div class="setting-sublabel">Сила матового размытия заднего плана</div>
                                 </div>
-                                <input type="range" class="slider-input" id="slider-glass-blur" min="0" max="40" value="20" style="width:140px">
+                                <input type="range" class="slider-input" id="slider-glass-blur" min="0" max="40" value="20" aria-label="Размытие заднего плана (Blur)" style="width:140px">
                             </div>
                         </div>
 
@@ -888,7 +913,7 @@
                                     <div class="setting-label">Discord Rich Presence (Игровой статус)</div>
                                     <div class="setting-sublabel">Отображать в вашем профиле Discord играющий трек, исполнителя и прогресс</div>
                                 </div>
-                                <button class="toggle-switch on" id="toggle-discord-rpc"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch on" id="toggle-discord-rpc" aria-label="Discord Rich Presence (Игровой статус)"><div class="toggle-dot"></div></button>
                             </div>
                         </div>
                     </div>
@@ -903,16 +928,16 @@
                                 <div class="setting-label">Выравнивание заголовка</div>
                                 <div class="setting-sublabel">Выберите выравнивание названия трека</div>
                                 <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
-                                    <div class="opt-card active" data-val="left" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px;">
-                                        <i data-lucide="align-left" style="width:20px;height:20px"></i>
+                                    <div class="opt-card active" data-val="left" style="padding:16px;">
+                                        <i data-lucide="align-left"></i>
                                         <span>Слева</span>
                                     </div>
-                                    <div class="opt-card" data-val="center" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px;">
-                                        <i data-lucide="align-center" style="width:20px;height:20px"></i>
+                                    <div class="opt-card" data-val="center" style="padding:16px;">
+                                        <i data-lucide="align-center"></i>
                                         <span>По центру</span>
                                     </div>
-                                    <div class="opt-card" data-val="right" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px;">
-                                        <i data-lucide="align-right" style="width:20px;height:20px"></i>
+                                    <div class="opt-card" data-val="right" style="padding:16px;">
+                                        <i data-lucide="align-right"></i>
                                         <span>Справа</span>
                                     </div>
                                 </div>
@@ -923,12 +948,12 @@
                                 <div class="setting-label">Стиль плеера</div>
                                 <div class="setting-sublabel">Выберите визуальный стиль плеера</div>
                                 <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
-                                    <div class="opt-card active" data-val="default" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px;">
-                                        <i data-lucide="layout-grid" style="width:20px;height:20px"></i>
+                                    <div class="opt-card active" data-val="default" style="padding:16px;">
+                                        <i data-lucide="layout-grid"></i>
                                         <span>Обычный</span>
                                     </div>
-                                    <div class="opt-card" data-val="vinyl" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px;">
-                                        <i data-lucide="disc" style="width:20px;height:20px"></i>
+                                    <div class="opt-card" data-val="vinyl" style="padding:16px;">
+                                        <i data-lucide="disc"></i>
                                         <span>Пластинка</span>
                                     </div>
                                     </div>
@@ -939,19 +964,19 @@
                                 <div class="setting-label">Тип слайдера</div>
                                 <div class="setting-sublabel">Выберите стиль слайдера прогресса</div>
                                 <div class="select-grid" style="grid-template-columns: repeat(4, 1fr); margin-top: 10px;">
-                                    <div class="opt-card active" data-val="default" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 10px;">
+                                    <div class="opt-card active" data-val="default" style="padding:14px 10px;">
                                         <i data-lucide="circle" style="width:18px;height:18px"></i>
                                         <span>Обычный</span>
                                     </div>
-                                    <div class="opt-card" data-val="thin" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 10px;">
+                                    <div class="opt-card" data-val="thin" style="padding:14px 10px;">
                                         <i data-lucide="minus" style="width:18px;height:18px"></i>
                                         <span>Тонкий</span>
                                     </div>
-                                    <div class="opt-card" data-val="ios" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 10px;">
+                                    <div class="opt-card" data-val="ios" style="padding:14px 10px;">
                                         <i data-lucide="toggle-right" style="width:18px;height:18px"></i>
                                         <span>iOS</span>
                                     </div>
-                                    <div class="opt-card" data-val="wave" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 10px;">
+                                    <div class="opt-card" data-val="wave" style="padding:14px 10px;">
                                         <i data-lucide="activity" style="width:18px;height:18px"></i>
                                         <span>Волновой</span>
                                     </div>
@@ -964,7 +989,7 @@
                                     <div class="setting-label">Показывать очередь</div>
                                     <div class="setting-sublabel">Отображать панель очереди</div>
                                 </div>
-                                <button class="toggle-switch on" id="toggle-show-queue"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch on" id="toggle-show-queue" aria-label="Показывать очередь"><div class="toggle-dot"></div></button>
                             </div>
 
                             <!-- 5. Положение очереди -->
@@ -972,16 +997,16 @@
                                 <div class="setting-label">Положение очереди</div>
                                 <div class="setting-sublabel">Выберите где отображать очередь воспроизведения</div>
                                 <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
-                                    <div class="opt-card active" data-val="bottom" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
-                                        <i data-lucide="panel-bottom" style="width:20px;height:20px"></i>
+                                    <div class="opt-card active" data-val="bottom" style="padding:14px;">
+                                        <i data-lucide="panel-bottom"></i>
                                         <span>Снизу</span>
                                     </div>
-                                    <div class="opt-card" data-val="left" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
-                                        <i data-lucide="panel-left" style="width:20px;height:20px"></i>
+                                    <div class="opt-card" data-val="left" style="padding:14px;">
+                                        <i data-lucide="panel-left"></i>
                                         <span>Слева</span>
                                     </div>
-                                    <div class="opt-card" data-val="right" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
-                                        <i data-lucide="panel-right" style="width:20px;height:20px"></i>
+                                    <div class="opt-card" data-val="right" style="padding:14px;">
+                                        <i data-lucide="panel-right"></i>
                                         <span>Справа</span>
                                     </div>
                                 </div>
@@ -993,7 +1018,7 @@
                                     <div class="setting-label">Компактная кнопка очереди</div>
                                     <div class="setting-sublabel">Использовать компактный стиль кнопки очереди</div>
                                 </div>
-                                <button class="toggle-switch on" id="toggle-compact-queue-btn"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch on" id="toggle-compact-queue-btn" aria-label="Компактная кнопка очереди"><div class="toggle-dot"></div></button>
                             </div>
 
                             <!-- Автопилот очереди -->
@@ -1002,7 +1027,7 @@
                                     <div class="setting-label">Бесконечный автопилот очереди</div>
                                     <div class="setting-sublabel">Автоматически подбирать похожие треки и продолжать воспроизведение, когда очередь заканчивается</div>
                                 </div>
-                                <button class="toggle-switch on" id="toggle-queue-autopilot"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch on" id="toggle-queue-autopilot" aria-label="Бесконечный автопилот очереди"><div class="toggle-dot"></div></button>
                             </div>
 
                             <!-- Предзагрузка следующего трека -->
@@ -1011,7 +1036,7 @@
                                     <div class="setting-label">Предзагрузка следующего трека (Prefetch)</div>
                                     <div class="setting-sublabel">Разрешать аудиопоток следующего трека заранее для мгновенного переключения без пауз</div>
                                 </div>
-                                <button class="toggle-switch on" id="toggle-player-prefetch"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch on" id="toggle-player-prefetch" aria-label="Предзагрузка следующего трека (Prefetch)"><div class="toggle-dot"></div></button>
                             </div>
 
                             <!-- Атмосферный свет обложки -->
@@ -1020,7 +1045,7 @@
                                     <div class="setting-label">Атмосферный свет обложки (Aura Orbs)</div>
                                     <div class="setting-sublabel">Мягкие дрейфующие световые сферы Vision Pro, окрашивающиеся под играющий трек</div>
                                 </div>
-                                <button class="toggle-switch on" id="toggle-aura-orbs"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch on" id="toggle-aura-orbs" aria-label="Атмосферный свет обложки (Aura Orbs)"><div class="toggle-dot"></div></button>
                             </div>
 
                             <!-- 7. Предпросмотр следующего трека -->
@@ -1029,7 +1054,7 @@
                                     <div class="setting-label">Предпросмотр следующего трека</div>
                                     <div class="setting-sublabel">Показывать информацию о следующем треке</div>
                                 </div>
-                                <button class="toggle-switch on" id="toggle-next-track-preview"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch on" id="toggle-next-track-preview" aria-label="Предпросмотр следующего трека"><div class="toggle-dot"></div></button>
                             </div>
 
                             <!-- 8. Вид очереди -->
@@ -1037,8 +1062,8 @@
                                 <div class="setting-label">Вид очереди</div>
                                 <div class="setting-sublabel">Выберите режим отображения треков в списке очереди</div>
                                 <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
-                                    <div class="opt-card active" data-val="normal" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
-                                        <i data-lucide="list" style="width:20px;height:20px"></i>
+                                    <div class="opt-card active" data-val="normal" style="padding:14px;">
+                                        <i data-lucide="list"></i>
                                         <span>Обычный</span>
                                     </div>
                                     </div>
@@ -1049,16 +1074,16 @@
                                 <div class="setting-label">Прогресс мини-плеера</div>
                                 <div class="setting-sublabel">Выберите, как отображать прогресс трека</div>
                                 <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
-                                    <div class="opt-card active" data-val="line" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
-                                        <i data-lucide="minus" style="width:20px;height:20px"></i>
+                                    <div class="opt-card active" data-val="line" style="padding:14px;">
+                                        <i data-lucide="minus"></i>
                                         <span>Линия</span>
                                     </div>
-                                    <div class="opt-card" data-val="bg" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
-                                        <i data-lucide="layout" style="width:20px;height:20px"></i>
+                                    <div class="opt-card" data-val="bg" style="padding:14px;">
+                                        <i data-lucide="layout"></i>
                                         <span>Фоном</span>
                                     </div>
-                                    <div class="opt-card" data-val="cover" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
-                                        <i data-lucide="circle" style="width:20px;height:20px"></i>
+                                    <div class="opt-card" data-val="cover" style="padding:14px;">
+                                        <i data-lucide="circle"></i>
                                         <span>Вокруг обложки</span>
                                     </div>
                                 </div>
@@ -1069,12 +1094,12 @@
                                 <div class="setting-label">Обложка мини-плеера</div>
                                 <div class="setting-sublabel">Выберите форму обложки в мини-плеере</div>
                                 <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
-                                    <div class="opt-card active" data-val="default" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
-                                        <i data-lucide="grid" style="width:20px;height:20px"></i>
+                                    <div class="opt-card active" data-val="default" style="padding:14px;">
+                                        <i data-lucide="grid"></i>
                                         <span>По умолчанию</span>
                                     </div>
-                                    <div class="opt-card" data-val="circle" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
-                                        <i data-lucide="circle" style="width:20px;height:20px"></i>
+                                    <div class="opt-card" data-val="circle" style="padding:14px;">
+                                        <i data-lucide="circle"></i>
                                         <span>Круглая</span>
                                     </div>
                                 </div>
@@ -1085,12 +1110,12 @@
                                 <div class="setting-label">Форма границ</div>
                                 <div class="setting-sublabel">Выберите форму мини-плеера</div>
                                 <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
-                                    <div class="opt-card active" data-val="default" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
-                                        <i data-lucide="grid" style="width:20px;height:20px"></i>
+                                    <div class="opt-card active" data-val="default" style="padding:14px;">
+                                        <i data-lucide="grid"></i>
                                         <span>По умолчанию</span>
                                     </div>
-                                    <div class="opt-card" data-val="capsule" style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px;">
-                                        <i data-lucide="circle" style="width:20px;height:20px"></i>
+                                    <div class="opt-card" data-val="capsule" style="padding:14px;">
+                                        <i data-lucide="circle"></i>
                                         <span>Капсула</span>
                                     </div>
                                 </div>
@@ -1144,7 +1169,7 @@
                                     <i data-lucide="upload" style="width:14px;height:14px"></i>
                                     Выбрать файл
                                 </button>
-                                <input type="file" id="input-bg-file" accept="image/*" style="display:none">
+                                <input type="file" id="input-bg-file" accept="image/*" aria-label="Файл фонового изображения" style="display:none">
                             </div>
                             <div class="setting-row" id="row-custom-bg-preview" style="display:none; flex-direction:column; align-items:flex-start; gap:12px;">
                                 <div class="setting-label">Предпросмотр фона:</div>
@@ -1158,14 +1183,14 @@
                                     <div class="setting-label">Размытие фона (Blur): <span id="label-bg-blur">0px</span></div>
                                     <div class="setting-sublabel">Регулировка мягкости размытия фонового изображения</div>
                                 </div>
-                                <input type="range" class="slider-input" id="slider-bg-blur" min="0" max="40" value="0" style="width:140px">
+                                <input type="range" class="slider-input" id="slider-bg-blur" min="0" max="40" value="0" aria-label="Размытие фонового изображения (Blur)" style="width:140px">
                             </div>
                             <div class="setting-row">
                                 <div>
                                     <div class="setting-label">Затемнение фона: <span id="label-bg-dim">30%</span></div>
                                     <div class="setting-sublabel">Прозрачность темной подложки поверх фона</div>
                                 </div>
-                                <input type="range" class="slider-input" id="slider-bg-dim" min="0" max="90" value="30" style="width:140px">
+                                <input type="range" class="slider-input" id="slider-bg-dim" min="0" max="90" value="30" aria-label="Затемнение фонового изображения, в процентах" style="width:140px">
                             </div>
                         </div>
                     </div>
@@ -1181,7 +1206,7 @@
                             <!-- Filter & Sort Bar -->
                               <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:18px;">
                                   <div style="width: 100%;">
-                                      <input type="text" id="workshop-search-input" class="settings-input" placeholder="Поиск по мастерской..." autocomplete="off">
+                                      <input type="text" id="workshop-search-input" class="settings-input" aria-label="Поиск по мастерской" placeholder="Поиск по мастерской..." autocomplete="off">
                                   </div>
                                   <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; width: 100%;">
                                 <div style="display:flex; gap:8px; flex-wrap:wrap;" id="workshop-tags-container">
@@ -1192,7 +1217,7 @@
                                     <button class="tag-btn" data-tag="games">Игры</button>
                                     <button class="tag-btn" data-tag="minimal">Минимализм</button>
                                 </div>
-                                <select id="workshop-sort-select" class="settings-select" style="height:38px; padding:0 14px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); font-size:12px; color:#fff; min-width:160px;">
+                                <select id="workshop-sort-select" class="settings-select" aria-label="Сортировка мастерской" style="height:38px; padding:0 14px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); font-size:12px; color:#fff; min-width:160px;">
                                     <option value="newest">✨ Сначала новые</option>
                                     <option value="popular">🔥 По популярности</option>
                                     <option value="downloads">📥 По скачиваниям</option>
@@ -1214,17 +1239,17 @@
                             <div class="setting-sublabel" style="margin-bottom:18px;">Выберите один из 10 эксклюзивных стилей логотипа и иконок приложения:</div>
                             
                             <div class="select-grid" id="icon-packs-grid" style="grid-template-columns: repeat(2, 1fr); gap: 14px;">
-                                <div class="opt-card active" data-id="aura_neon" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                <div class="opt-card active" data-id="aura_neon" style="gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14)">
                                     <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
                                         <i data-lucide="music" style="width:22px; height:22px; color:#ff2d55;"></i>
                                     </div>
                                     <div>
-                                        <div style="font-weight:700; font-size:14px; margin-bottom:2px; color:#ffffff;">AURA Neon</div>
+                                        <div style="font-weight:700; font-size:14px; margin-bottom:2px; color:#ffffff;">NeDotify Neon</div>
                                         <div style="font-size:11px; color:rgba(255,255,255,0.7); line-height:1.3;">Классическая нота NeDotify в неоновом свечении</div>
                                     </div>
                                 </div>
 
-                                <div class="opt-card" data-id="cyber_disc" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                <div class="opt-card" data-id="cyber_disc" style="gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14)">
                                     <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
                                         <i data-lucide="disc" style="width:22px; height:22px; color:#a855f7;"></i>
                                     </div>
@@ -1234,7 +1259,7 @@
                                     </div>
                                 </div>
 
-                                <div class="opt-card" data-id="flame_beats" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                <div class="opt-card" data-id="flame_beats" style="gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14)">
                                     <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
                                         <i data-lucide="flame" style="width:22px; height:22px; color:#f97316;"></i>
                                     </div>
@@ -1244,7 +1269,7 @@
                                     </div>
                                 </div>
 
-                                <div class="opt-card" data-id="cosmic_star" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                <div class="opt-card" data-id="cosmic_star" style="gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14)">
                                     <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
                                         <i data-lucide="sparkles" style="width:22px; height:22px; color:#38bdf8;"></i>
                                     </div>
@@ -1254,7 +1279,7 @@
                                     </div>
                                 </div>
 
-                                <div class="opt-card" data-id="deep_subwoofer" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                <div class="opt-card" data-id="deep_subwoofer" style="gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14)">
                                     <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
                                         <i data-lucide="speaker" style="width:22px; height:22px; color:#10b981;"></i>
                                     </div>
@@ -1264,7 +1289,7 @@
                                     </div>
                                 </div>
 
-                                <div class="opt-card" data-id="vintage_mic" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                <div class="opt-card" data-id="vintage_mic" style="gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14)">
                                     <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
                                         <i data-lucide="mic" style="width:22px; height:22px; color:#eab308;"></i>
                                     </div>
@@ -1275,7 +1300,7 @@
                                 </div>
 
 
-                                <div class="opt-card" data-id="wave_radio" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                <div class="opt-card" data-id="wave_radio" style="gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14)">
                                     <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
                                         <i data-lucide="radio" style="width:22px; height:22px; color:#ec4899;"></i>
                                     </div>
@@ -1285,7 +1310,7 @@
                                     </div>
                                 </div>
 
-                                <div class="opt-card" data-id="electric_heart" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                <div class="opt-card" data-id="electric_heart" style="gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14)">
                                     <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
                                         <i data-lucide="heart" style="width:22px; height:22px; color:#ef4444;"></i>
                                     </div>
@@ -1295,7 +1320,7 @@
                                     </div>
                                 </div>
 
-                                <div class="opt-card" data-id="infinity_stream" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                <div class="opt-card" data-id="infinity_stream" style="gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14)">
                                     <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
                                         <i data-lucide="infinity" style="width:22px; height:22px; color:#6366f1;"></i>
                                     </div>
@@ -1305,7 +1330,7 @@
                                     </div>
                                 </div>
 
-                                <div class="opt-card" data-id="crown_gold" style="display:flex; flex-direction:row; align-items:center; gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); text-align:left;">
+                                <div class="opt-card" data-id="crown_gold" style="gap:14px; padding:14px 16px; border-radius:14px; cursor:pointer; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14)">
                                     <div style="width:42px; height:42px; border-radius:10px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1px solid rgba(255,255,255,0.12);">
                                         <i data-lucide="crown" style="width:22px; height:22px; color:#f59e0b;"></i>
                                     </div>
@@ -1327,35 +1352,35 @@
                                     <div class="setting-label">Кроссфейд</div>
                                     <div class="setting-sublabel">Плавный переход между треками</div>
                                 </div>
-                                <button class="toggle-switch" id="toggle-crossfade"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch" id="toggle-crossfade" aria-label="Кроссфейд"><div class="toggle-dot"></div></button>
                             </div>
                             <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
                                 <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
                                     <div class="setting-label">Длительность кроссфейда</div>
                                     <span id="label-crossfade-sec" style="font-size:12px; color:var(--text-sec)">3 сек</span>
                                 </div>
-                                <input type="range" id="slider-crossfade-sec" class="slider-input" min="1" max="12" value="3" style="width:100%">
+                                <input type="range" id="slider-crossfade-sec" class="slider-input" min="1" max="12" value="3" aria-label="Длительность кроссфейда, в секундах" style="width:100%">
                             </div>
                             <div class="setting-row">
                                 <div>
                                     <div class="setting-label">Gapless playback</div>
                                     <div class="setting-sublabel">Воспроизведение без пауз и задержек</div>
                                 </div>
-                                <button class="toggle-switch on" id="toggle-gapless"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch on" id="toggle-gapless" aria-label="Gapless playback"><div class="toggle-dot"></div></button>
                             </div>
                             <div class="setting-row">
                                 <div>
                                     <div class="setting-label">Нормализация громкости (EBU R128)</div>
                                     <div class="setting-sublabel">Выравнивание громкости и защитное ограничение пиков</div>
                                 </div>
-                                <button class="toggle-switch on" id="toggle-normalization"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch on" id="toggle-normalization" aria-label="Нормализация громкости (EBU R128)"><div class="toggle-dot"></div></button>
                             </div>
                             <div class="setting-row">
                                 <div>
                                     <div class="setting-label">Автовоспроизведение</div>
                                     <div class="setting-sublabel">Продолжить после закрытия</div>
                                 </div>
-                                <button class="toggle-switch" id="toggle-autoplay"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch" id="toggle-autoplay" aria-label="Автовоспроизведение"><div class="toggle-dot"></div></button>
                             </div>
                         </div>
                         <div class="settings-section">
@@ -1365,7 +1390,7 @@
                                     <div class="setting-label">Регион поиска</div>
                                     <div class="setting-sublabel">Страна для трендов и чартов</div>
                                 </div>
-                                <select class="settings-select" id="select-region">
+                                <select class="settings-select" id="select-region" aria-label="Регион поиска">
                                     <option value="US">США (US)</option>
                                     <option value="RU">Россия (RU)</option>
                                     <option value="GB">Великобритания (GB)</option>
@@ -1382,13 +1407,13 @@
                                     <div class="setting-label">Показывать визуализатор на обложке</div>
                                     <div class="setting-sublabel">Аудио-визуализация в плеере</div>
                                 </div>
-                                <button class="toggle-switch on" id="toggle-visualizer"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch on" id="toggle-visualizer" aria-label="Показывать визуализатор на обложке"><div class="toggle-dot"></div></button>
                             </div>
                             <div class="setting-row">
                                 <div>
                                     <div class="setting-label">Стиль визуализатора</div>
                                 </div>
-                                <select class="settings-select" id="select-visualizer-style">
+                                <select class="settings-select" id="select-visualizer-style" aria-label="Стиль визуализатора">
                                     <option value="bars">Полосы (Bars)</option>
                                     <option value="wave">Волна (Wave)</option>
                                     <option value="circle">Круг (Circle)</option>
@@ -1430,7 +1455,7 @@
                                     <span class="setting-label">Preamp</span>
                                     <span id="eq-val-preamp" style="font-size:12px; color:var(--text-sec)">0 dB</span>
                                 </div>
-                                <input type="range" id="eq-preamp" class="slider-input eq-slider" min="-20" max="20" step="0.1" value="0" style="width:100%">
+                                <input type="range" id="eq-preamp" class="slider-input eq-slider" min="-20" max="20" step="0.1" value="0" aria-label="Эквалайзер: усиление, dB" style="width:100%">
                             </div>
                             <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:4px; height: 120px; margin-top: 10px; padding: 0 10px;" id="eq-bands-container">
                                 <!-- Generated by JS -->
@@ -1447,25 +1472,25 @@
                                 <div>
                                     <div class="setting-label">Включить частицы</div>
                                 </div>
-                                <button class="toggle-switch on" id="toggle-particles"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch on" id="toggle-particles" aria-label="Включить частицы"><div class="toggle-dot"></div></button>
                             </div>
                             <div class="setting-row">
                                 <div>
                                     <div class="setting-label">Количество: <span id="label-particles-count">30</span></div>
                                 </div>
-                                <input type="range" class="slider-input" id="slider-particles-count" min="5" max="80" value="30" style="width:140px">
+                                <input type="range" class="slider-input" id="slider-particles-count" min="5" max="80" value="30" aria-label="Количество частиц" style="width:140px">
                             </div>
                             <div class="setting-row">
                                 <div>
                                      <div class="setting-label">Размер: <span id="label-particles-size">Обычный</span></div>
                                 </div>
-                                <input type="range" class="slider-input" id="slider-particles-size" min="1" max="5" value="2" style="width:140px">
+                                <input type="range" class="slider-input" id="slider-particles-size" min="1" max="5" value="2" aria-label="Размер частиц" style="width:140px">
                             </div>
                             <div class="setting-row">
                                 <div>
                                      <div class="setting-label">Скорость: <span id="label-particles-speed">Обычная</span></div>
                                 </div>
-                                <input type="range" class="slider-input" id="slider-particles-speed" min="1" max="3" value="2" style="width:140px">
+                                <input type="range" class="slider-input" id="slider-particles-speed" min="1" max="3" value="2" aria-label="Скорость частиц" style="width:140px">
                             </div>
                         </div>
                         <div class="settings-section">
@@ -1507,7 +1532,7 @@
                                     <div class="setting-label" style="font-weight:600">Режим энергосбережения</div>
                                     <div class="setting-sublabel">Автоматически снижать нагрузку на систему при сворачивании или неактивности окна плеера</div>
                                 </div>
-                                <button class="toggle-switch" id="toggle-unfocus-enabled"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch" id="toggle-unfocus-enabled" aria-label="Режим энергосбережения"><div class="toggle-dot"></div></button>
                             </div>
 
                             <div class="setting-row">
@@ -1515,7 +1540,7 @@
                                     <div class="setting-label" style="font-weight:600">Отключать размытие стекла</div>
                                     <div class="setting-sublabel">Временно убирать тяжелый эффект матового стекла в фоне (экономит до 40% GPU)</div>
                                 </div>
-                                <button class="toggle-switch" id="toggle-unfocus-blur"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch" id="toggle-unfocus-blur" aria-label="Отключать размытие стекла"><div class="toggle-dot"></div></button>
                             </div>
 
                             <div class="setting-row">
@@ -1523,7 +1548,7 @@
                                     <div class="setting-label" style="font-weight:600">Замораживать анимации</div>
                                     <div class="setting-sublabel">Останавливать вращение пластинки и все плавные переходы CSS</div>
                                 </div>
-                                <button class="toggle-switch" id="toggle-unfocus-animations"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch" id="toggle-unfocus-animations" aria-label="Замораживать анимации"><div class="toggle-dot"></div></button>
                             </div>
 
                             <div class="setting-row">
@@ -1531,7 +1556,7 @@
                                     <div class="setting-label" style="font-weight:600">Останавливать частицы и визуал</div>
                                     <div class="setting-sublabel">Полностью останавливать рендер визуализатора в фоне</div>
                                 </div>
-                                <button class="toggle-switch" id="toggle-unfocus-visualizations"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch" id="toggle-unfocus-visualizations" aria-label="Останавливать частицы и визуал"><div class="toggle-dot"></div></button>
                             </div>
 
                             <div class="setting-row">
@@ -1540,7 +1565,7 @@
                                     <div class="setting-sublabel">Если визуал не остановлен, до скольки кадров снижать его рендер в фоне</div>
                                 </div>
                                 <div style="display:flex; align-items:center; gap:12px">
-                                    <input type="range" class="slider-input" id="slider-unfocus-fps" min="5" max="30" step="5" value="15" style="width:140px">
+                                    <input type="range" class="slider-input" id="slider-unfocus-fps" min="5" max="30" step="5" value="15" aria-label="Лимит FPS в фоне" style="width:140px">
                                     <span id="label-unfocus-fps" style="font-size:12px; font-weight:700; color:var(--primary); min-width:48px">15 FPS</span>
                                 </div>
                             </div>
@@ -1600,7 +1625,7 @@
                                     <div class="setting-sublabel">Частота кадров летающих частиц</div>
                                 </div>
                                 <div style="display:flex; align-items:center; gap:12px">
-                                    <input type="range" class="slider-input" id="slider-fps-particles" min="5" max="30" step="1" value="24" style="width:140px">
+                                    <input type="range" class="slider-input" id="slider-fps-particles" min="5" max="30" step="1" value="24" aria-label="FPS частичек" style="width:140px">
                                     <span id="label-fps-particles" style="font-size:12px; font-weight:700; color:var(--primary); min-width:48px">24 FPS</span>
                                 </div>
                             </div>
@@ -1611,7 +1636,7 @@
                                     <div class="setting-sublabel">Частота кадров звукового визуализатора</div>
                                 </div>
                                 <div style="display:flex; align-items:center; gap:12px">
-                                    <input type="range" class="slider-input" id="slider-fps-visualizer" min="10" max="60" step="5" value="30" style="width:140px">
+                                    <input type="range" class="slider-input" id="slider-fps-visualizer" min="10" max="60" step="5" value="30" aria-label="FPS визуализатора" style="width:140px">
                                     <span id="label-fps-visualizer" style="font-size:12px; font-weight:700; color:var(--primary); min-width:48px">30 FPS</span>
                                 </div>
                             </div>
@@ -1622,7 +1647,7 @@
                                     <div class="setting-sublabel">Частота плавных анимаций интерфейса</div>
                                 </div>
                                 <div style="display:flex; align-items:center; gap:12px">
-                                    <input type="range" class="slider-input" id="slider-fps-ui" min="15" max="60" step="5" value="60" style="width:140px">
+                                    <input type="range" class="slider-input" id="slider-fps-ui" min="15" max="60" step="5" value="60" aria-label="FPS интерфейса" style="width:140px">
                                     <span id="label-fps-ui" style="font-size:12px; font-weight:700; color:var(--primary); min-width:48px">60 FPS</span>
                                 </div>
                             </div>
@@ -1652,7 +1677,7 @@
                                     <div class="setting-label">Токен авторизации</div>
                                     <div class="setting-sublabel">Нужен для полного доступа (без ограничения 30 сек). Вставьте вручную или нажмите «Получить токен»</div>
                                 </div>
-                                <input type="password" class="settings-input" id="input-yandex-token" placeholder="Введите yandex_token...">
+                                <input type="password" class="settings-input" id="input-yandex-token" aria-label="Токен авторизации Яндекс Музыки" placeholder="Введите yandex_token...">
                                 <div style="display:flex;gap:8px;align-items:center;width:100%;margin-top:4px">
                                     <button id="btn-yandex-auth" style="padding:8px 16px;border-radius:8px;background:var(--primary);color:var(--bg-main);border:none;cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap">
                                         🔑 Получить токен
@@ -1672,13 +1697,13 @@
                                     <div class="setting-label">OAuth 2.0 Client ID</div>
                                     <div class="setting-sublabel">ID клиента для API YouTube Data v3</div>
                                 </div>
-                                <input type="text" class="settings-input" id="input-oauth-client-id" placeholder="Client ID..." disabled title="Функция пока недоступна">
+                                <input type="text" class="settings-input" id="input-oauth-client-id" aria-label="OAuth 2.0 Client ID" placeholder="Client ID..." disabled title="Функция пока недоступна">
                                 
                                 <div style="margin-top: 8px;">
                                     <div class="setting-label">OAuth 2.0 Client Secret</div>
                                     <div class="setting-sublabel">Секрет клиента для API YouTube Data v3 <span style="opacity:0.75;font-size:11px;">(⚠️ Client Secret не отправляется с фронтенда)</span></div>
                                 </div>
-                                <input type="password" class="settings-input" id="input-oauth-client-secret" placeholder="Client Secret..." disabled title="Функция пока недоступна">
+                                <input type="password" class="settings-input" id="input-oauth-client-secret" aria-label="OAuth 2.0 Client Secret" placeholder="Client Secret..." disabled title="Функция пока недоступна">
                                 
                                 <div style="display:flex;gap:8px;align-items:center;width:100%;margin-top:8px">
                                     <button id="btn-ytmusic-oauth" disabled title="Поддержка YouTube Music пока недоступна" style="padding:8px 16px;border-radius:8px;background:var(--primary);color:var(--bg-main);border:none;cursor:not-allowed;font-weight:600;font-size:13px;opacity:0.5">
@@ -1694,7 +1719,7 @@
                                     <div class="setting-label">Использовать куки браузера</div>
                                     <div class="setting-sublabel">Импортировать сессию авторизации из установленного браузера</div>
                                 </div>
-                                <select class="settings-select" id="select-browser-cookies">
+                                <select class="settings-select" id="select-browser-cookies" aria-label="Использовать куки браузера">
                                     <option value="none">Не использовать (None)</option>
                                     <option value="chrome">Google Chrome</option>
                                     <option value="firefox">Mozilla Firefox</option>
@@ -1708,14 +1733,14 @@
                                     <div class="setting-label">Путь к файлу куков (cookies.txt)</div>
                                     <div class="setting-sublabel">Укажите путь к экспортированному файлу cookies.txt</div>
                                 </div>
-                                <input type="text" class="settings-input" id="input-cookies-path" placeholder="C:\path\to\cookies.txt">
+                                <input type="text" class="settings-input" id="input-cookies-path" aria-label="Путь к файлу cookies.txt" placeholder="C:\path\to\cookies.txt">
                             </div>
                             <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px; border-bottom: none;">
                                 <div>
                                     <div class="setting-label">HTTP/HTTPS Прокси</div>
                                     <div class="setting-sublabel">Для обхода блокировок YouTube и сторонних сервисов (например, http://127.0.0.1:1080)</div>
                                 </div>
-                                <input type="text" class="settings-input" id="input-proxy-url" placeholder="http://127.0.0.1:1080">
+                                <input type="text" class="settings-input" id="input-proxy-url" aria-label="HTTP/HTTPS прокси" placeholder="http://127.0.0.1:1080">
                             </div>
                         </div>
                     </div>
@@ -1759,7 +1784,7 @@
                                     <div class="setting-label">Лимит кэша (Smart Storage)</div>
                                     <div class="setting-sublabel">Автоматическая LRU-очистка при превышении лимита (скачанное и избранное не удаляются)</div>
                                 </div>
-                                <select id="select-cache-quota" class="glass-select" style="min-width:140px; padding:6px 12px; border-radius:8px;">
+                                <select id="select-cache-quota" class="glass-select" aria-label="Лимит кэша (Smart Storage)" style="min-width:140px; padding:6px 12px; border-radius:8px;">
                                     <option value="1">1 ГБ</option>
                                     <option value="2">2 ГБ</option>
                                     <option value="5" selected>5 ГБ (Реком.)</option>
@@ -1801,11 +1826,11 @@
                                 <div style="width: 100%;">
                                     <div class="setting-label" style="margin-bottom:4px">Ссылка на внешнеый плейлист</div>
                                     <div class="setting-sublabel" style="margin-bottom:8px">Поддерживаются Яндекс Музыка, YouTube и Spotify</div>
-                                    <input type="text" class="settings-input" id="input-import-playlist-url" placeholder="https://music.yandex.ru/users/.../playlists/...">
+                                    <input type="text" class="settings-input" id="input-import-playlist-url" aria-label="Ссылка на внешний плейлист" placeholder="https://music.yandex.ru/users/.../playlists/...">
                                 </div>
                                 <div style="width: 100%;">
                                     <div class="setting-label" style="margin-bottom:4px">Название для локального плейлиста</div>
-                                    <input type="text" class="settings-input" id="input-import-playlist-name" placeholder="Мой импортированный плейлист">
+                                    <input type="text" class="settings-input" id="input-import-playlist-name" aria-label="Название для локального плейлиста" placeholder="Мой импортированный плейлист">
                                 </div>
                                 <button id="btn-import-playlist" style="padding: 10px 20px; border-radius: 8px; background: var(--primary); color: #fff; border: none; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
                                     <i data-lucide="download-cloud" style="width: 16px; height: 16px;"></i> Начать импорт
@@ -1824,7 +1849,7 @@
                                     <div class="setting-label">Включить службы Zapret</div>
                                     <div class="setting-sublabel">Маскировать трафик YouTube и сторонних музыкальных сервисов в текущей сессии</div>
                                 </div>
-                                <button class="toggle-switch" id="toggle-zapret-enabled"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch" id="toggle-zapret-enabled" aria-label="Включить службы Zapret"><div class="toggle-dot"></div></button>
                             </div>
                             <div class="setting-row">
                                 <div>
@@ -1832,14 +1857,14 @@
                                     <div class="setting-sublabel">Запускать службу обхода блокировок автоматически при старте приложения</div>
                                 </div>
                                 <button class="toggle-switch" id="toggle-zapret-autostart" aria-label="Автозапуск Zapret"><div class="toggle-dot"></div></button>
-                                <input type="checkbox" id="zapret-auto-start" style="display: none;" />
+                                <input type="checkbox" id="zapret-auto-start" aria-label="Автоматический запуск Zapret" style="display: none;" />
                             </div>
                             <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
                                 <div>
                                     <div class="setting-label">Режим обхода</div>
                                     <div class="setting-sublabel">Выберите стратегию обхода замедления (fake-packet / split / disord)</div>
                                 </div>
-                                <select class="settings-select" id="select-zapret-mode">
+                                <select class="settings-select" id="select-zapret-mode" aria-label="Режим обхода Zapret">
                                     <option value="youtube_discord">YouTube & Discord (Рекомендуется)</option>
                                     <option value="standard">Стандартный (Fake TLS + Split2)</option>
                                     <option value="aggressive">Disorder2 (для строгого DPI)</option>
@@ -1851,7 +1876,7 @@
                                     <div class="setting-label">Автообновление Zapret</div>
                                     <div class="setting-sublabel">Автоматически проверять и скачивать актуальные версии winws с GitHub</div>
                                 </div>
-                                <button class="toggle-switch" id="toggle-zapret-autoupdate"><div class="toggle-dot"></div></button>
+                                <button class="toggle-switch" id="toggle-zapret-autoupdate" aria-label="Автообновление Zapret"><div class="toggle-dot"></div></button>
                             </div>
                             <div class="setting-row" style="border-bottom: none;">
                                 <div>
@@ -1880,11 +1905,11 @@
             <div class="pb-title" id="pb-title">Не играет</div>
             <div class="pb-artist" id="pb-artist">Выберите трек</div>
         </div>
-        <button class="btn-ctrl" id="pb-btn-like" title="Нравится" aria-label="Favorite">
+        <button class="btn-ctrl" id="pb-btn-like" title="Нравится" aria-label="Нравится">
             <i data-lucide="heart" style="width:14px;height:14px"></i>
         </button>
         <!-- Three-dot track options -->
-        <button class="btn-ctrl" id="pb-btn-options" title="Опции" style="flex-shrink:0" aria-label="Track options">
+        <button class="btn-ctrl" id="pb-btn-options" title="Опции" style="flex-shrink:0" aria-label="Опции">
             <i data-lucide="more-horizontal" style="width:14px;height:14px"></i>
         </button>
     </div>
@@ -1892,28 +1917,28 @@
     <!-- Controls + Progress -->
     <div class="pb-controls">
         <div class="pb-buttons">
-            <button class="btn-ctrl" id="pb-btn-shuffle" title="Перемешать" aria-label="Shuffle">
+            <button class="btn-ctrl" id="pb-btn-shuffle" title="Перемешать" aria-label="Перемешать">
                 <i data-lucide="shuffle" style="width:14px;height:14px"></i>
             </button>
-            <button class="btn-ctrl" id="pb-btn-prev" title="Предыдущий" aria-label="Previous track">
+            <button class="btn-ctrl" id="pb-btn-prev" title="Предыдущий" aria-label="Предыдущий">
                 <i data-lucide="skip-back" style="width:16px;height:16px"></i>
             </button>
-            <button class="btn-play-main" id="pb-btn-play" title="Воспроизведение" aria-label="Play or pause">
+            <button class="btn-play-main" id="pb-btn-play" title="Воспроизведение" aria-label="Воспроизведение">
                 <i data-lucide="play" style="width:16px;height:16px;fill:currentColor"></i>
             </button>
-            <button class="btn-ctrl" id="pb-btn-next" title="" aria-label="Next track">
+            <button class="btn-ctrl" id="pb-btn-next" title="Следующий" aria-label="Следующий">
                 <i data-lucide="skip-forward" style="width:16px;height:16px"></i>
             </button>
-            <button class="btn-ctrl" id="pb-btn-repeat" title="Повтор" aria-label="Repeat mode">
+            <button class="btn-ctrl" id="pb-btn-repeat" title="Повтор" aria-label="Повтор">
                 <i data-lucide="repeat" style="width:14px;height:14px"></i>
             </button>
-            <button class="btn-ctrl active" id="pb-btn-flow" title="Бесконечная волна (Flow)" aria-label="Endless flow">
+            <button class="btn-ctrl active" id="pb-btn-flow" title="Бесконечная волна (Flow)" aria-label="Бесконечная волна (Flow)">
                 <i data-lucide="radio" style="width:14px;height:14px"></i>
             </button>
         </div>
         <div class="pb-progress">
             <span class="pb-time" id="pb-time-current">0:00</span>
-            <div class="progress-track" id="pb-progress-track" role="slider" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" style="position: relative;">
+            <div class="progress-track" id="pb-progress-track" role="slider" aria-label="Позиция воспроизведения" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" style="position: relative;">
                 <canvas id="pb-waveform-canvas" class="waveform-canvas hidden"></canvas>
                 <div class="progress-fill" id="pb-progress-fill" style="transform: translateX(-100%)"></div>
             </div>
@@ -1923,17 +1948,17 @@
 
     <!-- Right: Queue + Volume (compact) -->
     <div class="pb-right">
-        <button class="btn-ctrl" id="pb-btn-pip-lyrics" title="Плавающее караоке (PiP)" aria-label="PiP Lyrics">
+        <button class="btn-ctrl" id="pb-btn-pip-lyrics" title="Плавающее караоке (PiP)" aria-label="Плавающее караоке (PiP)">
             <i data-lucide="subtitles" style="width:16px;height:16px"></i>
         </button>
-        <button class="btn-ctrl" id="pb-btn-queue" title="Очередь" aria-label="Queue">
+        <button class="btn-ctrl" id="pb-btn-queue" title="Очередь" aria-label="Очередь">
             <i data-lucide="list-music" style="width:16px;height:16px"></i>
         </button>
         <div class="volume-wrap">
-            <button class="btn-ctrl" id="pb-volume-btn" title="Громкость" aria-label="Mute">
+            <button class="btn-ctrl" id="pb-volume-btn" title="Громкость" aria-label="Громкость">
                 <i data-lucide="volume-2" style="width:16px;height:16px"></i>
             </button>
-            <div class="volume-track" id="pb-volume-track" role="slider" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" tabindex="0">
+            <div class="volume-track" id="pb-volume-track" role="slider" aria-label="Громкость" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" tabindex="0">
                 <div class="volume-fill" id="pb-volume-fill" style="width:70%"></div>
             </div>
         </div>
@@ -1965,14 +1990,14 @@
 </div>
 
 <!-- Create Playlist Glassmorphism Modal -->
-<div id="modal-create-playlist" class="modal-overlay" style="display: none;">
+<div id="modal-create-playlist" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-create-playlist-title" style="display: none;">
     <div class="glass-modal-card">
         <div class="glass-modal-header">
-            <h3 class="glass-modal-title">Создать плейлист</h3>
-            <button class="glass-modal-close" id="modal-cp-close"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+            <h3 class="glass-modal-title" id="modal-create-playlist-title">Создать плейлист</h3>
+            <button class="glass-modal-close" id="modal-cp-close" aria-label="Закрыть"><i data-lucide="x" style="width:16px;height:16px"></i></button>
         </div>
         <div class="glass-modal-body">
-            <label class="glass-modal-label">Введите название плейлиста</label>
+            <label class="glass-modal-label" for="modal-cp-input">Введите название плейлиста</label>
             <input type="text" id="modal-cp-input" class="glass-modal-input" placeholder="Название плейлиста..." autocomplete="off">
         </div>
         <div class="glass-modal-footer">
@@ -1983,7 +2008,7 @@
 </div>
 
 <!-- Delete Playlist Confirmation Modal -->
-<div id="modal-delete-playlist" class="modal-overlay" style="display:none;">
+<div id="modal-delete-playlist" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Удаление плейлиста" style="display:none;">
     <div class="glass-modal-card" style="max-width:360px; text-align:center;">
         <div style="display:flex; flex-direction:column; align-items:center; gap:16px; padding:8px 0 4px;">
             <div style="width:52px; height:52px; border-radius:50%; background:rgba(239,68,68,0.15); border:1.5px solid rgba(239,68,68,0.35); display:flex; align-items:center; justify-content:center;">
@@ -2005,19 +2030,19 @@
 </div>
 
 <!-- Import Playlist Glassmorphism Modal -->
-<div id="modal-import-playlist" class="modal-overlay" style="display: none;">
+<div id="modal-import-playlist" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-import-playlist-title" style="display: none;">
     <div class="glass-modal-card" style="max-width: 500px;">
         <div class="glass-modal-header">
-            <h3 class="glass-modal-title">Импорт плейлиста</h3>
-            <button class="glass-modal-close" id="modal-ip-close"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+            <h3 class="glass-modal-title" id="modal-import-playlist-title">Импорт плейлиста</h3>
+            <button class="glass-modal-close" id="modal-ip-close" aria-label="Закрыть"><i data-lucide="x" style="width:16px;height:16px"></i></button>
         </div>
         <div class="glass-modal-body" style="display:flex; flex-direction:column; gap:12px;">
             <div>
-                <label class="glass-modal-label" style="display:block; margin-bottom:6px; font-size:12px; color:var(--text-sec);">Ссылка на плейлист (YouTube, Spotify)</label>
+                <label class="glass-modal-label" for="modal-ip-url" style="display:block; margin-bottom:6px; font-size:12px; color:var(--text-sec);">Ссылка на плейлист (YouTube, Spotify)</label>
                 <input type="text" id="modal-ip-url" class="glass-modal-input" placeholder="https://..." autocomplete="off">
             </div>
             <div>
-                <label class="glass-modal-label" style="display:block; margin-bottom:6px; font-size:12px; color:var(--text-sec);">Название плейлиста (опционально)</label>
+                <label class="glass-modal-label" for="modal-ip-name" style="display:block; margin-bottom:6px; font-size:12px; color:var(--text-sec);">Название плейлиста (опционально)</label>
                 <input type="text" id="modal-ip-name" class="glass-modal-input" placeholder="Мой импортированный плейлист..." autocomplete="off">
             </div>
             <div id="modal-ip-status" style="font-size:13px; color:var(--primary); display:none; align-items:center; gap:8px;">
@@ -2033,11 +2058,11 @@
 </div>
 
 <!-- Edit Track Tags Modal -->
-<div id="modal-edit-tags" class="modal-overlay" style="display: none; z-index: 9999;">
+<div id="modal-edit-tags" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-edit-tags-title" style="display: none; z-index: 9999;">
     <div class="glass-modal-card" style="max-width: 520px;">
         <div class="glass-modal-header">
-            <h3 class="glass-modal-title">Редактор тегов и метаданных</h3>
-            <button class="glass-modal-close" id="modal-et-close"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+            <h3 class="glass-modal-title" id="modal-edit-tags-title">Редактор тегов и метаданных</h3>
+            <button class="glass-modal-close" id="modal-et-close" aria-label="Закрыть"><i data-lucide="x" style="width:16px;height:16px"></i></button>
         </div>
         <div class="glass-modal-body" style="display:flex; gap:16px;">
             <!-- Cover Art Column -->
@@ -2055,24 +2080,24 @@
                 <input type="hidden" id="modal-et-track-id">
                 <input type="hidden" id="modal-et-cover-path">
                 <div>
-                    <label class="glass-modal-label" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Название трека</label>
+                    <label class="glass-modal-label" for="modal-et-title" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Название трека</label>
                     <input type="text" id="modal-et-title" class="glass-modal-input" placeholder="Название..." autocomplete="off">
                 </div>
                 <div>
-                    <label class="glass-modal-label" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Исполнитель / Артист</label>
+                    <label class="glass-modal-label" for="modal-et-artist" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Исполнитель / Артист</label>
                     <input type="text" id="modal-et-artist" class="glass-modal-input" placeholder="Исполнитель..." autocomplete="off">
                 </div>
                 <div>
-                    <label class="glass-modal-label" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Альбом</label>
+                    <label class="glass-modal-label" for="modal-et-album" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Альбом</label>
                     <input type="text" id="modal-et-album" class="glass-modal-input" placeholder="Альбом..." autocomplete="off">
                 </div>
                 <div style="display:flex; gap:10px;">
                     <div style="flex:2;">
-                        <label class="glass-modal-label" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Жанр</label>
+                        <label class="glass-modal-label" for="modal-et-genre" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Жанр</label>
                         <input type="text" id="modal-et-genre" class="glass-modal-input" placeholder="Жанр..." autocomplete="off">
                     </div>
                     <div style="flex:1;">
-                        <label class="glass-modal-label" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Год</label>
+                        <label class="glass-modal-label" for="modal-et-year" style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-sec);">Год</label>
                         <input type="number" id="modal-et-year" class="glass-modal-input" placeholder="2026" min="1900" max="2100">
                     </div>
                 </div>
@@ -2090,14 +2115,14 @@
 <!-- ============================================== -->
 <!-- ONBOARDING WIZARD -->
 <!-- ============================================== -->
-<div id="onboarding-wizard" class="modal-overlay hidden" style="z-index: 10000; backdrop-filter: blur(12px); background: rgba(0,0,0,0.65);">
+<div id="onboarding-wizard" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-label="Мастер первоначальной настройки" style="z-index: 10000; backdrop-filter: blur(12px); background: rgba(0,0,0,0.65);">
     <div class="modal-content glass-panel" style="width: 700px; max-width: 90%; min-height: 500px; display: flex; flex-direction: column; position: relative;">
         <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
-                <div style="font-size: 24px; font-weight: 700; color: #fff;">Добро пожаловать в AURA Music</div>
+                <div style="font-size: 24px; font-weight: 700; color: #fff;">Добро пожаловать в NeDotify</div>
                 <div style="font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 5px;">Настройте приложение под себя перед началом работы</div>
             </div>
-            <button id="ob-btn-close" class="icon-btn" title="Закрыть" style="background: rgba(255,255,255,0.08); border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #fff;">
+            <button id="ob-btn-close" class="icon-btn" title="Закрыть" aria-label="Закрыть" style="background: rgba(255,255,255,0.08); border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #fff;">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
         </div>
@@ -2128,7 +2153,7 @@
                         <div class="setting-label">Цветовой акцент</div>
                         <div class="setting-sublabel">Выберите основной цвет интерфейса</div>
                     </div>
-                    <input type="color" id="ob-accent-color" value="#a855f7" class="color-picker" style="width: 40px; height: 40px; border-radius: 8px; border: none; cursor: pointer; background: transparent;">
+                    <input type="color" id="ob-accent-color" value="#a855f7" class="color-picker" aria-label="Цветовой акцент" style="width: 40px; height: 40px; border-radius: 8px; border: none; cursor: pointer; background: transparent;">
                 </div>
             </div>
 
@@ -2141,7 +2166,7 @@
                         <div class="setting-label">Аудиоустройство по умолчанию</div>
                         <div class="setting-sublabel">Через что будет играть музыка</div>
                     </div>
-                    <select id="ob-audio-device" class="glass-select">
+                    <select id="ob-audio-device" class="glass-select" aria-label="Аудиоустройство по умолчанию">
                         <option value="default">Системное по умолчанию</option>
                         <!-- Add options from backend later if supported -->
                     </select>
@@ -2153,7 +2178,7 @@
                         <div class="setting-sublabel">Микширование треков без пауз</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="ob-crossfade">
+                        <input type="checkbox" id="ob-crossfade" aria-label="Плавный переход (Crossfade)">
                         <span class="slider"></span>
                     </label>
                 </div>
@@ -2164,7 +2189,7 @@
                         <div class="setting-sublabel">Автоматически выравнивать громкость всех треков</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="ob-volume-norm">
+                        <input type="checkbox" id="ob-volume-norm" aria-label="Нормализация громкости">
                         <span class="slider"></span>
                     </label>
                 </div>
@@ -2181,7 +2206,7 @@
                     <div style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                         <i data-lucide="link" style="width: 18px; height: 18px; color: rgba(255,255,255,0.6);"></i>
                     </div>
-                    <input type="text" id="ob-playlist-url" placeholder="https://music.youtube.com/playlist?list=..." style="flex: 1; width: 100%; min-width: 0; background: transparent; border: none; outline: none; color: #ffffff; font-size: 14px; font-weight: 400; padding: 0;">
+                    <input type="text" id="ob-playlist-url" aria-label="Ссылка на плейлист" placeholder="https://music.youtube.com/playlist?list=..." style="flex: 1; width: 100%; min-width: 0; background: transparent; border: none; outline: none; color: #ffffff; font-size: 14px; font-weight: 400; padding: 0;">
                 </div>
                 <div style="margin-top: 10px; font-size: 12px; color: rgba(255,255,255,0.5);">Вы также сможете сделать это позже во вкладке «Медиатека».</div>
             </div>
@@ -2193,10 +2218,10 @@
                 <div class="setting-row">
                     <div class="setting-info">
                         <div class="setting-label">Автозапуск</div>
-                        <div class="setting-sublabel">Запускать AURA Music при старте системы</div>
+                        <div class="setting-sublabel">Запускать NeDotify при старте системы</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="ob-autostart">
+                        <input type="checkbox" id="ob-autostart" aria-label="Автозапуск NeDotify">
                         <span class="slider"></span>
                     </label>
                 </div>
@@ -2207,7 +2232,7 @@
                         <div class="setting-sublabel">Не закрывать плеер при нажатии на крестик</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="ob-tray" checked>
+                        <input type="checkbox" id="ob-tray" checked aria-label="Сворачивать в трей">
                         <span class="slider"></span>
                     </label>
                 </div>
@@ -2233,7 +2258,7 @@
             <i data-lucide="grip-horizontal" style="width:14px;height:14px"></i>
             <span>Караоке</span>
         </div>
-        <button id="pip-lyrics-close" class="icon-btn" title="Закрыть караоке" style="width:22px;height:22px;background:transparent;border:none;color:var(--color-text-muted);cursor:pointer;">
+        <button id="pip-lyrics-close" class="icon-btn" title="Закрыть караоке" aria-label="Закрыть караоке" style="width:22px;height:22px;background:transparent;border:none;color:var(--color-text-muted);cursor:pointer;">
             <i data-lucide="x" style="width:14px;height:14px"></i>
         </button>
     </div>
@@ -2263,7 +2288,7 @@
             <i data-lucide="download" style="width:14px;height:14px"></i>
             <span>Скачать</span>
         </button>
-        <button id="batch-btn-clear" class="batch-btn-close" title="Снять выделение">
+        <button id="batch-btn-clear" class="batch-btn-close" title="Снять выделение" aria-label="Снять выделение">
             <i data-lucide="x" style="width:14px;height:14px"></i>
         </button>
     </div>
@@ -2273,13 +2298,13 @@
 <div id="queue-drawer">
     <div id="queue-drawer-header">
         <h2>Очередь воспроизведения</h2>
-        <button id="queue-drawer-close" class="icon-btn" title="Закрыть"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
+        <button id="queue-drawer-close" class="icon-btn" title="Закрыть" aria-label="Закрыть"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
     </div>
     <div id="queue-drawer-content"></div>
 </div>
 
-<script src="js/boot.js?v=20260821"></script>
-<script type="module" src="js/main.js?v=20260828_queue3"></script>
+<script src="js/boot.js?v=20261005_rail"></script>
+<script type="module" src="js/main.js?v=20261005_rail"></script>
 </body>
 </html>
 

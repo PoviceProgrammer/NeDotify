@@ -1,9 +1,12 @@
-import { formatTime, renderIcons, getCoverUrl, escapeHtml } from './utils.js';
+import { formatTime, renderIcons, getCoverUrl, escapeHtml, showToast } from './utils.js';
 import { getCurrentTrack, playTrack, incrementQueueVersion } from './player.js';
 
 let isQueueVisible = false;
 let draggedItemIndex = null;
 let currentQueue = [];
+
+export function getQueueTracks() { return currentQueue; }
+function syncQueueToWindow() { window.currentQueue = currentQueue; }
 
 export function initQueue() {
     const btnPP = document.getElementById('pp-btn-queue');
@@ -38,6 +41,8 @@ export function initQueue() {
     if (btnPB) btnPB.addEventListener('click', (e) => { e.stopPropagation(); toggleQueue(); });
     if (closeBtn) closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeQueue(); });
 
+    ensureClearButton(drawer);
+
     // Close on click outside WITHOUT blocking underlying clicks
     document.addEventListener('pointerdown', (e) => {
         if (!isQueueVisible) return;
@@ -56,6 +61,7 @@ export function initQueue() {
         incrementQueueVersion();
         const q = e.detail || {};
         currentQueue = q.tracks || [];
+        syncQueueToWindow();
         if (isQueueVisible) {
             renderQueue(q.tracks, q.current_index);
         }
@@ -71,7 +77,49 @@ async function loadQueue() {
     if (!window.pywebview?.api?.get_queue) return;
     const q = await window.pywebview.api.get_queue();
     currentQueue = q.tracks || [];
+    syncQueueToWindow();
     renderQueue(currentQueue, q.current_index);
+}
+
+// "Clear" button in the drawer header: prefers the clear_queue bridge,
+// falls back to removing tracks from the end (keeps the playing track).
+function ensureClearButton(drawer) {
+    const header = document.getElementById('queue-drawer-header');
+    if (!header || document.getElementById('queue-clear-btn')) return;
+    const btn = document.createElement('button');
+    btn.id = 'queue-clear-btn';
+    btn.className = 'icon-btn';
+    btn.title = 'Очистить очередь';
+    btn.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-sec);';
+    btn.innerHTML = '<i data-lucide="trash-2" style="width:14px;height:14px"></i><span>Очистить</span>';
+    const closeEl = document.getElementById('queue-drawer-close');
+    if (closeEl) header.insertBefore(btn, closeEl);
+    else header.appendChild(btn);
+    renderIcons(header);
+    btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        btn.disabled = true;
+        try {
+            if (window.pywebview?.api?.clear_queue) {
+                const res = await window.pywebview.api.clear_queue();
+                if (res && res.success === false) {
+                    showToast(res.error || 'Не удалось очистить очередь', 'error');
+                }
+            } else if (window.pywebview?.api?.remove_from_queue) {
+                await window.awaitBridge?.();
+                const q = window.pywebview?.api?.get_queue ? await window.pywebview.api.get_queue() : null;
+                const tracks = (q && q.tracks) || currentQueue || [];
+                const curIdx = (q && q.current_index !== undefined) ? q.current_index : -1;
+                for (let i = tracks.length - 1; i >= 0; i--) {
+                    if (i === curIdx) continue;
+                    try { await window.pywebview.api.remove_from_queue(i); } catch(err) {}
+                }
+            }
+            await loadQueue();
+        } finally {
+            btn.disabled = false;
+        }
+    });
 }
 
 function renderQueue(tracks, currentIndex) {
@@ -82,7 +130,13 @@ function renderQueue(tracks, currentIndex) {
     }
 
     content.innerHTML = '';
-    
+
+    // Build every row into a fragment and insert once (search.js pattern):
+    // N appendChild calls would invalidate layout N times. No layout read
+    // happens below, and the getBoundingClientRect() calls live in the
+    // dragover/drop handlers, which can only fire after this loop returns.
+    const fragment = document.createDocumentFragment();
+
     tracks.forEach((track, index) => {
         const item = document.createElement('div');
         item._trackData = track;
@@ -103,6 +157,9 @@ function renderQueue(tracks, currentIndex) {
                 <div class="track-item-artist">${escapeHtml(track.artist || 'Unknown Artist')}</div>
             </div>
             <div class="track-item-duration">${formatTime(track.duration || 0)}</div>
+            <button class="icon-btn queue-remove-btn" title="Удалить из очереди" style="flex-shrink:0;width:26px;height:26px;opacity:0.55;">
+                <i data-lucide="x" style="width:14px;height:14px"></i>
+            </button>
         `;
 
         const handle = item.querySelector('.drag-handle');
@@ -115,6 +172,7 @@ function renderQueue(tracks, currentIndex) {
         // Click to play track instantly
         item.addEventListener('click', (e) => {
             if (e.target.closest('.drag-handle')) return;
+            if (e.target.closest('.queue-remove-btn')) return;
             e.stopPropagation();
 
             if (window.pywebview?.api?.play_track) {
@@ -123,6 +181,36 @@ function renderQueue(tracks, currentIndex) {
                 window.NeDotify.playTrack(track);
             }
         });
+
+        // Remove-track cross button → backend remove_from_queue
+        const removeBtn = item.querySelector('.queue-remove-btn');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                if (index === currentIndex) {
+                    showToast('Нельзя удалить текущий трек', 'warning');
+                    return;
+                }
+                if (window.pywebview?.api?.remove_from_queue) {
+                    try {
+                        const res = await window.pywebview.api.remove_from_queue(index);
+                        if (res && res.success === false) {
+                            showToast(res.error || 'Не удалось удалить трек', 'error');
+                            return;
+                        }
+                    } catch(err) {
+                        showToast('Ошибка удаления из очереди', 'error');
+                        return;
+                    }
+                } else {
+                    currentQueue.splice(index, 1);
+                    syncQueueToWindow();
+                }
+                await loadQueue();
+            });
+            removeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+        }
 
         // Drag & Drop Events
         item.addEventListener('dragstart', (e) => {
@@ -190,9 +278,10 @@ function renderQueue(tracks, currentIndex) {
             }
         });
 
-        content.appendChild(item);
+        fragment.appendChild(item);
     });
 
+    content.appendChild(fragment);
     renderIcons();
 }
 

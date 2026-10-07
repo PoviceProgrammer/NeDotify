@@ -1,4 +1,4 @@
-import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, coverImgHtml, artistAvatarHtml, renderPlaylistCoverCollage } from './utils.js';
+import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, coverImgHtml, artistAvatarHtml, renderPlaylistCoverCollage, sizeCanvasForDprWithCssBox, registerCanvasDprListener } from './utils.js';
 
 const feedTimeouts = new Map();
 let trackChangeCount = 0;
@@ -11,6 +11,8 @@ function renderSkeletons(containerId, count = 4) {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
+    // Fragment: one insertion instead of one per skeleton card (search.js pattern).
+    const fragment = document.createDocumentFragment();
     for (let i = 0; i < count; i++) {
         const card = document.createElement('div');
         card.className = 'skeleton-card';
@@ -19,8 +21,9 @@ function renderSkeletons(containerId, count = 4) {
             <div class="skeleton-title"></div>
             <div class="skeleton-sub"></div>
         `;
-        container.appendChild(card);
+        fragment.appendChild(card);
     }
+    container.appendChild(fragment);
 }
 
 export function clearFeedTimeout(sectionId) {
@@ -63,6 +66,27 @@ export async function loadHome(isTrackChange = false) {
         if (data.analytics) {
             renderTopTracks(data.analytics.top_tracks || []);
             renderTopArtists(data.analytics.top_artists || []);
+        }
+
+        // Backfill artwork for rows stored before covers were persisted on
+        // playback. Without this those tiles stay empty placeholders forever,
+        // because the grid can only render what the row already holds.
+        if (window.pywebview.api.fetch_missing_covers) {
+            try {
+                const res = await window.pywebview.api.fetch_missing_covers(40);
+                if (res && res.updated > 0 && currentGen === homeLoadGeneration) {
+                    const fresh = await window.pywebview.api.get_home_data() || {};
+                    if (currentGen === homeLoadGeneration) {
+                        if (fresh.history && fresh.history.length) renderHistory(fresh.history);
+                        if (fresh.analytics) {
+                            renderTopTracks(fresh.analytics.top_tracks || []);
+                            renderTopArtists(fresh.analytics.top_artists || []);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('Cover backfill failed:', err);
+            }
         }
 
         // Step 2: Playlists (fast local query)
@@ -338,6 +362,12 @@ export function renderQuickAccess(data = {}, playlists = []) {
 
     container.innerHTML = '';
 
+    // Fragment: the six cards land in one insertion (search.js pattern).
+    // attachPlaylistCollage() is async and re-resolves a detached coverEl,
+    // and it can only resume in a microtask - after this synchronous loop has
+    // already appended the fragment - so its isConnected check is unaffected.
+    const qaFragment = document.createDocumentFragment();
+
     items.slice(0, 6).forEach(item => {
         const card = document.createElement('div');
         card.className = 'quick-access-card';
@@ -400,8 +430,9 @@ export function renderQuickAccess(data = {}, playlists = []) {
             });
         }
 
-        container.appendChild(card);
+        qaFragment.appendChild(card);
     });
+    container.appendChild(qaFragment);
 
     renderIcons(container);
 }
@@ -410,9 +441,11 @@ function renderHistory(tracks) {
     const container = document.getElementById('home-history');
     if (!container) return;
     container.innerHTML = '';
+    const fragment = document.createDocumentFragment();
     tracks.slice(0, 10).forEach((track, idx) => {
-        container.appendChild(createFeedCard(track, tracks, idx));
+        fragment.appendChild(createFeedCard(track, tracks, idx));
     });
+    container.appendChild(fragment);
     renderIcons(container);
 }
 
@@ -470,6 +503,8 @@ export function renderAuthenticHome(sections) {
         scrollEl.id = sectionId;
         
         const items = Array.isArray(section.items) ? section.items : [];
+        // Fragment: this section's cards land in one insertion (search.js pattern).
+        const cardsFragment = document.createDocumentFragment();
         items.forEach(item => {
             if (!item) return;
             if (item.type === 'track') {
@@ -512,7 +547,7 @@ export function renderAuthenticHome(sections) {
                         window.pywebview.api.play_track(trackData, allTracks);
                     }
                 };
-                scrollEl.appendChild(card);
+                cardsFragment.appendChild(card);
             } else if (item.type === 'playlist' || item.type === 'album') {
                 const card = document.createElement('div');
                 card.className = 'feed-card';
@@ -543,7 +578,7 @@ export function renderAuthenticHome(sections) {
                         }
                     }
                 };
-                scrollEl.appendChild(card);
+                cardsFragment.appendChild(card);
             } else if (item.type === 'custom_playlist') {
                 const card = document.createElement('div');
                 card.className = 'feed-card';
@@ -564,10 +599,11 @@ export function renderAuthenticHome(sections) {
                         }
                     }
                 };
-                scrollEl.appendChild(card);
+                cardsFragment.appendChild(card);
             }
         });
-        
+
+        scrollEl.appendChild(cardsFragment);
         sectionEl.appendChild(scrollEl);
         container.appendChild(sectionEl);
         renderIcons(sectionEl);
@@ -654,6 +690,12 @@ export function renderHomePlaylists(playlists) {
     if (!container) return;
     container.innerHTML = '';
 
+    // Fragment: all playlist cards land in one insertion (search.js pattern).
+    // attachPlaylistCollage() can only resume in a microtask, i.e. after this
+    // synchronous loop appended the fragment, so its isConnected re-resolve
+    // still finds the live card.
+    const playlistsFragment = document.createDocumentFragment();
+
     playlists.forEach(pl => {
         const card = document.createElement('div');
         card.className = 'feed-card';
@@ -680,8 +722,9 @@ export function renderHomePlaylists(playlists) {
                 }
             }
         });
-        container.appendChild(card);
+        playlistsFragment.appendChild(card);
     });
+    container.appendChild(playlistsFragment);
     renderIcons(container);
 }
 
@@ -773,6 +816,9 @@ export function renderArtists(artists) {
         return;
     }
 
+    // Fragment: artist cards land in one insertion (search.js pattern).
+    const artistsFragment = document.createDocumentFragment();
+
     artists.forEach(artist => {
         const card = document.createElement('div');
         card.className = 'feed-card artist-card';
@@ -797,8 +843,9 @@ export function renderArtists(artists) {
                 input.dispatchEvent(new Event('input', { bubbles: true }));
             }
         });
-        container.appendChild(card);
+        artistsFragment.appendChild(card);
     });
+    container.appendChild(artistsFragment);
     renderIcons(container);
     requestArtistAvatars(artists.map(a => a.artist || a.name));
 }
@@ -813,9 +860,12 @@ function renderFeedSection(containerId, tracks) {
         return;
     }
 
+    // Fragment: the section's cards land in one insertion (search.js pattern).
+    const feedFragment = document.createDocumentFragment();
     tracks.forEach((track, idx) => {
-        container.appendChild(createFeedCard(track, tracks, idx));
+        feedFragment.appendChild(createFeedCard(track, tracks, idx));
     });
+    container.appendChild(feedFragment);
     renderIcons(container);
 }
 
@@ -929,6 +979,8 @@ export function renderTopTracks(tracks) {
         return;
     }
 
+    // Fragment: top-track cards land in one insertion (search.js pattern).
+    const topTracksFragment = document.createDocumentFragment();
     tracks.forEach((track, i) => {
         const cover = getCoverUrl(track);
         const card = document.createElement('div');
@@ -947,8 +999,9 @@ export function renderTopTracks(tracks) {
         card.onclick = () => {
             if (window.pywebview?.api) window.pywebview.api.play_track(track, tracks, i);
         };
-        container.appendChild(card);
+        topTracksFragment.appendChild(card);
     });
+    container.appendChild(topTracksFragment);
     renderIcons(container);
 }
 
@@ -962,6 +1015,8 @@ export function renderTopArtists(artists) {
         return;
     }
 
+    // Fragment: top-artist cards land in one insertion (search.js pattern).
+    const topArtistsFragment = document.createDocumentFragment();
     artists.forEach(artist => {
         const card = document.createElement('div');
         card.className = 'feed-card artist-card';
@@ -985,8 +1040,9 @@ export function renderTopArtists(artists) {
                 if (searchTab) searchTab.click();
             }
         };
-        container.appendChild(card);
+        topArtistsFragment.appendChild(card);
     });
+    container.appendChild(topArtistsFragment);
     renderIcons(container);
     requestArtistAvatars(artists.map(a => a.artist || a.name));
 }
@@ -1024,6 +1080,7 @@ function renderWrappedUI(stats) {
     }
 
     list.innerHTML = '';
+    const topListFragment = document.createDocumentFragment();
     stats.top_tracks.forEach((track, i) => {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.05);';
@@ -1037,16 +1094,35 @@ function renderWrappedUI(stats) {
             </div>
             <span style="color:var(--primary); font-size:11px; font-weight:600; white-space:nowrap;">${track.plays} прослушиваний</span>
         `;
-        list.appendChild(row);
+        topListFragment.appendChild(row);
     });
+    list.appendChild(topListFragment);
 }
+
+// Retained so a devicePixelRatio change can re-rasterise the chart without
+// another bridge round-trip for the same period's data.
+let lastActivityData = null;
 
 function renderActivityChart(activity) {
     const canvas = document.getElementById('wrapped-activity-canvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const w = canvas.width = canvas.parentElement.clientWidth || 300;
-    const h = canvas.height = 140;
+    // CSS-pixel geometry; the backing store is scaled by devicePixelRatio and
+    // the context carries the matching scale, so all the maths below - and
+    // therefore the rendered chart - is unchanged. At dpr === 1 the backing
+    // store is exactly w x h, identical to before.
+    // This canvas has no CSS width/height rule, so its on-screen size comes
+    // from its width/height attributes: the CSS box is pinned explicitly or a
+    // 150% display would draw it 1.5x too large. At dpr === 1 the pinned box
+    // equals the attribute size it already had.
+    const sized = sizeCanvasForDprWithCssBox(
+        canvas, ctx,
+        canvas.parentElement.clientWidth || 300,
+        140
+    );
+    const w = sized.cssW;
+    const h = sized.cssH;
+    lastActivityData = activity;
 
     ctx.clearRect(0, 0, w, h);
 
@@ -1082,6 +1158,12 @@ function renderActivityChart(activity) {
         ctx.fillText(item.day, x + barWidth / 2, h - 8);
     });
 }
+
+// A window drag between monitors changes devicePixelRatio without a resize
+// event; re-rasterise the activity chart at the new scale.
+registerCanvasDprListener(() => {
+    if (lastActivityData) renderActivityChart(lastActivityData);
+});
 
 // Bind period buttons
 document.addEventListener('DOMContentLoaded', () => {

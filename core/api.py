@@ -22,13 +22,40 @@ import webview
 
 logger = logging.getLogger(__name__)
 
-# Temporary feature flag: license validation and VK-based activation are disabled
-# until they are replaced with a remote, server-owned licensing service.
+# Captured once: evaluate_js must never be awaited on this thread (see _emit).
+_MAIN_THREAD = threading.main_thread()
+
+# --- Licensing (Q3 decision: no subscription is planned) -------------------
+# License/subscription validation is intentionally disabled and stays dead code:
+# nothing in the UI calls validate_subscription_key / get_subscription_info, and
+# the flag below has no consumer other than those two stubs. They are kept (not
+# deleted) as the documented seam where a server-owned licensing service would
+# plug in, so nobody re-adds a client-side key check later. Do not wire any new
+# UI to them.
 LICENSE_VALIDATION_ENABLED = False
 
-# Hard per-provider search deadline. Single source of truth: the docstring, the
-# timer below and the test suite all read this constant.
-PROVIDER_SEARCH_TIMEOUT = 4.0
+# --- Autostart: the Windows "Run" value name --------------------------------
+# Single source of truth for the value name written to
+#   HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+# installer.iss writes the SAME name in its [Registry] section. Inno Setup
+# cannot read a Python constant, so the literal "NeDotify" is repeated there;
+# tests/test_build_and_brand.py fails the build when the two sides diverge.
+# Hive, key path and value name must match on both sides: while this method
+# wrote "AURA Music" and the installer wrote "NeDotify", Windows logged the user
+# in, started the app twice and no single toggle could switch both entries off.
+AUTOSTART_RUN_VALUE = "NeDotify"
+AUTOSTART_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"  # under HKCU
+
+# Run value names written by earlier builds. They have to be deleted on EVERY
+# toggle, not only when autostart is switched off: a leftover "AURA Music"
+# entry keeps launching whatever path it points at, so enabling autostart with
+# the stale entry still around produced a second launch at logon.
+AUTOSTART_RUN_LEGACY_VALUES = ("AURA Music",)
+
+# Hard per-provider search deadline. Raised from 4.0 to 6.0: yt-dlp socket_timeout
+# is 6s and YTMusic session timeout is 15s; a 4s bridge deadline forced a
+# visible "nothing found" before the provider even answered.
+PROVIDER_SEARCH_TIMEOUT = 6.0
 
 # Total wall-clock budget for a bridge method that must answer synchronously.
 # pywebview serves the call on a bridge thread and the JS caller is awaiting it, so
@@ -39,6 +66,92 @@ BRIDGE_SYNC_BUDGET = 6.0
 # Window geometry: main window and compact mini player.
 MAIN_WINDOW_SIZE = (1100, 800)
 MINI_WINDOW_SIZE = (380, 110)
+
+# Cover image formats the tag editor and the /api/cover proxy both accept.
+# A cached cover MUST keep its real extension: core/proxy.py serves the file
+# with mimetypes.guess_type(<path>), so PNG/WebP bytes under a ".jpg" name were
+# published as image/jpeg and the browser refused to decode them.
+_COVER_MIME_BY_EXT = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
+_COVER_EXT_BY_MIME = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+
+
+# DNS verdicts are cached because the check itself is the expensive part and it
+# runs on every proxied request (core/proxy.py do_GET), on every open_url /
+# import_external_playlist call and on every SafeRedirectHandler hop. main.py
+# patches socket.getaddrinfo with a DoH fallback over 3 endpoints at 2s each, so
+# a single unresolvable host could block a proxy thread for ~6s - precisely in
+# the blocked-network scenario that fallback exists for.
+_SSRF_CACHE_TTL = 120.0
+_SSRF_CACHE_MAX = 512
+_ssrf_cache: dict = {}
+_ssrf_cache_lock = threading.Lock()
+
+
+def _reset_ssrf_cache():
+    """Drop all memoized DNS verdicts (tests and explicit invalidation)."""
+    with _ssrf_cache_lock:
+        _ssrf_cache.clear()
+
+
+def _ssrf_cache_get(hostname: str):
+    """Memoized verdict for `hostname`, or None when absent/expired."""
+    with _ssrf_cache_lock:
+        entry = _ssrf_cache.get(hostname)
+        if entry is None:
+            return None
+        expires, verdict = entry
+        if time.monotonic() >= expires:
+            _ssrf_cache.pop(hostname, None)
+            return None
+        return verdict
+
+
+def _ssrf_cache_put(hostname: str, verdict: bool):
+    with _ssrf_cache_lock:
+        if hostname not in _ssrf_cache and len(_ssrf_cache) >= _SSRF_CACHE_MAX:
+            # Bounded memory: evict the entry closest to expiry.
+            oldest = min(_ssrf_cache, key=lambda h: _ssrf_cache[h][0])
+            _ssrf_cache.pop(oldest, None)
+        _ssrf_cache[hostname] = (time.monotonic() + _SSRF_CACHE_TTL, verdict)
+
+
+def _dns_resolves_to_public_ip(hostname: str) -> bool:
+    """Resolve `hostname` and report whether every address is publicly routable.
+
+    Memoized per host: the decision depends only on the hostname, so caching on
+    it cannot mix up two different URLs pointing at different hosts.
+    """
+    cached = _ssrf_cache_get(hostname)
+    if cached is not None:
+        return cached
+
+    verdict = True
+    try:
+        addr_info = socket.getaddrinfo(hostname, None)
+        for family, socktype, proto, canonname, sockaddr in addr_info:
+            ip_str = sockaddr[0]
+            ip = ipaddress.ip_address(ip_str)
+            if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+                verdict = False
+                break
+    except Exception:
+        # If DNS resolution fails, fallback string check
+        if hostname.startswith("169.254.") or hostname.startswith("10.") or hostname.startswith("192.168.") or hostname.startswith("127."):
+            verdict = False
+
+    _ssrf_cache_put(hostname, verdict)
+    return verdict
 
 
 def _is_ssrf_safe_url(url: str) -> bool:
@@ -72,21 +185,121 @@ def _is_ssrf_safe_url(url: str) -> bool:
         except Exception:
             logger.debug("_is_ssrf_safe_url: suppressed exception", exc_info=True)
 
-        # Resolve all DNS records (IPv4 & IPv6)
-        try:
-            addr_info = socket.getaddrinfo(hostname, None)
-            for family, socktype, proto, canonname, sockaddr in addr_info:
-                ip_str = sockaddr[0]
-                ip = ipaddress.ip_address(ip_str)
-                if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
-                    return False
-        except Exception:
-            # If DNS resolution fails, fallback string check
-            if hostname.startswith("169.254.") or hostname.startswith("10.") or hostname.startswith("192.168.") or hostname.startswith("127."):
-                return False
-        return True
+        # Resolve all DNS records (IPv4 & IPv6), memoized per host.
+        return _dns_resolves_to_public_ip(hostname)
     except Exception:
         return False
+
+
+_URL_IN_TEXT_RE = re.compile(r'https?://[^\s<>"\']+', re.IGNORECASE)
+
+
+def _extract_first_url(raw: str) -> str:
+    """Pull the first http(s) URL out of arbitrary pasted text.
+
+    Users paste a whole share blob rather than a bare link -- e.g.
+    ``15 треков '...' 2026 https://on.soundcloud.com/xyz  SoundCloud``.
+    urlparse() on that returns the wrong scheme, so SSRF validation rejected a
+    perfectly good playlist link with "Некорректная или небезопасная ссылка".
+    """
+    if not raw:
+        return ""
+    text = str(raw).strip()
+    if text.lower().startswith(("http://", "https://")):
+        # Still strip trailing sentence punctuation: a link copied out of a
+        # sentence keeps it ("...list=PL123.").
+        return text.rstrip('.,;:!?)]}"\'')
+    match = _URL_IN_TEXT_RE.search(text)
+    if not match:
+        return text
+    # Trailing punctuation is common when copying from a sentence.
+    return match.group(0).rstrip('.,;:!?)]}"\'')
+
+
+def _as_float(value):
+    """Best-effort float conversion; None when the value is not numeric."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+# A bare number above this bound passed positionally to set_cache_quota() is
+# megabytes, not gigabytes: the settings dropdown never offers a stream cache
+# bigger than a few GB, while older builds wrote storage.cache_size_mb.
+_POSITIONAL_MB_THRESHOLD = 64.0
+
+
+def _normalize_cache_quota(quota_gb=None, cache_size_mb=None, cache_quota_gb=None, **kwargs):
+    """Fold the accepted quota spellings into one (gigabytes, megabytes) pair.
+
+    Pure function - no settings, no I/O - so this precedence table is directly
+    testable:
+
+    ==========================================  ======================
+    input                                      result (GB, MB)
+    ==========================================  ======================
+    nothing at all                             ``(None, None)``
+    ``cache_quota_gb=5`` (frontend key, GB)    ``(5.0, 5120.0)``
+    ``cache_size_mb=2048`` (legacy key, MB)    ``(2.0, 2048.0)``
+    both given (GB wins)                       ``(5.0, 5120.0)``
+    ``quota_gb=500`` (bare, > 64 -> MB)         ``(0.48828125, 500.0)``
+    ``quota_gb=0``                             ``(0.0, 0.0)``
+    ``quota_gb=-3`` (clamped)                  ``(0.0, 0.0)``
+    non-numeric junk                           ``(None, None)``
+    ==========================================  ======================
+
+    A bare number is only reinterpreted as MB when BOTH unit-carrying keys are
+    absent, because any explicit key already states its own unit.
+    """
+    if cache_quota_gb is None:
+        cache_quota_gb = kwargs.get("cache_quota_gb")
+    if cache_size_mb is None:
+        cache_size_mb = kwargs.get("cache_size_mb")
+
+    val_gb = _as_float(quota_gb)
+    if val_gb is None:
+        val_gb = _as_float(cache_quota_gb)
+    size_mb = _as_float(cache_size_mb)
+
+    if val_gb is None and size_mb is None:
+        # Nothing usable: keep looking for a bare positional number.
+        bare = _as_float(quota_gb)
+        if bare is None:
+            bare = _as_float(cache_quota_gb)
+        if bare is None:
+            return None, None
+        val_gb, size_mb = bare, None
+
+    # Heuristic: a bare number > 64 with no explicit unit key is MB, not GB.
+    if size_mb is None and val_gb is not None and val_gb > _POSITIONAL_MB_THRESHOLD:
+        size_mb = val_gb
+        val_gb = None
+
+    if val_gb is None:
+        if size_mb is None:
+            return None, None
+        val_gb = size_mb / 1024.0
+    else:
+        # An explicit gigabyte value wins: cache_size_mb is then re-derived from
+        # it, so the two persisted keys can never disagree.
+        size_mb = val_gb * 1024.0
+
+    return max(0.0, val_gb), max(0.0, size_mb)
+
+
+def _missing_local_file_message(track, file_path=None) -> str:
+    """Human-readable reason a local track cannot be played."""
+    label = "Трек"
+    if isinstance(track, dict):
+        title = str(track.get("title") or "").strip()
+        artist = str(track.get("artist") or "").strip()
+        if title:
+            label = f"«{title}»" + (f" — {artist}" if artist else "")
+    where = f" ({file_path})" if file_path else ""
+    return f"{label}: аудиофайл не найден{where}"
 
 
 class AppApi:
@@ -113,6 +326,12 @@ class AppApi:
         # Connect engine event callbacks
         if hasattr(self._core, "engine") and self._core.engine:
             self._core.engine._on_track_changed = self._on_track_changed
+            # H-5: this hook existed on the engine but nothing ever assigned it,
+            # so reaching the end of the queue produced neither an event nor any
+            # autoplay. Wired up here; the frontend handles the track end by
+            # calling next_track(), whose None result it already treats as
+            # "stopped", so this only publishes the backend-side fact.
+            self._core.engine._on_queue_end = self._on_queue_end
             if hasattr(self._core.engine, "on_error"):
                 self._core.engine.on_error(self._on_audio_error)
 
@@ -613,15 +832,39 @@ class AppApi:
         if not self._window:
             return
 
-        payload_json = json.dumps(data or {})
-        js_code = (
-            f"if (window.onPythonEvent) {{ window.onPythonEvent("
-            f"{json.dumps(event_name)}, {payload_json}); }}"
-        )
+        # json.dumps must be inside the guard: a single non-serializable value in
+        # the payload (or a recursive structure) used to raise straight out of
+        # _emit before the try below, so the event was silently dropped and the
+        # caller saw no error at all.
+        try:
+            payload_json = json.dumps(data or {})
+            js_code = (
+                f"if (window.onPythonEvent) {{ window.onPythonEvent("
+                f"{json.dumps(event_name)}, {payload_json}); }}"
+            )
+        except Exception as e:
+            logger.error("emit %s payload serialization failed: %r", event_name, e, exc_info=True)
+            return
+
+        # pywebview's WinForms backend marshals evaluate_js through
+        # Control.Invoke. Calling that FROM the UI thread deadlocks the whole
+        # app: the thread waits for itself to drain the message queue. The
+        # pywebview `loaded` event runs on the UI thread, so a track restored
+        # from the saved session froze the entire window and the UI stopped
+        # reacting to clicks. Hand those calls to a worker instead.
+        if threading.current_thread() is _MAIN_THREAD:
+            threading.Thread(
+                target=self._window.evaluate_js,
+                args=(js_code,),
+                daemon=True,
+                name="EmitWorker",
+            ).start()
+            return
+
         try:
             self._window.evaluate_js(js_code)
         except Exception as e:
-            logger.debug(f"Failed to evaluate JS event {event_name}: {e}")
+            logger.error("emit %s failed: %r", event_name, e, exc_info=True)
 
     def _enrich_track_lufs(self, track_dict: dict) -> dict:
         """Ensure loudness_lufs and lufs fields are populated from DB if available."""
@@ -698,6 +941,17 @@ class AppApi:
         if getattr(self, "_tray", None):
             self._tray.update_state(track=track_copy, force=True)
 
+    def _on_queue_end(self):
+        """Publish that the queue was exhausted (repeat off, last track).
+
+        PlaybackQueue.next_track() returns None there, and AudioEngine.next_track()
+        calls this hook instead of advancing. Nothing else in the backend reacts,
+        so the event is the only place the UI learns the backend agrees that
+        playback has reached the end.
+        """
+        logger.info("api.py -> queue ended")
+        self._emit("queue_ended", {"reason": "queue_exhausted"})
+
     def _on_audio_error(self, err):
         """Callback invoked when audio engine encounters playback error."""
         err_msg = str(err)
@@ -723,6 +977,20 @@ class AppApi:
                 return
             self._history_logged_key = key
             t_id = track.get("id")
+            if not t_id:
+                # A track played straight from search has no local row yet, so
+                # there was nothing to attach the history entry to and the play
+                # was silently dropped. Persist it first: add_track() also
+                # stores cover_url, which is what the home/library grids render
+                # their artwork from -- without this every streamed track showed
+                # a skeleton placeholder forever.
+                try:
+                    t_id = self._core.db.ensure_track_exists(track)
+                except Exception:
+                    logger.debug("maybe_log_history: could not persist track", exc_info=True)
+                    t_id = None
+                if t_id:
+                    track["id"] = t_id
             if t_id:
                 try:
                     self._core.db.add_to_history(int(t_id))
@@ -733,6 +1001,9 @@ class AppApi:
 
     def report_state(self, state: str, elapsed_ms: int = 0):
         """Report playback state update (playing, paused, stopped)."""
+        # Remembered so play_pause() can answer with the real last state instead
+        # of pretending it performed a pause/resume it cannot do.
+        self._last_reported_state = state
         if state == "playing":
             self.maybe_log_history()
         elif state == "stopped":
@@ -786,6 +1057,13 @@ class AppApi:
             "position_ms": pos_ms,
             "duration_ms": duration
         })
+
+    def _notify_queue_updated(self):
+        """Emit queue_updated so the drawer never goes stale after a queue swap."""
+        try:
+            self._emit("queue_updated", self.get_queue())
+        except Exception:
+            logger.debug("_notify_queue_updated failed", exc_info=True)
 
     def play_track(self, track: dict, track_list: list = None, index: int = 0):
         """Play given track data object."""
@@ -853,9 +1131,10 @@ class AppApi:
                     return False
 
             fp = target_track.get("file_path") if isinstance(target_track, dict) else None
-            if source == "local" or _fp_usable(fp):
+            if _fp_usable(fp):
                 logger.info(f"api.py -> play_track fast path: source={source}, file_path={str(fp)[:80] if fp else None}")
                 self._core.engine.play_queue(track_list, safe_index)
+                self._notify_queue_updated()
                 return
 
             # Check DB stream cache (local file or fresh url)
@@ -867,12 +1146,14 @@ class AppApi:
                         target_track["file_path"] = cfp
                         logger.info(f"api.py -> play_track cache hit (local file): {cfp}")
                         self._core.engine.play_queue(track_list, safe_index)
+                        self._notify_queue_updated()
                         return
                     c_url = cached.get("stream_url")
                     if c_url and (c_url.startswith("http://") or c_url.startswith("https://")):
                         target_track["file_path"] = c_url
                         logger.info(f"api.py -> play_track cache hit (url): {c_url[:80]}")
                         self._core.engine.play_queue(track_list, safe_index)
+                        self._notify_queue_updated()
                         return
 
             # Check on-disk streams directory
@@ -892,11 +1173,21 @@ class AppApi:
                 if found_local:
                     logger.info(f"api.py -> play_track streams dir hit: {target_track['file_path']}")
                     self._core.engine.play_queue(track_list, safe_index)
+                    self._notify_queue_updated()
                     return
+
+            # A "local" track whose file is gone must fail loudly. The online
+            # resolution cascade below can never produce a stream for it, so the
+            # old `source == "local" or ...` fast path used to start playback
+            # against a missing path and the user only got silence.
+            if source == "local":
+                self._on_audio_error(_missing_local_file_message(target_track, fp))
+                return
 
             # Start queue playback immediately (frontend shows loading state),
             # resolve the target stream in background and notify again when ready.
             self._core.engine.play_queue(track_list, safe_index)
+            self._notify_queue_updated()
 
             def on_queue_resolved(stream_url, metadata=None):
                 if not stream_url:
@@ -953,6 +1244,10 @@ class AppApi:
                 self._core.engine._notify_track_changed()
             else:
                 play_callback(track)
+            try:
+                self._emit("queue_updated", self.get_queue())
+            except Exception:
+                logger.debug("_deliver queue_updated failed", exc_info=True)
 
         fp = track.get("file_path")
         if source == "local" and not fp:
@@ -976,7 +1271,7 @@ class AppApi:
                             track["file_path"] = fp
                             break
 
-        if source == "local" or _fp_usable(fp):
+        if _fp_usable(fp):
             logger.info(f"api.py -> _resolve_track fast path: source={source}, file_path={str(fp)[:80] if fp else None}")
             _deliver()
             return
@@ -1013,6 +1308,13 @@ class AppApi:
                     _deliver()
                     return
 
+        if source == "local":
+            # Neither the file nor either cache can produce a stream for a local
+            # source, so the resolution cascade below would only ever end in
+            # "Не удалось найти поток". Report the real cause instead.
+            self._on_audio_error(_missing_local_file_message(track, fp))
+            return
+
         # Re-resolve stream url asynchronously
         cur_start = self._core.engine.queue.current_track
 
@@ -1046,13 +1348,20 @@ class AppApi:
 
         self._core.re_resolve_stream_url_async(source, source_id, callback=on_resolved, on_error=on_resolve_error, track=track)
 
-    def stop_track(self):
-        """Stop audio playback."""
-        pass # Handled by frontend
+    def play_pause(self) -> str:
+        """Report the last playback state the frontend observed.
 
-    def play_pause(self):
-        """Toggle play/pause audio state."""
-        pass # Handled by frontend
+        The audio element lives in the frontend, so the backend cannot pause or
+        resume it - and it must not guess: it receives no argument telling it
+        whether the user asked to play or to pause, so any state change here
+        would desync the UI. The frontend drives <audio> itself (its own
+        togglePlayPause) and reports the result through report_state(). This
+        method is still called from the library "play all" buttons and the
+        mediaSession handlers, so it answers with the truth instead of None:
+        "playing", "paused", "stopped", or "" when nothing was reported yet.
+        """
+        state = getattr(self, "_last_reported_state", "") or ""
+        return state
 
     def next_track(self):
         """Play next track in queue. Returns the next track or None at queue end."""
@@ -1129,6 +1438,21 @@ class AppApi:
             return {"success": True}
         except Exception as e:
             logger.error(f"remove_from_queue error: {e}")
+            return {"success": False, "error": str(e)}
+
+    def clear_queue(self):
+        """Remove all tracks except the currently playing one (O-1)."""
+        try:
+            queue = self._core.engine.queue
+            current = queue.current_track
+            queue.clear()
+            # Keep the current track so playback state stays valid.
+            if current:
+                queue.set_tracks([current], 0)
+            self._emit("queue_updated", self.get_queue())
+            return {"success": True}
+        except Exception as e:
+            logger.error(f"clear_queue error: {e}")
             return {"success": False, "error": str(e)}
 
     def get_setting(self, key: str, default=None):
@@ -1229,12 +1553,44 @@ class AppApi:
         return self._core.settings.get("audio", "volume", 70)
 
     def toggle_mute(self):
-        """Toggle audio mute state."""
-        return False # Handled by frontend
+        """Toggle the persisted mute state and return the NEW state.
 
-    def set_position(self, pos_ms: int):
-        """Seek playback position in milliseconds."""
-        pass # Handled by frontend
+        The HTML5 element on the frontend does the actual attenuation; the
+        backend owns the flag so the value is consistent and truthful instead of
+        the old hardcoded ``return False`` (which read as "sound is on" no matter
+        what the user had muted). DEFAULT_SETTINGS already ships ``audio.muted``
+        and nothing used to read or write it.
+
+        Returns True when audio is muted from now on, False when unmuted.
+        """
+        settings = getattr(self._core, "settings", None)
+        if settings is None:
+            # Without a settings store there is nothing truthful to report.
+            return False
+        try:
+            current = bool(settings.get("audio", "muted", False))
+        except Exception:
+            logger.debug("toggle_mute: could not read audio.muted", exc_info=True)
+            current = False
+        new_state = not current
+        try:
+            settings.set("audio", "muted", new_state)
+        except Exception as e:
+            logger.error(f"toggle_mute: could not persist audio.muted: {e}")
+            return current
+        self._emit("mute_changed", {"muted": new_state})
+        return new_state
+
+    def is_muted(self) -> bool:
+        """Return the persisted mute state without changing it."""
+        settings = getattr(self._core, "settings", None)
+        if settings is None:
+            return False
+        try:
+            return bool(settings.get("audio", "muted", False))
+        except Exception:
+            logger.debug("is_muted: suppressed exception", exc_info=True)
+            return False
 
     def toggle_shuffle(self):
         """Toggle queue shuffle mode."""
@@ -1251,12 +1607,26 @@ class AppApi:
     def get_next_track(self, *args, **kwargs):
         """Return metadata and stream URL for the upcoming track in the queue without advancing index."""
         try:
-            if not self._core.engine.queue.tracks:
+            queue = self._core.engine.queue
+            tracks = queue.tracks
+            if not tracks:
                 return None
-            current_idx = self._core.engine.queue._current_index
-            next_idx = (current_idx + 1) % len(self._core.engine.queue.tracks)
-            if next_idx < len(self._core.engine.queue.tracks):
-                raw_track = self._core.engine.queue.tracks[next_idx]
+            current_idx = queue.current_index
+            # current_index is -1 for an empty queue and can only be meaningful
+            # once something is actually current; there is no "next" to preview.
+            if current_idx < 0:
+                return None
+            # PlaybackQueue.next_track() returns None at the end of the queue
+            # unless repeat == "all", in which case it wraps to index 0. The old
+            # unconditional (current_idx + 1) % len(tracks) wrapped anyway, so a
+            # preloading frontend cached the FIRST track in vain on the last
+            # track (and always with a single-track queue).
+            at_end = current_idx >= len(tracks) - 1
+            if at_end and queue.repeat != "all":
+                return None
+            next_idx = 0 if at_end else current_idx + 1
+            if 0 <= next_idx < len(tracks):
+                raw_track = tracks[next_idx]
                 if not raw_track or not isinstance(raw_track, dict):
                     return None
                 
@@ -1341,6 +1711,12 @@ class AppApi:
                     completion_emitted[0] = True
                     self._emit("search_completed", {"query": query, "source": source})
 
+        if not requested_providers:
+            # All providers filtered out (e.g. DISABLED_UI_PROVIDERS): do not hang,
+            # emit completion immediately so the UI stops its spinner.
+            self._emit("search_completed", {"query": query, "source": source})
+            return {"query": query, "tracks": []}
+
         # Local DB Search
         if "local" in requested_providers:
             def _run_local():
@@ -1398,14 +1774,18 @@ class AppApi:
                     logger.info("%s search failed: %s", name, err)
                     _finish([])
 
+                # SoundCloud regularly exceeds the 4s budget (client_id scrape +
+                # api-v2 round trips); give it 8s, keep 4.0s for the rest.
+                _timeout = 8.0 if name == "soundcloud" else PROVIDER_SEARCH_TIMEOUT
+
                 def _on_timeout():
                     with lock:
                         if is_done[0]:
                             return
-                    logger.warning("%s search timed out after %.1fs", name, PROVIDER_SEARCH_TIMEOUT)
+                    logger.warning("%s search timed out after %.1fs", name, _timeout)
                     _finish([])
 
-                timer = threading.Timer(PROVIDER_SEARCH_TIMEOUT, _on_timeout)
+                timer = threading.Timer(_timeout, _on_timeout)
                 timer.daemon = True
                 timer.start()
 
@@ -1507,33 +1887,88 @@ class AppApi:
         return self.get_favorite_tracks()
 
     def get_downloaded_tracks(self):
-        """Get list of downloaded local tracks."""
-        return self._core.db.get_downloaded_tracks()
+        """Get list of downloaded local tracks (missing files filtered out)."""
+        try:
+            tracks = self._core.db.get_downloaded_tracks() or []
+        except Exception:
+            return []
+        result = []
+        for t in tracks:
+            if not isinstance(t, dict):
+                continue
+            fp = t.get("file_path")
+            if fp and os.path.exists(fp):
+                result.append(t)
+        return result
 
     def download_track(self, track_data: dict):
-        """Queue track for background download."""
-        if not track_data:
+        """Queue track for background download. Returns True if queued, False otherwise."""
+        if not track_data or not isinstance(track_data, dict):
             return False
 
         track_id = track_data.get("id")
-        source = track_data.get("source", "youtube")
-        source_id = track_data.get("source_id") or str(track_id)
+        source = track_data.get("source") or "youtube"
+        source_id = track_data.get("source_id")
+
+        if not source_id and track_id is not None:
+            # Never substitute a numeric DB id for a provider videoId: look up
+            # the real provider source_id first.
+            try:
+                db_track = self._core.db.get_track(int(track_id))
+                if db_track:
+                    if db_track.get("source_id"):
+                        source_id = db_track.get("source_id")
+                    if db_track.get("source"):
+                        source = db_track.get("source")
+            except (ValueError, TypeError):
+                # track_id is not a numeric DB id (e.g. already a videoId string)
+                source_id = source_id or str(track_data.get("source_id") or track_id)
+            except Exception:
+                logger.debug("download_track DB lookup failed", exc_info=True)
 
         if not track_id:
-            track_id = self._core.db.add_track(
-                title=track_data.get("title", "Unknown"),
-                artist=track_data.get("artist", "Unknown Artist"),
-                source=source,
-                source_id=source_id,
-                duration=track_data.get("duration", 0)
-            )
+            try:
+                track_id = self._core.db.add_track(
+                    title=track_data.get("title", "Unknown"),
+                    artist=track_data.get("artist", "Unknown Artist"),
+                    source=source,
+                    source_id=source_id,
+                    duration=track_data.get("duration", 0)
+                )
+            except Exception as e:
+                logger.error(f"download_track: failed to persist track: {e}")
+                try:
+                    self._emit("download_failed", {"track_id": None, "error": str(e)})
+                except Exception:
+                    pass
+                return False
 
-        return self._core.downloader.queue_download(track_id, source, source_id)
+        if not source_id:
+            logger.warning(f"download_track: missing source_id for track {track_id}, refusing to queue")
+            try:
+                self._emit("download_failed", {"track_id": track_id, "error": "missing source_id"})
+            except Exception:
+                pass
+            return False
+
+        try:
+            queued = self._core.downloader.queue_download(track_id, source, str(source_id))
+        except Exception as e:
+            logger.error(f"download_track: queue_download failed for {track_id}: {e}")
+            try:
+                self._emit("download_failed", {"track_id": track_id, "error": str(e)})
+            except Exception:
+                pass
+            return False
+        if not queued:
+            # Duplicate or rejected by the queue manager.
+            return False
+        return True
 
     def import_external_playlist(self, url: str, name: str | None = None):
         """Resolve a supported external playlist and persist its tracks locally."""
-        url = (url or "").strip()
-        if not _is_ssrf_safe_url(url):
+        url = _extract_first_url(url or "")
+        if not url or not _is_ssrf_safe_url(url):
             logger.warning("SSRF block triggered for playlist import URL: %s", url)
             return {"success": False, "error": "Некорректная или небезопасная ссылка"}
 
@@ -1812,36 +2247,51 @@ class AppApi:
         return True
 
     def update_autostart(self, enabled: bool):
-        """Toggle app autostart registry entry on Windows."""
+        """Toggle the app autostart registry entry on Windows.
+
+        Writes AUTOSTART_RUN_VALUE under AUTOSTART_RUN_KEY in HKCU - the exact
+        hive/key/value-name triple that installer.iss writes, so enabling
+        autostart leaves ONE Run entry instead of two. Legacy names from
+        pre-NeDotify builds (AUTOSTART_RUN_LEGACY_VALUES, i.e. "AURA Music")
+        are removed on both the enable and the disable path: they survived
+        enabling (second launch at logon) and only the old code, on disable,
+        removed the pair.
+        """
         if sys.platform != "win32":
             return False
         try:
             import winreg
-            key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
-            app_name = "AURA Music"
-            if enabled:
-                if getattr(sys, 'frozen', False):
-                    exe_path = f'"{sys.executable}"'
-                else:
-                    # Anchor to this file, not the CWD: launching the app from a
-                    # different working directory used to register a broken
-                    # autostart entry.
-                    main_py = os.path.join(
-                        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py"
-                    )
-                    exe_path = f'"{sys.executable}" "{main_py}"'
-                winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, exe_path)
-            else:
-                for name in (app_name, "NeDotify"):
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, AUTOSTART_RUN_KEY, 0, winreg.KEY_SET_VALUE)
+            try:
+                if enabled:
+                    if getattr(sys, 'frozen', False):
+                        exe_path = f'"{sys.executable}"'
+                    else:
+                        # Anchor to this file, not the CWD: launching the app from a
+                        # different working directory used to register a broken
+                        # autostart entry.
+                        main_py = os.path.join(
+                            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py"
+                        )
+                        exe_path = f'"{sys.executable}" "{main_py}"'
+                    winreg.SetValueEx(key, AUTOSTART_RUN_VALUE, 0, winreg.REG_SZ, exe_path)
+                # Only the legacy names are dropped on the enable path: the value
+                # just written above must survive. On disable, the current name
+                # goes too, otherwise the toggle could never turn autostart off.
+                stale_names = (
+                    AUTOSTART_RUN_LEGACY_VALUES if enabled
+                    else (AUTOSTART_RUN_VALUE,) + tuple(AUTOSTART_RUN_LEGACY_VALUES)
+                )
+                for name in stale_names:
                     try:
                         winreg.DeleteValue(key, name)
                     except (FileNotFoundError, OSError):
                         pass
-            try:
-                winreg.CloseKey(key)
-            except OSError:
-                logger.debug("Registry key close failed", exc_info=True)
+            finally:
+                try:
+                    winreg.CloseKey(key)
+                except OSError:
+                    logger.debug("Registry key close failed", exc_info=True)
             self._core.settings.set("general", "autostart", enabled)
             self._core.settings.set("app", "autostart", enabled)
             return True
@@ -1850,12 +2300,15 @@ class AppApi:
             return False
 
     def validate_subscription_key(self, key: str):
-        """Report licence status for `key`.
+        """Report licence status for `key`. Validation intentionally disabled.
 
-        Licensing is not enforced in this build (LICENSE_VALIDATION_ENABLED is False),
-        so every key is reported as valid. The flag is honoured here rather than the
-        result being hardcoded, so enabling it cannot be forgotten: with validation on
-        and no remote service wired up, access is denied instead of silently granted.
+        Licensing is not enforced in this build: LICENSE_VALIDATION_ENABLED is
+        False and no caller exists (the UI never asks), so every key is reported
+        as valid. The stub is kept on purpose - it is the documented seam for a
+        remote, server-owned licensing service - and the flag is honoured here
+        rather than the result being hardcoded, so flipping it cannot be
+        forgotten: with validation on and no service wired up, access is denied
+        instead of silently granted. Do not add UI that calls this.
         """
         if not LICENSE_VALIDATION_ENABLED:
             return {"valid": True, "is_valid": True, "success": True, "expire": "never", "valid_until": 0}
@@ -1864,7 +2317,11 @@ class AppApi:
                 "error": "Сервис проверки лицензий недоступен", "valid_until": 0}
 
     def get_subscription_info(self):
-        """Return current licence information. See validate_subscription_key."""
+        """Return current licence information. Validation intentionally disabled.
+
+        See validate_subscription_key: the stub exists for a future server-side
+        licensing service and has no caller today.
+        """
         if not LICENSE_VALIDATION_ENABLED:
             return {"valid": True, "is_valid": True, "success": True, "expire": "never",
                     "valid_until": 0, "key": "OPEN-SOURCE"}
@@ -1983,7 +2440,7 @@ class AppApi:
                 "total_mb": total_mb,
                 "tracks": {"count": track_count, "size": f"{track_mb} MB"},
                 "covers": {"count": covers_count, "size": f"{cover_mb} MB"},
-                "cache_dir": cache_dir
+                "cache_dir": base_cache_dir
             }
             self._storage_info_cache = (time.monotonic(), res)
             self._emit("storage_info", res)
@@ -1999,15 +2456,56 @@ class AppApi:
             self._emit("storage_info", err_res)
             return err_res
 
-    def clear_storage(self, storage_type: str = "cache"):
-        """Clear cache or storage folder."""
+    def clear_storage(self, storage_type: str = "cache") -> bool:
+        """Clear cached data. ``storage_type``:
+
+        - ``"cache"``: clear the cache manager (covers, stream cache, temp).
+        - ``"all"``: additionally delete the audio files of downloaded tracks.
+
+        Downloaded tracks are user-owned music, so "all" also drops those files
+        from disk. That is why the value is validated strictly here instead of
+        silently doing what "cache" does: the old implementation accepted "all"
+        and only cleared the cache, so the caller could believe the downloads
+        were gone while the files stayed.
+
+        Returns False (never raises) for an unknown storage_type so a bad value
+        cannot wipe something unintended.
+        """
         try:
-            if storage_type in ("cache", "all"):
-                self._core.cache.clear_all()
+            storage_type = str(storage_type or "cache").strip().lower()
+            if storage_type not in ("cache", "all"):
+                logger.warning("clear_storage: unsupported storage_type %r", storage_type)
+                return False
+            cache = getattr(self._core, "cache", None)
+            if cache is None:
+                logger.error("clear_storage: cache manager unavailable")
+                return False
+            cache.clear_all()
+            if storage_type == "all":
+                removed = self._delete_downloaded_files()
+                logger.info("clear_storage: removed %d downloaded file(s)", removed)
             return True
         except Exception as e:
             logger.error(f"Clear storage failed: {e}")
             return False
+
+    def _delete_downloaded_files(self) -> int:
+        """Delete every downloaded track file from disk. Returns files removed."""
+        removed = 0
+        tracks = self._core.db.get_downloaded_tracks() or []
+        for t in tracks:
+            if not isinstance(t, dict):
+                continue
+            fp = t.get("file_path")
+            if not fp:
+                continue
+            try:
+                if os.path.isfile(fp):
+                    os.remove(fp)
+                    removed += 1
+            except OSError as e:
+                logger.warning("clear_storage: could not remove %s: %s", fp, e)
+        return removed
 
     def get_wrapped_stats(self, period: str = "week"):
         """Get NeDotify Wrapped analytics stats (top 5 tracks/artists, total minutes, activity graph)."""
@@ -2076,6 +2574,65 @@ class AppApi:
 
         threading.Thread(target=run, daemon=True, name=f"Lyrics-{cascade_no}").start()
         return {"status": "loading", "cascade": cascade_no}
+
+    def fetch_missing_covers(self, limit: int = 40):
+        """Backfill cover_url for library/history rows that have none.
+
+        Rows written before covers were persisted on playback keep a NULL
+        cover_url, so every grid rendered a bare placeholder forever. Resolve
+        artwork from the owning provider and store it. Runs off the bridge
+        thread; failures are per-track and non-fatal.
+        """
+        try:
+            rows = self._core.db.get_tracks_missing_cover(limit=limit) or []
+        except Exception:
+            logger.debug("fetch_missing_covers: query failed", exc_info=True)
+            return {"updated": 0}
+
+        updated = 0
+        for row in rows:
+            source = (row.get("source") or "").lower()
+            source_id = str(row.get("source_id") or "").strip()
+            if not source or not source_id:
+                continue
+            try:
+                extra = self._resolve_track_metadata(source, source_id)
+            except Exception:
+                logger.debug("fetch_missing_covers: %s/%s failed", source, source_id, exc_info=True)
+                continue
+            cover = str(extra.get("cover_url") or "")
+            if cover:
+                try:
+                    self._core.db.backfill_track_metadata(
+                        int(row["id"]), cover,
+                        title=str(extra.get("title") or ""),
+                        artist=str(extra.get("artist") or ""),
+                    )
+                    updated += 1
+                except Exception:
+                    logger.debug("fetch_missing_covers: store failed", exc_info=True)
+        if updated:
+            self._emit("library_updated", {"covers": updated})
+        return {"updated": updated, "scanned": len(rows)}
+
+    def _resolve_track_metadata(self, source: str, source_id: str) -> dict:
+        """Ask the owning provider for one track's artwork and real names."""
+        svc = None
+        if source == "soundcloud":
+            svc = getattr(self._core, "soundcloud", None)
+        elif source == "youtube":
+            svc = getattr(self._core, "youtube", None)
+        getter = getattr(svc, "get_track_metadata", None) if svc else None
+        if not callable(getter):
+            return {}
+        try:
+            return getter(source_id) or {}
+        except Exception:
+            logger.debug("_resolve_track_metadata(%s/%s) failed", source, source_id, exc_info=True)
+            return {}
+
+    def _resolve_track_cover(self, source: str, source_id: str) -> str:
+        return str(self._resolve_track_metadata(source, source_id).get("cover_url") or "")
 
     def get_lyrics_translation(self, lyrics_text: str, target_lang: str = "ru"):
         """Get translation for lyrics text."""
@@ -2439,10 +2996,15 @@ class AppApi:
             if hasattr(self._core, "downloader"):
                 self._core.downloader.start_batch(len(to_download))
 
+            # Announce the batch BEFORE anything is queued: with a fast pool the
+            # per-track batch_download_progress events emitted by
+            # queue_download() used to reach the frontend first, and a UI that
+            # initializes its counter from batch_download_started then reset it
+            # to the progress values.
+            self._emit("batch_download_started", {"total": len(to_download), "current": 0})
+
             for track in to_download:
                 self.download_track(track)
-
-            self._emit("batch_download_started", {"total": len(to_download), "current": 0})
 
             return {
                 "success": True,
@@ -2640,15 +3202,20 @@ class AppApi:
                 try:
                     with open(new_cover_path, "rb") as cf:
                         cover_bytes = cf.read()
-                    if new_cover_path.lower().endswith(".png"):
-                        cover_mime = "image/png"
-                    elif new_cover_path.lower().endswith(".webp"):
-                        cover_mime = "image/webp"
+                    # Extension and MIME must agree: the proxy guesses the
+                    # Content-Type of /api/cover from the file name, so PNG/WebP
+                    # bytes stored as "<id>.jpg" were served as image/jpeg and
+                    # refused by the browser's image decoder.
+                    src_ext = os.path.splitext(new_cover_path)[1].lower()
+                    cover_mime = _COVER_MIME_BY_EXT.get(src_ext, "image/jpeg")
+                    cover_ext = _COVER_EXT_BY_MIME.get(cover_mime, ".jpg")
 
-                    # Save copy to ~/.nedotify/covers/ for fast UI loading
+                    # Save copy to ~/.nedotify/covers/ for fast UI loading.
+                    # The proxy serves every COVER_EXTENSIONS entry from this
+                    # directory, so the real extension is served correctly.
                     covers_dir = os.path.join(os.path.expanduser("~"), ".nedotify", "covers")
                     os.makedirs(covers_dir, exist_ok=True)
-                    cached_cover = os.path.join(covers_dir, f"{track_id}.jpg")
+                    cached_cover = os.path.join(covers_dir, f"{track_id}{cover_ext}")
                     with open(cached_cover, "wb") as f:
                         f.write(cover_bytes)
                     cover_path = cached_cover
@@ -2725,16 +3292,42 @@ class AppApi:
             logger.error(f"Error getting storage details: {e}")
             return {"used_bytes": 0, "quota_bytes": 5 * 1024 * 1024 * 1024, "quota_gb": 5, "protected_count": 0}
 
-    def set_cache_quota(self, quota_gb: int) -> dict:
-        """Set storage cache quota in GB and trigger LRU eviction if quota is exceeded."""
+    def set_cache_quota(self, quota_gb=None, cache_size_mb=None, cache_quota_gb=None, **kwargs) -> dict:
+        """Set storage cache quota and trigger LRU eviction if quota is exceeded.
+
+        Unifies the two historically divergent keys:
+          - frontend sends ``cache_quota_gb`` (GB, select-cache-quota),
+          - older settings schema used ``storage.cache_size_mb`` (MB).
+        Accepts either (GB wins when both are given) so callers never silently
+        write a key the reader ignores. See _normalize_cache_quota() for the
+        full precedence table.
+
+        A quota of 0 is rejected instead of being handed to
+        CacheManager.purge_stream_cache(quota_bytes=0): the cache manager
+        treats 0 as "unlimited" and skips purging, while any other manager
+        implementation reads it as "delete everything". Refusing keeps a
+        mis-sent 0 from silently wiping the stream cache.
+        """
         try:
-            quota_val = max(0, int(quota_gb))
+            val_gb, size_mb = _normalize_cache_quota(
+                quota_gb=quota_gb,
+                cache_size_mb=cache_size_mb,
+                cache_quota_gb=cache_quota_gb,
+                **kwargs,
+            )
+            if val_gb is None:
+                return {"success": False, "error": "quota not specified"}
+            if val_gb <= 0:
+                return {"success": False, "error": "quota must be greater than 0 GB"}
+            quota_val = max(0, int(round(val_gb)))
+            size_mb_val = int(round(size_mb))
             if hasattr(self._core, "settings") and self._core.settings:
                 self._core.settings.set("storage", "cache_quota_gb", quota_val)
+                self._core.settings.set("storage", "cache_size_mb", size_mb_val)
 
             freed = 0
             if hasattr(self._core, "cache") and self._core.cache:
-                freed = self._core.cache.purge_stream_cache(quota_bytes=quota_val * 1024 * 1024 * 1024 if quota_val > 0 else 0)
+                freed = self._core.cache.purge_stream_cache(quota_bytes=quota_val * 1024 * 1024 * 1024)
                 details = self._core.cache.get_storage_details()
             else:
                 details = {"quota_gb": quota_val, "used_bytes": 0}

@@ -1,33 +1,29 @@
 ---
 name: aura-build
-description: Package AURA Music into NeDotify.exe and the Inno Setup / GUI installer with PyInstaller. Use when asked to build, package, ship a release, produce an installer, or when a change might break frozen mode (asset paths, sys._MEIPASS, hidden imports, bundled data files).
+description: Package NeDotify into NeDotify.exe and the Inno Setup installer. Use when asked to build, package, ship a release, produce an installer, or when a change might break frozen mode (asset paths, sys._MEIPASS, hidden imports, bundled data files).
 ---
 
-# Packaging AURA Music
+# Packaging NeDotify
 
 ## Full installer build
 
-```powershell
-& ".venv\Scripts\python.exe" build_installer.py
-```
+Two sequential steps; the second aborts the build if the first failed:
 
-Three sequential PyInstaller passes (`build_installer.py`), each aborting the
-build on non-zero exit:
+1. `pyinstaller setup_pyinstaller.spec` → `dist\NeDotify.exe`
+2. `iscc installer.iss` → `dist\NeDotify_Setup.exe`
 
-1. `uninstaller_gui.py` → `dist/uninstall.exe` (onefile, windowed)
-2. `setup_pyinstaller.spec` (`--clean`) → `dist/NeDotify.exe`
-3. `installer_gui.py` → `dist/NeDotify_Setup.exe`, embedding both exes via
-   `--add-data`, then copied to `dist/NeDotify_beta5_Setup.exe` for
-   backward compatibility
-
-`installer.iss` is the Inno Setup script for the alternative native installer.
+`installer.iss` is the **only** installer source: it owns shortcuts, the
+HKCU autostart `Run` value and the uninstaller. There is no PyInstaller-built
+GUI installer and no second, custom uninstaller — that pipeline was deleted
+because it produced three byte-identical setup exes and an uninstaller that
+competed with Inno Setup's.
 
 A full build is slow and rewrites `build/` and `dist/`. For a spec-only
-iteration: `& ".venv\Scripts\python.exe" -m PyInstaller --clean setup_pyinstaller.spec`.
+iteration: `& ".venv_win\Scripts\python.exe" -m PyInstaller --clean setup_pyinstaller.spec`.
 
 ## Frozen-mode rules
 
-- Resolve every static asset (icons, `ui/web_new/**`, templates) through
+- Resolve every static asset (icons, `ui/web_new_v2/**`, templates) through
   `sys._MEIPASS` when frozen and `os.path.dirname(__file__)` in source mode.
   A path that works in `python main.py` and breaks in the exe is the single
   most common packaging regression here.

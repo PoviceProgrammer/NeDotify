@@ -9,7 +9,7 @@ import logging
 import time
 import collections
 from concurrent.futures import ThreadPoolExecutor
-from services.base_service import BaseMusicService
+from services.base_service import BaseMusicService, normalize_proxy_url
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class SoundCloudService(BaseMusicService):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
         if self.settings:
-            proxy = self.settings.get('auth', 'proxy_url', '')
+            proxy = normalize_proxy_url(self.settings.get('auth', 'proxy_url', ''))
             if proxy:
                 self._session.proxies = {'http': proxy, 'https': proxy}
         
@@ -163,7 +163,7 @@ class SoundCloudService(BaseMusicService):
                 'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'},
             }
             if self.settings:
-                proxy = self.settings.get('auth', 'proxy_url', '')
+                proxy = normalize_proxy_url(self.settings.get('auth', 'proxy_url', ''))
                 if proxy:
                     ydl_opts['proxy'] = proxy
                 import os
@@ -192,7 +192,7 @@ class SoundCloudService(BaseMusicService):
                 'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'},
             }
             if self.settings:
-                proxy = self.settings.get('auth', 'proxy_url', '')
+                proxy = normalize_proxy_url(self.settings.get('auth', 'proxy_url', ''))
                 if proxy:
                     ydl_opts['proxy'] = proxy
             store["search"] = yt_dlp.YoutubeDL(ydl_opts)
@@ -389,6 +389,39 @@ class SoundCloudService(BaseMusicService):
 
         self._executor.submit(_fetch)
 
+    def get_track_metadata(self, track_id: str) -> dict:
+        """Fetch a single track's metadata (artwork included) by numeric id.
+
+        Used to backfill cover_url for rows stored before artwork was persisted
+        on playback, so library grids stop showing empty placeholders.
+        """
+        try:
+            cid = self._get_client_id()
+            if not cid:
+                return {}
+            r = self._session.get(
+                f"https://api-v2.soundcloud.com/tracks/{track_id}?client_id={cid}",
+                timeout=6.0,
+            )
+            if r.status_code != 200:
+                return {}
+            data = r.json() or {}
+        except Exception:
+            self.logger.debug("get_track_metadata(%s) failed", track_id, exc_info=True)
+            return {}
+
+        artwork = data.get("artwork_url") or ""
+        if artwork and "large.jpg" in artwork:
+            # t500 keeps the download small while staying sharp on a grid tile.
+            artwork = artwork.replace("large.jpg", "t500x500.jpg")
+        return {
+            "title": data.get("title") or "",
+            "artist": (data.get("user") or {}).get("username") or "",
+            "cover_url": artwork,
+            "source_id": str(data.get("id") or track_id),
+            "source_url": data.get("permalink_url") or f"https://soundcloud.com/{track_id}",
+        }
+
     def get_stream_url(self, track_url: str, callback: Callable = None, error_callback: Callable = None, quality: str = "high", **kwargs):
         """Extract direct audio stream URL from a SoundCloud track."""
         info = self.get_from_cache(track_url)
@@ -558,21 +591,32 @@ class SoundCloudService(BaseMusicService):
         if not HAS_YTDLP:
             raise Exception('yt-dlp is missing')
 
-        sc_url_str = str(sc_url).strip()
+        # Single timestamp for every filename derived from this call, otherwise
+        # output_path and outtmpl drift apart by a second and the existence
+        # fallback below can never match the real download.
+        ts = int(time.time())
+
+        raw_input = str(sc_url).strip()
+        sc_url_str = raw_input
         if not sc_url_str.startswith('http'):
             if sc_url_str.isdigit():
+                # Bare numeric track id: yt-dlp cannot fetch a permalink from it,
+                # the api-v2 track URL is the only resolvable form.
                 sc_url_str = f'https://api-v2.soundcloud.com/tracks/{sc_url_str}'
             else:
-                sc_url_str = f'https://soundcloud.com/{sc_url_str}'
+                # Permalink slug such as "artist/track": qualify it. A value that
+                # already contains a slash is used as-is after the host prefix;
+                # a bare slug without slash is also prefixed (best effort).
+                sc_url_str = f'https://soundcloud.com/{sc_url_str.lstrip("/")}'
 
-        file_name = f'sc_{int(time.time())}.mp3'
+        file_name = f'sc_{ts}.mp3'
         output_path = os.path.join(output_dir, file_name)
 
         ydl_opts = {'quiet': True, 'no_warnings': True, 'format': 'bestaudio/best'}
-        ydl = yt_dlp.YoutubeDL(ydl_opts)
-        
+
         try:
-            info = ydl.extract_info(sc_url_str, download=False)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(sc_url_str, download=False)
         except Exception as e:
             self.logger.debug(f'SoundCloud metadata probe failed for {sc_url_str}: {e}', exc_info=True)
             info = None
@@ -601,7 +645,7 @@ class SoundCloudService(BaseMusicService):
 
             yt_dlp_opts = yt._get_ydl_opts('bestaudio/best', fallback=True)
             yt_dlp_opts.update({
-                'outtmpl': os.path.join(output_dir, f'sc_yt_{int(time.time())}.%(ext)s'),
+                'outtmpl': os.path.join(output_dir, f'sc_yt_{ts}.%(ext)s'),
                 'skip_download': False,
             })
             with yt_dlp.YoutubeDL(yt_dlp_opts) as yt_ydl:
@@ -619,7 +663,18 @@ class SoundCloudService(BaseMusicService):
                 'quiet': True,
                 'no_warnings': True,
                 'format': 'bestaudio/best',
-                'outtmpl': os.path.join(output_dir, f'sc_{int(time.time())}.%(ext)s'),
+                'outtmpl': os.path.join(output_dir, f'sc_{ts}.%(ext)s'),
+                # Same throughput settings as the YouTube path: without them
+                # yt-dlp fetches one connection with a small buffer, which is
+                # the slowest configuration available.
+                'concurrent_fragment_downloads': 4,
+                'http_chunk_size': 10 * 1024 * 1024,
+                'buffersize': 1024 * 1024,
+                'retries': 10,
+                'extractor_retries': 3,
+                'fragment_retries': 10,
+                'file_access_retries': 3,
+                'socket_timeout': 30,
             }
             with yt_dlp.YoutubeDL(dl_opts) as sc_ydl:
                 sc_info = sc_ydl.extract_info(sc_url_str, download=True)

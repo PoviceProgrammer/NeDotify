@@ -1,4 +1,4 @@
-import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml, updatePlayingTrackInDOM } from './utils.js';
+import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml, updatePlayingTrackInDOM, sizeCanvasForDpr, registerCanvasDprListener } from './utils.js';
 
 let currentTrack = null;
 let isPlaying = false;
@@ -78,6 +78,8 @@ function loadAudioSource(audioEl, src) {
         try { hlsInstance.destroy(); } catch(e) {}
         hlsInstance = null;
     }
+    // Reset stale src so a fast skip never fires error/stall handlers for the old stream
+    try { audioEl.removeAttribute('src'); audioEl.src = ''; audioEl.load(); } catch(e) {}
 
     const isHls = typeof src === 'string' && (src.includes('.m3u8') || src.includes('/playlist') || src.includes('format=m3u8'));
     if (isHls && window.Hls && window.Hls.isSupported()) {
@@ -577,7 +579,36 @@ export function togglePlayPause() {
     if (!hasValidSrc) {
         if (currentTrack) {
             if (window.pywebview?.api?.play_track) {
-                window.pywebview.api.play_track(currentTrack);
+                // Pass the current queue when we have it so the backend keeps
+                // the queue (shuffle/repeat/next) instead of resolving solo.
+                const q = Array.isArray(window.currentQueue) ? window.currentQueue : null;
+                if (q && q.length > 0) {
+                    let idx = q.findIndex(t => t && currentTrack && (
+                        (t.id !== undefined && currentTrack.id !== undefined && String(t.id) === String(currentTrack.id)) ||
+                        (t.source_id && currentTrack.source_id && String(t.source_id) === String(currentTrack.source_id)) ||
+                        (t.title === currentTrack.title && (t.artist || '') === (currentTrack.artist || ''))
+                    ));
+                    if (idx < 0) idx = 0;
+                    window.pywebview.api.play_track(currentTrack, q, idx);
+                } else if (window.pywebview?.api?.get_queue) {
+                    window.pywebview.api.get_queue().then(queueState => {
+                        const tracks = (queueState && queueState.tracks) || [];
+                        if (tracks.length > 0) {
+                            let idx = tracks.findIndex(t => t && currentTrack && (
+                                (t.id !== undefined && currentTrack.id !== undefined && String(t.id) === String(currentTrack.id)) ||
+                                (t.source_id && currentTrack.source_id && String(t.source_id) === String(currentTrack.source_id))
+                            ));
+                            if (idx < 0) idx = (queueState.current_index >= 0 ? queueState.current_index : 0);
+                            window.pywebview.api.play_track(currentTrack, tracks, idx);
+                        } else {
+                            window.pywebview.api.play_track(currentTrack);
+                        }
+                    }).catch(() => {
+                        window.pywebview.api.play_track(currentTrack);
+                    });
+                } else {
+                    window.pywebview.api.play_track(currentTrack);
+                }
             }
         }
         return;
@@ -892,6 +923,10 @@ export function initPlayer() {
             optMenu.style.top = `${rect.top - 10}px`;
             optMenu.style.transform = 'translateY(-100%)';
             optMenu.classList.toggle('visible');
+            // Fixed-position menu: dismiss it when the window resizes or the page changes.
+            if (optMenu.classList.contains('visible')) {
+                window.NeDotify?._armFloatingMenuGuard?.();
+            }
 
             // Update track title in header
             const header = document.getElementById('track-options-header');
@@ -1028,7 +1063,10 @@ function animateProgress(timestamp) {
         animFrameId = null;
         return;
     }
-    if (document.hidden) return;
+    if (document.hidden) {
+        animFrameId = requestAnimationFrame(animateProgress);
+        return;
+    }
     animFrameId = requestAnimationFrame(animateProgress);
 
     // Throttle progress bar updates to target UI FPS
@@ -1088,8 +1126,8 @@ function animateProgress(timestamp) {
                                     const inactiveAudio = activeAudio === audioA ? audioB : audioA;
                                     if (inactiveAudio && inactiveAudio.src !== nextTrack.stream_url) {
                                         try {
-                                            inactiveAudio.src = nextTrack.stream_url;
-                                            inactiveAudio.load();
+                                            // Route through the HLS-aware loader, never raw .src.
+                                            loadAudioSource(inactiveAudio, nextTrack.stream_url);
                                         } catch (preErr) {
                                             inactiveAudio.src = "";
                                             inactiveAudio.removeAttribute("src");
@@ -1726,7 +1764,22 @@ window.addEventListener('resize', () => {
     document.querySelectorAll('.waveform-canvas').forEach(cv => {
         cv._wfW = undefined;
         cv._wfH = undefined;
+        cv._wfBw = undefined;
+        cv._wfBh = undefined;
     });
+});
+
+// A drag between a 100% and a 150% monitor changes devicePixelRatio without a
+// resize event. Drop the cached backing-store size too, so the next render
+// re-rasterises the waveform at the new scale instead of leaving it soft.
+registerCanvasDprListener(() => {
+    document.querySelectorAll('.waveform-canvas').forEach(cv => {
+        cv._wfBw = undefined;
+        cv._wfBh = undefined;
+        cv._wfPlayed = -1;
+        cv._wfStatic = false;
+    });
+    try { renderWaveforms(currentPosMs / (currentDuration || 1)); } catch (e) {}
 });
 
 export async function fetchAndRenderWaveform(track) {
@@ -1795,6 +1848,7 @@ function drawWaveformToCanvas(canvas, peaks, progressPct) {
     const ctx = canvas.getContext('2d');
 
     // C-5: cached element size (invalidated on window resize / track change)
+    // These are CSS pixels; the backing store is derived from them below.
     const parent = canvas.parentElement;
     let w = canvas._wfW;
     if (w === undefined || w === 0) {
@@ -1805,9 +1859,13 @@ function drawWaveformToCanvas(canvas, peaks, progressPct) {
         h = canvas._wfH = parent.clientHeight || 20;
     }
 
-    if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
+    // Backing store follows devicePixelRatio; every drawing call below keeps
+    // using the CSS-pixel w/h, and the context carries the dpr scale. At
+    // dpr === 1 the backing store is exactly w x h, as it was before.
+    const sized = sizeCanvasForDpr(canvas, ctx, w, h);
+    if (canvas._wfBw !== sized.bw || canvas._wfBh !== sized.bh) {
+        canvas._wfBw = sized.bw;
+        canvas._wfBh = sized.bh;
         canvas._wfPlayed = -1;
         canvas._wfStatic = false;
     }

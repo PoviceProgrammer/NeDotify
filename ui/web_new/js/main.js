@@ -17,11 +17,15 @@ import { initContextMenu } from './contextmenu.js';
 import { initHotkeys } from './hotkeys.js';
 import { initEfficiency, initBlurObserver } from './efficiency.js';
 
-// Bridge gate: resolves as soon as window.pywebview.api exists. Cold WebView2
+function isBridgeReady() {
+    return Boolean(window.pywebview?.api && typeof window.pywebview.api.get_settings === 'function');
+}
+
+// Bridge gate: resolves as soon as window.pywebview.api methods exist. Cold WebView2
 // starts can take ~16s to inject the bridge; callers await this instead of
 // exiting early, so the UI comes alive by itself on the FIRST load.
 window.awaitBridge = function awaitBridge() {
-    if (window.pywebview?.api) {
+    if (isBridgeReady()) {
         if (!window.PROXY_PORT && window.pywebview.api.get_proxy_info) {
             window.pywebview.api.get_proxy_info().then(info => {
                 if (info && info.port) {
@@ -33,19 +37,31 @@ window.awaitBridge = function awaitBridge() {
         return Promise.resolve();
     }
     return new Promise((resolve) => {
-        const check = () => {
-            if (window.pywebview?.api) {
-                if (!window.PROXY_PORT && window.pywebview.api.get_proxy_info) {
-                    window.pywebview.api.get_proxy_info().then(info => {
-                        if (info && info.port) {
-                            window.PROXY_PORT = info.port;
-                            window.PROXY_TOKEN = info.token || '';
-                        }
-                    }).catch(() => {});
-                }
-                return resolve();
+        let resolved = false;
+        const complete = () => {
+            if (resolved) return;
+            resolved = true;
+            window.removeEventListener('pywebviewready', complete);
+            if (!window.PROXY_PORT && window.pywebview.api?.get_proxy_info) {
+                window.pywebview.api.get_proxy_info().then(info => {
+                    if (info && info.port) {
+                        window.PROXY_PORT = info.port;
+                        window.PROXY_TOKEN = info.token || '';
+                    }
+                }).catch(() => {});
             }
-            setTimeout(check, 150);
+            resolve();
+        };
+
+        window.addEventListener('pywebviewready', complete, { once: true });
+        const check = () => {
+            if (isBridgeReady()) {
+                complete();
+                return;
+            }
+            if (!resolved) {
+                setTimeout(check, 100);
+            }
         };
         check();
     });
@@ -180,7 +196,7 @@ window.toggleMiniPlayerMode = toggleMiniPlayerMode;
             if (parsed) document.documentElement.style.setProperty('--primary', parsed);
         }
 
-        const transEnabled = JSON.parse(localStorage.getItem('nedotify_theme_transparency_enabled') ?? 'true');
+        const transEnabled = JSON.parse(localStorage.getItem('nedotify_theme_transparency_enabled') ?? 'false');
         const transLevel = JSON.parse(localStorage.getItem('nedotify_theme_transparency_level') ?? '80');
         const opacity = transEnabled ? (transLevel / 100) : 1.0;
         document.documentElement.style.setProperty('--app-bg-opacity', opacity);
@@ -297,9 +313,9 @@ window.toggleMiniPlayerMode = toggleMiniPlayerMode;
 // NEVER run init() without the bridge: its guards would exit and the UI would
 // stay dead on the skeleton splash. Skeleton stays visible until the bridge arrives.
 function tryInit() {
-    if (window.pywebview?.api) init();
+    if (isBridgeReady()) init();
 }
-if (window.pywebview?.api) {
+if (isBridgeReady()) {
     tryInit();
 } else {
     window.addEventListener('pywebviewready', tryInit, { once: true });
@@ -308,12 +324,12 @@ if (window.pywebview?.api) {
 // Bridge-dead last resort: count page loads that happened without a bridge
 // (the backend watchdog silently reloads twice), and only then show the error
 // overlay — after 45s of bridge absence on the 3rd load (initial + 2 reloads).
-if (!window.pywebview?.api) {
+if (!isBridgeReady()) {
     const strikes = parseInt(sessionStorage.getItem('nedotify_bridge_strikes') || '0', 10) + 1;
     sessionStorage.setItem('nedotify_bridge_strikes', String(strikes));
 }
 setTimeout(() => {
-    if (window.pywebview?.api) return;
+    if (isBridgeReady()) return;
     const strikes = parseInt(sessionStorage.getItem('nedotify_bridge_strikes') || '0', 10);
     if (strikes >= 3) {
         sessionStorage.removeItem('nedotify_bridge_strikes');

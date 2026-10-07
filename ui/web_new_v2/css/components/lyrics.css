@@ -1,54 +1,43 @@
 /* ==========================================================================
    NeDotify v2 — Component: Lyrics Subsystem (Kinetic Karaoke Engine)
-   Apple Music-Style Kinetic Lyrics with GPU Scaling, Blur Depth,
-   Gradient Edge Masks, and Comprehensive Performance Guards.
+   Apple Music / Spotify style kinetic lyrics.
+
+   The sheet is NOT a native scroller: the viewport clips with overflow:hidden
+   and the whole sheet is moved with a single GPU-friendly transform. Native
+   scrolling produced stepped, discrete motion; a transform driven by one
+   springy transition gives the continuous "rubber" travel the design needs.
    ========================================================================== */
 
-/* ─── 1. Viewport & Scroll Containers ─── */
+/* ─── 1. Viewport (clipping window) ─── */
+.lyrics-viewport,
 .player-lyrics-container,
 .lyrics-scroll-container,
 #player-lyrics-scroll,
 #lyrics-container {
     flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
+    /* Without min-height:0 this flex item is sized by its content, so the panel
+       grew to the full lyric sheet instead of clipping -- the last lines were
+       pushed out of view and neither wheel nor the karaoke follow moved them. */
+    min-height: 0;
     position: relative;
-    scroll-behavior: smooth;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+    overflow: hidden;
+    overscroll-behavior: contain;
+    /* Pointer-drag scrubbing must not be stolen by the compositor for a native
+       pan; the wheel/drag handlers below own all vertical movement. */
+    touch-action: none;
+    cursor: grab;
+    -webkit-user-select: none;
+    user-select: none;
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%);
     mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%);
 }
 
-.player-lyrics-container::-webkit-scrollbar,
-.lyrics-scroll-container::-webkit-scrollbar,
-#player-lyrics-scroll::-webkit-scrollbar,
-#lyrics-container::-webkit-scrollbar {
-    width: 4px;
+.lyrics-viewport.is-dragging {
+    cursor: grabbing;
 }
 
-.player-lyrics-container::-webkit-scrollbar-track,
-.lyrics-scroll-container::-webkit-scrollbar-track,
-#player-lyrics-scroll::-webkit-scrollbar-track,
-#lyrics-container::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.player-lyrics-container::-webkit-scrollbar-thumb,
-.lyrics-scroll-container::-webkit-scrollbar-thumb,
-#player-lyrics-scroll::-webkit-scrollbar-thumb,
-#lyrics-container::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-full, 9999px);
-}
-
-.player-lyrics-container::-webkit-scrollbar-thumb:hover,
-.lyrics-scroll-container::-webkit-scrollbar-thumb:hover,
-#player-lyrics-scroll::-webkit-scrollbar-thumb:hover,
-#lyrics-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.35);
-}
-
+/* ─── 2. Track (the element that actually moves) ─── */
+.lyrics-track,
 .player-lyrics-content,
 .lyrics-content,
 #lyrics-content,
@@ -59,78 +48,101 @@
     justify-content: flex-start;
     text-align: center;
     gap: var(--space-md, 16px);
-    padding: 45vh var(--space-lg, 24px);
-    min-height: 100%;
     box-sizing: border-box;
+    /* position:relative makes the track the offsetParent of every line, so
+       line.offsetTop is a track-local coordinate and needs no rect math. */
+    position: relative;
+    /* Pre-JS default so the sheet is not pinned to the very top; the engine
+       replaces this with exact px derived from the measured viewport. */
+    padding: 30vh var(--space-lg, 24px) 40vh;
+    transform: translate3d(0, 0, 0);
+    will-change: transform;
+    backface-visibility: hidden;
+    transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Center empty states cleanly without excessive scroll height */
-.player-lyrics-content:has(.empty-state),
-.lyrics-content:has(.empty-state),
-#lyrics-content:has(.empty-state),
-#overlay-lyrics-content:has(.empty-state) {
-    padding: var(--space-xl, 32px) var(--space-lg, 24px);
-    justify-content: center;
+/* Instant repositioning: window resize, re-measure, track switch, and any
+   live wheel/drag frame. The spring is only for line-to-line travel. */
+.lyrics-track.no-anim {
+    transition: none !important;
 }
 
-.player-lyrics-content .empty-state,
-.lyrics-content .empty-state {
-    margin: auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-sm, 8px);
-    color: var(--color-text-dim, rgba(255, 245, 247, 0.40));
-    font-family: var(--font-body, 'DM Sans', sans-serif);
-    font-size: var(--font-size-sm, 13px);
-}
-
-/* ─── 2. Kinetic Lyric Line Styling (Apple Music Style) ─── */
+/* ─── 3. Kinetic Lyric Line States ─── */
 .lyric-line {
     font-family: var(--font-display, 'Sora', sans-serif);
     font-size: var(--font-size-xl, 24px);
     font-weight: 700;
     line-height: 1.4;
-    color: var(--color-text-main, #ffffff);
-    opacity: 0.40;
-    filter: blur(1.5px);
-    transform: scale(1);
+    /* Alpha lives in the colour so `opacity` stays free for the past/active
+       states to stack on top of it without darkening the glyph twice. */
+    color: rgba(255, 255, 255, 0.32);
+    opacity: 1;
+    filter: blur(2px);
+    transform: scale(0.95);
     transform-origin: center center;
     cursor: pointer;
     user-select: none;
     margin: 8px 0;
     padding: 8px 20px;
     border-radius: var(--radius-md, 12px);
-    transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-                opacity 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-                filter 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-                color 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-                text-shadow 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-                background-color 0.2s ease;
+    will-change: auto;
+    transition: filter 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                color 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                text-shadow 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 0.18s ease;
 }
 
-.lyric-line:hover:not(.active) {
-    opacity: 0.85;
-    filter: blur(0px);
-    transform: scale(1.03);
-    color: var(--color-text-main, #ffffff);
-    background: rgba(255, 255, 255, 0.04);
-    will-change: transform, opacity;
+/* Hover is a fast pre-focus: the blur has to fall away immediately to read as
+   a response to the pointer, while the release back to rest stays slow. */
+.lyric-line:hover:not(.active):not(.past) {
+    filter: blur(0);
+    transform: scale(1);
+    color: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.05);
+    transition: filter 0.16s ease-out,
+                transform 0.16s ease-out,
+                color 0.16s ease-out,
+                opacity 0.16s ease-out,
+                background-color 0.16s ease-out;
+}
+
+/* While the pointer is scrubbing the sheet, the lines travel under a stationary
+   cursor — highlighting whichever one happens to pass under it reads as noise. */
+.lyrics-viewport.is-dragging .lyric-line:hover:not(.active) {
+    filter: blur(2px);
+    transform: scale(0.95);
+    color: rgba(255, 255, 255, 0.32);
+    background: transparent;
 }
 
 .lyric-line.active {
+    filter: blur(0);
+    transform: scale(1.06);
+    color: #ffffff;
     opacity: 1;
-    filter: blur(0px) !important;
-    transform: scale(1.15);
-    color: var(--color-primary, var(--primary, #f43f5e)) !important;
-    font-weight: 800;
-    text-shadow: 0 0 24px var(--color-primary-glow, var(--accent-glow, rgba(244, 63, 94, 0.35))),
-                 0 0 48px var(--color-primary-glow, var(--accent-glow, rgba(244, 63, 94, 0.20)));
+    /* Deliberately NOT bolder than the resting weight. A font-weight change
+       alters text metrics, so every following line re-wraps and re-lays out and
+       the offsetTop values the engine just measured go stale. Emphasis is
+       carried entirely by composited properties (scale, blur, colour, glow). */
+    font-weight: 700;
+    /* Soft white bloom, tinted by the active theme so themes keep their accent. */
+    text-shadow: 0 0 18px rgba(255, 255, 255, 0.32),
+                 0 0 44px var(--color-primary-glow, var(--accent-glow, rgba(244, 63, 94, 0.28)));
     position: relative;
     z-index: 5;
     background: transparent;
-    will-change: transform, opacity;
+    /* Promoted only while focused: a will-change on every line of a long sheet
+       would allocate hundreds of compositor layers. */
+    will-change: transform, filter;
+}
+
+/* Already-sung lines sink into the depth of the stack. */
+.lyric-line.past {
+    filter: blur(1.5px);
+    transform: scale(0.94);
+    opacity: 0.25;
 }
 
 .lyric-orig-text {
@@ -139,7 +151,7 @@
     word-break: break-word;
 }
 
-/* ─── 3. Bilingual / Translation Line ─── */
+/* ─── 4. Bilingual / Translation Line ─── */
 .lyric-translation {
     font-family: var(--font-body, 'DM Sans', sans-serif);
     font-size: var(--font-size-sm, 13px);
@@ -155,27 +167,36 @@
 .lyric-line.active .lyric-translation {
     color: var(--color-text-main, #ffffff);
     opacity: 1;
-    font-weight: 600;
-}
-
-/* ─── 4. Plain (Unsynchronized) Lyrics ─── */
-.lyric-plain {
-    font-family: var(--font-body, 'DM Sans', sans-serif);
-    font-size: var(--font-size-lg, 20px);
+    /* Same reason as the line itself: a weight change re-lays out the sheet. */
     font-weight: 500;
-    line-height: 1.6;
-    color: var(--color-text-main, #ffffff);
-    opacity: 0.85;
-    filter: none !important;
-    text-align: center;
-    margin: 6px 0;
-    cursor: default;
-    transition: opacity 0.2s ease;
 }
 
-.lyric-plain:hover {
-    opacity: 1;
-    transform: none;
+/* ─── 5. Empty & Notice States ─── */
+/* The engine writes inline px padding for the focal space; !important is
+   required so an empty sheet centres itself instead of sitting below a
+   viewport-height of blank padding. */
+.lyrics-track:has(.empty-state),
+.player-lyrics-content:has(.empty-state),
+.lyrics-content:has(.empty-state),
+#lyrics-content:has(.empty-state),
+#overlay-lyrics-content:has(.empty-state) {
+    padding: var(--space-xl, 32px) var(--space-lg, 24px) !important;
+    justify-content: center;
+    min-height: 100%;
+}
+
+.lyrics-track .empty-state,
+.player-lyrics-content .empty-state,
+.lyrics-content .empty-state {
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm, 8px);
+    color: var(--color-text-dim, rgba(255, 245, 247, 0.40));
+    font-family: var(--font-body, 'DM Sans', sans-serif);
+    font-size: var(--font-size-sm, 13px);
 }
 
 .lyric-notice {
@@ -188,7 +209,31 @@
     gap: 8px;
 }
 
-/* ─── 5. Fullscreen Overlay & Panels ─── */
+/* ─── 6. Plain (Unsynchronized) Lyrics ─── */
+/* No timestamps means no active line: no scaling, no blur, no depth. */
+.lyric-plain {
+    font-family: var(--font-body, 'DM Sans', sans-serif);
+    font-size: var(--font-size-lg, 20px);
+    font-weight: 500;
+    line-height: 1.6;
+    color: var(--color-text-main, #ffffff);
+    opacity: 0.85;
+    filter: none !important;
+    transform: none !important;
+    text-align: center;
+    margin: 6px 0;
+    padding: 4px 20px;
+    cursor: default;
+    transition: opacity 0.2s ease;
+}
+
+.lyric-plain:hover {
+    opacity: 1;
+    transform: none !important;
+    background: transparent;
+}
+
+/* ─── 7. Fullscreen Overlay & Panels ─── */
 .lyrics-overlay,
 #lyrics-overlay {
     position: fixed;
@@ -258,7 +303,7 @@
     text-transform: uppercase;
 }
 
-/* ─── 6. Controls & Buttons ─── */
+/* ─── 8. Controls & Buttons ─── */
 .lyrics-offset-controls {
     display: flex;
     align-items: center;
@@ -334,7 +379,10 @@
     transform: scale(1.1);
 }
 
-/* ─── 7. PERFORMANCE GUARDS (Low/Medium Perf & Battery Saver) ─── */
+/* ─── 9. Performance Guards (Low/Medium Perf & Battery Saver) ─── */
+/* Blur is the expensive part of this component: every blurred line is its own
+   paint surface. On constrained hardware the depth cue degrades to scale only
+   and the long sheet transition is shortened. */
 :root.perf-low .lyric-line,
 :root.perf-medium .lyric-line,
 :root.battery-saver-active .lyric-line,
@@ -342,8 +390,17 @@
 .perf-medium .lyric-line,
 .battery-saver-active .lyric-line {
     filter: none !important;
-    will-change: auto;
+    will-change: auto !important;
     transition: transform 0.25s ease, opacity 0.25s ease, color 0.25s ease;
+}
+
+:root.perf-low .lyric-line.past,
+:root.perf-medium .lyric-line.past,
+:root.battery-saver-active .lyric-line.past,
+.perf-low .lyric-line.past,
+.perf-medium .lyric-line.past,
+.battery-saver-active .lyric-line.past {
+    filter: none !important;
 }
 
 :root.perf-low .lyric-line:not(.active),
@@ -352,8 +409,17 @@
 .perf-low .lyric-line:not(.active),
 .perf-medium .lyric-line:not(.active),
 .battery-saver-active .lyric-line:not(.active) {
-    filter: none !important;
-    opacity: 0.40 !important;
+    color: rgba(255, 255, 255, 0.32) !important;
+    opacity: 1 !important;
+}
+
+:root.perf-low .lyric-line.past,
+:root.perf-medium .lyric-line.past,
+:root.battery-saver-active .lyric-line.past,
+.perf-low .lyric-line.past,
+.perf-medium .lyric-line.past,
+.battery-saver-active .lyric-line.past {
+    opacity: 0.25 !important;
 }
 
 :root.perf-low .lyric-line.active,
@@ -363,6 +429,16 @@
 .perf-medium .lyric-line.active,
 .battery-saver-active .lyric-line.active {
     text-shadow: none !important;
+}
+
+:root.perf-low .lyrics-track,
+:root.perf-medium .lyrics-track,
+:root.battery-saver-active .lyrics-track,
+.perf-low .lyrics-track,
+.perf-medium .lyrics-track,
+.battery-saver-active .lyrics-track {
+    will-change: auto;
+    transition-duration: 0.32s;
 }
 
 :root.perf-low .lyrics-overlay,
@@ -380,4 +456,88 @@
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     background: rgba(14, 7, 17, 0.96) !important;
+}
+
+/* ─── 10. Reduced Motion ─── */
+/* The spring is the whole effect; with motion suppressed it is replaced by an
+   instant snap rather than a slow glide. */
+@media (prefers-reduced-motion: reduce) {
+    .lyrics-track,
+    .lyric-line,
+    .lyric-line.active,
+    .lyric-line.past,
+    .lyric-line:hover:not(.active):not(.past) {
+        transition: none !important;
+    }
+
+    .lyrics-track {
+        will-change: auto;
+    }
+}
+
+/* ==========================================================================
+   11. Light Theme — the panel sheet only.
+
+   WHY THIS IS SCOPED TO `#player-lyrics-scroll` AND NOT THE BARE SELECTOR
+   ---------------------------------------------------------------------
+   `lyrics.js:getContainers()` (line ~350) renders the SAME `.lyric-line`
+   elements into two sheets, and they sit on opposite-polarity backdrops:
+
+     #player-lyrics-scroll  -> .player-glass-card -> #main-content -> --bg-main
+                              theme-aware: INVERTS to paper in the light theme.
+                              White ink measured 1.03:1 there -> invisible.
+
+     #lyrics-overlay        -> background rgba(14, 7, 17, 0.88)
+                              HARDCODED. Does not invert. White ink is correct
+                              there at 19.86:1, and the perf-* block above
+                              hard-reasserts it with !important.
+
+   So a blanket swap of the base `.lyric-line` colour would have fixed the
+   panel and simultaneously turned the fullscreen karaoke sheet into dark
+   glyphs on a near-black backdrop. These overrides are therefore scoped to
+   the panel subtree and added AFTER the base rules, so they win on source
+   order without touching a single dark-theme value. `lyrics.css` loads
+   before themes.css, but that is irrelevant: var() resolves after the
+   cascade, so --text-faint still picks up the light value from base.css.
+
+   THE DIM -> BRIGHT PROGRESSION IS PRESERVED, one token per rung:
+     resting  .lyric-line            faint   0.32 -> 0.62   (4.87:1)
+     hover    :hover:not(.active)    bright  0.92 -> 0.92  (13.35:1)
+     active   .lyric-line.active     main    #ffffff -> #1b1425 (16.37:1)
+     past     (no colour of its own; opacity 0.25 stacks on `faint`)
+   Ordering faint < bright < main holds in both themes, and `.past` keeps
+   deriving from `faint`, so the already-sung sink still reads as dimmer than
+   the hover rung rather than collapsing into it.
+   ========================================================================== */
+[data-theme="light"] #player-lyrics-scroll .lyric-line {
+    color: var(--text-faint);
+}
+
+[data-theme="light"] #player-lyrics-scroll .lyric-line:hover:not(.active):not(.past) {
+    color: var(--text-bright);
+}
+
+[data-theme="light"] #player-lyrics-scroll .lyric-line.active {
+    color: var(--text-main);
+}
+
+/* The drag-suppression rung returns to the resting step, matching the base
+   rule it mirrors (base keeps this one literal because the overlay sheet
+   still needs white there). */
+[data-theme="light"] #player-lyrics-scroll .lyrics-viewport.is-dragging .lyric-line:hover:not(.active),
+[data-theme="light"] #player-lyrics-scroll .lyric-line:hover:not(.active) {
+    color: var(--text-faint);
+}
+
+/* The perf-* guards above re-assert the resting colour with !important, so
+   the light resting value has to answer at the same weight or the guard wins
+   and the panel goes invisible on low-power machines. The perf classes are
+   set on document.documentElement (main.js / settings.js / onboarding.js), so
+   they qualify the :root, never #player-lyrics-scroll itself - hence the
+   `html` ancestor form below, which also outranks `:root.perf-low` on
+   specificity while carrying the same !important weight. */
+[data-theme="light"] .perf-low #player-lyrics-scroll .lyric-line:not(.active),
+[data-theme="light"] .perf-medium #player-lyrics-scroll .lyric-line:not(.active),
+[data-theme="light"] .battery-saver-active #player-lyrics-scroll .lyric-line:not(.active) {
+    color: var(--text-faint) !important;
 }

@@ -1,0 +1,212 @@
+/* ==========================================================================
+   NeDotify v2 — Visual Polish Pack (2026)
+   Basis: Apple Liquid Glass edge-light + refined glassmorphism +
+   Spotify/Apple Music hierarchy (large artwork, tabular numbers, spring
+   micro-interactions). Additive overrides only — safe to remove.
+   Respects :root.perf-low / battery-saver (no shadows/anims there).
+   ========================================================================== */
+
+:root {
+    --spring: cubic-bezier(0.16, 1, 0.3, 1);
+    --spring-bouncy: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --edge-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    --ring: 0 0 0 3px rgba(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)), 0.35);
+}
+
+/* ── 1. Typography hierarchy ── */
+.page-title {
+    font-family: var(--font-display, 'Sora', sans-serif);
+    font-size: var(--font-size-2xl, 30px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+}
+.feed-title {
+    font-family: var(--font-display, 'Sora', sans-serif);
+    letter-spacing: -0.01em;
+}
+
+/* ── 2. Sidebar: gradient active pill (replaces flat accent w/ dark text) ── */
+.nav-item.active {
+    background: linear-gradient(135deg,
+        rgba(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)), 0.9),
+        rgba(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)), 0.65));
+    color: var(--color-primary-fg, #ffffff);
+    box-shadow: 0 4px 16px var(--color-primary-glow, rgba(244, 63, 94, 0.35)),
+                var(--edge-highlight);
+}
+.nav-item {
+    transition: background-color 0.25s ease, color 0.25s ease,
+                transform 0.2s var(--spring), box-shadow 0.25s ease;
+}
+.nav-item:hover:not(.active) {
+    transform: translateX(2px);
+}
+
+/* ── 3. Search type pills: primary instead of white/black clash ── */
+.type-filter-btn.active {
+    background: linear-gradient(135deg,
+        rgb(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94))),
+        rgba(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)), 0.75));
+    color: var(--color-primary-fg, #ffffff);
+    box-shadow: 0 4px 16px var(--color-primary-glow, rgba(244, 63, 94, 0.35));
+}
+.type-filter-btn.active i, .type-filter-btn.active svg {
+    color: inherit;
+}
+
+/* ── 4. Unified primary buttons (kill hardcoded orange/blue) ── */
+.filter-btn.active, .keybind-record-btn.active {
+    background: rgb(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)));
+    color: var(--color-primary-fg, #ffffff);
+    box-shadow: 0 4px 14px var(--color-primary-glow, rgba(244, 63, 94, 0.35));
+}
+.btn-primary {
+    background: linear-gradient(135deg,
+        rgb(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94))),
+        rgba(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)), 0.8));
+    color: var(--color-primary-fg, #ffffff);
+    box-shadow: 0 4px 14px var(--color-primary-glow, rgba(244, 63, 94, 0.35)),
+                var(--edge-highlight);
+    transition: transform 0.2s var(--spring-bouncy), filter 0.2s ease, box-shadow 0.2s ease;
+}
+.btn-primary:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+}
+.btn-primary:active {
+    transform: scale(0.97);
+}
+
+/* ── 5. Search capsule: theme-aware Liquid Glass + focus ring ── */
+.search-capsule {
+    background: color-mix(in srgb, var(--bg-surface, #14141d) 82%, transparent);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), var(--edge-highlight);
+    backdrop-filter: blur(var(--blur-md)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--blur-md)) saturate(160%);
+}
+.search-capsule:focus-within {
+    border-color: rgba(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)), 0.55);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55),
+                0 0 0 3px rgba(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)), 0.18),
+                var(--edge-highlight);
+}
+
+/* ── 6. Player bar: Liquid Glass edge light ── */
+#player-bar {
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55),
+                inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+.btn-play-main {
+    transition: transform 0.22s var(--spring-bouncy), box-shadow 0.2s ease;
+}
+.btn-play-main:active {
+    transform: scale(0.92);
+}
+
+/* ── 7. Cards: softer lift + artwork zoom ── */
+.feed-card, .quick-access-card {
+    transition: transform 0.22s var(--spring), box-shadow 0.25s ease,
+                border-color 0.25s ease, background-color 0.25s ease;
+}
+.feed-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45),
+                0 0 20px rgba(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)), 0.12);
+}
+.feed-card-cover img, .qa-cover img {
+    transition: transform 0.4s var(--spring);
+}
+.feed-card:hover .feed-card-cover img {
+    transform: scale(1.06);
+}
+
+/* ── 8. Playing track: left accent bar ── */
+.track-item.playing::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 3px;
+    background: rgb(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)));
+    box-shadow: 0 0 8px var(--color-primary-glow, rgba(244, 63, 94, 0.5));
+}
+.track-item.playing {
+    padding-left: 16px;
+}
+
+/* ── 9. Scrollbars: readable but subtle ── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)), 0.5);
+}
+
+/* ── 10. Toasts: glass (opaque enough to stay readable on light themes) ── */
+.toast {
+    background: color-mix(in srgb, var(--bg-surface, #14141d) 92%, transparent);
+    backdrop-filter: blur(var(--blur-md)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--blur-md)) saturate(160%);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), var(--edge-highlight);
+}
+
+/* ── 11. Focus visibility (keyboard a11y) ── */
+button:focus-visible, input:focus-visible, .nav-item:focus-visible,
+.track-item:focus-visible, .feed-card:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+}
+
+/* ── 12. Skeleton: unify on ui-shimmer ── */
+.skeleton-cover, .skeleton-title, .skeleton-sub,
+.skeleton-card .skeleton-title {
+    background: linear-gradient(90deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.03) 100%);
+    background-size: 800px 100%;
+    animation: ui-shimmer 1.8s infinite linear;
+}
+
+/* ── 13. Performance guards: polish adds nothing on low/battery ── */
+:root.perf-low .nav-item.active,
+:root.perf-low .type-filter-btn.active,
+:root.perf-low .btn-primary,
+:root.perf-low .filter-btn.active,
+:root.battery-saver-active .nav-item.active,
+:root.battery-saver-active .type-filter-btn.active,
+:root.battery-saver-active .btn-primary {
+    box-shadow: none !important;
+}
+:root.perf-low .feed-card:hover,
+:root.perf-low .quick-access-card:hover,
+:root.perf-low .nav-item:hover:not(.active),
+:root.perf-low .btn-primary:hover,
+:root.battery-saver-active .feed-card:hover,
+:root.battery-saver-active .btn-primary:hover {
+    transform: none !important;
+}
+:root.perf-low #player-bar,
+:root.battery-saver-active #player-bar {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+:root.perf-low .track-item.playing::before {
+    box-shadow: none !important;
+}
+
+/* ── 14. Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+    .feed-card, .quick-access-card, .nav-item, .btn-primary, .btn-play-main,
+    .feed-card-cover img, .qa-cover img {
+        transition: none !important;
+    }
+    .feed-card:hover, .quick-access-card:hover {
+        transform: none !important;
+    }
+}

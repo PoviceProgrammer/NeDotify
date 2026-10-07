@@ -72,7 +72,6 @@ class PlaybackQueue:
                 # Save original order and shuffle
                 self._original_order = self._tracks.copy()
                 current = self.current_track
-                current_key = self._track_key(current) if current else None
                 remaining = [t for i, t in enumerate(self._tracks) if i != self._current_index]
                 random.shuffle(remaining)
                 if current:
@@ -83,6 +82,8 @@ class PlaybackQueue:
             elif not enabled and self._shuffle:
                 # Restore original order without losing newly added tracks
                 current = self.current_track
+                # Only the disabling branch needs to know WHICH track is
+                # current; the enabling branch above already pins it at 0.
                 current_key = self._track_key(current) if current else None
                 current_keys = {self._track_key(t) for t in self._tracks}
                 restored = [t for t in self._original_order if self._track_key(t) in current_keys]
@@ -252,7 +253,8 @@ class PlaybackQueue:
 
             return self.current_track
 
-    # Historical alias: callers exist under both spellings.
+    # Alias kept for external/3rd-party callers: the app itself only uses
+    # previous_track() (audio/engine.py:prev_track).
     prev_track = previous_track
 
     def jump_to(self, index: int) -> Optional[dict]:
@@ -278,18 +280,3 @@ class PlaybackQueue:
         with self._lock:
             start = self._current_index + 1
             return self._tracks[start:start + count]
-
-    def to_serializable(self) -> dict:
-        """Serialize queue state for session persistence."""
-        with self._lock:
-            return {
-                "track_ids": [t.get("id") for t in self._tracks if t.get("id")],
-                "current_index": self._current_index,
-                "shuffle": self._shuffle,
-                "repeat": self._repeat,
-            }
-
-    def get_queue_track_ids(self) -> list:
-        """Get list of track IDs in queue."""
-        with self._lock:
-            return [t.get("id") for t in self._tracks if t.get("id")]

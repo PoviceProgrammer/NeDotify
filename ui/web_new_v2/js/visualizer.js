@@ -1,5 +1,6 @@
 // NeDotify — Audio-Reactive Visualizer (GPU-Optimized)
 import { getIsPlaying, getVolume, getCurrentTrack, getAudioFrequencyData } from './player.js';
+import { sizeCanvasForDpr, registerCanvasDprListener } from './utils.js';
 
 let animFrameId = null;
 let bars = [];
@@ -22,15 +23,59 @@ export function setVisualizerFps(fps) {
     frameInterval = 1000 / targetFps;
 }
 
+// Single source of truth for #toggle-visualizer (settings.js must NOT bind it).
+// options.silent skips persistence (used when restoring backend state).
+export function setVisualizerEnabled(enabled, options = {}) {
+    isEnabled = !!enabled;
+    const toggle = document.getElementById('toggle-visualizer');
+    if (toggle) toggle.classList.toggle('on', isEnabled);
+    const canvas = document.getElementById('visualizer-canvas');
+    if (canvas) canvas.style.display = isEnabled ? '' : 'none';
+    if (!isEnabled) {
+        if (animFrameId) {
+            cancelAnimationFrame(animFrameId);
+            animFrameId = null;
+        }
+        targets.forEach(t => {
+            if (t.ctx && t.canvas) t.ctx.clearRect(0, 0, t.canvas.width, t.canvas.height);
+        });
+    } else if (documentVisible && !animFrameId) {
+        hasDrawnIdle = false;
+        animFrameId = requestAnimationFrame(draw);
+    }
+    if (!options.silent) persistVisualizerEnabled();
+}
+
+function persistVisualizerEnabled() {
+    try {
+        localStorage.setItem('nedotify_ui_cover_visualizer', JSON.stringify(isEnabled));
+    } catch(e) {}
+    if (window.settings) {
+        window.settings.ui = window.settings.ui || {};
+        window.settings.ui.cover_visualizer = isEnabled;
+    }
+    if (window.pywebview?.api?.save_setting) {
+        try { window.pywebview.api.save_setting('cover_visualizer', isEnabled, 'ui'); } catch(e) {}
+    }
+}
+
+export function isVisualizerEnabled() { return isEnabled; }
+
 // Cached gradient colors
 let cachedPrimaryRgb = '255, 159, 28';
 let gradientCacheTime = 0;
 const GRADIENT_CACHE_DURATION = 5000;
 
+// cssW/cssH are the drawable size in CSS pixels; canvas.width/height are the
+// device-pixel backing store (cssW * devicePixelRatio). Every draw*() below
+// works in CSS pixels through the context's dpr scale, so no geometry, colour,
+// gradient or line width changes - only the resolution bookkeeping.
 const targets = [
-    { id: 'visualizer-canvas', canvas: null, ctx: null, primary: true },
-    { id: 'home-visualizer-canvas', canvas: null, ctx: null, primary: false }
+    { id: 'visualizer-canvas', canvas: null, ctx: null, primary: true, cssW: 0, cssH: 0 },
+    { id: 'home-visualizer-canvas', canvas: null, ctx: null, primary: false, cssW: 0, cssH: 0 }
 ];
+
+let unsubscribeDpr = null;
 
 let documentVisible = !document.hidden;
 document.addEventListener('visibilitychange', () => {
@@ -70,13 +115,22 @@ export function initVisualizer() {
     const resizeCanvas = () => {
         targets.forEach(t => {
             if (t.canvas && t.canvas.parentElement) {
-                t.canvas.width = t.canvas.parentElement.offsetWidth || 380;
-                t.canvas.height = t.canvas.parentElement.offsetHeight || 380;
+                const sized = sizeCanvasForDpr(
+                    t.canvas, t.ctx,
+                    t.canvas.parentElement.offsetWidth || 380,
+                    t.canvas.parentElement.offsetHeight || 380
+                );
+                t.cssW = sized.cssW;
+                t.cssH = sized.cssH;
             }
         });
     };
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
+    // Dragging the window between a 100% and a 150% monitor changes
+    // devicePixelRatio without firing resize, so re-run the same bookkeeping.
+    if (unsubscribeDpr) unsubscribeDpr();
+    unsubscribeDpr = registerCanvasDprListener(resizeCanvas);
 
     bars = [];
     for (let i = 0; i < BAR_COUNT; i++) {
@@ -100,21 +154,18 @@ export function initVisualizer() {
     }
 
     const toggleEnabled = document.getElementById('toggle-visualizer');
-    if (toggleEnabled) {
+    if (toggleEnabled && !toggleEnabled._boundVisualizerClick) {
+        toggleEnabled._boundVisualizerClick = true;
+        // Initial state: DOM toggle class wins if present, else stored setting.
+        try {
+            const stored = localStorage.getItem('nedotify_ui_cover_visualizer');
+            const fromStore = stored !== null ? JSON.parse(stored) : null;
+            const fromDom = toggleEnabled.classList.contains('on');
+            const initial = fromStore !== null ? !!fromStore : (fromDom || isEnabled);
+            setVisualizerEnabled(initial, { silent: true });
+        } catch(e) {}
         toggleEnabled.addEventListener('click', () => {
-            isEnabled = !isEnabled;
-            toggleEnabled.classList.toggle('on', isEnabled);
-            if (!isEnabled) {
-                if (animFrameId) {
-                    cancelAnimationFrame(animFrameId);
-                    animFrameId = null;
-                }
-                targets.forEach(t => {
-                    if (t.ctx && t.canvas) t.ctx.clearRect(0, 0, t.canvas.width, t.canvas.height);
-                });
-            } else {
-                draw(0);
-            }
+            setVisualizerEnabled(!isEnabled);
         });
     }
 
@@ -201,7 +252,7 @@ function updateSimulation(playing, now, volScale, track) {
             }
             bar.target = Math.max(0.04, Math.min(1, target));
         } else {
-            bar.target = 0.015 + Math.sin(now * 0.4 + bar.phase) * 0.012;
+            bar.target = 0.05 + Math.sin(now * 0.4 + bar.phase) * 0.035;
         }
 
         const diff = bar.target - bar.current;
@@ -240,11 +291,9 @@ function draw(timestamp) {
     }
 
     if (!playing) {
-        if (hasDrawnIdle) {
-            animFrameId = null;
-            return;
-        }
-        hasDrawnIdle = true;
+        // Ambient idle loop: keep animating gently on pause instead of
+        // freezing after a single near-invisible frame.
+        animFrameId = requestAnimationFrame(draw);
     } else {
         hasDrawnIdle = false;
         animFrameId = requestAnimationFrame(draw);
@@ -272,8 +321,11 @@ function draw(timestamp) {
         if (parentPage && !parentPage.classList.contains('active')) return;
 
         const ctx = target.ctx;
-        const w = target.canvas.width;
-        const h = target.canvas.height;
+        // Draw in CSS pixels. The `|| canvas.width` fallback only kicks in for a
+        // canvas that never got a parentElement at init, where the old code
+        // used the backing store directly - identical at devicePixelRatio 1.
+        const w = target.cssW || target.canvas.width;
+        const h = target.cssH || target.canvas.height;
         ctx.clearRect(0, 0, w, h);
 
         const data = new Array(BAR_COUNT);
@@ -293,7 +345,7 @@ function draw(timestamp) {
 
 function makeGradient(ctx, x1, y1, x2, y2, playing, primary, rgb) {
     const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-    const alpha = playing ? (primary ? 0.7 : 0.4) : 0.15;
+    const alpha = playing ? (primary ? 0.7 : 0.55) : 0.34;
     grad.addColorStop(0, `rgba(${rgb}, ${alpha * 0.3})`);
     grad.addColorStop(0.5, `rgba(${rgb}, ${alpha * 0.6})`);
     grad.addColorStop(1, `rgba(${rgb}, ${alpha})`);

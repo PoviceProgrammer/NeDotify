@@ -1,4 +1,5 @@
 import { togglePlayPause } from './player.js';
+import { isFocusInsideModalTrap } from './utils.js';
 
 export const DEFAULT_KEYBINDS = [
     { id: 'play_pause', label: 'Воспроизведение / Пауза', defaultKey: 'Space' },
@@ -143,6 +144,17 @@ export function initHotkeys() {
         if (activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable || targetIsEditable) {
             return;
         }
+
+        // A modal dialog owns the keyboard while it is open. executeHotkeysAction
+        // is the one dispatcher and it is the only place that calls
+        // preventDefault(); Space and Enter on a focused button are clicks the
+        // browser has not fired yet, so letting the Space bind through would
+        // cancel the very control Tab just moved to. Deliberately narrow: it
+        // only fires for a modal that is armed AND still visible AND has focus,
+        // so no binding changes behaviour outside an open dialog. F11, the media
+        // keys and the rebinding mode above are all before this point and are
+        // untouched.
+        if (isFocusInsideModalTrap(e.target)) return;
 
         // F11: Frameless Window Maximize (keeps taskbar visible)
         if (e.key === 'F11' || e.code === 'F11') {

@@ -1,0 +1,3 @@
+thread (13280);<module> (bench\pyprof_child.py:702);main (bench\pyprof_child.py:697);mode_idle_hold (bench\pyprof_child.py:663) 3
+thread (19652);_bootstrap (threading.py:1044);_bootstrap_inner (threading.py:1082);run (threading.py:1024);_process_pending (services\watchdog_service.py:54) 2
+thread (13280) 16

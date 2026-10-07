@@ -1,7 +1,7 @@
 // NeDotify — Settings Module
 import { renderIcons, escapeHtml, compressBackgroundImage, showToast } from './utils.js';
 import { initParticles, stopParticles, setParticlesFps } from './particles.js';
-import { setVisualizerFps } from './visualizer.js';
+import { setVisualizerFps, setVisualizerEnabled } from './visualizer.js';
 import { initOnboarding } from './onboarding.js';
 import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js';
 import { evaluateEfficiencyState } from './efficiency.js';
@@ -16,6 +16,20 @@ function getLocalSetting(key, defaultVal) {
     } catch(e) {
         return defaultVal;
     }
+}
+
+// Helper: read a saved setting, preferring the backend (the durable store).
+//
+// The restore helpers below used to read localStorage unconditionally, so a
+// cleared/evicted WebView2 cache silently reset every setting to its default
+// even though the backend still had the user's value -- the "my settings did
+// not save" symptom. window.settings is populated from the backend before these
+// run, so it wins; localStorage stays as the fallback for keys the backend has
+// not seen yet, and for the first paint before the bridge answers.
+function savedSetting(category, key, defaultVal) {
+    const fromBackend = window.settings?.[category]?.[key];
+    if (fromBackend !== undefined && fromBackend !== null) return fromBackend;
+    return getLocalSetting(`nedotify_${category}_${key}`, defaultVal);
 }
 
 const THEMES = [
@@ -96,7 +110,9 @@ export function initSettings() {
     setupToggle('toggle-normalization', 'volume_normalization', 'audio');
     setupToggle('toggle-autoplay', 'autoplay', 'audio');
     setupToggle('toggle-particles', 'particles_enabled', 'ui');
-    setupToggle('toggle-visualizer', 'cover_visualizer', 'ui');
+    // NOTE: #toggle-visualizer is owned by visualizer.js (single source of truth).
+    // settings.js must NOT bind a second click handler here — it only persists
+    // via saveSetting() when told to, and syncs state through setVisualizerEnabled().
 
     setupSlider('slider-crossfade-sec', 'crossfade_duration_sec', 'audio', (v) => {
         setElText('label-crossfade-sec', `${v} сек`);
@@ -231,8 +247,15 @@ export function initSettings() {
         scanDuplicatesBtn.addEventListener('click', async () => {
             duplicatesContainer.innerHTML = '<div style="font-size:12px; color:var(--text-sec); display:flex; align-items:center; gap:8px;"><div class="spinner" style="width:14px;height:14px;"></div> Сканирование медиатеки на дубликаты...</div>';
             if (window.pywebview?.api?.find_duplicate_tracks) {
-                const groups = await window.pywebview.api.find_duplicate_tracks();
-                renderDuplicateGroups(groups, duplicatesContainer);
+                try {
+                    const groups = await window.pywebview.api.find_duplicate_tracks();
+                    renderDuplicateGroups(groups, duplicatesContainer);
+                    const n = Array.isArray(groups) ? groups.length : 0;
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: n === 0 ? 'Дубликатов не найдено' : `Найдено групп дубликатов: ${n}`, type: n === 0 ? 'success' : 'info' } }));
+                } catch (e) {
+                    duplicatesContainer.innerHTML = '<div style="font-size:12px; color:var(--text-sec);">Ошибка сканирования</div>';
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка сканирования дубликатов', type: 'error' } }));
+                }
             } else {
                 duplicatesContainer.innerHTML = '<div style="font-size:12px; color:var(--text-sec);">Сканирование недоступно</div>';
             }
@@ -263,19 +286,9 @@ export function initSettings() {
         } catch(e) {}
     }
 
-    // Custom theme random button
-    const btnRandom = document.getElementById('btn-random-theme');
-    if (btnRandom) {
-        btnRandom.addEventListener('click', () => {
-            const rColor = () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
-            const p = rColor();
-            const a = rColor();
-            document.documentElement.style.setProperty('--primary', p);
-            document.documentElement.style.setProperty('--accent', a);
-            saveSetting('custom_primary', p, 'theme');
-            saveSetting('custom_accent', a, 'theme');
-        });
-    }
+    // Custom theme random button lives in setupAppearancePanel() (single source).
+    // (Removed duplicate minimal listener that overwrote only --primary/--accent
+    //  and double-fired alongside the full-palette generator.)
 
     // Playlist Import
     const btnImport = document.getElementById('btn-import-playlist');
@@ -284,7 +297,7 @@ export function initSettings() {
     const statusImport = document.getElementById('import-playlist-status');
 
     if (btnImport && inputImportUrl) {
-        btnImport.addEventListener('click', () => {
+        btnImport.addEventListener('click', async () => {
             const url = inputImportUrl.value.trim();
             const name = inputImportName ? inputImportName.value.trim() : '';
             if (!url) {
@@ -297,15 +310,25 @@ export function initSettings() {
             }
             btnImport.disabled = true;
 
-            if (window.pywebview?.api?.import_external_playlist) {
-                window.pywebview.api.import_external_playlist(url, name);
-            }
-            setTimeout(() => {
+            try {
+                if (window.pywebview?.api?.import_external_playlist) {
+                    const res = await window.pywebview.api.import_external_playlist(url, name);
+                    if (res && res.success) {
+                        const plName = res.playlist_name || res.name || 'Импортированный';
+                        const count = res.imported_count ?? res.count ?? 0;
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Импортирован плейлист "${plName}" (${count} треков)`, type: 'success' } }));
+                        inputImportUrl.value = '';
+                        if (inputImportName) inputImportName.value = '';
+                    } else {
+                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: res?.error || 'Не удалось импортировать плейлист', type: 'error' } }));
+                    }
+                }
+            } catch (e) {
+                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка при импорте плейлиста', type: 'error' } }));
+            } finally {
                 btnImport.disabled = false;
                 if (statusImport) statusImport.style.display = 'none';
-                inputImportUrl.value = '';
-                if (inputImportName) inputImportName.value = '';
-            }, 4000);
+            }
         });
     }
 
@@ -541,6 +564,14 @@ function renderFontCards(activeCat = 'system') {
     const container = document.getElementById('font-cards-grid');
     if (!container) return;
 
+    // The picker families (Inter, Outfit, Roboto, Montserrat, Plus Jakarta
+    // Sans) are remote and loaded on demand by boot.js. Request them here -
+    // i.e. when the picker is actually rendered - so a cold start does not
+    // pay for them. Idempotent; a failed/offline load just leaves the fallback.
+    if (typeof window.NeDotifyEnsurePickerFonts === 'function') {
+        try { window.NeDotifyEnsurePickerFonts(); } catch (e) {}
+    }
+
     const currentFont = getComputedStyle(document.documentElement).getPropertyValue('--font-family').trim() || "'Inter', sans-serif";
 
     container.innerHTML = '';
@@ -642,6 +673,22 @@ export function applySettingsFromBackend(settings) {
         });
     }
 
+    // theme_mode is the actual light/dark/system switch (theme.theme is the palette name).
+    // Both used to be written to the same data-theme attribute, so applying the
+    // mode straight after the palette made the chosen palette vanish on every
+    // restart. The palette now wins; the mode only picks the colours when no
+    // palette is stored, and the mode buttons always reflect the saved state.
+    if (settings.theme && settings.theme.theme_mode !== undefined) {
+        const mode = String(settings.theme.theme_mode);
+        document.querySelectorAll('.theme-mode-btn[data-mode]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === mode);
+        });
+        const hasPalette = !!(settings.theme.theme || settings.theme.name);
+        if (!hasPalette) {
+            try { applyThemeMode(mode); } catch(e) {}
+        }
+    }
+
     if (settings.ui) {
         if (settings.ui.particles_enabled !== undefined) {
             const toggle = document.getElementById('toggle-particles');
@@ -654,7 +701,8 @@ export function applySettingsFromBackend(settings) {
         }
         if (settings.ui.cover_visualizer !== undefined) {
             const toggle = document.getElementById('toggle-visualizer');
-            if (toggle) toggle.classList.toggle('on', settings.ui.cover_visualizer);
+            if (toggle) toggle.classList.toggle('on', !!settings.ui.cover_visualizer);
+            try { setVisualizerEnabled(!!settings.ui.cover_visualizer, { silent: true }); } catch(e) {}
         }
         if (settings.ui.particles_count !== undefined) {
             const slider = document.getElementById('slider-particles-count');
@@ -762,6 +810,14 @@ export function applySettingsFromBackend(settings) {
         if (toggleGL) toggleGL.classList.toggle('on', settings.audio.gapless_playback !== false);
         const toggleAP = document.getElementById('toggle-autoplay');
         if (toggleAP) toggleAP.classList.toggle('on', !!settings.audio.autoplay);
+        // volume_normalization is bound in setupToggle('toggle-normalization',
+        // 'volume_normalization', 'audio') so it was saved on every change but
+        // never read back here, leaving the toggle stuck at its default after a
+        // restart even though the backend had the right value.
+        if (settings.audio.volume_normalization !== undefined) {
+            const toggleVN = document.getElementById('toggle-normalization');
+            if (toggleVN) toggleVN.classList.toggle('on', !!settings.audio.volume_normalization);
+        }
     }
 
     if (settings.general) {
@@ -769,6 +825,16 @@ export function applySettingsFromBackend(settings) {
         if (selectRegion && settings.general.region !== undefined) {
             selectRegion.value = settings.general.region;
         }
+    }
+
+    // Discord Rich Presence state from backend (settings.app.discord_rpc_enabled).
+    // Only syncs the toggle UI + localStorage; the backend already holds the value.
+    if (settings.app && settings.app.discord_rpc_enabled !== undefined) {
+        const toggleDiscord = document.getElementById('toggle-discord-rpc');
+        if (toggleDiscord) toggleDiscord.classList.toggle('on', !!settings.app.discord_rpc_enabled);
+        try {
+            localStorage.setItem('nedotify_app_discord_rpc_enabled', JSON.stringify(!!settings.app.discord_rpc_enabled));
+        } catch(e) {}
     }
 
     if (settings.efficiency) {
@@ -797,6 +863,10 @@ export function applySettingsFromBackend(settings) {
             const toggleAP = document.getElementById('toggle-queue-autopilot');
             if (toggleAP) toggleAP.classList.toggle('on', !!autoVal);
         }
+        // Now that window.settings holds the backend values, repaint the Player
+        // tab's cards and toggles. The earlier setupPlayerSettingsPanel() pass
+        // ran before the bridge answered and could only guess from localStorage.
+        try { syncPlayerSettingsUI(); } catch(e) {}
     }
 
     if (settings.auth) {
@@ -847,10 +917,17 @@ export function applySettingsFromBackend(settings) {
             }
         }
         
-        setYandexWarning(!!settings.auth.yandex_auth_error);
+        // NOTE (audit H-3): `settings.auth.yandex_auth_error` used to be read
+        // here. No such key exists in DEFAULT_SETTINGS (core/settings.py) and
+        // the backend never emits a `yandex_auth_error` event, so the banner
+        // could only ever stay hidden. The real Yandex flow reports through
+        // `yandex_device_auth_*`, handled in js/events.js.
     }
 }
 
+// Kept exported on purpose: js/events.js imports the symbol (a missing ESM
+// named export breaks the whole module graph) and #yandex-auth-warning still
+// exists in index.html for a future, real `yandex_auth_error` backend event.
 export function setYandexWarning(visible) {
     const warning = document.getElementById('yandex-auth-warning');
     if (warning) {
@@ -943,37 +1020,14 @@ export function initKeybinds() {
     }
 }
 
-function triggerKeybindAction(actionId) {
-    switch(actionId) {
-        case 'play_pause':
-            document.getElementById('pb-btn-play')?.click();
-            break;
-        case 'next_track':
-            document.getElementById('pb-btn-next')?.click();
-            break;
-        case 'prev_track':
-            document.getElementById('pb-btn-prev')?.click();
-            break;
-        case 'volume_up':
-            window.NeDotify?.adjustVolume?.(5);
-            break;
-        case 'volume_down':
-            window.NeDotify?.adjustVolume?.(-5);
-            break;
-        case 'toggle_mute':
-            document.getElementById('pb-volume-btn')?.click();
-            break;
-        case 'toggle_lyrics':
-            document.getElementById('pp-btn-lyrics')?.click();
-            break;
-        case 'toggle_mini':
-            document.getElementById('btn-mini-player')?.click();
-            break;
-    }
-}
-
-function formatKeyName(code) {
-    if (!code) return 'Не назначено';
+/**
+ * Human label for a single bare KeyboardEvent.code - no modifiers.
+ * Split out of formatKeyName() so the combo splitter below can reuse it.
+ * @param {string} code
+ * @returns {string}
+ */
+function formatBaseKeyName(code) {
+    if (!code) return code;
     const translations = {
         'Space': 'Пробел',
         'ArrowRight': 'Стрелка Вправо',
@@ -1009,6 +1063,39 @@ function formatKeyName(code) {
     if (code.startsWith('Digit')) return `Цифра ${code.replace('Digit', '')}`;
     if (code.startsWith('Numpad')) return `Нумпад ${code.replace('Numpad', '')}`;
     return code;
+}
+
+// Modifier names exactly as parseKeyEventCombo() emits them, in the order it
+// pushes them. 'Meta' is the Windows key.
+const KEYBIND_MODIFIER_LABELS = {
+    'Ctrl': 'Ctrl',
+    'Alt': 'Alt',
+    'Shift': 'Shift',
+    'Meta': 'Win'
+};
+
+/**
+ * Human label for a full combo string as stored in activeKeybinds.
+ *
+ * parseKeyEventCombo() joins the modifiers and the base key with '+', so
+ * 'Ctrl+ArrowRight' is a TWO-part string. This used to look the whole string up
+ * in a map that only ever contained bare codes, miss, and fall through to
+ * `return code` - which is why every modified default rendered as the literal
+ * text "Ctrl+ArrowRight" in the Settings list, while the unmodified 'ArrowRight'
+ * correctly rendered as "Стрелка Вправо". Any binding the user made with a
+ * modifier held down was equally unreadable. Split on '+' and label each part.
+ */
+function formatKeyName(code) {
+    if (!code) return 'Не назначено';
+    const parts = String(code).split('+').filter(Boolean);
+    if (parts.length === 0) return 'Не назначено';
+
+    const labels = parts.map(part =>
+        Object.prototype.hasOwnProperty.call(KEYBIND_MODIFIER_LABELS, part)
+            ? KEYBIND_MODIFIER_LABELS[part]
+            : formatBaseKeyName(part)
+    );
+    return labels.join(' + ');
 }
 
 function renderKeybindsList() {
@@ -1123,20 +1210,20 @@ export function applyPerformancePreset(preset, skipSave = false) {
         root.classList.add('perf-low');
         applyBlurQuality('off');
         applyGlowSettings('off');
-        _setSlidersForPreset(15, 10, 30);
+        _setSlidersForPreset(15, 10, 30, skipSave);
         _syncActiveCard('opt-blur-quality', 'off');
         _syncActiveCard('opt-glow-quality', 'off');
     } else if (normalized === 'medium') {
         root.classList.add('perf-medium');
         applyBlurQuality('lq');
         applyGlowSettings('subtle');
-        _setSlidersForPreset(30, 18, 45);
+        _setSlidersForPreset(30, 18, 45, skipSave);
         _syncActiveCard('opt-blur-quality', 'lq');
         _syncActiveCard('opt-glow-quality', 'subtle');
     } else { // high
         applyBlurQuality('hq');
         applyGlowSettings('full');
-        _setSlidersForPreset(60, 24, 60);
+        _setSlidersForPreset(60, 24, 60, skipSave);
         _syncActiveCard('opt-blur-quality', 'hq');
         _syncActiveCard('opt-glow-quality', 'full');
     }
@@ -1144,11 +1231,17 @@ export function applyPerformancePreset(preset, skipSave = false) {
     if (!skipSave) {
         saveSetting('performance_preset', preset, 'optimization');
     }
-    applyAuraOrbs(getLocalSetting('nedotify_player_aura_orbs_enabled', true));
+    applyAuraOrbs(savedSetting('player', 'aura_orbs_enabled', true));
     window.dispatchEvent(new CustomEvent('nedotify:performance_preset_changed', { detail: { preset: normalized } }));
 }
 
-function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
+// skipSave is threaded through so the restore path can lay the preset's values
+// onto the sliders without writing them back. saveSetting() also mutates
+// window.settings, so saving here during restore overwrote the user's own
+// fps_* / blur / glow values with the preset's defaults on every startup --
+// which also made the final applied value depend on a race with the restore
+// block that runs right after this call.
+function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60, skipSave = false) {
     const sv = document.getElementById('slider-fps-visualizer');
     if (sv) {
         sv.value = vizFps;
@@ -1156,7 +1249,7 @@ function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
         sv.style.setProperty('--value-percent', `${pct}%`);
         setElText('label-fps-visualizer', `${vizFps} FPS`);
         setVisualizerFps(vizFps);
-        saveSetting('fps_visualizer', vizFps, 'optimization');
+        if (!skipSave) saveSetting('fps_visualizer', vizFps, 'optimization');
     }
     const sp = document.getElementById('slider-fps-particles');
     if (sp) {
@@ -1165,7 +1258,7 @@ function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
         sp.style.setProperty('--value-percent', `${pct}%`);
         setElText('label-fps-particles', `${particlesFps} FPS`);
         setParticlesFps(particlesFps);
-        saveSetting('fps_particles', particlesFps, 'optimization');
+        if (!skipSave) saveSetting('fps_particles', particlesFps, 'optimization');
     }
     const su = document.getElementById('slider-fps-ui');
     if (su) {
@@ -1174,7 +1267,7 @@ function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
         su.style.setProperty('--value-percent', `${pct}%`);
         setElText('label-fps-ui', `${uiFps} FPS`);
         setUiFps(uiFps);
-        saveSetting('fps_ui', uiFps, 'optimization');
+        if (!skipSave) saveSetting('fps_ui', uiFps, 'optimization');
     }
 }
 
@@ -1446,9 +1539,10 @@ function setupAppearancePanel() {
         }
     });
 
-    // Random Theme Palette Generator
+    // Random Theme Palette Generator (single listener: full palette + save)
     const btnRandom = document.getElementById('btn-random-theme');
-    if (btnRandom) {
+    if (btnRandom && !btnRandom._boundRandomTheme) {
+        btnRandom._boundRandomTheme = true;
         btnRandom.addEventListener('click', () => {
             const rHex = () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
             colorPickers.forEach(item => {
@@ -1463,7 +1557,12 @@ function setupAppearancePanel() {
                     const b = parseInt(c.substring(4, 6), 16) || 0;
                     document.documentElement.style.setProperty(`${item.prop}-rgb`, `${r}, ${g}, ${b}`);
                 }
+                saveSetting(item.id.replace('picker-color-', 'color_'), val, 'theme');
             });
+            const primaryEl = document.getElementById('picker-color-primary');
+            const accentEl = document.getElementById('picker-color-accent');
+            if (primaryEl) saveSetting('custom_primary', primaryEl.value, 'theme');
+            if (accentEl) saveSetting('custom_accent', accentEl.value, 'theme');
             window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Палитра случайно сгенерирована!', type: 'info' } }));
         });
     }
@@ -1517,7 +1616,7 @@ function applyThemeMode(mode) {
     } else {
         document.documentElement.setAttribute('data-theme', mode);
     }
-    applyAuraOrbs(getLocalSetting('nedotify_player_aura_orbs_enabled', true));
+    applyAuraOrbs(savedSetting('player', 'aura_orbs_enabled', true));
 }
 
 let _zapretListenersAttached = false;
@@ -1607,6 +1706,11 @@ function setupZapretPanel() {
         if (selectZapretMode) {
             selectZapretMode.addEventListener('change', (e) => {
                 selectedMode = e.target.value;
+                // Persist immediately, regardless of the enable toggle state.
+                saveSetting('mode', selectedMode, 'zapret');
+                if (window.pywebview?.api?.set_setting) {
+                    window.pywebview.api.set_setting('zapret', 'mode', selectedMode);
+                }
                 if (toggleZapret && toggleZapret.classList.contains('on')) {
                     applyZapret(true);
                 }
@@ -1782,11 +1886,9 @@ function setupBackgroundPanel() {
     setupSlider('slider-bg-blur', 'bg_blur', 'theme', (v) => {
         const val = parseInt(v) || 0;
         setElText('label-bg-blur', `${val}px`);
-        setElText('label-glass-blur', `${val}px`);
-        const glassSlider = document.getElementById('slider-glass-blur');
-        if (glassSlider) glassSlider.value = val;
-        document.documentElement.style.setProperty('--glass-blur', `${val}px`);
-        document.documentElement.style.setProperty('--blur-sm', `${Math.max(4, Math.round(val * 0.4))}px`);
+        // bg-blur applies ONLY to #custom-bg-layer (via applyCustomBg filter).
+        // Glass blur (--glass-blur / --blur-*) is owned exclusively by
+        // #slider-glass-blur and must not be touched here.
         const bgUrl = getLocalSetting('nedotify_theme_custom_bg_image', '') || window.settings?.theme?.custom_bg_image;
         const dimVal = parseInt(document.getElementById('slider-bg-dim')?.value || 30);
         if (bgUrl) {
@@ -2016,10 +2118,15 @@ export function applyIconPack(packId) {
         }
     };
 
-    // Logo
+    // Logo. Write into the .sidebar-logo-icon slot only: the rail title is the
+    // collapse/expand toggle and owns two .sidebar-logo-text variants
+    // ("NeDotify" / the collapsed "N"). Replacing logoEl.innerHTML wholesale
+    // used to leave a bare text node here, which silently destroyed that
+    // structure the first time a user switched icon packs.
     const logoEl = document.querySelector('.sidebar-logo');
     if (logoEl) {
-        logoEl.innerHTML = `<i data-lucide="${map.logo}" style="width:24px;height:24px;filter:drop-shadow(0 0 10px ${pack.color});"></i> NeDotify`;
+        const iconSlot = logoEl.querySelector('.sidebar-logo-icon') || logoEl;
+        iconSlot.innerHTML = `<i data-lucide="${map.logo}" style="width:24px;height:24px;filter:drop-shadow(0 0 10px ${pack.color});"></i>`;
     }
 
     // Player bar transport controls
@@ -2227,6 +2334,47 @@ export function applyMpPos(pos) {
     }
 }
 
+// Repaint the Player tab's cards and toggles from the saved values.
+//
+// This runs twice on a cold start: once from setupPlayerSettingsPanel() (before
+// the bridge has answered, so it can only see localStorage) and again from
+// applySettingsFromBackend() once the backend values are known. Without the
+// second call the toggles kept whatever the first pass guessed, so a cleared
+// localStorage left the Player tab showing "queue on" while the queue was
+// actually hidden. applyShowQueue() and friends change behaviour but not the
+// toggle markup, so the visual state has to be re-synced explicitly.
+function syncPlayerSettingsUI() {
+    const syncActiveCard = (containerId, val) => {
+        const c = document.getElementById(containerId);
+        if (c) {
+            c.querySelectorAll('.opt-card').forEach(card => {
+                card.classList.toggle('active', card.dataset.val === val);
+            });
+        }
+    };
+    const syncToggleVisual = (id, val) => {
+        const t = document.getElementById(id);
+        if (t) t.classList.toggle('on', !!val);
+    };
+
+    syncActiveCard('opt-title-align', savedSetting('player', 'title_align', 'left'));
+    syncActiveCard('opt-player-style', savedSetting('player', 'player_style', 'default'));
+    syncActiveCard('opt-slider-type', savedSetting('player', 'slider_type', 'default'));
+    syncActiveCard('opt-queue-pos', savedSetting('player', 'queue_pos', 'bottom'));
+    syncActiveCard('opt-queue-view', savedSetting('player', 'queue_view', 'normal'));
+    syncActiveCard('opt-mp-progress', savedSetting('player', 'mp_progress', 'line'));
+    syncActiveCard('opt-mp-cover-shape', savedSetting('player', 'mp_cover_shape', 'default'));
+    syncActiveCard('opt-mp-shape', savedSetting('player', 'mp_shape', 'default'));
+
+    syncToggleVisual('toggle-show-queue', savedSetting('player', 'show_queue', true));
+    syncToggleVisual('toggle-compact-queue-btn', savedSetting('player', 'compact_queue_btn', true));
+    syncToggleVisual('toggle-next-track-preview', savedSetting('player', 'next_track_preview', true));
+    syncToggleVisual('toggle-queue-autopilot', savedSetting('player', 'queue_autopilot',
+        savedSetting('player', 'flow_enabled', true)));
+    syncToggleVisual('toggle-player-prefetch', savedSetting('player', 'player_prefetch', true));
+    syncToggleVisual('toggle-aura-orbs', savedSetting('player', 'aura_orbs_enabled', true));
+}
+
 function setupPlayerSettingsPanel() {
     const setupCardGroup = (containerId, settingKey, onChange) => {
         const container = document.getElementById(containerId);
@@ -2280,57 +2428,29 @@ function setupPlayerSettingsPanel() {
         });
     }
 
-    // Restore saved settings from localStorage
+    // Restore saved settings, backend first (see savedSetting) so a cleared
+    // localStorage cannot reset the Player tab back to its defaults.
     const saved = {
-        align: getLocalSetting('nedotify_player_title_align', 'left'),
-        style: getLocalSetting('nedotify_player_player_style', 'default'),
-        slider: getLocalSetting('nedotify_player_slider_type', 'default'),
-        showQueue: getLocalSetting('nedotify_player_show_queue', true),
-        queuePos: getLocalSetting('nedotify_player_queue_pos', 'bottom'),
-        compactQueue: getLocalSetting('nedotify_player_compact_queue_btn', true),
-        nextPreview: getLocalSetting('nedotify_player_next_track_preview', true),
-        autopilot: getLocalSetting('nedotify_player_queue_autopilot', getLocalSetting('nedotify_player_flow_enabled', true)),
-        prefetch: getLocalSetting('nedotify_player_player_prefetch', true),
-        auraOrbs: getLocalSetting('nedotify_player_aura_orbs_enabled', true),
-        queueView: getLocalSetting('nedotify_player_queue_view', 'normal'),
-        mpProg: getLocalSetting('nedotify_player_mp_progress', 'line'),
-        mpCover: getLocalSetting('nedotify_player_mp_cover_shape', 'default'),
-        mpShape: getLocalSetting('nedotify_player_mp_shape', 'default'),
-        mpPos: getLocalSetting('nedotify_player_mp_pos', 'bottom-right'),
+        align: savedSetting('player', 'title_align', 'left'),
+        style: savedSetting('player', 'player_style', 'default'),
+        slider: savedSetting('player', 'slider_type', 'default'),
+        showQueue: savedSetting('player', 'show_queue', true),
+        queuePos: savedSetting('player', 'queue_pos', 'bottom'),
+        compactQueue: savedSetting('player', 'compact_queue_btn', true),
+        nextPreview: savedSetting('player', 'next_track_preview', true),
+        autopilot: savedSetting('player', 'queue_autopilot',
+                                savedSetting('player', 'flow_enabled', true)),
+        prefetch: savedSetting('player', 'player_prefetch', true),
+        auraOrbs: savedSetting('player', 'aura_orbs_enabled', true),
+        queueView: savedSetting('player', 'queue_view', 'normal'),
+        mpProg: savedSetting('player', 'mp_progress', 'line'),
+        mpCover: savedSetting('player', 'mp_cover_shape', 'default'),
+        mpShape: savedSetting('player', 'mp_shape', 'default'),
+        mpPos: savedSetting('player', 'mp_pos', 'bottom-right'),
     };
 
-    // Update active UI cards according to saved state
-    const syncActiveCard = (containerId, val) => {
-        const c = document.getElementById(containerId);
-        if (c) {
-            c.querySelectorAll('.opt-card').forEach(card => {
-                card.classList.toggle('active', card.dataset.val === val);
-            });
-        }
-    };
-
-    // Sync toggle visual states from saved values
-    const syncToggleVisual = (id, val) => {
-        const t = document.getElementById(id);
-        if (t) t.classList.toggle('on', !!val);
-    };
-
-    syncActiveCard('opt-title-align', saved.align);
-    syncActiveCard('opt-player-style', saved.style);
-    syncActiveCard('opt-slider-type', saved.slider);
-    syncActiveCard('opt-queue-pos', saved.queuePos);
-    syncActiveCard('opt-queue-view', saved.queueView);
-    syncActiveCard('opt-mp-progress', saved.mpProg);
-    syncActiveCard('opt-mp-cover-shape', saved.mpCover);
-    syncActiveCard('opt-mp-shape', saved.mpShape);
-
-    // Sync toggle visuals
-    syncToggleVisual('toggle-show-queue', saved.showQueue);
-    syncToggleVisual('toggle-compact-queue-btn', saved.compactQueue);
-    syncToggleVisual('toggle-next-track-preview', saved.nextPreview);
-    syncToggleVisual('toggle-queue-autopilot', saved.autopilot);
-    syncToggleVisual('toggle-player-prefetch', saved.prefetch);
-    syncToggleVisual('toggle-aura-orbs', saved.auraOrbs);
+    // Update active UI cards / toggle visuals from the saved state.
+    syncPlayerSettingsUI();
 
     if (mpPosGroup) {
         mpPosGroup.querySelectorAll('.opt-card-btn').forEach(b => {

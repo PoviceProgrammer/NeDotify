@@ -49,6 +49,10 @@ def get_system_region():
 
 
 DEFAULT_SETTINGS = {
+    "app": {
+        "discord_rpc_enabled": True,
+        "autostart": False,
+    },
     "general": {
         "language": "ru",
         "region": get_system_region(),
@@ -116,12 +120,21 @@ DEFAULT_SETTINGS = {
         # Values use the frontend combo format (parseKeyEventCombo): e.code
         # names joined with '+'. Arrows are Ctrl-modified on purpose - bare
         # arrows hijacked list navigation.
+        #
+        # The action ids must be the frontend's, not our own naming: the
+        # frontend only accepts ids in its KNOWN_ACTIONS set, so a key stored
+        # here under a name it does not know (this block used to say "mute"
+        # where the frontend says "toggle_mute") is silently dropped and the
+        # matching action falls back to whatever the frontend default happens to
+        # be. tests/test_keybind_contracts.py parses both files and fails on drift.
         "play_pause": "Space",
         "next_track": "Ctrl+ArrowRight",
         "prev_track": "Ctrl+ArrowLeft",
         "volume_up": "Ctrl+ArrowUp",
         "volume_down": "Ctrl+ArrowDown",
-        "mute": "KeyM",
+        "toggle_mute": "KeyM",
+        "toggle_lyrics": "KeyL",
+        "toggle_mini": "KeyP",
         "like": "KeyK",
         "search": "Slash",
     },
@@ -229,6 +242,13 @@ DEFAULT_SETTINGS = {
         "shuffle": False,
         "repeat": "off",
     },
+    # UNUSED - do not wire anything up to this block.
+    # The subscription/licensing feature is not planned: the UI has no input
+    # and no validation call path (AppApi.validate_subscription_key and
+    # AppApi.get_subscription_info have zero callers), so an empty key can
+    # never unlock anything. Kept only so settings.json files written by older
+    # builds still load (unknown keys are preserved, not dropped) and so the
+    # schema does not shift. See STATUS.md "Licensing" and docs/AUDIT.md.
     "subscription": {
         "key": "",
         "valid_until": None,
@@ -371,6 +391,28 @@ class SettingsManager:
             self._cache[category][key] = value
             self._dirty.add((category, key))
         self._wake_writer()
+
+    def sync_flush_now(self) -> bool:
+        """Force every pending setting to the database, right now.
+
+        For hard-exit paths: os._exit() skips atexit handlers, and the writer
+        thread sits in a sleep before its own flush, so up to
+        FLUSH_INTERVAL_SECONDS of user changes would be lost. Call this
+        immediately before tearing the database down.
+
+        Returns True when the pending set was empty or was written in full;
+        False means some keys are still pending (the write failed, and the
+        keys were put back for the next flush).
+        """
+        try:
+            self.flush()
+        except Exception as e:
+            # flush() already restores the pending keys on a failed batch, but a
+            # teardown caller must never see this raise: the process is about to
+            # exit either way and losing the log line would hide the cause.
+            logger.error("sync_flush_now: settings flush raised: %s", e, exc_info=True)
+            return False
+        return not self._dirty
 
     def flush(self) -> None:
         """Persist every pending setting to the database right now.

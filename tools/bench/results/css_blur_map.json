@@ -1,0 +1,1427 @@
+{
+  "schema": "nedotify.css-blur-map.v1",
+  "generated_by": "tools/bench/css_inventory.py",
+  "sort_key": "(file, line, selector, property, value)",
+  "counts": {
+    "total_blur_declarations": 81,
+    "backdrop_filter_active": 50,
+    "backdrop_filter_none": 12,
+    "filter_with_blur_fn": 9
+  },
+  "declarations": [
+    {
+      "key": "ui/web_new_v2/css/components/base.css:136::root.battery-saver-active #sidebar, :root.battery-saver-active #player-bar, :root.battery-saver-active .glass-panel, :root.battery-saver-active .card, :root.battery-saver-active .player-glass-card, :root.battery-saver-active .settings-modal-card, :root.battery-saver-active .modal-content|backdrop-filter|none",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 136,
+      "selector": ":root.battery-saver-active #sidebar, :root.battery-saver-active #player-bar, :root.battery-saver-active .glass-panel, :root.battery-saver-active .card, :root.battery-saver-active .player-glass-card, :root.battery-saver-active .settings-modal-card, :root.battery-saver-active .modal-content",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 173,
+      "is_backdrop": true,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:137::root.battery-saver-active #sidebar, :root.battery-saver-active #player-bar, :root.battery-saver-active .glass-panel, :root.battery-saver-active .card, :root.battery-saver-active .player-glass-card, :root.battery-saver-active .settings-modal-card, :root.battery-saver-active .modal-content|-webkit-backdrop-filter|none",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 137,
+      "selector": ":root.battery-saver-active #sidebar, :root.battery-saver-active #player-bar, :root.battery-saver-active .glass-panel, :root.battery-saver-active .card, :root.battery-saver-active .player-glass-card, :root.battery-saver-active .settings-modal-card, :root.battery-saver-active .modal-content",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 174,
+      "is_backdrop": true,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:203:.card.blur-out, .glass-panel.blur-out, .player-glass-card.blur-out, .settings-modal-card.blur-out|backdrop-filter|none",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 203,
+      "selector": ".card.blur-out, .glass-panel.blur-out, .player-glass-card.blur-out, .settings-modal-card.blur-out",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 205,
+      "is_backdrop": true,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:204:.card.blur-out, .glass-panel.blur-out, .player-glass-card.blur-out, .settings-modal-card.blur-out|-webkit-backdrop-filter|none",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 204,
+      "selector": ".card.blur-out, .glass-panel.blur-out, .player-glass-card.blur-out, .settings-modal-card.blur-out",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 206,
+      "is_backdrop": true,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:295:.btn-primary:hover|filter|brightness(1.1)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 295,
+      "selector": ".btn-primary:hover",
+      "at_rules": [],
+      "property": "filter",
+      "value": "brightness(1.1)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 262,
+      "is_backdrop": false,
+      "has_blur_fn": false,
+      "blur_is_none": false,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:419:html.has-custom-bg #sidebar|backdrop-filter|blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 419,
+      "selector": "html.has-custom-bg #sidebar",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 323,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--glass-blur, var(--blur-md, 14px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:420:html.has-custom-bg #sidebar|-webkit-backdrop-filter|blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 420,
+      "selector": "html.has-custom-bg #sidebar",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 324,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--glass-blur, var(--blur-md, 14px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:425:html.has-custom-bg #main-content|backdrop-filter|blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 425,
+      "selector": "html.has-custom-bg #main-content",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 326,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--glass-blur, var(--blur-md, 14px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:426:html.has-custom-bg #main-content|-webkit-backdrop-filter|blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 426,
+      "selector": "html.has-custom-bg #main-content",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 327,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--glass-blur, var(--blur-md, 14px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:431:html.has-custom-bg #player-bar|backdrop-filter|blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 431,
+      "selector": "html.has-custom-bg #player-bar",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 329,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--glass-blur, var(--blur-md, 14px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:432:html.has-custom-bg #player-bar|-webkit-backdrop-filter|blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 432,
+      "selector": "html.has-custom-bg #player-bar",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 330,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--glass-blur, var(--blur-md, 14px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:500:#sidebar|backdrop-filter|blur(var(--blur-md))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 500,
+      "selector": "#sidebar",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 377,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-md"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:501:#sidebar|-webkit-backdrop-filter|blur(var(--blur-md))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 501,
+      "selector": "#sidebar",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 378,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-md"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:739:#main-content|backdrop-filter|blur(var(--blur-md))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 739,
+      "selector": "#main-content",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 503,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-md"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:740:#main-content|-webkit-backdrop-filter|blur(var(--blur-md))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 740,
+      "selector": "#main-content",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 504,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-md"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:818:.card|backdrop-filter|blur(var(--blur-sm))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 818,
+      "selector": ".card",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 530,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-sm"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:908:.search-capsule|backdrop-filter|blur(var(--blur-sm))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 908,
+      "selector": ".search-capsule",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 597,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-sm"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:909:.search-capsule|-webkit-backdrop-filter|blur(var(--blur-sm))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 909,
+      "selector": ".search-capsule",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 598,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-sm"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:1026:.search-platform-dropdown|backdrop-filter|blur(var(--blur-xl))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 1026,
+      "selector": ".search-platform-dropdown",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-xl))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 667,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-xl"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:1027:.search-platform-dropdown|-webkit-backdrop-filter|blur(var(--blur-xl))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 1027,
+      "selector": ".search-platform-dropdown",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-xl))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 668,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-xl"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:1488:.rich-menu-header-bg|filter|blur(25px) brightness(0.35) saturate(1.4)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 1488,
+      "selector": ".rich-menu-header-bg",
+      "at_rules": [],
+      "property": "filter",
+      "value": "blur(25px) brightness(0.35) saturate(1.4)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 975,
+      "is_backdrop": false,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "25px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:1638:#particles-bg|filter|blur(8px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 1638,
+      "selector": "#particles-bg",
+      "at_rules": [],
+      "property": "filter",
+      "value": "blur(8px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 1075,
+      "is_backdrop": false,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "8px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:1639:#particles-bg|-webkit-filter|blur(8px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 1639,
+      "selector": "#particles-bg",
+      "at_rules": [],
+      "property": "-webkit-filter",
+      "value": "blur(8px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 1076,
+      "is_backdrop": false,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "8px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:2496:#mini-player-overlay|backdrop-filter|blur(24px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 2496,
+      "selector": "#mini-player-overlay",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(24px)",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 1592,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "24px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:2637:#mini-player-overlay .mp-controls-row button.btn-play-mini:hover|filter|brightness(1.15)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 2637,
+      "selector": "#mini-player-overlay .mp-controls-row button.btn-play-mini:hover",
+      "at_rules": [],
+      "property": "filter",
+      "value": "brightness(1.15)",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 1678,
+      "is_backdrop": false,
+      "has_blur_fn": false,
+      "blur_is_none": false,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:2948:#view-settings.view-page.settings-overlay|backdrop-filter|blur(16px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 2948,
+      "selector": "#view-settings.view-page.settings-overlay",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(16px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 1862,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "16px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:2949:#view-settings.view-page.settings-overlay|-webkit-backdrop-filter|blur(16px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 2949,
+      "selector": "#view-settings.view-page.settings-overlay",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 1863,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "16px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:2974:.settings-modal-card|backdrop-filter|blur(32px) saturate(150%)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 2974,
+      "selector": ".settings-modal-card",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(32px) saturate(150%)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 1882,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "32px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:2975:.settings-modal-card|-webkit-backdrop-filter|blur(32px) saturate(150%)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 2975,
+      "selector": ".settings-modal-card",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(32px) saturate(150%)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 1883,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "32px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3345:.opt-card, .opt-toggle-btn|filter|none",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3345,
+      "selector": ".opt-card, .opt-toggle-btn",
+      "at_rules": [],
+      "property": "filter",
+      "value": "none",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2082,
+      "is_backdrop": false,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3363:.opt-card:hover, .opt-toggle-btn:hover|filter|brightness(1.2)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3363,
+      "selector": ".opt-card:hover, .opt-toggle-btn:hover",
+      "at_rules": [],
+      "property": "filter",
+      "value": "brightness(1.2)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2093,
+      "is_backdrop": false,
+      "has_blur_fn": false,
+      "blur_is_none": false,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3371:.opt-card.active, .opt-toggle-btn.active|filter|none",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3371,
+      "selector": ".opt-card.active, .opt-toggle-btn.active",
+      "at_rules": [],
+      "property": "filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 2098,
+      "is_backdrop": false,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3457:.workshop-card-badge|backdrop-filter|blur(8px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3457,
+      "selector": ".workshop-card-badge",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(8px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2146,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "8px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3473:.workshop-card-overlay|backdrop-filter|blur(3px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3473,
+      "selector": ".workshop-card-overlay",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(3px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2159,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "3px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3503:.workshop-btn-apply:hover|filter|brightness(1.15)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3503,
+      "selector": ".workshop-btn-apply:hover",
+      "at_rules": [],
+      "property": "filter",
+      "value": "brightness(1.15)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2180,
+      "is_backdrop": false,
+      "has_blur_fn": false,
+      "blur_is_none": false,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3583:#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel|backdrop-filter|blur(var(--glass-blur)) saturate(180%)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3583,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2223,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--glass-blur"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3584:#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel|-webkit-backdrop-filter|blur(var(--glass-blur)) saturate(180%)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3584,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2224,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--glass-blur"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3628:#custom-context-menu|backdrop-filter|blur(20px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3628,
+      "selector": "#custom-context-menu",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(20px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2241,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "20px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3686:body.unfocused-blur-disabled #sidebar, body.unfocused-blur-disabled #player-bar, body.unfocused-blur-disabled .player-glass-card, body.unfocused-blur-disabled .glass-panel, body.unfocused-blur-disabled .card, body.unfocused-blur-disabled .glass-modal, body.unfocused-blur-disabled #queue-drawer, body.unfocused-blur-disabled .context-menu, body.unfocused-blur-disabled .settings-modal-card, body.unfocused-blur-disabled .topbar, body.unfocused-blur-disabled .top-bar|backdrop-filter|none",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3686,
+      "selector": "body.unfocused-blur-disabled #sidebar, body.unfocused-blur-disabled #player-bar, body.unfocused-blur-disabled .player-glass-card, body.unfocused-blur-disabled .glass-panel, body.unfocused-blur-disabled .card, body.unfocused-blur-disabled .glass-modal, body.unfocused-blur-disabled #queue-drawer, body.unfocused-blur-disabled .context-menu, body.unfocused-blur-disabled .settings-modal-card, body.unfocused-blur-disabled .topbar, body.unfocused-blur-disabled .top-bar",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 2264,
+      "is_backdrop": true,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3687:body.unfocused-blur-disabled #sidebar, body.unfocused-blur-disabled #player-bar, body.unfocused-blur-disabled .player-glass-card, body.unfocused-blur-disabled .glass-panel, body.unfocused-blur-disabled .card, body.unfocused-blur-disabled .glass-modal, body.unfocused-blur-disabled #queue-drawer, body.unfocused-blur-disabled .context-menu, body.unfocused-blur-disabled .settings-modal-card, body.unfocused-blur-disabled .topbar, body.unfocused-blur-disabled .top-bar|-webkit-backdrop-filter|none",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3687,
+      "selector": "body.unfocused-blur-disabled #sidebar, body.unfocused-blur-disabled #player-bar, body.unfocused-blur-disabled .player-glass-card, body.unfocused-blur-disabled .glass-panel, body.unfocused-blur-disabled .card, body.unfocused-blur-disabled .glass-modal, body.unfocused-blur-disabled #queue-drawer, body.unfocused-blur-disabled .context-menu, body.unfocused-blur-disabled .settings-modal-card, body.unfocused-blur-disabled .topbar, body.unfocused-blur-disabled .top-bar",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 2265,
+      "is_backdrop": true,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3708::root.blur-disabled *|backdrop-filter|none",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3708,
+      "selector": ":root.blur-disabled *",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 2269,
+      "is_backdrop": true,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3709::root.blur-disabled *|-webkit-backdrop-filter|none",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3709,
+      "selector": ":root.blur-disabled *",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 2270,
+      "is_backdrop": true,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3742:.network-banner|backdrop-filter|blur(8px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3742,
+      "selector": ".network-banner",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(8px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2282,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "8px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3743:.network-banner|-webkit-backdrop-filter|blur(8px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3743,
+      "selector": ".network-banner",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(8px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2283,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "8px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3822:.custom-glass-dropdown-menu|backdrop-filter|blur(16px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3822,
+      "selector": ".custom-glass-dropdown-menu",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(16px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2324,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "16px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3823:.custom-glass-dropdown-menu|-webkit-backdrop-filter|blur(16px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3823,
+      "selector": ".custom-glass-dropdown-menu",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2325,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "16px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:3871:.pl-drag-ghost|backdrop-filter|blur(8px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 3871,
+      "selector": ".pl-drag-ghost",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(8px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2351,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "8px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:4006:#mini-lyrics-widget|backdrop-filter|blur(var(--blur-lg, 16px))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 4006,
+      "selector": "#mini-lyrics-widget",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-lg, 16px))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2417,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-lg, 16px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:4007:#mini-lyrics-widget|-webkit-backdrop-filter|blur(var(--blur-lg, 16px))",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 4007,
+      "selector": "#mini-lyrics-widget",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-lg, 16px))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2418,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-lg, 16px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:4115:.search-suggestions-dropdown|backdrop-filter|blur(20px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 4115,
+      "selector": ".search-suggestions-dropdown",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(20px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2490,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "20px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:4116:.search-suggestions-dropdown|-webkit-backdrop-filter|blur(20px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 4116,
+      "selector": ".search-suggestions-dropdown",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(20px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2491,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "20px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:4275:#batch-action-bar|backdrop-filter|blur(24px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 4275,
+      "selector": "#batch-action-bar",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(24px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2590,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "24px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css:4276:#batch-action-bar|-webkit-backdrop-filter|blur(24px)",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "line": 4276,
+      "selector": "#batch-action-bar",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(24px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2591,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "24px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css:80:.lyric-line|filter|blur(2px)",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "line": 80,
+      "selector": ".lyric-line",
+      "at_rules": [],
+      "property": "filter",
+      "value": "blur(2px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 3209,
+      "is_backdrop": false,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "2px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css:100:.lyric-line:hover:not(.active):not(.past)|filter|blur(0)",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "line": 100,
+      "selector": ".lyric-line:hover:not(.active):not(.past)",
+      "at_rules": [],
+      "property": "filter",
+      "value": "blur(0)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 3219,
+      "is_backdrop": false,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "0"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css:114:.lyrics-viewport.is-dragging .lyric-line:hover:not(.active)|filter|blur(2px)",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "line": 114,
+      "selector": ".lyrics-viewport.is-dragging .lyric-line:hover:not(.active)",
+      "at_rules": [],
+      "property": "filter",
+      "value": "blur(2px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 3224,
+      "is_backdrop": false,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "2px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css:121:.lyric-line.active|filter|blur(0)",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "line": 121,
+      "selector": ".lyric-line.active",
+      "at_rules": [],
+      "property": "filter",
+      "value": "blur(0)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 3228,
+      "is_backdrop": false,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "0"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css:143:.lyric-line.past|filter|blur(1.5px)",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "line": 143,
+      "selector": ".lyric-line.past",
+      "at_rules": [],
+      "property": "filter",
+      "value": "blur(1.5px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 3238,
+      "is_backdrop": false,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "1.5px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css:221:.lyric-plain|filter|none",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "line": 221,
+      "selector": ".lyric-plain",
+      "at_rules": [],
+      "property": "filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 3281,
+      "is_backdrop": false,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css:245:.lyrics-overlay, #lyrics-overlay|backdrop-filter|blur(40px)",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "line": 245,
+      "selector": ".lyrics-overlay, #lyrics-overlay",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(40px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 3297,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "40px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css:246:.lyrics-overlay, #lyrics-overlay|-webkit-backdrop-filter|blur(40px)",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "line": 246,
+      "selector": ".lyrics-overlay, #lyrics-overlay",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(40px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 3298,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "40px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css:392::root.perf-low .lyric-line, :root.perf-medium .lyric-line, :root.battery-saver-active .lyric-line, .perf-low .lyric-line, .perf-medium .lyric-line, .battery-saver-active .lyric-line|filter|none",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "line": 392,
+      "selector": ":root.perf-low .lyric-line, :root.perf-medium .lyric-line, :root.battery-saver-active .lyric-line, .perf-low .lyric-line, .perf-medium .lyric-line, .battery-saver-active .lyric-line",
+      "at_rules": [],
+      "property": "filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 3375,
+      "is_backdrop": false,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css:403::root.perf-low .lyric-line.past, :root.perf-medium .lyric-line.past, :root.battery-saver-active .lyric-line.past, .perf-low .lyric-line.past, .perf-medium .lyric-line.past, .battery-saver-active .lyric-line.past|filter|none",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "line": 403,
+      "selector": ":root.perf-low .lyric-line.past, :root.perf-medium .lyric-line.past, :root.battery-saver-active .lyric-line.past, .perf-low .lyric-line.past, .perf-medium .lyric-line.past, .battery-saver-active .lyric-line.past",
+      "at_rules": [],
+      "property": "filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 3378,
+      "is_backdrop": false,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css:456::root.perf-low .lyrics-overlay, :root.perf-medium .lyrics-overlay, :root.battery-saver-active .lyrics-overlay, .perf-low .lyrics-overlay, .perf-medium .lyrics-overlay, .battery-saver-active .lyrics-overlay, :root.perf-low #lyrics-overlay, :root.perf-medium #lyrics-overlay, :root.battery-saver-active #lyrics-overlay, .perf-low #lyrics-overlay, .perf-medium #lyrics-overlay, .battery-saver-active #lyrics-overlay|backdrop-filter|none",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "line": 456,
+      "selector": ":root.perf-low .lyrics-overlay, :root.perf-medium .lyrics-overlay, :root.battery-saver-active .lyrics-overlay, .perf-low .lyrics-overlay, .perf-medium .lyrics-overlay, .battery-saver-active .lyrics-overlay, :root.perf-low #lyrics-overlay, :root.perf-medium #lyrics-overlay, :root.battery-saver-active #lyrics-overlay, .perf-low #lyrics-overlay, .perf-medium #lyrics-overlay, .battery-saver-active #lyrics-overlay",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 3385,
+      "is_backdrop": true,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css:457::root.perf-low .lyrics-overlay, :root.perf-medium .lyrics-overlay, :root.battery-saver-active .lyrics-overlay, .perf-low .lyrics-overlay, .perf-medium .lyrics-overlay, .battery-saver-active .lyrics-overlay, :root.perf-low #lyrics-overlay, :root.perf-medium #lyrics-overlay, :root.battery-saver-active #lyrics-overlay, .perf-low #lyrics-overlay, .perf-medium #lyrics-overlay, .battery-saver-active #lyrics-overlay|-webkit-backdrop-filter|none",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "line": 457,
+      "selector": ":root.perf-low .lyrics-overlay, :root.perf-medium .lyrics-overlay, :root.battery-saver-active .lyrics-overlay, .perf-low .lyrics-overlay, .perf-medium .lyrics-overlay, .battery-saver-active .lyrics-overlay, :root.perf-low #lyrics-overlay, :root.perf-medium #lyrics-overlay, :root.battery-saver-active #lyrics-overlay, .perf-low #lyrics-overlay, .perf-medium #lyrics-overlay, .battery-saver-active #lyrics-overlay",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 3386,
+      "is_backdrop": true,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css:16:#player-bar|backdrop-filter|blur(16px)",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "line": 16,
+      "selector": "#player-bar",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(16px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2684,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "16px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css:17:#player-bar|-webkit-backdrop-filter|blur(16px)",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "line": 17,
+      "selector": "#player-bar",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2685,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "16px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css:315:#queue-drawer|backdrop-filter|blur(28px) saturate(160%)",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "line": 315,
+      "selector": "#queue-drawer",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(28px) saturate(160%)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2864,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "28px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css:316:#queue-drawer|-webkit-backdrop-filter|blur(28px) saturate(160%)",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "line": 316,
+      "selector": "#queue-drawer",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(28px) saturate(160%)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 2865,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "28px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css:44:.player-bg-glow|filter|blur(var(--ambient-blur))",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "line": 44,
+      "selector": ".player-bg-glow",
+      "at_rules": [],
+      "property": "filter",
+      "value": "blur(var(--ambient-blur))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 3045,
+      "is_backdrop": false,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--ambient-blur"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css:60:.player-glass-card|backdrop-filter|blur(var(--blur-md))",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "line": 60,
+      "selector": ".player-glass-card",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 3055,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-md"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css:61:.player-glass-card|-webkit-backdrop-filter|blur(var(--blur-md))",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "line": 61,
+      "selector": ".player-glass-card",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 3056,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-md"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css:74:.btn-primary:hover|filter|brightness(1.08)",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "line": 74,
+      "selector": ".btn-primary:hover",
+      "at_rules": [],
+      "property": "filter",
+      "value": "brightness(1.08)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 4181,
+      "is_backdrop": false,
+      "has_blur_fn": false,
+      "blur_is_none": false,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css:86:.search-capsule|backdrop-filter|blur(var(--blur-md)) saturate(160%)",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "line": 86,
+      "selector": ".search-capsule",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md)) saturate(160%)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 4187,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-md"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css:87:.search-capsule|-webkit-backdrop-filter|blur(var(--blur-md)) saturate(160%)",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "line": 87,
+      "selector": ".search-capsule",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md)) saturate(160%)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 4188,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-md"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css:98:#player-bar|backdrop-filter|blur(16px) saturate(160%)",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "line": 98,
+      "selector": "#player-bar",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(16px) saturate(160%)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 4191,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "16px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css:99:#player-bar|-webkit-backdrop-filter|blur(16px) saturate(160%)",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "line": 99,
+      "selector": "#player-bar",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px) saturate(160%)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 4192,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "16px"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css:156:.toast|backdrop-filter|blur(var(--blur-md)) saturate(160%)",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "line": 156,
+      "selector": ".toast",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md)) saturate(160%)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 4217,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-md"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css:157:.toast|-webkit-backdrop-filter|blur(var(--blur-md)) saturate(160%)",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "line": 157,
+      "selector": ".toast",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md)) saturate(160%)",
+      "important": false,
+      "kind": "declaration",
+      "cascade_index": 4218,
+      "is_backdrop": true,
+      "has_blur_fn": true,
+      "blur_is_none": false,
+      "blur_radii": [
+        "var(--blur-md"
+      ]
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css:196::root.perf-low #player-bar, :root.battery-saver-active #player-bar|backdrop-filter|none",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "line": 196,
+      "selector": ":root.perf-low #player-bar, :root.battery-saver-active #player-bar",
+      "at_rules": [],
+      "property": "backdrop-filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 4227,
+      "is_backdrop": true,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css:197::root.perf-low #player-bar, :root.battery-saver-active #player-bar|-webkit-backdrop-filter|none",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "line": 197,
+      "selector": ":root.perf-low #player-bar, :root.battery-saver-active #player-bar",
+      "at_rules": [],
+      "property": "-webkit-backdrop-filter",
+      "value": "none",
+      "important": true,
+      "kind": "declaration",
+      "cascade_index": 4228,
+      "is_backdrop": true,
+      "has_blur_fn": false,
+      "blur_is_none": true,
+      "blur_radii": []
+    }
+  ]
+}

@@ -5,13 +5,19 @@ secrets/
 
 # Python & Virtual Environments
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 *.pyd
 *.egg-info/
-.venv/
+# Covers every local variant: .venv, .venv_win, .venv_win_backup, venv.
+# `.venv/` alone let the two Windows copies show up as untracked noise.
+.venv*/
 venv/
 .pytest_cache/
+# pytest-cov is not a project dependency, but a one-off `pytest --cov` run
+# would otherwise drop a binary .coverage in the root.
+.coverage
+.coverage.*
+htmlcov/
 
 # Builds & Binaries
 dist/
@@ -20,7 +26,10 @@ build/
 *.zip
 *.pkg
 *.msi
+# Generated PyInstaller specs are noise, but the project's own build spec must
+# stay versioned or releases cannot be rebuilt.
 *.spec
+!setup_pyinstaller.spec
 
 # Database & Runtime files
 *.db
@@ -31,8 +40,15 @@ restored_sources/
 backups/
 
 # Tests, Audits, Benchmarks & Reports
-tests/
-run_tests.py
+# A bench run snapshots the entire runtime environment into `_warm_profile/`:
+# AppData (OneAuth account tokens, IdentityCache, INetCookies), the WebView2
+# profile, the pip cache and bench cookies. Reproducible by rerunning the bench,
+# and it carries live credentials, so it stays out of version control.
+tools/bench/results/_warm_profile/
+*.pstats
+# NOTE: `tests/` and `run_tests.py` were listed here, which silently kept the
+# whole pytest suite out of version control. They are tracked on purpose now:
+# every regression test must survive a fresh clone.
 .test_runs/
 .jscheck/
 .audit/

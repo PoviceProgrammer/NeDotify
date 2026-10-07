@@ -1,0 +1,5792 @@
+{
+  "schema": "nedotify.backdrop-nesting.v1",
+  "generated_by": "tools/bench/dom_nesting.py",
+  "html": "ui/web_new_v2/index.html",
+  "notes": [
+    "static analysis of index.html + the 9 css files; no browser involved",
+    "nesting_depth counts ANCESTORS that create a containing block for a nested backdrop-filter",
+    "backdrop_filtered_ancestors lists ancestors that themselves blur the backdrop"
+  ],
+  "counts": {
+    "dom_nodes": 1435,
+    "records": 60,
+    "max_nesting_depth": 1,
+    "records_with_backdro_filtered_ancestor": 29
+  },
+  "records": [
+    {
+      "declaration": "components/base.css:2723",
+      "property": "backdrop-filter",
+      "value": "blur(16px)",
+      "important": false,
+      "selector": "#view-settings.view-page.settings-overlay",
+      "compound_selector": "#view-settings.view-page.settings-overlay",
+      "at_rules": [],
+      "element": "div#view-settings",
+      "element_line_in_html": 686,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "rgba(0, 0, 0, 0.55)"
+        ],
+        "backdrop-filter": [
+          "blur(16px)"
+        ],
+        "opacity": [
+          "0"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:2724",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px)",
+      "important": false,
+      "selector": "#view-settings.view-page.settings-overlay",
+      "compound_selector": "#view-settings.view-page.settings-overlay",
+      "at_rules": [],
+      "element": "div#view-settings",
+      "element_line_in_html": 686,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "rgba(0, 0, 0, 0.55)"
+        ],
+        "backdrop-filter": [
+          "blur(16px)"
+        ],
+        "opacity": [
+          "0"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:2749",
+      "property": "backdrop-filter",
+      "value": "blur(32px) saturate(150%)",
+      "important": false,
+      "selector": ".settings-modal-card",
+      "compound_selector": ".settings-modal-card",
+      "at_rules": [],
+      "element": "div.settings-modal-card",
+      "element_line_in_html": 687,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-settings",
+          "selector": "#view-settings",
+          "line": 686,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "rgba(20, 14, 24, 0.88)"
+        ],
+        "backdrop-filter": [
+          "blur(32px) saturate(150%)"
+        ],
+        "transform": [
+          "scale(0.96) translateY(10px)"
+        ],
+        "opacity": [
+          "0"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:2750",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(32px) saturate(150%)",
+      "important": false,
+      "selector": ".settings-modal-card",
+      "compound_selector": ".settings-modal-card",
+      "at_rules": [],
+      "element": "div.settings-modal-card",
+      "element_line_in_html": 687,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-settings",
+          "selector": "#view-settings",
+          "line": 686,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "rgba(20, 14, 24, 0.88)"
+        ],
+        "backdrop-filter": [
+          "blur(32px) saturate(150%)"
+        ],
+        "transform": [
+          "scale(0.96) translateY(10px)"
+        ],
+        "opacity": [
+          "0"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3120",
+      "property": "filter",
+      "value": "none",
+      "important": false,
+      "selector": ".opt-card, .opt-toggle-btn",
+      "compound_selector": ".opt-card",
+      "at_rules": [],
+      "element": "div.active.opt-card",
+      "element_line_in_html": 912,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-settings",
+          "selector": "#view-settings",
+          "line": 686,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-modal-card",
+          "selector": "div.settings-modal-card",
+          "line": 687,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-layout",
+          "selector": "div.settings-layout",
+          "line": 696,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-panels",
+          "selector": "div.settings-panels",
+          "line": 759,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#settings-player",
+          "selector": "#settings-player",
+          "line": 903,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-section",
+          "selector": "div.settings-section",
+          "line": 904,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#opt-title-align",
+          "selector": "#opt-title-align",
+          "line": 908,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.select-grid",
+          "selector": "div.select-grid",
+          "line": 911,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/base.css:3120",
+      "property": "filter",
+      "value": "none",
+      "important": false,
+      "selector": ".opt-card, .opt-toggle-btn",
+      "compound_selector": ".opt-card",
+      "at_rules": [],
+      "element": "div.opt-card",
+      "element_line_in_html": 916,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-settings",
+          "selector": "#view-settings",
+          "line": 686,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-modal-card",
+          "selector": "div.settings-modal-card",
+          "line": 687,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-layout",
+          "selector": "div.settings-layout",
+          "line": 696,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-panels",
+          "selector": "div.settings-panels",
+          "line": 759,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#settings-player",
+          "selector": "#settings-player",
+          "line": 903,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-section",
+          "selector": "div.settings-section",
+          "line": 904,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#opt-title-align",
+          "selector": "#opt-title-align",
+          "line": 908,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.select-grid",
+          "selector": "div.select-grid",
+          "line": 911,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/base.css:3120",
+      "property": "filter",
+      "value": "none",
+      "important": false,
+      "selector": ".opt-card, .opt-toggle-btn",
+      "compound_selector": ".opt-card",
+      "at_rules": [],
+      "element": "button.filter-btn.opt-card",
+      "element_line_in_html": 1563,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-settings",
+          "selector": "#view-settings",
+          "line": 686,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-modal-card",
+          "selector": "div.settings-modal-card",
+          "line": 687,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-layout",
+          "selector": "div.settings-layout",
+          "line": 696,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-panels",
+          "selector": "div.settings-panels",
+          "line": 759,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#settings-optimization",
+          "selector": "#settings-optimization",
+          "line": 1507,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-section",
+          "selector": "div.settings-section",
+          "line": 1556,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.setting-row",
+          "selector": "div.setting-row",
+          "line": 1560,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#opt-perf-preset",
+          "selector": "#opt-perf-preset",
+          "line": 1562,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/base.css:3120",
+      "property": "filter",
+      "value": "none",
+      "important": false,
+      "selector": ".opt-card, .opt-toggle-btn",
+      "compound_selector": ".opt-card",
+      "at_rules": [],
+      "element": "button.active.filter-btn.opt-card",
+      "element_line_in_html": 1565,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-settings",
+          "selector": "#view-settings",
+          "line": 686,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-modal-card",
+          "selector": "div.settings-modal-card",
+          "line": 687,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-layout",
+          "selector": "div.settings-layout",
+          "line": 696,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-panels",
+          "selector": "div.settings-panels",
+          "line": 759,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#settings-optimization",
+          "selector": "#settings-optimization",
+          "line": 1507,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-section",
+          "selector": "div.settings-section",
+          "line": 1556,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.setting-row",
+          "selector": "div.setting-row",
+          "line": 1560,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#opt-perf-preset",
+          "selector": "#opt-perf-preset",
+          "line": 1562,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/base.css:3120",
+      "property": "filter",
+      "value": "none",
+      "important": false,
+      "selector": ".opt-card, .opt-toggle-btn",
+      "compound_selector": ".opt-toggle-btn",
+      "at_rules": [],
+      "element": "button.active.filter-btn.opt-toggle-btn",
+      "element_line_in_html": 1643,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-settings",
+          "selector": "#view-settings",
+          "line": 686,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-modal-card",
+          "selector": "div.settings-modal-card",
+          "line": 687,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-layout",
+          "selector": "div.settings-layout",
+          "line": 696,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-panels",
+          "selector": "div.settings-panels",
+          "line": 759,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#settings-optimization",
+          "selector": "#settings-optimization",
+          "line": 1507,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-section",
+          "selector": "div.settings-section",
+          "line": 1556,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.setting-row",
+          "selector": "div.setting-row",
+          "line": 1637,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#opt-active-resources",
+          "selector": "#opt-active-resources",
+          "line": 1642,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/base.css:3146",
+      "property": "filter",
+      "value": "none",
+      "important": true,
+      "selector": ".opt-card.active, .opt-toggle-btn.active",
+      "compound_selector": ".opt-card.active",
+      "at_rules": [],
+      "element": "div.active.opt-card",
+      "element_line_in_html": 912,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-settings",
+          "selector": "#view-settings",
+          "line": 686,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-modal-card",
+          "selector": "div.settings-modal-card",
+          "line": 687,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-layout",
+          "selector": "div.settings-layout",
+          "line": 696,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-panels",
+          "selector": "div.settings-panels",
+          "line": 759,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#settings-player",
+          "selector": "#settings-player",
+          "line": 903,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-section",
+          "selector": "div.settings-section",
+          "line": 904,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#opt-title-align",
+          "selector": "#opt-title-align",
+          "line": 908,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.select-grid",
+          "selector": "div.select-grid",
+          "line": 911,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/base.css:3146",
+      "property": "filter",
+      "value": "none",
+      "important": true,
+      "selector": ".opt-card.active, .opt-toggle-btn.active",
+      "compound_selector": ".opt-card.active",
+      "at_rules": [],
+      "element": "button.active.filter-btn.opt-card",
+      "element_line_in_html": 1565,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-settings",
+          "selector": "#view-settings",
+          "line": 686,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-modal-card",
+          "selector": "div.settings-modal-card",
+          "line": 687,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-layout",
+          "selector": "div.settings-layout",
+          "line": 696,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-panels",
+          "selector": "div.settings-panels",
+          "line": 759,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#settings-optimization",
+          "selector": "#settings-optimization",
+          "line": 1507,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-section",
+          "selector": "div.settings-section",
+          "line": 1556,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.setting-row",
+          "selector": "div.setting-row",
+          "line": 1560,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#opt-perf-preset",
+          "selector": "#opt-perf-preset",
+          "line": 1562,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/base.css:3146",
+      "property": "filter",
+      "value": "none",
+      "important": true,
+      "selector": ".opt-card.active, .opt-toggle-btn.active",
+      "compound_selector": ".opt-toggle-btn.active",
+      "at_rules": [],
+      "element": "button.active.filter-btn.opt-toggle-btn",
+      "element_line_in_html": 1643,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-settings",
+          "selector": "#view-settings",
+          "line": 686,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-modal-card",
+          "selector": "div.settings-modal-card",
+          "line": 687,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-layout",
+          "selector": "div.settings-layout",
+          "line": 696,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-panels",
+          "selector": "div.settings-panels",
+          "line": 759,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#settings-optimization",
+          "selector": "#settings-optimization",
+          "line": 1507,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-section",
+          "selector": "div.settings-section",
+          "line": 1556,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.setting-row",
+          "selector": "div.setting-row",
+          "line": 1637,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#opt-active-resources",
+          "selector": "#opt-active-resources",
+          "line": 1642,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/base.css:3597",
+      "property": "backdrop-filter",
+      "value": "blur(16px)",
+      "important": false,
+      "selector": ".custom-glass-dropdown-menu",
+      "compound_selector": ".custom-glass-dropdown-menu",
+      "at_rules": [],
+      "element": "div#eq-dropdown-menu",
+      "element_line_in_html": 1421,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-settings",
+          "selector": "#view-settings",
+          "line": 686,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-modal-card",
+          "selector": "div.settings-modal-card",
+          "line": 687,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-layout",
+          "selector": "div.settings-layout",
+          "line": 696,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-panels",
+          "selector": "div.settings-panels",
+          "line": 759,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#settings-audio",
+          "selector": "#settings-audio",
+          "line": 1328,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-section",
+          "selector": "div.settings-section",
+          "line": 1404,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-section-title",
+          "selector": "div.settings-section-title",
+          "line": 1405,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div",
+          "selector": "div",
+          "line": 1414,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#eq-custom-preset-dropdown",
+          "selector": "#eq-custom-preset-dropdown",
+          "line": 1416,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "rgba(20, 22, 28, 0.95)"
+        ],
+        "backdrop-filter": [
+          "blur(16px)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3598",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px)",
+      "important": false,
+      "selector": ".custom-glass-dropdown-menu",
+      "compound_selector": ".custom-glass-dropdown-menu",
+      "at_rules": [],
+      "element": "div#eq-dropdown-menu",
+      "element_line_in_html": 1421,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-settings",
+          "selector": "#view-settings",
+          "line": 686,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-modal-card",
+          "selector": "div.settings-modal-card",
+          "line": 687,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-layout",
+          "selector": "div.settings-layout",
+          "line": 696,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-panels",
+          "selector": "div.settings-panels",
+          "line": 759,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#settings-audio",
+          "selector": "#settings-audio",
+          "line": 1328,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-section",
+          "selector": "div.settings-section",
+          "line": 1404,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.settings-section-title",
+          "selector": "div.settings-section-title",
+          "line": 1405,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div",
+          "selector": "div",
+          "line": 1414,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div#eq-custom-preset-dropdown",
+          "selector": "#eq-custom-preset-dropdown",
+          "line": 1416,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "rgba(20, 22, 28, 0.95)"
+        ],
+        "backdrop-filter": [
+          "blur(16px)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:702",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "important": false,
+      "selector": ".search-capsule",
+      "compound_selector": ".search-capsule",
+      "at_rules": [],
+      "element": "div.search-capsule",
+      "element_line_in_html": 323,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-search",
+          "selector": "#view-search",
+          "line": 320,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.search-header-container",
+          "selector": "div.search-header-container",
+          "line": 321,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "rgba(22, 20, 18, 0.85)",
+          "color-mix(in srgb, var(--bg-surface, #14141d) 82%, transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-sm))",
+          "blur(var(--blur-md)) saturate(160%)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:703",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "important": false,
+      "selector": ".search-capsule",
+      "compound_selector": ".search-capsule",
+      "at_rules": [],
+      "element": "div.search-capsule",
+      "element_line_in_html": 323,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-search",
+          "selector": "#view-search",
+          "line": 320,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.search-header-container",
+          "selector": "div.search-header-container",
+          "line": 321,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "rgba(22, 20, 18, 0.85)",
+          "color-mix(in srgb, var(--bg-surface, #14141d) 82%, transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-sm))",
+          "blur(var(--blur-md)) saturate(160%)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:820",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-xl))",
+      "important": false,
+      "selector": ".search-platform-dropdown",
+      "compound_selector": ".search-platform-dropdown",
+      "at_rules": [],
+      "element": "div#search-platform-dropdown",
+      "element_line_in_html": 338,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-search",
+          "selector": "#view-search",
+          "line": 320,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.search-header-container",
+          "selector": "div.search-header-container",
+          "line": 321,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.search-capsule",
+          "selector": "div.search-capsule",
+          "line": 323,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.search-platform-wrapper",
+          "selector": "div.search-platform-wrapper",
+          "line": 329,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "rgba(20, 18, 16, 0.96)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-xl))"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:821",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-xl))",
+      "important": false,
+      "selector": ".search-platform-dropdown",
+      "compound_selector": ".search-platform-dropdown",
+      "at_rules": [],
+      "element": "div#search-platform-dropdown",
+      "element_line_in_html": 338,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-search",
+          "selector": "#view-search",
+          "line": 320,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.search-header-container",
+          "selector": "div.search-header-container",
+          "line": 321,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.search-capsule",
+          "selector": "div.search-capsule",
+          "line": 323,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.search-platform-wrapper",
+          "selector": "div.search-platform-wrapper",
+          "line": 329,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "rgba(20, 18, 16, 0.96)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-xl))"
+        ]
+      }
+    },
+    {
+      "declaration": "components/lyrics.css:245",
+      "property": "backdrop-filter",
+      "value": "blur(40px)",
+      "important": false,
+      "selector": ".lyrics-overlay, #lyrics-overlay",
+      "compound_selector": "#lyrics-overlay",
+      "at_rules": [],
+      "element": "div#lyrics-overlay",
+      "element_line_in_html": 607,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/lyrics.css:245",
+      "property": "backdrop-filter",
+      "value": "blur(40px)",
+      "important": false,
+      "selector": ".lyrics-overlay, #lyrics-overlay",
+      "compound_selector": ".lyrics-overlay",
+      "at_rules": [],
+      "element": "div#lyrics-overlay",
+      "element_line_in_html": 607,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/lyrics.css:246",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(40px)",
+      "important": false,
+      "selector": ".lyrics-overlay, #lyrics-overlay",
+      "compound_selector": "#lyrics-overlay",
+      "at_rules": [],
+      "element": "div#lyrics-overlay",
+      "element_line_in_html": 607,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/lyrics.css:246",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(40px)",
+      "important": false,
+      "selector": ".lyrics-overlay, #lyrics-overlay",
+      "compound_selector": ".lyrics-overlay",
+      "at_rules": [],
+      "element": "div#lyrics-overlay",
+      "element_line_in_html": 607,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/player-view.css:30",
+      "property": "filter",
+      "value": "blur(var(--ambient-blur))",
+      "important": false,
+      "selector": ".player-bg-glow",
+      "compound_selector": ".player-bg-glow",
+      "at_rules": [],
+      "element": "div#player-bg-glow",
+      "element_line_in_html": 524,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-player",
+          "selector": "#view-player",
+          "line": 521,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.player-2col-layout",
+          "selector": "div.player-2col-layout",
+          "line": 522,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "radial-gradient(circle at 40% 50%, color-mix(in srgb, var(--accent, #3b82f6) 25%, transparent), transparent 70%)"
+        ],
+        "filter": [
+          "blur(var(--ambient-blur))"
+        ],
+        "opacity": [
+          "0.6"
+        ]
+      }
+    },
+    {
+      "declaration": "components/player-view.css:46",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "selector": ".player-glass-card",
+      "compound_selector": ".player-glass-card",
+      "at_rules": [],
+      "element": "div.player-glass-card.player-left-col",
+      "element_line_in_html": 527,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-player",
+          "selector": "#view-player",
+          "line": 521,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.player-2col-layout",
+          "selector": "div.player-2col-layout",
+          "line": 522,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--color-surface, #170c16) calc(var(--app-bg-opacity, 1) * 85%), transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-md))"
+        ],
+        "contain": [
+          "layout"
+        ]
+      }
+    },
+    {
+      "declaration": "components/player-view.css:46",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "selector": ".player-glass-card",
+      "compound_selector": ".player-glass-card",
+      "at_rules": [],
+      "element": "div.player-glass-card.player-right-col",
+      "element_line_in_html": 587,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-player",
+          "selector": "#view-player",
+          "line": 521,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.player-2col-layout",
+          "selector": "div.player-2col-layout",
+          "line": 522,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--color-surface, #170c16) calc(var(--app-bg-opacity, 1) * 85%), transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-md))"
+        ],
+        "contain": [
+          "layout"
+        ]
+      }
+    },
+    {
+      "declaration": "components/player-view.css:47",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "selector": ".player-glass-card",
+      "compound_selector": ".player-glass-card",
+      "at_rules": [],
+      "element": "div.player-glass-card.player-left-col",
+      "element_line_in_html": 527,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-player",
+          "selector": "#view-player",
+          "line": 521,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.player-2col-layout",
+          "selector": "div.player-2col-layout",
+          "line": 522,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--color-surface, #170c16) calc(var(--app-bg-opacity, 1) * 85%), transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-md))"
+        ],
+        "contain": [
+          "layout"
+        ]
+      }
+    },
+    {
+      "declaration": "components/player-view.css:47",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "selector": ".player-glass-card",
+      "compound_selector": ".player-glass-card",
+      "at_rules": [],
+      "element": "div.player-glass-card.player-right-col",
+      "element_line_in_html": 587,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-player",
+          "selector": "#view-player",
+          "line": 521,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.player-2col-layout",
+          "selector": "div.player-2col-layout",
+          "line": 522,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--color-surface, #170c16) calc(var(--app-bg-opacity, 1) * 85%), transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-md))"
+        ],
+        "contain": [
+          "layout"
+        ]
+      }
+    },
+    {
+      "declaration": "components/visual-polish.css:86",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md)) saturate(160%)",
+      "important": false,
+      "selector": ".search-capsule",
+      "compound_selector": ".search-capsule",
+      "at_rules": [],
+      "element": "div.search-capsule",
+      "element_line_in_html": 323,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-search",
+          "selector": "#view-search",
+          "line": 320,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.search-header-container",
+          "selector": "div.search-header-container",
+          "line": 321,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "rgba(22, 20, 18, 0.85)",
+          "color-mix(in srgb, var(--bg-surface, #14141d) 82%, transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-sm))",
+          "blur(var(--blur-md)) saturate(160%)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/visual-polish.css:87",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md)) saturate(160%)",
+      "important": false,
+      "selector": ".search-capsule",
+      "compound_selector": ".search-capsule",
+      "at_rules": [],
+      "element": "div.search-capsule",
+      "element_line_in_html": 323,
+      "nesting_depth": 1,
+      "backdrop_filtered_ancestors": [
+        "div#main-content"
+      ],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#main-content",
+          "selector": "#main-content",
+          "line": 183,
+          "containing_props": [
+            "backdrop-filter",
+            "contain"
+          ],
+          "backdrop_filter": [
+            "blur(var(--blur-md))"
+          ],
+          "filter": null,
+          "background": [
+            "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#view-search",
+          "selector": "#view-search",
+          "line": 320,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "div.search-header-container",
+          "selector": "div.search-header-container",
+          "line": 321,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [
+        "div#main-content"
+      ],
+      "self_props_relevant": {
+        "background": [
+          "rgba(22, 20, 18, 0.85)",
+          "color-mix(in srgb, var(--bg-surface, #14141d) 82%, transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-sm))",
+          "blur(var(--blur-md)) saturate(160%)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:1432",
+      "property": "filter",
+      "value": "blur(8px)",
+      "important": false,
+      "selector": "#particles-bg",
+      "compound_selector": "#particles-bg",
+      "at_rules": [],
+      "element": "div#particles-bg",
+      "element_line_in_html": 55,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "filter": [
+          "blur(8px)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:1433",
+      "property": "-webkit-filter",
+      "value": "blur(8px)",
+      "important": false,
+      "selector": "#particles-bg",
+      "compound_selector": "#particles-bg",
+      "at_rules": [],
+      "element": "div#particles-bg",
+      "element_line_in_html": 55,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "filter": [
+          "blur(8px)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:2271",
+      "property": "backdrop-filter",
+      "value": "blur(24px)",
+      "important": true,
+      "selector": "#mini-player-overlay",
+      "compound_selector": "#mini-player-overlay",
+      "at_rules": [],
+      "element": "div#mini-player-overlay",
+      "element_line_in_html": 82,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "rgba(15, 15, 20, 0.96) !important"
+        ],
+        "backdrop-filter": [
+          "blur(24px) !important"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3358",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "compound_selector": "#player-bar",
+      "at_rules": [],
+      "element": "div#player-bar",
+      "element_line_in_html": 1881,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--color-surface, rgba(255, 255, 255, 0.035)) calc(var(--app-bg-opacity, 1) * 88%), rgba(14, 7, 17, 0.75))"
+        ],
+        "backdrop-filter": [
+          "blur(16px)",
+          "blur(16px) saturate(160%)"
+        ],
+        "will-change": [
+          "transform"
+        ],
+        "contain": [
+          "layout style"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3358",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "compound_selector": "#sidebar",
+      "at_rules": [],
+      "element": "aside#sidebar",
+      "element_line_in_html": 139,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--bg-main) calc(var(--app-bg-opacity) * 55%), transparent)",
+          "color-mix(in srgb, var(--bg-surface) 90%, transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-md))"
+        ],
+        "contain": [
+          "layout style"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3358",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "compound_selector": ".context-menu",
+      "at_rules": [],
+      "element": "div#playlist-context-menu",
+      "element_line_in_html": 1950,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "var(--bg-surface)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3358",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "compound_selector": ".context-menu",
+      "at_rules": [],
+      "element": "div#track-options-menu",
+      "element_line_in_html": 1956,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "var(--bg-surface)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3358",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "compound_selector": ".glass-panel",
+      "at_rules": [],
+      "element": "div.glass-panel.modal-content",
+      "element_line_in_html": 2100,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#onboarding-wizard",
+          "selector": "#onboarding-wizard",
+          "line": 2099,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/base.css:3358",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "compound_selector": ".modal-content",
+      "at_rules": [],
+      "element": "div.glass-panel.modal-content",
+      "element_line_in_html": 2100,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#onboarding-wizard",
+          "selector": "#onboarding-wizard",
+          "line": 2099,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/base.css:3359",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "compound_selector": "#player-bar",
+      "at_rules": [],
+      "element": "div#player-bar",
+      "element_line_in_html": 1881,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--color-surface, rgba(255, 255, 255, 0.035)) calc(var(--app-bg-opacity, 1) * 88%), rgba(14, 7, 17, 0.75))"
+        ],
+        "backdrop-filter": [
+          "blur(16px)",
+          "blur(16px) saturate(160%)"
+        ],
+        "will-change": [
+          "transform"
+        ],
+        "contain": [
+          "layout style"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3359",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "compound_selector": "#sidebar",
+      "at_rules": [],
+      "element": "aside#sidebar",
+      "element_line_in_html": 139,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--bg-main) calc(var(--app-bg-opacity) * 55%), transparent)",
+          "color-mix(in srgb, var(--bg-surface) 90%, transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-md))"
+        ],
+        "contain": [
+          "layout style"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3359",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "compound_selector": ".context-menu",
+      "at_rules": [],
+      "element": "div#playlist-context-menu",
+      "element_line_in_html": 1950,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "var(--bg-surface)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3359",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "compound_selector": ".context-menu",
+      "at_rules": [],
+      "element": "div#track-options-menu",
+      "element_line_in_html": 1956,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "var(--bg-surface)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3359",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "compound_selector": ".glass-panel",
+      "at_rules": [],
+      "element": "div.glass-panel.modal-content",
+      "element_line_in_html": 2100,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#onboarding-wizard",
+          "selector": "#onboarding-wizard",
+          "line": 2099,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/base.css:3359",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "important": false,
+      "selector": "#sidebar, #player-bar, .top-bar, .context-menu, .modal-content, .glass-panel",
+      "compound_selector": ".modal-content",
+      "at_rules": [],
+      "element": "div.glass-panel.modal-content",
+      "element_line_in_html": 2100,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#onboarding-wizard",
+          "selector": "#onboarding-wizard",
+          "line": 2099,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {}
+    },
+    {
+      "declaration": "components/base.css:3517",
+      "property": "backdrop-filter",
+      "value": "blur(8px)",
+      "important": false,
+      "selector": ".network-banner",
+      "compound_selector": ".network-banner",
+      "at_rules": [],
+      "element": "div#network-banner",
+      "element_line_in_html": 76,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "transform": [
+          "translateX(-50%) translateY(-10px)"
+        ],
+        "background": [
+          "rgba(239, 68, 68, 0.9)"
+        ],
+        "backdrop-filter": [
+          "blur(8px)"
+        ],
+        "opacity": [
+          "0"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3518",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(8px)",
+      "important": false,
+      "selector": ".network-banner",
+      "compound_selector": ".network-banner",
+      "at_rules": [],
+      "element": "div#network-banner",
+      "element_line_in_html": 76,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "transform": [
+          "translateX(-50%) translateY(-10px)"
+        ],
+        "background": [
+          "rgba(239, 68, 68, 0.9)"
+        ],
+        "backdrop-filter": [
+          "blur(8px)"
+        ],
+        "opacity": [
+          "0"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3781",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-lg, 16px))",
+      "important": false,
+      "selector": "#mini-lyrics-widget",
+      "compound_selector": "#mini-lyrics-widget",
+      "at_rules": [],
+      "element": "div#mini-lyrics-widget",
+      "element_line_in_html": 2236,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--color-surface, #170c16) calc(var(--app-bg-opacity, 1) * 88%), rgba(14, 7, 17, 0.92))"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-lg, 16px))"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:3782",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-lg, 16px))",
+      "important": false,
+      "selector": "#mini-lyrics-widget",
+      "compound_selector": "#mini-lyrics-widget",
+      "at_rules": [],
+      "element": "div#mini-lyrics-widget",
+      "element_line_in_html": 2236,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--color-surface, #170c16) calc(var(--app-bg-opacity, 1) * 88%), rgba(14, 7, 17, 0.92))"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-lg, 16px))"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:4050",
+      "property": "backdrop-filter",
+      "value": "blur(24px)",
+      "important": false,
+      "selector": "#batch-action-bar",
+      "compound_selector": "#batch-action-bar",
+      "at_rules": [],
+      "element": "div#batch-action-bar",
+      "element_line_in_html": 2254,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "transform": [
+          "translateX(-50%) translateY(0)"
+        ],
+        "background": [
+          "color-mix(in srgb, var(--color-surface, #170c16) 90%, rgba(14, 7, 17, 0.9))"
+        ],
+        "backdrop-filter": [
+          "blur(24px)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:4051",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(24px)",
+      "important": false,
+      "selector": "#batch-action-bar",
+      "compound_selector": "#batch-action-bar",
+      "at_rules": [],
+      "element": "div#batch-action-bar",
+      "element_line_in_html": 2254,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "transform": [
+          "translateX(-50%) translateY(0)"
+        ],
+        "background": [
+          "color-mix(in srgb, var(--color-surface, #170c16) 90%, rgba(14, 7, 17, 0.9))"
+        ],
+        "backdrop-filter": [
+          "blur(24px)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:449",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "selector": "#sidebar",
+      "compound_selector": "#sidebar",
+      "at_rules": [],
+      "element": "aside#sidebar",
+      "element_line_in_html": 139,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--bg-main) calc(var(--app-bg-opacity) * 55%), transparent)",
+          "color-mix(in srgb, var(--bg-surface) 90%, transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-md))"
+        ],
+        "contain": [
+          "layout style"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:450",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "selector": "#sidebar",
+      "compound_selector": "#sidebar",
+      "at_rules": [],
+      "element": "aside#sidebar",
+      "element_line_in_html": 139,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--bg-main) calc(var(--app-bg-opacity) * 55%), transparent)",
+          "color-mix(in srgb, var(--bg-surface) 90%, transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-md))"
+        ],
+        "contain": [
+          "layout style"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:533",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "selector": "#main-content",
+      "compound_selector": "#main-content",
+      "at_rules": [],
+      "element": "div#main-content",
+      "element_line_in_html": 183,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-md))"
+        ],
+        "contain": [
+          "layout"
+        ]
+      }
+    },
+    {
+      "declaration": "components/base.css:534",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "important": false,
+      "selector": "#main-content",
+      "compound_selector": "#main-content",
+      "at_rules": [],
+      "element": "div#main-content",
+      "element_line_in_html": 183,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent)"
+        ],
+        "backdrop-filter": [
+          "blur(var(--blur-md))"
+        ],
+        "contain": [
+          "layout"
+        ]
+      }
+    },
+    {
+      "declaration": "components/player-bar.css:16",
+      "property": "backdrop-filter",
+      "value": "blur(16px)",
+      "important": false,
+      "selector": "#player-bar",
+      "compound_selector": "#player-bar",
+      "at_rules": [],
+      "element": "div#player-bar",
+      "element_line_in_html": 1881,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--color-surface, rgba(255, 255, 255, 0.035)) calc(var(--app-bg-opacity, 1) * 88%), rgba(14, 7, 17, 0.75))"
+        ],
+        "backdrop-filter": [
+          "blur(16px)",
+          "blur(16px) saturate(160%)"
+        ],
+        "will-change": [
+          "transform"
+        ],
+        "contain": [
+          "layout style"
+        ]
+      }
+    },
+    {
+      "declaration": "components/player-bar.css:17",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px)",
+      "important": false,
+      "selector": "#player-bar",
+      "compound_selector": "#player-bar",
+      "at_rules": [],
+      "element": "div#player-bar",
+      "element_line_in_html": 1881,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--color-surface, rgba(255, 255, 255, 0.035)) calc(var(--app-bg-opacity, 1) * 88%), rgba(14, 7, 17, 0.75))"
+        ],
+        "backdrop-filter": [
+          "blur(16px)",
+          "blur(16px) saturate(160%)"
+        ],
+        "will-change": [
+          "transform"
+        ],
+        "contain": [
+          "layout style"
+        ]
+      }
+    },
+    {
+      "declaration": "components/player-bar.css:315",
+      "property": "backdrop-filter",
+      "value": "blur(28px) saturate(160%)",
+      "important": false,
+      "selector": "#queue-drawer",
+      "compound_selector": "#queue-drawer",
+      "at_rules": [],
+      "element": "div#queue-drawer",
+      "element_line_in_html": 2279,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "rgba(18, 12, 22, 0.80)"
+        ],
+        "backdrop-filter": [
+          "blur(28px) saturate(160%)"
+        ],
+        "opacity": [
+          "0"
+        ],
+        "transform": [
+          "translateY(12px) scale(0.98)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/player-bar.css:316",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(28px) saturate(160%)",
+      "important": false,
+      "selector": "#queue-drawer",
+      "compound_selector": "#queue-drawer",
+      "at_rules": [],
+      "element": "div#queue-drawer",
+      "element_line_in_html": 2279,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "rgba(18, 12, 22, 0.80)"
+        ],
+        "backdrop-filter": [
+          "blur(28px) saturate(160%)"
+        ],
+        "opacity": [
+          "0"
+        ],
+        "transform": [
+          "translateY(12px) scale(0.98)"
+        ]
+      }
+    },
+    {
+      "declaration": "components/visual-polish.css:98",
+      "property": "backdrop-filter",
+      "value": "blur(16px) saturate(160%)",
+      "important": false,
+      "selector": "#player-bar",
+      "compound_selector": "#player-bar",
+      "at_rules": [],
+      "element": "div#player-bar",
+      "element_line_in_html": 1881,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--color-surface, rgba(255, 255, 255, 0.035)) calc(var(--app-bg-opacity, 1) * 88%), rgba(14, 7, 17, 0.75))"
+        ],
+        "backdrop-filter": [
+          "blur(16px)",
+          "blur(16px) saturate(160%)"
+        ],
+        "will-change": [
+          "transform"
+        ],
+        "contain": [
+          "layout style"
+        ]
+      }
+    },
+    {
+      "declaration": "components/visual-polish.css:99",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px) saturate(160%)",
+      "important": false,
+      "selector": "#player-bar",
+      "compound_selector": "#player-bar",
+      "at_rules": [],
+      "element": "div#player-bar",
+      "element_line_in_html": 1881,
+      "nesting_depth": 0,
+      "backdrop_filtered_ancestors": [],
+      "ancestor_chain_top_down": [
+        {
+          "ident": "#document",
+          "selector": "#document",
+          "line": 0,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "html",
+          "selector": "html",
+          "line": 2,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": null,
+          "opacity": null
+        },
+        {
+          "ident": "body",
+          "selector": "body",
+          "line": 31,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "var(--color-bg-base, #0e0711)"
+          ],
+          "opacity": null
+        },
+        {
+          "ident": "div#app-container",
+          "selector": "#app-container",
+          "line": 136,
+          "containing_props": [],
+          "backdrop_filter": null,
+          "filter": null,
+          "background": [
+            "transparent"
+          ],
+          "opacity": null
+        }
+      ],
+      "containing_block_ancestors": [],
+      "self_props_relevant": {
+        "background": [
+          "color-mix(in srgb, var(--color-surface, rgba(255, 255, 255, 0.035)) calc(var(--app-bg-opacity, 1) * 88%), rgba(14, 7, 17, 0.75))"
+        ],
+        "backdrop-filter": [
+          "blur(16px)",
+          "blur(16px) saturate(160%)"
+        ],
+        "will-change": [
+          "transform"
+        ],
+        "contain": [
+          "layout style"
+        ]
+      }
+    }
+  ]
+}

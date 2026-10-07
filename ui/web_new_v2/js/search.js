@@ -1,5 +1,5 @@
 // NeDotify — Search Module Redesign
-import { createTrackElement, renderIcons, filterVisibleTracks, escapeHtml, getCoverFallbackGradient } from './utils.js';
+import { createTrackElement, renderIcons, filterVisibleTracks, escapeHtml, getCoverFallbackGradient, openModalFocusTrap, closeModalFocusTrap } from './utils.js';
 import { getCurrentTrack } from './player.js';
 import { 
     loadArtistProfile, 
@@ -63,6 +63,8 @@ export function initSearch() {
             if (clearBtn) clearBtn.classList.toggle('visible', query.length > 0);
 
             if (query.length > 0) {
+                const sugg = document.getElementById('search-suggestions-dropdown');
+                if (sugg) sugg.classList.add('hidden');
                 showLoading();
                 searchDebounce = setTimeout(() => {
                     allResults = [];
@@ -106,6 +108,8 @@ export function initSearch() {
     function onSelectPlatform(selectedSource, targetBtn) {
         if (!selectedSource || !PLATFORM_SVGS[selectedSource]) return;
 
+        // Any explicit source switch is a new search intent -> leave artist profile
+        isViewingArtistProfile = false;
         currentSource = selectedSource;
 
         // Update active icon on platform button
@@ -152,14 +156,8 @@ export function initSearch() {
             }
         });
     }
-
-    document.querySelectorAll('.platform-item').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const targetBtn = e.currentTarget || btn;
-            onSelectPlatform(targetBtn.dataset.source, targetBtn);
-        });
-    });
+    // De-duplicated: per-button listeners removed — delegated listener above is enough.
+    // Keeping this comment to prevent re-adding a second dispatch that doubled api('search').
 
     // Sub-type Filters: Все, Треки, Плейлисты, Альбомы, Артисты
     document.querySelectorAll('.type-filter-btn[data-type]').forEach(btn => {
@@ -207,6 +205,10 @@ export function searchArtistProfile(artistName) {
     // Dismiss any open modal overlay immediately so search/profile is visible
     document.querySelectorAll('.modal-overlay, #album-modal-container, #playlist-modal-container').forEach(m => {
         m.style.display = 'none';
+        // These overlays are hidden behind our back, so their traps have to go
+        // with them - otherwise the next Tab would be dragged into a closed
+        // dialog.
+        closeModalFocusTrap(m);
     });
 
     isViewingArtistProfile = true;
@@ -238,32 +240,51 @@ export function searchArtistProfile(artistName) {
 
 window.searchArtistProfile = searchArtistProfile;
 
+function trackDedupKey(t) {
+    const src = String(t.source || '').toLowerCase().trim();
+    const sid = String(t.source_id || t.id || '').trim();
+    if (src && sid) return `${src}::${sid}`;
+    const title = String(t.title || '').toLowerCase().trim();
+    const artist = String(t.artist || '').toLowerCase().trim();
+    const dur = t.duration ? String(Math.round(Number(t.duration)) || '') : '';
+    return `fallback::${title}__${artist}__${dur}`;
+}
+
 export function onSearchResults(data) {
-    if (isViewingArtistProfile) {
-        return; // Don't overwrite active artist profile view
+    if (data && data.source === '__completion__') {
+        if (data.query && currentSearchQuery && data.query !== currentSearchQuery) {
+            return; // Stale completion — a newer query is already in flight
+        }
+        const container = document.getElementById('search-results');
+        if (container && container.querySelector('.spinner') && allResults.length === 0) {
+            container.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
+        }
+        return;
+    }
+    // Don't let provider bursts overwrite an active artist profile, but allow explicit type switches
+    if (isViewingArtistProfile && data && data.type !== 'artists' && currentType === 'artists') {
+        return;
     }
     if (data.query && currentSearchQuery && data.query !== currentSearchQuery) {
         return; // Stale result — ignore
     }
-    if (data.tracks && data.tracks.length > 0) {
-        const filteredTracks = filterVisibleTracks(data.tracks);
+    const incoming = Array.isArray(data.tracks) ? data.tracks : [];
+    if (incoming.length > 0) {
+        const filteredTracks = filterVisibleTracks(incoming);
         if (filteredTracks.length > 0) {
-            const seen = new Set(allResults.map(t => `${(t.title || '').toLowerCase().trim()}_${(t.artist || '').toLowerCase().trim()}`));
+            const seen = new Set(allResults.map(trackDedupKey));
             for (const t of filteredTracks) {
-                const key = `${(t.title || '').toLowerCase().trim()}_${(t.artist || '').toLowerCase().trim()}`;
+                const key = trackDedupKey(t);
                 if (!seen.has(key)) {
                     seen.add(key);
                     allResults.push(t);
                 }
             }
             renderResults(allResults);
-        }
-    } else {
-        const container = document.getElementById('search-results');
-        if (container && container.querySelector('.spinner') && allResults.length === 0) {
-            container.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
+            return;
         }
     }
+    // Empty chunk: keep spinner until completion sentinel arrives
 }
 
 function renderResults(tracks) {
@@ -297,7 +318,7 @@ function renderResults(tracks) {
                     playlistMap.set(key, {
                         id: t.id || `playlist_${idx}`,
                         title: t.title || 'Плейлист',
-                        author: t.artist || t.author || 'AURA Music',
+                        author: t.artist || t.author || 'NeDotify',
                         cover_url: t.cover_url || t.cover_path || '',
                         source: t.source || 'youtube',
                         source_id: t.source_id || '',
@@ -578,6 +599,16 @@ export async function playAlbum(album, cardElement = null) {
     }
 }
 
+// The two detail overlays below hide themselves from three different paths
+// (backdrop click, the X button, and "play everything"). Routing all of them
+// through one place is what keeps visibility and the focus trap in step - a
+// modal that is display:none but still trapped would swallow every Tab.
+function hideDetailModal(modal) {
+    if (!modal) return;
+    modal.style.display = 'none';
+    closeModalFocusTrap(modal);
+}
+
 export async function openAlbumModal(album) {
     let modal = document.getElementById('album-detail-modal');
     if (!modal) {
@@ -585,7 +616,7 @@ export async function openAlbumModal(album) {
         modal.id = 'album-detail-modal';
         modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:9999; display:flex; align-items:center; justify-content:center; animation:fadeIn 0.25s ease; padding:20px;';
         modal.addEventListener('click', (e) => {
-            if (e.target === modal) modal.style.display = 'none';
+            if (e.target === modal) hideDetailModal(modal);
         });
         document.body.appendChild(modal);
     }
@@ -618,8 +649,13 @@ export async function openAlbumModal(album) {
     `;
     renderIcons();
 
+    // Initial focus: this overlay is a read-only detail view, so its X button
+    // is the only sensible landing spot. Armed after innerHTML is written,
+    // because that is when the close button exists.
+    openModalFocusTrap(modal, { initialFocus: '#close-album-modal' });
+
     document.getElementById('close-album-modal')?.addEventListener('click', () => {
-        modal.style.display = 'none';
+        hideDetailModal(modal);
     }, { once: true });
 
     let albumTracks = [];
@@ -648,7 +684,7 @@ export async function openAlbumModal(album) {
     document.getElementById('btn-play-full-album')?.addEventListener('click', () => {
         if (albumTracks.length > 0 && window.pywebview?.api?.play_track) {
             window.pywebview.api.play_track(albumTracks[0], albumTracks, 0);
-            modal.style.display = 'none';
+            hideDetailModal(modal);
         }
     }, { once: true });
 }
@@ -662,7 +698,7 @@ export function renderPlaylistGrid(playlists, container) {
 
     playlists.forEach((pl, idx) => {
         const title = pl.title || pl.name || 'Плейлист';
-        const author = pl.author || pl.artist || 'AURA Music';
+        const author = pl.author || pl.artist || 'NeDotify';
         const cover = pl.cover_url || pl.cover_path || pl.cover || '';
         const trackCount = pl.track_count || 10;
         const trackCountStr = typeof trackCount === 'number' ? `${trackCount} треков` : 'Плейлист';
@@ -776,7 +812,7 @@ export async function openPlaylistModal(playlist) {
         modal.id = 'playlist-detail-modal';
         modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:9999; display:flex; align-items:center; justify-content:center; animation:fadeIn 0.25s ease; padding:20px;';
         modal.addEventListener('click', (e) => {
-            if (e.target === modal) modal.style.display = 'none';
+            if (e.target === modal) hideDetailModal(modal);
         });
         document.body.appendChild(modal);
     }
@@ -793,7 +829,7 @@ export async function openPlaylistModal(playlist) {
                 <img src="${escapeHtml(playlist.cover_url || playlist.cover || playlist.cover_path || '')}" alt="" onerror="this.onerror=null;this.style.display='none'" style="width:110px; height:110px; border-radius:12px; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
                 <div style="display:flex; flex-direction:column; gap:6px; flex:1; overflow:hidden;">
                     <div style="font-size:20px; font-weight:800; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(playlist.title || playlist.name || 'Плейлист')}</div>
-                    <div style="font-size:14px; color:var(--text-sec);">${escapeHtml(playlist.author || playlist.artist || 'AURA Music')}</div>
+                    <div style="font-size:14px; color:var(--text-sec);">${escapeHtml(playlist.author || playlist.artist || 'NeDotify')}</div>
                     <div style="font-size:12px; color:var(--text-sec); opacity:0.8;">${playlist.track_count ? playlist.track_count + ' треков' : 'Плейлист'}</div>
                     <div style="margin-top:8px; display:flex; gap:10px;">
                         <button id="btn-play-full-playlist" style="padding:8px 18px; border-radius:24px; border:none; background:var(--primary); color:#fff; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;">
@@ -809,8 +845,11 @@ export async function openPlaylistModal(playlist) {
     `;
     renderIcons();
 
+    // Initial focus: read-only detail view, so the X button.
+    openModalFocusTrap(modal, { initialFocus: '#close-playlist-modal' });
+
     document.getElementById('close-playlist-modal')?.addEventListener('click', () => {
-        modal.style.display = 'none';
+        hideDetailModal(modal);
     }, { once: true });
 
     let playlistTracks = [];
@@ -846,7 +885,7 @@ export async function openPlaylistModal(playlist) {
             } else if (window.NeDotify?.playTrack) {
                 window.NeDotify.playTrack(playlistTracks[0], playlistTracks);
             }
-            modal.style.display = 'none';
+            hideDetailModal(modal);
         }
     }, { once: true });
 }

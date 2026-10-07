@@ -1,0 +1,5245 @@
+{
+  "schema": "nedotify.animation-declarations.v2",
+  "generated_by": "tools/visual_guard/run_guard.py --write-css-baseline",
+  "scanned": [
+    "ui/**/.css",
+    "ui/**/.html",
+    "ui/**/.js"
+  ],
+  "watched_value_tokens": [
+    "transition",
+    "animation",
+    "backdrop-filter",
+    "filter:",
+    "will-change",
+    "contain:"
+  ],
+  "watched_vars": [
+    "--blur-",
+    "--glass-blur",
+    "--app-bg-opacity",
+    "--player-glow-",
+    "--glow",
+    "--transition",
+    "--anim",
+    "--ease",
+    "--dur",
+    "--duration"
+  ],
+  "keying": "<relative/path>|<property> -> multiset of normalized values; position independent, so line numbers never enter a key and `occurrence` is a report label only",
+  "counts": {
+    "declarations": 651,
+    "keys": 99,
+    "files": 24
+  },
+  "declarations": [
+    {
+      "key": "ui/web_new/css/styles.css|--app-bg-opacity",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--app-bg-opacity",
+      "value": "1",
+      "text": "--app-bg-opacity: 1",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-lg",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-lg",
+      "value": "0px",
+      "text": "--blur-lg: 0px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-lg",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-lg",
+      "value": "0px !important",
+      "text": "--blur-lg: 0px !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-lg",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-lg",
+      "value": "8px",
+      "text": "--blur-lg: 8px",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-lg",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-lg",
+      "value": "calc(var(--glass-blur) * 1.5)",
+      "text": "--blur-lg: calc(var(--glass-blur) * 1.5)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-md",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-md",
+      "value": "0px",
+      "text": "--blur-md: 0px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-md",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-md",
+      "value": "0px !important",
+      "text": "--blur-md: 0px !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-md",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-md",
+      "value": "6px",
+      "text": "--blur-md: 6px",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-md",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-md",
+      "value": "var(--glass-blur)",
+      "text": "--blur-md: var(--glass-blur)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-sm",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-sm",
+      "value": "0px",
+      "text": "--blur-sm: 0px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-sm",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-sm",
+      "value": "0px !important",
+      "text": "--blur-sm: 0px !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-sm",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-sm",
+      "value": "3px",
+      "text": "--blur-sm: 3px",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-sm",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-sm",
+      "value": "calc(var(--glass-blur) * 0.75)",
+      "text": "--blur-sm: calc(var(--glass-blur) * 0.75)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-xl",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-xl",
+      "value": "0px",
+      "text": "--blur-xl: 0px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-xl",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-xl",
+      "value": "0px !important",
+      "text": "--blur-xl: 0px !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-xl",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-xl",
+      "value": "10px",
+      "text": "--blur-xl: 10px",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--blur-xl",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--blur-xl",
+      "value": "calc(var(--glass-blur) * 2)",
+      "text": "--blur-xl: calc(var(--glass-blur) * 2)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--enable-animations",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--enable-animations",
+      "value": "1",
+      "text": "--enable-animations: 1",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--enable-transitions",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--enable-transitions",
+      "value": "1",
+      "text": "--enable-transitions: 1",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--glass-blur",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--glass-blur",
+      "value": "0px",
+      "text": "--glass-blur: 0px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--glass-blur",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--glass-blur",
+      "value": "0px !important",
+      "text": "--glass-blur: 0px !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--glass-blur",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--glass-blur",
+      "value": "6px",
+      "text": "--glass-blur: 6px",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--glass-blur",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--glass-blur",
+      "value": "8px",
+      "text": "--glass-blur: 8px",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--player-glow-blur",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--player-glow-blur",
+      "value": "0px",
+      "text": "--player-glow-blur: 0px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--player-glow-blur",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--player-glow-blur",
+      "value": "0px !important",
+      "text": "--player-glow-blur: 0px !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--player-glow-blur",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--player-glow-blur",
+      "value": "20px",
+      "text": "--player-glow-blur: 20px",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--player-glow-blur",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--player-glow-blur",
+      "value": "40px",
+      "text": "--player-glow-blur: 40px",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--player-glow-opacity",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--player-glow-opacity",
+      "value": "0",
+      "text": "--player-glow-opacity: 0",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--player-glow-opacity",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--player-glow-opacity",
+      "value": "0 !important",
+      "text": "--player-glow-opacity: 0 !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--player-glow-opacity",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--player-glow-opacity",
+      "value": "0.35",
+      "text": "--player-glow-opacity: 0.35",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|--player-glow-opacity",
+      "file": "ui/web_new/css/styles.css",
+      "property": "--player-glow-opacity",
+      "value": "0.5",
+      "text": "--player-glow-opacity: 0.5",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(14px)",
+      "text": "-webkit-backdrop-filter: blur(14px)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px)",
+      "text": "-webkit-backdrop-filter: blur(16px)",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(28px)",
+      "text": "-webkit-backdrop-filter: blur(28px)",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(8px)",
+      "text": "-webkit-backdrop-filter: blur(8px)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-md))",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-md))",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-md))",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-sm))",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-sm))",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-xl))",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-xl))",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "text": "-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%)",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "text": "-webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "occurrence": 11
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "text": "-webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "occurrence": 12
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "text": "-webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "occurrence": 13
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "none !important",
+      "text": "-webkit-backdrop-filter: none !important",
+      "occurrence": 14
+    },
+    {
+      "key": "ui/web_new/css/styles.css|-webkit-backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "none !important",
+      "text": "-webkit-backdrop-filter: none !important",
+      "occurrence": 15
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "auraFloat 24s infinite alternate ease-in-out",
+      "text": "animation: auraFloat 24s infinite alternate ease-in-out",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "dropdownFadeIn 0.15s ease-out",
+      "text": "animation: dropdownFadeIn 0.15s ease-out",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "dropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "animation: dropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "fadeIn 0.25s ease",
+      "text": "animation: fadeIn 0.25s ease",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "fadeIn 0.25s ease-out",
+      "text": "animation: fadeIn 0.25s ease-out",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "fadeIn 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)",
+      "text": "animation: fadeIn 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "fadeIn 0.3s ease forwards",
+      "text": "animation: fadeIn 0.3s ease forwards",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "fadeIn 0.4s ease",
+      "text": "animation: fadeIn 0.4s ease",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "fadeInSlideUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards",
+      "text": "animation: fadeInSlideUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "heartPulse 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+      "text": "animation: heartPulse 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "iconRotatePop 0.3s ease",
+      "text": "animation: iconRotatePop 0.3s ease",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "lyricLineFadeIn 0.3s ease forwards",
+      "text": "animation: lyricLineFadeIn 0.3s ease forwards",
+      "occurrence": 11
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "lyricLineFadeIn 0.4s ease forwards",
+      "text": "animation: lyricLineFadeIn 0.4s ease forwards",
+      "occurrence": 12
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "menuPop 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "text": "animation: menuPop 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "occurrence": 13
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "modalPop 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "animation: modalPop 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 14
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "none",
+      "text": "animation: none",
+      "occurrence": 15
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "none !important",
+      "text": "animation: none !important",
+      "occurrence": 16
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "none !important",
+      "text": "animation: none !important",
+      "occurrence": 17
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "none !important",
+      "text": "animation: none !important",
+      "occurrence": 18
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "pageSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "text": "animation: pageSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "occurrence": 19
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "panelTabSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "text": "animation: panelTabSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "occurrence": 20
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "particleFloat linear infinite",
+      "text": "animation: particleFloat linear infinite",
+      "occurrence": 21
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "shimmer 1.5s infinite",
+      "text": "animation: shimmer 1.5s infinite",
+      "occurrence": 22
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "shimmer 1.8s ease-in-out infinite",
+      "text": "animation: shimmer 1.8s ease-in-out infinite",
+      "occurrence": 23
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "shimmer 1.8s ease-in-out infinite 0.1s",
+      "text": "animation: shimmer 1.8s ease-in-out infinite 0.1s",
+      "occurrence": 24
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "shimmer 1.8s ease-in-out infinite 0.2s",
+      "text": "animation: shimmer 1.8s ease-in-out infinite 0.2s",
+      "occurrence": 25
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "shimmer 2s infinite linear",
+      "text": "animation: shimmer 2s infinite linear",
+      "occurrence": 26
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "spin 1s linear infinite",
+      "text": "animation: spin 1s linear infinite",
+      "occurrence": 27
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "spin-slow 0.8s linear infinite",
+      "text": "animation: spin-slow 0.8s linear infinite",
+      "occurrence": 28
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "spin-slow 1s linear infinite",
+      "text": "animation: spin-slow 1s linear infinite",
+      "occurrence": 29
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "spin-slow 8s linear infinite",
+      "text": "animation: spin-slow 8s linear infinite",
+      "occurrence": 30
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "spinIcon 1s linear infinite",
+      "text": "animation: spinIcon 1s linear infinite",
+      "occurrence": 31
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "spinVinyl 12s linear infinite",
+      "text": "animation: spinVinyl 12s linear infinite",
+      "occurrence": 32
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "splashShimmer 1.4s ease-in-out infinite",
+      "text": "animation: splashShimmer 1.4s ease-in-out infinite",
+      "occurrence": 33
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation",
+      "value": "toastIn 0.3s ease, toastOut 0.3s ease 3.7s forwards",
+      "text": "animation: toastIn 0.3s ease, toastOut 0.3s ease 3.7s forwards",
+      "occurrence": 34
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation-delay",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation-delay",
+      "value": "-12s",
+      "text": "animation-delay: -12s",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation-delay",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation-delay",
+      "value": "-6s",
+      "text": "animation-delay: -6s",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation-duration",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation-duration",
+      "value": "18s",
+      "text": "animation-duration: 18s",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation-duration",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation-duration",
+      "value": "22s",
+      "text": "animation-duration: 22s",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation-duration",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation-duration",
+      "value": "28s",
+      "text": "animation-duration: 28s",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|animation-play-state",
+      "file": "ui/web_new/css/styles.css",
+      "property": "animation-play-state",
+      "value": "paused !important",
+      "text": "animation-play-state: paused !important",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(14px)",
+      "text": "backdrop-filter: blur(14px)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(16px)",
+      "text": "backdrop-filter: blur(16px)",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(20px)",
+      "text": "backdrop-filter: blur(20px)",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(24px) !important",
+      "text": "backdrop-filter: blur(24px) !important",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(28px)",
+      "text": "backdrop-filter: blur(28px)",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(30px)",
+      "text": "backdrop-filter: blur(30px)",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(3px)",
+      "text": "backdrop-filter: blur(3px)",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(50px)",
+      "text": "backdrop-filter: blur(50px)",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(8px)",
+      "text": "backdrop-filter: blur(8px)",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(8px)",
+      "text": "backdrop-filter: blur(8px)",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(8px)",
+      "text": "backdrop-filter: blur(8px)",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "text": "backdrop-filter: blur(var(--blur-md))",
+      "occurrence": 11
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "text": "backdrop-filter: blur(var(--blur-md))",
+      "occurrence": 12
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "text": "backdrop-filter: blur(var(--blur-md))",
+      "occurrence": 13
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "text": "backdrop-filter: blur(var(--blur-sm))",
+      "occurrence": 14
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "text": "backdrop-filter: blur(var(--blur-sm))",
+      "occurrence": 15
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "text": "backdrop-filter: blur(var(--blur-sm))",
+      "occurrence": 16
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-xl))",
+      "text": "backdrop-filter: blur(var(--blur-xl))",
+      "occurrence": 17
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "text": "backdrop-filter: blur(var(--glass-blur)) saturate(180%)",
+      "occurrence": 18
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "text": "backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "occurrence": 19
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "text": "backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "occurrence": 20
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "text": "backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "occurrence": 21
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "none !important",
+      "text": "backdrop-filter: none !important",
+      "occurrence": 22
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "none !important",
+      "text": "backdrop-filter: none !important",
+      "occurrence": 23
+    },
+    {
+      "key": "ui/web_new/css/styles.css|backdrop-filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "backdrop-filter",
+      "value": "none !important",
+      "text": "backdrop-filter: none !important",
+      "occurrence": 24
+    },
+    {
+      "key": "ui/web_new/css/styles.css|contain",
+      "file": "ui/web_new/css/styles.css",
+      "property": "contain",
+      "value": "layout",
+      "text": "contain: layout",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|contain",
+      "file": "ui/web_new/css/styles.css",
+      "property": "contain",
+      "value": "layout",
+      "text": "contain: layout",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|contain",
+      "file": "ui/web_new/css/styles.css",
+      "property": "contain",
+      "value": "layout style",
+      "text": "contain: layout style",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|contain",
+      "file": "ui/web_new/css/styles.css",
+      "property": "contain",
+      "value": "layout style",
+      "text": "contain: layout style",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|contain",
+      "file": "ui/web_new/css/styles.css",
+      "property": "contain",
+      "value": "strict",
+      "text": "contain: strict",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new/css/styles.css|contain",
+      "file": "ui/web_new/css/styles.css",
+      "property": "contain",
+      "value": "strict",
+      "text": "contain: strict",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new/css/styles.css|contain",
+      "file": "ui/web_new/css/styles.css",
+      "property": "contain",
+      "value": "strict",
+      "text": "contain: strict",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "blur(0px)",
+      "text": "filter: blur(0px)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "blur(0px)",
+      "text": "filter: blur(0px)",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "blur(0px)",
+      "text": "filter: blur(0px)",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "blur(0px) !important",
+      "text": "filter: blur(0px) !important",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "blur(1px)",
+      "text": "filter: blur(1px)",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "blur(25px) brightness(0.35) saturate(1.4)",
+      "text": "filter: blur(25px) brightness(0.35) saturate(1.4)",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "blur(3px)",
+      "text": "filter: blur(3px)",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "blur(var(--ambient-blur))",
+      "text": "filter: blur(var(--ambient-blur))",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "brightness(1.1)",
+      "text": "filter: brightness(1.1)",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "brightness(1.15)",
+      "text": "filter: brightness(1.15)",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "brightness(1.15) !important",
+      "text": "filter: brightness(1.15) !important",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "brightness(1.2)",
+      "text": "filter: brightness(1.2)",
+      "occurrence": 11
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "none",
+      "text": "filter: none",
+      "occurrence": 12
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "none !important",
+      "text": "filter: none !important",
+      "occurrence": 13
+    },
+    {
+      "key": "ui/web_new/css/styles.css|filter",
+      "file": "ui/web_new/css/styles.css",
+      "property": "filter",
+      "value": "none !important",
+      "text": "filter: none !important",
+      "occurrence": 14
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.15s",
+      "text": "transition: all 0.15s",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.15s",
+      "text": "transition: all 0.15s",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.15s ease",
+      "text": "transition: all 0.15s ease",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.15s ease",
+      "text": "transition: all 0.15s ease",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.15s ease !important",
+      "text": "transition: all 0.15s ease !important",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+      "text": "transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.25s ease",
+      "text": "transition: all 0.25s ease",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.2s",
+      "text": "transition: all 0.2s",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.2s",
+      "text": "transition: all 0.2s",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.2s",
+      "text": "transition: all 0.2s",
+      "occurrence": 11
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.2s",
+      "text": "transition: all 0.2s",
+      "occurrence": 12
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 13
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 14
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 15
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 16
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 17
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 18
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 19
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 20
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 21
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "text": "transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "occurrence": 22
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.3s ease",
+      "text": "transition: all 0.3s ease",
+      "occurrence": 23
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "all 0.3s ease",
+      "text": "transition: all 0.3s ease",
+      "occurrence": 24
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "backdrop-filter 0.2s ease, background-color 0.2s ease !important",
+      "text": "transition: backdrop-filter 0.2s ease, background-color 0.2s ease !important",
+      "occurrence": 25
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "backdrop-filter 0.5s ease-in-out, -webkit-backdrop-filter 0.5s ease-in-out, background-color 0.5s ease, opacity 0.5s ease !important",
+      "text": "transition: backdrop-filter 0.5s ease-in-out, -webkit-backdrop-filter 0.5s ease-in-out, background-color 0.5s ease, opacity 0.5s ease !important",
+      "occurrence": 26
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.15s",
+      "text": "transition: background 0.15s",
+      "occurrence": 27
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.15s",
+      "text": "transition: background 0.15s",
+      "occurrence": 28
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.15s",
+      "text": "transition: background 0.15s",
+      "occurrence": 29
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.15s ease",
+      "text": "transition: background 0.15s ease",
+      "occurrence": 30
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.15s ease, transform 0.15s ease",
+      "text": "transition: background 0.15s ease, transform 0.15s ease",
+      "occurrence": 31
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.15s, color 0.15s",
+      "text": "transition: background 0.15s, color 0.15s",
+      "occurrence": 32
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.15s, color 0.15s, border-color 0.15s",
+      "text": "transition: background 0.15s, color 0.15s, border-color 0.15s",
+      "occurrence": 33
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.15s, opacity 0.15s, transform 0.15s",
+      "text": "transition: background 0.15s, opacity 0.15s, transform 0.15s",
+      "occurrence": 34
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.2s",
+      "text": "transition: background 0.2s",
+      "occurrence": 35
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.2s",
+      "text": "transition: background 0.2s",
+      "occurrence": 36
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.2s ease",
+      "text": "transition: background 0.2s ease",
+      "occurrence": 37
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.2s ease, transform 0.15s ease",
+      "text": "transition: background 0.2s ease, transform 0.15s ease",
+      "occurrence": 38
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.2s ease, transform 0.2s ease",
+      "text": "transition: background 0.2s ease, transform 0.2s ease",
+      "occurrence": 39
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.2s, border-color 0.2s",
+      "text": "transition: background 0.2s, border-color 0.2s",
+      "occurrence": 40
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.2s, border-color 0.2s",
+      "text": "transition: background 0.2s, border-color 0.2s",
+      "occurrence": 41
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.2s, border-color 0.2s, transform 0.2s",
+      "text": "transition: background 0.2s, border-color 0.2s, transform 0.2s",
+      "occurrence": 42
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 0.2s, color 0.2s, border-color 0.2s",
+      "text": "transition: background 0.2s, color 0.2s, border-color 0.2s",
+      "occurrence": 43
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background 1s ease, opacity 0.5s ease",
+      "text": "transition: background 1s ease, opacity 0.5s ease",
+      "occurrence": 44
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background-color 0.15s ease, border-color 0.15s ease",
+      "text": "transition: background-color 0.15s ease, border-color 0.15s ease",
+      "occurrence": 45
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background-color 0.25s ease",
+      "text": "transition: background-color 0.25s ease",
+      "occurrence": 46
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease, transform 0.2s ease, opacity 0.25s ease",
+      "text": "transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease, transform 0.2s ease, opacity 0.25s ease",
+      "occurrence": 47
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, font-family 0.3s ease",
+      "text": "transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, font-family 0.3s ease",
+      "occurrence": 48
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background-color 0.3s ease",
+      "text": "transition: background-color 0.3s ease",
+      "occurrence": 49
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "background-color 0.4s ease, color 0.4s ease",
+      "text": "transition: background-color 0.4s ease, color 0.4s ease",
+      "occurrence": 50
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "border-color 0.2s",
+      "text": "transition: border-color 0.2s",
+      "occurrence": 51
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "border-color 0.2s",
+      "text": "transition: border-color 0.2s",
+      "occurrence": 52
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "border-color 0.2s, background 0.2s",
+      "text": "transition: border-color 0.2s, background 0.2s",
+      "occurrence": 53
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "border-color 0.3s ease, box-shadow 0.3s ease",
+      "text": "transition: border-color 0.3s ease, box-shadow 0.3s ease",
+      "occurrence": 54
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "color 0.15s",
+      "text": "transition: color 0.15s",
+      "occurrence": 55
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "color 0.15s ease, text-decoration 0.15s ease",
+      "text": "transition: color 0.15s ease, text-decoration 0.15s ease",
+      "occurrence": 56
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "color 0.2s",
+      "text": "transition: color 0.2s",
+      "occurrence": 57
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "color 0.2s ease",
+      "text": "transition: color 0.2s ease",
+      "occurrence": 58
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "color 0.2s, background-color 0.2s",
+      "text": "transition: color 0.2s, background-color 0.2s",
+      "occurrence": 59
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "color 0.35s ease, transform 0.35s ease, filter 0.35s ease, font-size 0.35s ease",
+      "text": "transition: color 0.35s ease, transform 0.35s ease, filter 0.35s ease, font-size 0.35s ease",
+      "occurrence": 60
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "color 0.3s ease, transform 0.3s ease",
+      "text": "transition: color 0.3s ease, transform 0.3s ease",
+      "occurrence": 61
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "filter 0.25s ease, transform 0.25s ease",
+      "text": "transition: filter 0.25s ease, transform 0.25s ease",
+      "occurrence": 62
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "height 0.12s ease",
+      "text": "transition: height 0.12s ease",
+      "occurrence": 63
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "height 0.15s ease",
+      "text": "transition: height 0.15s ease",
+      "occurrence": 64
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "none !important",
+      "text": "transition: none !important",
+      "occurrence": 65
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "none !important",
+      "text": "transition: none !important",
+      "occurrence": 66
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "none !important",
+      "text": "transition: none !important",
+      "occurrence": 67
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.15s",
+      "text": "transition: opacity 0.15s",
+      "occurrence": 68
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.15s ease",
+      "text": "transition: opacity 0.15s ease",
+      "occurrence": 69
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.18s ease, color 0.18s ease !important",
+      "text": "transition: opacity 0.18s ease, color 0.18s ease !important",
+      "occurrence": 70
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.18s ease, transform 0.18s ease",
+      "text": "transition: opacity 0.18s ease, transform 0.18s ease",
+      "occurrence": 71
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 72
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.2s",
+      "text": "transition: opacity 0.2s",
+      "occurrence": 73
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.2s ease",
+      "text": "transition: opacity 0.2s ease",
+      "occurrence": 74
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.2s ease",
+      "text": "transition: opacity 0.2s ease",
+      "occurrence": 75
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.2s, transform 0.15s",
+      "text": "transition: opacity 0.2s, transform 0.15s",
+      "occurrence": 76
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.2s, transform 0.2s",
+      "text": "transition: opacity 0.2s, transform 0.2s",
+      "occurrence": 77
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.3s ease",
+      "text": "transition: opacity 0.3s ease",
+      "occurrence": 78
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.3s ease",
+      "text": "transition: opacity 0.3s ease",
+      "occurrence": 79
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.4s ease",
+      "text": "transition: opacity 0.4s ease",
+      "occurrence": 80
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.5s ease",
+      "text": "transition: opacity 0.5s ease",
+      "occurrence": 81
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "opacity 0.8s ease",
+      "text": "transition: opacity 0.8s ease",
+      "occurrence": 82
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.15s, border-color 0.15s, background 0.15s",
+      "text": "transition: transform 0.15s, border-color 0.15s, background 0.15s",
+      "occurrence": 83
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.15s, border-color 0.15s, background 0.15s",
+      "text": "transition: transform 0.15s, border-color 0.15s, background 0.15s",
+      "occurrence": 84
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.15s, box-shadow 0.15s",
+      "text": "transition: transform 0.15s, box-shadow 0.15s",
+      "occurrence": 85
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.1s",
+      "text": "transition: transform 0.1s",
+      "occurrence": 86
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.1s linear !important",
+      "text": "transition: transform 0.1s linear !important",
+      "occurrence": 87
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 88
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.25s ease, background 0.25s ease, box-shadow 0.25s ease",
+      "text": "transition: transform 0.25s ease, background 0.25s ease, box-shadow 0.25s ease",
+      "occurrence": 89
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.2s",
+      "text": "transition: transform 0.2s",
+      "occurrence": 90
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.2s",
+      "text": "transition: transform 0.2s",
+      "occurrence": 91
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "text": "transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "occurrence": 92
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "text": "transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "occurrence": 93
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s",
+      "text": "transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s",
+      "occurrence": 94
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s, background 0.2s !important",
+      "text": "transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s, background 0.2s !important",
+      "occurrence": 95
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.2s ease, background 0.2s ease",
+      "text": "transition: transform 0.2s ease, background 0.2s ease",
+      "occurrence": 96
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.2s ease, background-color 0.2s ease",
+      "text": "transition: transform 0.2s ease, background-color 0.2s ease",
+      "occurrence": 97
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease",
+      "text": "transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease",
+      "occurrence": 98
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s",
+      "text": "transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s",
+      "occurrence": 99
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.2s ease, box-shadow 0.3s ease !important",
+      "text": "transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.2s ease, box-shadow 0.3s ease !important",
+      "occurrence": 100
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "text": "transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "occurrence": 101
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      "text": "transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      "occurrence": 102
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      "text": "transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      "occurrence": 103
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.3s ease",
+      "text": "transition: transform 0.3s ease",
+      "occurrence": 104
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 105
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.4s ease",
+      "text": "transition: transform 0.4s ease",
+      "occurrence": 106
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.5s ease",
+      "text": "transition: transform 0.5s ease",
+      "occurrence": 107
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 108
+    },
+    {
+      "key": "ui/web_new/css/styles.css|transition",
+      "file": "ui/web_new/css/styles.css",
+      "property": "transition",
+      "value": "width 0.2s, height 0.15s",
+      "text": "transition: width 0.2s, height 0.15s",
+      "occurrence": 109
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "auto",
+      "text": "will-change: auto",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "contents",
+      "text": "will-change: contents",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "contents",
+      "text": "will-change: contents",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "opacity",
+      "text": "will-change: opacity",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "transform",
+      "text": "will-change: transform",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "transform",
+      "text": "will-change: transform",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "transform",
+      "text": "will-change: transform",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "transform",
+      "text": "will-change: transform",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "transform",
+      "text": "will-change: transform",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "transform",
+      "text": "will-change: transform",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "transform, opacity",
+      "text": "will-change: transform, opacity",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "transform, opacity",
+      "text": "will-change: transform, opacity",
+      "occurrence": 11
+    },
+    {
+      "key": "ui/web_new/css/styles.css|will-change",
+      "file": "ui/web_new/css/styles.css",
+      "property": "will-change",
+      "value": "transform, opacity",
+      "text": "will-change: transform, opacity",
+      "occurrence": 12
+    },
+    {
+      "key": "ui/web_new/index.html|backdrop-filter",
+      "file": "ui/web_new/index.html",
+      "property": "backdrop-filter",
+      "value": "blur(12px); background: rgba(0,0,0,0.65)",
+      "text": "backdrop-filter: blur(12px); background: rgba(0,0,0,0.65)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/index.html|transition",
+      "file": "ui/web_new/index.html",
+      "property": "transition",
+      "value": "background 0.2s",
+      "text": "transition: background 0.2s",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/index.html|transition",
+      "file": "ui/web_new/index.html",
+      "property": "transition",
+      "value": "width 0.2s ease",
+      "text": "transition: width 0.2s ease",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/js/artist_profile.js|transition",
+      "file": "ui/web_new/js/artist_profile.js",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/js/artist_profile.js|transition",
+      "file": "ui/web_new/js/artist_profile.js",
+      "property": "transition",
+      "value": "transform 0.15s, opacity 0.15s; pointer-events:auto",
+      "text": "transition: transform 0.15s, opacity 0.15s; pointer-events:auto",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/js/artist_profile.js|transition",
+      "file": "ui/web_new/js/artist_profile.js",
+      "property": "transition",
+      "value": "transform 0.15s, opacity 0.15s; pointer-events:auto",
+      "text": "transition: transform 0.15s, opacity 0.15s; pointer-events:auto",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/js/library.js|transition",
+      "file": "ui/web_new/js/library.js",
+      "property": "transition",
+      "value": "background 0.3s",
+      "text": "transition: background 0.3s",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/js/library.js|transition",
+      "file": "ui/web_new/js/library.js",
+      "property": "transition",
+      "value": "box-shadow 0.15s",
+      "text": "transition: box-shadow 0.15s",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/js/library.js|transition",
+      "file": "ui/web_new/js/library.js",
+      "property": "transition",
+      "value": "none",
+      "text": "transition: none",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/js/library.js|transition",
+      "file": "ui/web_new/js/library.js",
+      "property": "transition",
+      "value": "none",
+      "text": "transition: none",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/js/library.js|transition",
+      "file": "ui/web_new/js/library.js",
+      "property": "transition",
+      "value": "none",
+      "text": "transition: none",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new/js/library.js|transition",
+      "file": "ui/web_new/js/library.js",
+      "property": "transition",
+      "value": "opacity 0.18s",
+      "text": "transition: opacity 0.18s",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new/js/library.js|transition",
+      "file": "ui/web_new/js/library.js",
+      "property": "transition",
+      "value": "opacity 0.22s ease, transform 0.22s ease",
+      "text": "transition: opacity 0.22s ease, transform 0.22s ease",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new/js/library.js|transition",
+      "file": "ui/web_new/js/library.js",
+      "property": "transition",
+      "value": "top 0.18s cubic-bezier(0.16,1,0.3,1), left 0.18s cubic-bezier(0.16,1,0.3,1), transform 0.18s, opacity 0.18s",
+      "text": "transition: top 0.18s cubic-bezier(0.16,1,0.3,1), left 0.18s cubic-bezier(0.16,1,0.3,1), transform 0.18s, opacity 0.18s",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new/js/library.js|transition",
+      "file": "ui/web_new/js/library.js",
+      "property": "transition",
+      "value": "transform 0.18s ease, opacity 0.18s ease",
+      "text": "transition: transform 0.18s ease, opacity 0.18s ease",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new/js/library.js|transition",
+      "file": "ui/web_new/js/library.js",
+      "property": "transition",
+      "value": "transform 0.22s cubic-bezier(0.16,1,0.3,1), opacity 0.22s ease",
+      "text": "transition: transform 0.22s cubic-bezier(0.16,1,0.3,1), opacity 0.22s ease",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new/js/library.js|transition",
+      "file": "ui/web_new/js/library.js",
+      "property": "transition",
+      "value": "transform 0.25s ease, opacity 0.25s ease, max-height 0.3s ease",
+      "text": "transition: transform 0.25s ease, opacity 0.25s ease, max-height 0.3s ease",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new/js/particles.js|will-change",
+      "file": "ui/web_new/js/particles.js",
+      "property": "will-change",
+      "value": "transform;transform:translateZ(0)",
+      "text": "will-change: transform;transform:translateZ(0)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/js/player.js|filter",
+      "file": "ui/web_new/js/player.js",
+      "property": "filter",
+      "value": "blur(var(--player-glow-blur)) brightness(0.35) saturate(1.3)",
+      "text": "filter: blur(var(--player-glow-blur)) brightness(0.35) saturate(1.3)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/js/player.js|transition",
+      "file": "ui/web_new/js/player.js",
+      "property": "transition",
+      "value": "opacity 0.5s ease-in-out",
+      "text": "transition: opacity 0.5s ease-in-out",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/js/search.js|animation",
+      "file": "ui/web_new/js/search.js",
+      "property": "animation",
+      "value": "fadeIn 0.25s ease; padding:20px",
+      "text": "animation: fadeIn 0.25s ease; padding:20px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/js/search.js|animation",
+      "file": "ui/web_new/js/search.js",
+      "property": "animation",
+      "value": "fadeIn 0.25s ease; padding:20px",
+      "text": "animation: fadeIn 0.25s ease; padding:20px",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/js/search.js|animation",
+      "file": "ui/web_new/js/search.js",
+      "property": "animation",
+      "value": "fadeIn 0.3s ease",
+      "text": "animation: fadeIn 0.3s ease",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/js/search.js|animation",
+      "file": "ui/web_new/js/search.js",
+      "property": "animation",
+      "value": "fadeIn 0.3s ease",
+      "text": "animation: fadeIn 0.3s ease",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/js/search.js|animation",
+      "file": "ui/web_new/js/search.js",
+      "property": "animation",
+      "value": "fadeIn 0.3s ease",
+      "text": "animation: fadeIn 0.3s ease",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new/js/search.js|animation",
+      "file": "ui/web_new/js/search.js",
+      "property": "animation",
+      "value": "fadeIn 0.3s ease",
+      "text": "animation: fadeIn 0.3s ease",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new/js/search.js|transition",
+      "file": "ui/web_new/js/search.js",
+      "property": "transition",
+      "value": "opacity 0.2s; z-index:3",
+      "text": "transition: opacity 0.2s; z-index:3",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/js/search.js|transition",
+      "file": "ui/web_new/js/search.js",
+      "property": "transition",
+      "value": "opacity 0.2s; z-index:3",
+      "text": "transition: opacity 0.2s; z-index:3",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new/js/search.js|transition",
+      "file": "ui/web_new/js/search.js",
+      "property": "transition",
+      "value": "transform 0.2s",
+      "text": "transition: transform 0.2s",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new/js/search.js|transition",
+      "file": "ui/web_new/js/search.js",
+      "property": "transition",
+      "value": "transform 0.2s",
+      "text": "transition: transform 0.2s",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new/js/search.js|transition",
+      "file": "ui/web_new/js/search.js",
+      "property": "transition",
+      "value": "transform 0.2s, background 0.2s",
+      "text": "transition: transform 0.2s, background 0.2s",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new/js/search.js|transition",
+      "file": "ui/web_new/js/search.js",
+      "property": "transition",
+      "value": "transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative",
+      "text": "transition: transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new/js/search.js|transition",
+      "file": "ui/web_new/js/search.js",
+      "property": "transition",
+      "value": "transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative",
+      "text": "transition: transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new/js/settings.js|filter",
+      "file": "ui/web_new/js/settings.js",
+      "property": "filter",
+      "value": "drop-shadow(0 0 10px ${pack.color})",
+      "text": "filter: drop-shadow(0 0 10px ${pack.color})",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new/js/utils.js|animationdelay",
+      "file": "ui/web_new/js/utils.js",
+      "property": "animationdelay",
+      "value": "`${Math.min(index * 0.03, 0.5)}s`",
+      "text": "animationdelay: `${Math.min(index * 0.03, 0.5)}s`",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--app-bg-opacity",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--app-bg-opacity",
+      "value": "1",
+      "text": "--app-bg-opacity: 1",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-lg",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-lg",
+      "value": "0px",
+      "text": "--blur-lg: 0px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-lg",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-lg",
+      "value": "0px !important",
+      "text": "--blur-lg: 0px !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-lg",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-lg",
+      "value": "8px",
+      "text": "--blur-lg: 8px",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-lg",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-lg",
+      "value": "calc(var(--glass-blur) * 1.5)",
+      "text": "--blur-lg: calc(var(--glass-blur) * 1.5)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-md",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-md",
+      "value": "0px",
+      "text": "--blur-md: 0px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-md",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-md",
+      "value": "0px !important",
+      "text": "--blur-md: 0px !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-md",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-md",
+      "value": "6px",
+      "text": "--blur-md: 6px",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-md",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-md",
+      "value": "var(--glass-blur)",
+      "text": "--blur-md: var(--glass-blur)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-sm",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-sm",
+      "value": "0px",
+      "text": "--blur-sm: 0px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-sm",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-sm",
+      "value": "0px !important",
+      "text": "--blur-sm: 0px !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-sm",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-sm",
+      "value": "3px",
+      "text": "--blur-sm: 3px",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-sm",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-sm",
+      "value": "calc(var(--glass-blur) * 0.75)",
+      "text": "--blur-sm: calc(var(--glass-blur) * 0.75)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-xl",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-xl",
+      "value": "0px",
+      "text": "--blur-xl: 0px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-xl",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-xl",
+      "value": "0px !important",
+      "text": "--blur-xl: 0px !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-xl",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-xl",
+      "value": "10px",
+      "text": "--blur-xl: 10px",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--blur-xl",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--blur-xl",
+      "value": "calc(var(--glass-blur) * 2)",
+      "text": "--blur-xl: calc(var(--glass-blur) * 2)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--enable-animations",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--enable-animations",
+      "value": "1",
+      "text": "--enable-animations: 1",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--enable-transitions",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--enable-transitions",
+      "value": "1",
+      "text": "--enable-transitions: 1",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--glass-blur",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--glass-blur",
+      "value": "0px",
+      "text": "--glass-blur: 0px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--glass-blur",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--glass-blur",
+      "value": "0px !important",
+      "text": "--glass-blur: 0px !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--glass-blur",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--glass-blur",
+      "value": "6px",
+      "text": "--glass-blur: 6px",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--glass-blur",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--glass-blur",
+      "value": "8px",
+      "text": "--glass-blur: 8px",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--player-glow-blur",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--player-glow-blur",
+      "value": "0px",
+      "text": "--player-glow-blur: 0px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--player-glow-blur",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--player-glow-blur",
+      "value": "0px !important",
+      "text": "--player-glow-blur: 0px !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--player-glow-blur",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--player-glow-blur",
+      "value": "20px",
+      "text": "--player-glow-blur: 20px",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--player-glow-blur",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--player-glow-blur",
+      "value": "40px",
+      "text": "--player-glow-blur: 40px",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--player-glow-opacity",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--player-glow-opacity",
+      "value": "0",
+      "text": "--player-glow-opacity: 0",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--player-glow-opacity",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--player-glow-opacity",
+      "value": "0 !important",
+      "text": "--player-glow-opacity: 0 !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--player-glow-opacity",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--player-glow-opacity",
+      "value": "0.35",
+      "text": "--player-glow-opacity: 0.35",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|--player-glow-opacity",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "--player-glow-opacity",
+      "value": "0.5",
+      "text": "--player-glow-opacity: 0.5",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px)",
+      "text": "-webkit-backdrop-filter: blur(16px)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px)",
+      "text": "-webkit-backdrop-filter: blur(16px)",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(20px)",
+      "text": "-webkit-backdrop-filter: blur(20px)",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(24px)",
+      "text": "-webkit-backdrop-filter: blur(24px)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(32px) saturate(150%)",
+      "text": "-webkit-backdrop-filter: blur(32px) saturate(150%)",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(8px)",
+      "text": "-webkit-backdrop-filter: blur(8px)",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-lg, 16px))",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-lg, 16px))",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-md))",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-md))",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-sm))",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-xl))",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-xl))",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "text": "-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%)",
+      "occurrence": 11
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "text": "-webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "occurrence": 12
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "text": "-webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "occurrence": 13
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "text": "-webkit-backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "occurrence": 14
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "none !important",
+      "text": "-webkit-backdrop-filter: none !important",
+      "occurrence": 15
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "none !important",
+      "text": "-webkit-backdrop-filter: none !important",
+      "occurrence": 16
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "none !important",
+      "text": "-webkit-backdrop-filter: none !important",
+      "occurrence": 17
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "none !important",
+      "text": "-webkit-backdrop-filter: none !important",
+      "occurrence": 18
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|-webkit-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "-webkit-filter",
+      "value": "blur(8px)",
+      "text": "-webkit-filter: blur(8px)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "auraFloat 24s infinite alternate ease-in-out",
+      "text": "animation: auraFloat 24s infinite alternate ease-in-out",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "fadeIn 0.25s ease-out",
+      "text": "animation: fadeIn 0.25s ease-out",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "fadeIn 0.4s ease",
+      "text": "animation: fadeIn 0.4s ease",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "heartPulse 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+      "text": "animation: heartPulse 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "iconRotatePop 0.3s ease",
+      "text": "animation: iconRotatePop 0.3s ease",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "menuPop 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "text": "animation: menuPop 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "modalPop 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "animation: modalPop 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "none",
+      "text": "animation: none",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "none !important",
+      "text": "animation: none !important",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "none !important",
+      "text": "animation: none !important",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "pageSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "text": "animation: pageSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "panelTabSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "text": "animation: panelTabSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "occurrence": 11
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "particleFloat linear infinite",
+      "text": "animation: particleFloat linear infinite",
+      "occurrence": 12
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "pulse-yellow-glow 2s ease-in-out forwards !important",
+      "text": "animation: pulse-yellow-glow 2s ease-in-out forwards !important",
+      "occurrence": 13
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "spin 1s linear infinite",
+      "text": "animation: spin 1s linear infinite",
+      "occurrence": 14
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "spin-slow 0.8s linear infinite",
+      "text": "animation: spin-slow 0.8s linear infinite",
+      "occurrence": 15
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "spin-slow 1s linear infinite",
+      "text": "animation: spin-slow 1s linear infinite",
+      "occurrence": 16
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "spin-slow 8s linear infinite",
+      "text": "animation: spin-slow 8s linear infinite",
+      "occurrence": 17
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "splashShimmer 1.4s ease-in-out infinite",
+      "text": "animation: splashShimmer 1.4s ease-in-out infinite",
+      "occurrence": 18
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "toastIn 0.3s ease, toastOut 0.3s ease 3.7s forwards",
+      "text": "animation: toastIn 0.3s ease, toastOut 0.3s ease 3.7s forwards",
+      "occurrence": 19
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "ui-dropdown-enter 0.15s ease-out",
+      "text": "animation: ui-dropdown-enter 0.15s ease-out",
+      "occurrence": 20
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "ui-dropdown-enter 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "animation: ui-dropdown-enter 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 21
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "ui-dropdown-enter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "text": "animation: ui-dropdown-enter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "occurrence": 22
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "ui-shimmer 1.5s infinite",
+      "text": "animation: ui-shimmer 1.5s infinite",
+      "occurrence": 23
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation",
+      "value": "ui-shimmer 2s infinite linear",
+      "text": "animation: ui-shimmer 2s infinite linear",
+      "occurrence": 24
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation-delay",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation-delay",
+      "value": "-12s",
+      "text": "animation-delay: -12s",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation-delay",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation-delay",
+      "value": "-6s",
+      "text": "animation-delay: -6s",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation-duration",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation-duration",
+      "value": "18s",
+      "text": "animation-duration: 18s",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation-duration",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation-duration",
+      "value": "22s",
+      "text": "animation-duration: 22s",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation-duration",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation-duration",
+      "value": "28s",
+      "text": "animation-duration: 28s",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation-play-state",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation-play-state",
+      "value": "paused !important",
+      "text": "animation-play-state: paused !important",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|animation-play-state",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "animation-play-state",
+      "value": "paused !important",
+      "text": "animation-play-state: paused !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(16px)",
+      "text": "backdrop-filter: blur(16px)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(16px)",
+      "text": "backdrop-filter: blur(16px)",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(20px)",
+      "text": "backdrop-filter: blur(20px)",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(20px)",
+      "text": "backdrop-filter: blur(20px)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(24px)",
+      "text": "backdrop-filter: blur(24px)",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(24px) !important",
+      "text": "backdrop-filter: blur(24px) !important",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(32px) saturate(150%)",
+      "text": "backdrop-filter: blur(32px) saturate(150%)",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(3px)",
+      "text": "backdrop-filter: blur(3px)",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(8px)",
+      "text": "backdrop-filter: blur(8px)",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(8px)",
+      "text": "backdrop-filter: blur(8px)",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(8px)",
+      "text": "backdrop-filter: blur(8px)",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-lg, 16px))",
+      "text": "backdrop-filter: blur(var(--blur-lg, 16px))",
+      "occurrence": 11
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "text": "backdrop-filter: blur(var(--blur-md))",
+      "occurrence": 12
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "text": "backdrop-filter: blur(var(--blur-md))",
+      "occurrence": 13
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "text": "backdrop-filter: blur(var(--blur-sm))",
+      "occurrence": 14
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-sm))",
+      "text": "backdrop-filter: blur(var(--blur-sm))",
+      "occurrence": 15
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-xl))",
+      "text": "backdrop-filter: blur(var(--blur-xl))",
+      "occurrence": 16
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur)) saturate(180%)",
+      "text": "backdrop-filter: blur(var(--glass-blur)) saturate(180%)",
+      "occurrence": 17
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "text": "backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "occurrence": 18
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "text": "backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "occurrence": 19
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "text": "backdrop-filter: blur(var(--glass-blur, var(--blur-md, 14px)))",
+      "occurrence": 20
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "none !important",
+      "text": "backdrop-filter: none !important",
+      "occurrence": 21
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "none !important",
+      "text": "backdrop-filter: none !important",
+      "occurrence": 22
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "none !important",
+      "text": "backdrop-filter: none !important",
+      "occurrence": 23
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "backdrop-filter",
+      "value": "none !important",
+      "text": "backdrop-filter: none !important",
+      "occurrence": 24
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|contain",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "contain",
+      "value": "layout",
+      "text": "contain: layout",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|contain",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "contain",
+      "value": "layout style",
+      "text": "contain: layout style",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|contain",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "contain",
+      "value": "strict",
+      "text": "contain: strict",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|contain",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "contain",
+      "value": "strict",
+      "text": "contain: strict",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "filter",
+      "value": "blur(25px) brightness(0.35) saturate(1.4)",
+      "text": "filter: blur(25px) brightness(0.35) saturate(1.4)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "filter",
+      "value": "blur(8px)",
+      "text": "filter: blur(8px)",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "filter",
+      "value": "brightness(1.1)",
+      "text": "filter: brightness(1.1)",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "filter",
+      "value": "brightness(1.15)",
+      "text": "filter: brightness(1.15)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "filter",
+      "value": "brightness(1.15) !important",
+      "text": "filter: brightness(1.15) !important",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "filter",
+      "value": "brightness(1.2)",
+      "text": "filter: brightness(1.2)",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "filter",
+      "value": "none",
+      "text": "filter: none",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|filter",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "filter",
+      "value": "none !important",
+      "text": "filter: none !important",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.15s ease",
+      "text": "transition: all 0.15s ease",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.15s ease",
+      "text": "transition: all 0.15s ease",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.15s ease !important",
+      "text": "transition: all 0.15s ease !important",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+      "text": "transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.25s ease",
+      "text": "transition: all 0.25s ease",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.2s",
+      "text": "transition: all 0.2s",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.2s",
+      "text": "transition: all 0.2s",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.2s",
+      "text": "transition: all 0.2s",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.2s",
+      "text": "transition: all 0.2s",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 11
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 12
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 13
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 14
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 15
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 16
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 17
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 18
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 19
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "all 0.3s ease",
+      "text": "transition: all 0.3s ease",
+      "occurrence": 20
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "backdrop-filter 0.2s ease, background-color 0.2s ease !important",
+      "text": "transition: backdrop-filter 0.2s ease, background-color 0.2s ease !important",
+      "occurrence": 21
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "backdrop-filter 0.5s ease-in-out, -webkit-backdrop-filter 0.5s ease-in-out, background-color 0.5s ease, opacity 0.5s ease !important",
+      "text": "transition: backdrop-filter 0.5s ease-in-out, -webkit-backdrop-filter 0.5s ease-in-out, background-color 0.5s ease, opacity 0.5s ease !important",
+      "occurrence": 22
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.15s",
+      "text": "transition: background 0.15s",
+      "occurrence": 23
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.15s",
+      "text": "transition: background 0.15s",
+      "occurrence": 24
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.15s ease",
+      "text": "transition: background 0.15s ease",
+      "occurrence": 25
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.15s ease",
+      "text": "transition: background 0.15s ease",
+      "occurrence": 26
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.15s, color 0.15s",
+      "text": "transition: background 0.15s, color 0.15s",
+      "occurrence": 27
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.15s, color 0.15s, border-color 0.15s",
+      "text": "transition: background 0.15s, color 0.15s, border-color 0.15s",
+      "occurrence": 28
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.15s, opacity 0.15s, transform 0.15s",
+      "text": "transition: background 0.15s, opacity 0.15s, transform 0.15s",
+      "occurrence": 29
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.2s",
+      "text": "transition: background 0.2s",
+      "occurrence": 30
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.2s",
+      "text": "transition: background 0.2s",
+      "occurrence": 31
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.2s ease",
+      "text": "transition: background 0.2s ease",
+      "occurrence": 32
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.2s ease, transform 0.15s ease",
+      "text": "transition: background 0.2s ease, transform 0.15s ease",
+      "occurrence": 33
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.2s ease, transform 0.2s ease",
+      "text": "transition: background 0.2s ease, transform 0.2s ease",
+      "occurrence": 34
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.2s, border-color 0.2s",
+      "text": "transition: background 0.2s, border-color 0.2s",
+      "occurrence": 35
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.2s, border-color 0.2s",
+      "text": "transition: background 0.2s, border-color 0.2s",
+      "occurrence": 36
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.2s, border-color 0.2s, transform 0.2s",
+      "text": "transition: background 0.2s, border-color 0.2s, transform 0.2s",
+      "occurrence": 37
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 0.2s, color 0.2s, border-color 0.2s",
+      "text": "transition: background 0.2s, color 0.2s, border-color 0.2s",
+      "occurrence": 38
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background 1s ease, opacity 0.5s ease",
+      "text": "transition: background 1s ease, opacity 0.5s ease",
+      "occurrence": 39
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease",
+      "text": "transition: background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease",
+      "occurrence": 40
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background-color 0.25s ease",
+      "text": "transition: background-color 0.25s ease",
+      "occurrence": 41
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease, transform 0.2s ease, opacity 0.25s ease",
+      "text": "transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease, transform 0.2s ease, opacity 0.25s ease",
+      "occurrence": 42
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, font-family 0.3s ease",
+      "text": "transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, font-family 0.3s ease",
+      "occurrence": 43
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background-color 0.3s ease",
+      "text": "transition: background-color 0.3s ease",
+      "occurrence": 44
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "background-color 0.4s ease, color 0.4s ease",
+      "text": "transition: background-color 0.4s ease, color 0.4s ease",
+      "occurrence": 45
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "border-color 0.2s",
+      "text": "transition: border-color 0.2s",
+      "occurrence": 46
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "border-color 0.2s",
+      "text": "transition: border-color 0.2s",
+      "occurrence": 47
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "border-color 0.2s, background 0.2s",
+      "text": "transition: border-color 0.2s, background 0.2s",
+      "occurrence": 48
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "border-color 0.2s, background 0.2s",
+      "text": "transition: border-color 0.2s, background 0.2s",
+      "occurrence": 49
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "border-color 0.3s ease, box-shadow 0.3s ease",
+      "text": "transition: border-color 0.3s ease, box-shadow 0.3s ease",
+      "occurrence": 50
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "color 0.15s",
+      "text": "transition: color 0.15s",
+      "occurrence": 51
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "color 0.15s",
+      "text": "transition: color 0.15s",
+      "occurrence": 52
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "color 0.15s ease, text-decoration 0.15s ease",
+      "text": "transition: color 0.15s ease, text-decoration 0.15s ease",
+      "occurrence": 53
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "color 0.15s, background 0.15s",
+      "text": "transition: color 0.15s, background 0.15s",
+      "occurrence": 54
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "color 0.15s, background 0.15s",
+      "text": "transition: color 0.15s, background 0.15s",
+      "occurrence": 55
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "color 0.2s ease",
+      "text": "transition: color 0.2s ease",
+      "occurrence": 56
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "color 0.2s ease, transform 0.2s ease",
+      "text": "transition: color 0.2s ease, transform 0.2s ease",
+      "occurrence": 57
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "color 0.2s, background-color 0.2s",
+      "text": "transition: color 0.2s, background-color 0.2s",
+      "occurrence": 58
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "filter 0.25s ease, transform 0.25s ease",
+      "text": "transition: filter 0.25s ease, transform 0.25s ease",
+      "occurrence": 59
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "height 0.12s ease",
+      "text": "transition: height 0.12s ease",
+      "occurrence": 60
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "max-height 0.22s cubic-bezier(0.4, 0, 0.2, 1),",
+      "text": "transition: max-height 0.22s cubic-bezier(0.4, 0, 0.2, 1),",
+      "occurrence": 61
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "none !important",
+      "text": "transition: none !important",
+      "occurrence": 62
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "none !important",
+      "text": "transition: none !important",
+      "occurrence": 63
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "none !important",
+      "text": "transition: none !important",
+      "occurrence": 64
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "none !important",
+      "text": "transition: none !important",
+      "occurrence": 65
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "opacity 0.16s ease, max-width 0.22s cubic-bezier(0.4, 0, 0.2, 1)",
+      "text": "transition: opacity 0.16s ease, max-width 0.22s cubic-bezier(0.4, 0, 0.2, 1)",
+      "occurrence": 66
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "opacity 0.18s ease, color 0.18s ease !important",
+      "text": "transition: opacity 0.18s ease, color 0.18s ease !important",
+      "occurrence": 67
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "opacity 0.18s ease, max-width 0.24s cubic-bezier(0.4, 0, 0.2, 1)",
+      "text": "transition: opacity 0.18s ease, max-width 0.24s cubic-bezier(0.4, 0, 0.2, 1)",
+      "occurrence": 68
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "opacity 0.18s ease, transform 0.18s ease",
+      "text": "transition: opacity 0.18s ease, transform 0.18s ease",
+      "occurrence": 69
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 70
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 71
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease",
+      "text": "transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease",
+      "occurrence": 72
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "opacity 0.2s ease",
+      "text": "transition: opacity 0.2s ease",
+      "occurrence": 73
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "opacity 0.2s, transform 0.2s",
+      "text": "transition: opacity 0.2s, transform 0.2s",
+      "occurrence": 74
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "opacity 0.3s ease",
+      "text": "transition: opacity 0.3s ease",
+      "occurrence": 75
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "opacity 0.4s ease",
+      "text": "transition: opacity 0.4s ease",
+      "occurrence": 76
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "opacity 0.8s ease",
+      "text": "transition: opacity 0.8s ease",
+      "occurrence": 77
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "transform 0.15s, border-color 0.15s, background 0.15s",
+      "text": "transition: transform 0.15s, border-color 0.15s, background 0.15s",
+      "occurrence": 78
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "transform 0.15s, border-color 0.15s, background 0.15s",
+      "text": "transition: transform 0.15s, border-color 0.15s, background 0.15s",
+      "occurrence": 79
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "transform 0.1s linear !important",
+      "text": "transition: transform 0.1s linear !important",
+      "occurrence": 80
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease",
+      "text": "transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease",
+      "occurrence": 81
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "transform 0.2s",
+      "text": "transition: transform 0.2s",
+      "occurrence": 82
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s, background 0.2s !important",
+      "text": "transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s, background 0.2s !important",
+      "occurrence": 83
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "transform 0.2s ease, background-color 0.2s ease",
+      "text": "transition: transform 0.2s ease, background-color 0.2s ease",
+      "occurrence": 84
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease",
+      "text": "transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease",
+      "occurrence": 85
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease",
+      "text": "transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease",
+      "occurrence": 86
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "transform 0.4s ease",
+      "text": "transition: transform 0.4s ease",
+      "occurrence": 87
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "transform 0.5s ease",
+      "text": "transition: transform 0.5s ease",
+      "occurrence": 88
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 89
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|transition",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "transition",
+      "value": "width 0.26s cubic-bezier(0.4, 0, 0.2, 1),",
+      "text": "transition: width 0.26s cubic-bezier(0.4, 0, 0.2, 1),",
+      "occurrence": 90
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|will-change",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "will-change",
+      "value": "auto",
+      "text": "will-change: auto",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|will-change",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "will-change",
+      "value": "contents",
+      "text": "will-change: contents",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|will-change",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "will-change",
+      "value": "transform",
+      "text": "will-change: transform",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|will-change",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "will-change",
+      "value": "transform",
+      "text": "will-change: transform",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/base.css|will-change",
+      "file": "ui/web_new_v2/css/components/base.css",
+      "property": "will-change",
+      "value": "transform",
+      "text": "will-change: transform",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/home-view.css|animation",
+      "file": "ui/web_new_v2/css/components/home-view.css",
+      "property": "animation",
+      "value": "ui-shimmer 1.8s infinite linear",
+      "text": "animation: ui-shimmer 1.8s infinite linear",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/home-view.css|transition",
+      "file": "ui/web_new_v2/css/components/home-view.css",
+      "property": "transition",
+      "value": "background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease",
+      "text": "transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/home-view.css|transition",
+      "file": "ui/web_new_v2/css/components/home-view.css",
+      "property": "transition",
+      "value": "opacity 0.2s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease",
+      "text": "transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/home-view.css|transition",
+      "file": "ui/web_new_v2/css/components/home-view.css",
+      "property": "transition",
+      "value": "opacity 0.2s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease",
+      "text": "transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/home-view.css|transition",
+      "file": "ui/web_new_v2/css/components/home-view.css",
+      "property": "transition",
+      "value": "transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.25s ease",
+      "text": "transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.25s ease",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/home-view.css|transition",
+      "file": "ui/web_new_v2/css/components/home-view.css",
+      "property": "transition",
+      "value": "transform 0.2s ease, box-shadow 0.2s ease",
+      "text": "transition: transform 0.2s ease, box-shadow 0.2s ease",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/home-view.css|transition",
+      "file": "ui/web_new_v2/css/components/home-view.css",
+      "property": "transition",
+      "value": "transform 0.3s ease",
+      "text": "transition: transform 0.3s ease",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(40px)",
+      "text": "-webkit-backdrop-filter: blur(40px)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "none !important",
+      "text": "-webkit-backdrop-filter: none !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "backdrop-filter",
+      "value": "blur(40px)",
+      "text": "backdrop-filter: blur(40px)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "backdrop-filter",
+      "value": "none !important",
+      "text": "backdrop-filter: none !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|filter",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "filter",
+      "value": "blur(0)",
+      "text": "filter: blur(0)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|filter",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "filter",
+      "value": "blur(0)",
+      "text": "filter: blur(0)",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|filter",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "filter",
+      "value": "blur(1.5px)",
+      "text": "filter: blur(1.5px)",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|filter",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "filter",
+      "value": "blur(2px)",
+      "text": "filter: blur(2px)",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|filter",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "filter",
+      "value": "blur(2px)",
+      "text": "filter: blur(2px)",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|filter",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "filter",
+      "value": "none !important",
+      "text": "filter: none !important",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|filter",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "filter",
+      "value": "none !important",
+      "text": "filter: none !important",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|filter",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "filter",
+      "value": "none !important",
+      "text": "filter: none !important",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|transition",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|transition",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "transition",
+      "value": "color 0.2s ease, background-color 0.2s ease, transform 0.2s ease",
+      "text": "transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|transition",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "transition",
+      "value": "color 0.3s ease, opacity 0.3s ease",
+      "text": "transition: color 0.3s ease, opacity 0.3s ease",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|transition",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "transition",
+      "value": "filter 0.16s ease-out,",
+      "text": "transition: filter 0.16s ease-out,",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|transition",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "transition",
+      "value": "filter 0.55s cubic-bezier(0.16, 1, 0.3, 1),",
+      "text": "transition: filter 0.55s cubic-bezier(0.16, 1, 0.3, 1),",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|transition",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "transition",
+      "value": "none !important",
+      "text": "transition: none !important",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|transition",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "transition",
+      "value": "none !important",
+      "text": "transition: none !important",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|transition",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "transition",
+      "value": "opacity 0.2s ease",
+      "text": "transition: opacity 0.2s ease",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|transition",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "transition",
+      "value": "opacity 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),",
+      "text": "transition: opacity 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|transition",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "transition",
+      "value": "transform 0.25s ease, opacity 0.25s ease, color 0.25s ease",
+      "text": "transition: transform 0.25s ease, opacity 0.25s ease, color 0.25s ease",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|transition",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "transition",
+      "value": "transform 0.65s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|transition-duration",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "transition-duration",
+      "value": "0.32s",
+      "text": "transition-duration: 0.32s",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|will-change",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "will-change",
+      "value": "auto",
+      "text": "will-change: auto",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|will-change",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "will-change",
+      "value": "auto",
+      "text": "will-change: auto",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|will-change",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "will-change",
+      "value": "auto",
+      "text": "will-change: auto",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|will-change",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "will-change",
+      "value": "auto !important",
+      "text": "will-change: auto !important",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|will-change",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "will-change",
+      "value": "transform",
+      "text": "will-change: transform",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/lyrics.css|will-change",
+      "file": "ui/web_new_v2/css/components/lyrics.css",
+      "property": "will-change",
+      "value": "transform, filter",
+      "text": "will-change: transform, filter",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px)",
+      "text": "-webkit-backdrop-filter: blur(16px)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(28px) saturate(160%)",
+      "text": "-webkit-backdrop-filter: blur(28px) saturate(160%)",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|animation",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "animation",
+      "value": "spinDisc 12s linear infinite",
+      "text": "animation: spinDisc 12s linear infinite",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "backdrop-filter",
+      "value": "blur(16px)",
+      "text": "backdrop-filter: blur(16px)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "backdrop-filter",
+      "value": "blur(28px) saturate(160%)",
+      "text": "backdrop-filter: blur(28px) saturate(160%)",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|contain",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "contain",
+      "value": "layout style",
+      "text": "contain: layout style",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|transition",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "transition",
+      "value": "background 0.15s ease, color 0.15s ease",
+      "text": "transition: background 0.15s ease, color 0.15s ease",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|transition",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "transition",
+      "value": "background-color 0.18s ease, border-color 0.18s ease",
+      "text": "transition: background-color 0.18s ease, border-color 0.18s ease",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|transition",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "transition",
+      "value": "border-color 0.3s ease, transform 0.2s ease",
+      "text": "transition: border-color 0.3s ease, transform 0.2s ease",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|transition",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "transition",
+      "value": "color 0.15s ease",
+      "text": "transition: color 0.15s ease",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|transition",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "transition",
+      "value": "color 0.2s ease, transform 0.2s ease, background-color 0.2s ease",
+      "text": "transition: color 0.2s ease, transform 0.2s ease, background-color 0.2s ease",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|transition",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "transition",
+      "value": "height 0.15s ease",
+      "text": "transition: height 0.15s ease",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|transition",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "transition",
+      "value": "height 0.15s ease",
+      "text": "transition: height 0.15s ease",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|transition",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "transition",
+      "value": "opacity 0.12s ease-out, transform 0.12s ease-out",
+      "text": "transition: opacity 0.12s ease-out, transform 0.12s ease-out",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|transition",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "transition",
+      "value": "opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "text": "transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|transition",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "transition",
+      "value": "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, background-color 0.2s ease",
+      "text": "transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, background-color 0.2s ease",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|transition",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "transition",
+      "value": "transform 0.3s ease, border-radius 0.3s ease",
+      "text": "transition: transform 0.3s ease, border-radius 0.3s ease",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|will-change",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "will-change",
+      "value": "opacity, transform",
+      "text": "will-change: opacity, transform",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-bar.css|will-change",
+      "file": "ui/web_new_v2/css/components/player-bar.css",
+      "property": "will-change",
+      "value": "transform",
+      "text": "will-change: transform",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-md))",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md))",
+      "text": "backdrop-filter: blur(var(--blur-md))",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css|contain",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "property": "contain",
+      "value": "layout",
+      "text": "contain: layout",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css|contain",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "property": "contain",
+      "value": "strict",
+      "text": "contain: strict",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css|filter",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "property": "filter",
+      "value": "blur(var(--ambient-blur))",
+      "text": "filter: blur(var(--ambient-blur))",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css|transition",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "property": "transition",
+      "value": "border-color 0.3s ease",
+      "text": "transition: border-color 0.3s ease",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css|transition",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "property": "transition",
+      "value": "opacity 0.12s ease-out, transform 0.12s ease-out",
+      "text": "transition: opacity 0.12s ease-out, transform 0.12s ease-out",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css|transition",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "property": "transition",
+      "value": "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease !important",
+      "text": "transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease !important",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css|will-change",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "property": "will-change",
+      "value": "opacity, transform",
+      "text": "will-change: opacity, transform",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/player-view.css|will-change",
+      "file": "ui/web_new_v2/css/components/player-view.css",
+      "property": "will-change",
+      "value": "transform, opacity",
+      "text": "will-change: transform, opacity",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|animation",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "animation",
+      "value": "eqPulse 1s ease-in-out infinite alternate",
+      "text": "animation: eqPulse 1s ease-in-out infinite alternate",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|animation",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "animation",
+      "value": "fadeIn 0.25s ease",
+      "text": "animation: fadeIn 0.25s ease",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|animation",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "animation",
+      "value": "fadeIn 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)",
+      "text": "animation: fadeIn 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|animation",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "animation",
+      "value": "fadeIn 0.3s ease forwards",
+      "text": "animation: fadeIn 0.3s ease forwards",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|animation-delay",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "animation-delay",
+      "value": "0.2s",
+      "text": "animation-delay: 0.2s",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|animation-delay",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "animation-delay",
+      "value": "0.4s",
+      "text": "animation-delay: 0.4s",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|transition",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "transition",
+      "value": "background-color 0.2s ease, border-color 0.2s ease, transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.2s ease",
+      "text": "transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.2s ease",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|transition",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "transition",
+      "value": "color 0.15s ease, background-color 0.15s ease",
+      "text": "transition: color 0.15s ease, background-color 0.15s ease",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|transition",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "transition",
+      "value": "opacity 0.15s ease",
+      "text": "transition: opacity 0.15s ease",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|transition",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "transition",
+      "value": "opacity 0.15s ease",
+      "text": "transition: opacity 0.15s ease",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|transition",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "transition",
+      "value": "opacity 0.2s ease",
+      "text": "transition: opacity 0.2s ease",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|transition",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "transition",
+      "value": "opacity 0.2s ease",
+      "text": "transition: opacity 0.2s ease",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|transition",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "transition",
+      "value": "transform 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease",
+      "text": "transition: transform 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|transition",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "transition",
+      "value": "transform 0.2s ease, background-color 0.2s ease",
+      "text": "transition: transform 0.2s ease, background-color 0.2s ease",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|transition",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "transition",
+      "value": "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      "text": "transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new_v2/css/components/track-table.css|transition",
+      "file": "ui/web_new_v2/css/components/track-table.css",
+      "property": "transition",
+      "value": "transform 0.3s ease",
+      "text": "transition: transform 0.3s ease",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(16px) saturate(160%)",
+      "text": "-webkit-backdrop-filter: blur(16px) saturate(160%)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md)) saturate(160%)",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-md)) saturate(160%)",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "blur(var(--blur-md)) saturate(160%)",
+      "text": "-webkit-backdrop-filter: blur(var(--blur-md)) saturate(160%)",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|-webkit-backdrop-filter",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "-webkit-backdrop-filter",
+      "value": "none !important",
+      "text": "-webkit-backdrop-filter: none !important",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|animation",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "animation",
+      "value": "ui-shimmer 1.8s infinite linear",
+      "text": "animation: ui-shimmer 1.8s infinite linear",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "backdrop-filter",
+      "value": "blur(16px) saturate(160%)",
+      "text": "backdrop-filter: blur(16px) saturate(160%)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md)) saturate(160%)",
+      "text": "backdrop-filter: blur(var(--blur-md)) saturate(160%)",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "backdrop-filter",
+      "value": "blur(var(--blur-md)) saturate(160%)",
+      "text": "backdrop-filter: blur(var(--blur-md)) saturate(160%)",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|backdrop-filter",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "backdrop-filter",
+      "value": "none !important",
+      "text": "backdrop-filter: none !important",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|filter",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "filter",
+      "value": "brightness(1.08)",
+      "text": "filter: brightness(1.08)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|transition",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "transition",
+      "value": "background-color 0.25s ease, color 0.25s ease,",
+      "text": "transition: background-color 0.25s ease, color 0.25s ease,",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|transition",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "transition",
+      "value": "none !important",
+      "text": "transition: none !important",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|transition",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "transition",
+      "value": "transform 0.22s var(--spring), box-shadow 0.25s ease,",
+      "text": "transition: transform 0.22s var(--spring), box-shadow 0.25s ease,",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|transition",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "transition",
+      "value": "transform 0.22s var(--spring-bouncy), box-shadow 0.2s ease",
+      "text": "transition: transform 0.22s var(--spring-bouncy), box-shadow 0.2s ease",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|transition",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "transition",
+      "value": "transform 0.2s var(--spring-bouncy), filter 0.2s ease, box-shadow 0.2s ease",
+      "text": "transition: transform 0.2s var(--spring-bouncy), filter 0.2s ease, box-shadow 0.2s ease",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/css/components/visual-polish.css|transition",
+      "file": "ui/web_new_v2/css/components/visual-polish.css",
+      "property": "transition",
+      "value": "transform 0.4s var(--spring)",
+      "text": "transition: transform 0.4s var(--spring)",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/css/tokens.css|--app-bg-opacity",
+      "file": "ui/web_new_v2/css/tokens.css",
+      "property": "--app-bg-opacity",
+      "value": "1",
+      "text": "--app-bg-opacity: 1",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/tokens.css|--blur-lg",
+      "file": "ui/web_new_v2/css/tokens.css",
+      "property": "--blur-lg",
+      "value": "calc(var(--glass-blur) * 1.5)",
+      "text": "--blur-lg: calc(var(--glass-blur) * 1.5)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/tokens.css|--blur-md",
+      "file": "ui/web_new_v2/css/tokens.css",
+      "property": "--blur-md",
+      "value": "var(--glass-blur)",
+      "text": "--blur-md: var(--glass-blur)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/tokens.css|--blur-sm",
+      "file": "ui/web_new_v2/css/tokens.css",
+      "property": "--blur-sm",
+      "value": "calc(var(--glass-blur) * 0.75)",
+      "text": "--blur-sm: calc(var(--glass-blur) * 0.75)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/tokens.css|--blur-xl",
+      "file": "ui/web_new_v2/css/tokens.css",
+      "property": "--blur-xl",
+      "value": "calc(var(--glass-blur) * 2)",
+      "text": "--blur-xl: calc(var(--glass-blur) * 2)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/tokens.css|--glass-blur",
+      "file": "ui/web_new_v2/css/tokens.css",
+      "property": "--glass-blur",
+      "value": "8px",
+      "text": "--glass-blur: 8px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/tokens.css|--player-glow-blur",
+      "file": "ui/web_new_v2/css/tokens.css",
+      "property": "--player-glow-blur",
+      "value": "40px",
+      "text": "--player-glow-blur: 40px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/tokens.css|--player-glow-opacity",
+      "file": "ui/web_new_v2/css/tokens.css",
+      "property": "--player-glow-opacity",
+      "value": "0.55",
+      "text": "--player-glow-opacity: 0.55",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/tokens.css|animation",
+      "file": "ui/web_new_v2/css/tokens.css",
+      "property": "animation",
+      "value": "ui-dropdown-enter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "text": "animation: ui-dropdown-enter 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/css/tokens.css|animation",
+      "file": "ui/web_new_v2/css/tokens.css",
+      "property": "animation",
+      "value": "ui-shimmer 1.8s infinite linear",
+      "text": "animation: ui-shimmer 1.8s infinite linear",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/index.html|backdrop-filter",
+      "file": "ui/web_new_v2/index.html",
+      "property": "backdrop-filter",
+      "value": "blur(12px); background: rgba(0,0,0,0.65)",
+      "text": "backdrop-filter: blur(12px); background: rgba(0,0,0,0.65)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/index.html|transition",
+      "file": "ui/web_new_v2/index.html",
+      "property": "transition",
+      "value": "background 0.2s",
+      "text": "transition: background 0.2s",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/index.html|transition",
+      "file": "ui/web_new_v2/index.html",
+      "property": "transition",
+      "value": "width 0.2s ease",
+      "text": "transition: width 0.2s ease",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/js/artist_profile.js|transition",
+      "file": "ui/web_new_v2/js/artist_profile.js",
+      "property": "transition",
+      "value": "all 0.2s ease",
+      "text": "transition: all 0.2s ease",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/js/artist_profile.js|transition",
+      "file": "ui/web_new_v2/js/artist_profile.js",
+      "property": "transition",
+      "value": "transform 0.15s, opacity 0.15s; pointer-events:auto",
+      "text": "transition: transform 0.15s, opacity 0.15s; pointer-events:auto",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/js/artist_profile.js|transition",
+      "file": "ui/web_new_v2/js/artist_profile.js",
+      "property": "transition",
+      "value": "transform 0.15s, opacity 0.15s; pointer-events:auto",
+      "text": "transition: transform 0.15s, opacity 0.15s; pointer-events:auto",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/js/library.js|transition",
+      "file": "ui/web_new_v2/js/library.js",
+      "property": "transition",
+      "value": "background 0.3s",
+      "text": "transition: background 0.3s",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/js/library.js|transition",
+      "file": "ui/web_new_v2/js/library.js",
+      "property": "transition",
+      "value": "box-shadow 0.15s",
+      "text": "transition: box-shadow 0.15s",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/js/library.js|transition",
+      "file": "ui/web_new_v2/js/library.js",
+      "property": "transition",
+      "value": "none",
+      "text": "transition: none",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/js/library.js|transition",
+      "file": "ui/web_new_v2/js/library.js",
+      "property": "transition",
+      "value": "none",
+      "text": "transition: none",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/js/library.js|transition",
+      "file": "ui/web_new_v2/js/library.js",
+      "property": "transition",
+      "value": "none",
+      "text": "transition: none",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/js/library.js|transition",
+      "file": "ui/web_new_v2/js/library.js",
+      "property": "transition",
+      "value": "opacity 0.18s",
+      "text": "transition: opacity 0.18s",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/js/library.js|transition",
+      "file": "ui/web_new_v2/js/library.js",
+      "property": "transition",
+      "value": "opacity 0.22s ease, transform 0.22s ease",
+      "text": "transition: opacity 0.22s ease, transform 0.22s ease",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new_v2/js/library.js|transition",
+      "file": "ui/web_new_v2/js/library.js",
+      "property": "transition",
+      "value": "top 0.18s cubic-bezier(0.16,1,0.3,1), left 0.18s cubic-bezier(0.16,1,0.3,1), transform 0.18s, opacity 0.18s",
+      "text": "transition: top 0.18s cubic-bezier(0.16,1,0.3,1), left 0.18s cubic-bezier(0.16,1,0.3,1), transform 0.18s, opacity 0.18s",
+      "occurrence": 7
+    },
+    {
+      "key": "ui/web_new_v2/js/library.js|transition",
+      "file": "ui/web_new_v2/js/library.js",
+      "property": "transition",
+      "value": "transform 0.18s ease, opacity 0.18s ease",
+      "text": "transition: transform 0.18s ease, opacity 0.18s ease",
+      "occurrence": 8
+    },
+    {
+      "key": "ui/web_new_v2/js/library.js|transition",
+      "file": "ui/web_new_v2/js/library.js",
+      "property": "transition",
+      "value": "transform 0.22s cubic-bezier(0.16,1,0.3,1), opacity 0.22s ease",
+      "text": "transition: transform 0.22s cubic-bezier(0.16,1,0.3,1), opacity 0.22s ease",
+      "occurrence": 9
+    },
+    {
+      "key": "ui/web_new_v2/js/library.js|transition",
+      "file": "ui/web_new_v2/js/library.js",
+      "property": "transition",
+      "value": "transform 0.25s ease, opacity 0.25s ease, max-height 0.3s ease",
+      "text": "transition: transform 0.25s ease, opacity 0.25s ease, max-height 0.3s ease",
+      "occurrence": 10
+    },
+    {
+      "key": "ui/web_new_v2/js/player.js|filter",
+      "file": "ui/web_new_v2/js/player.js",
+      "property": "filter",
+      "value": "blur(var(--player-glow-blur)) brightness(0.35) saturate(1.3)",
+      "text": "filter: blur(var(--player-glow-blur)) brightness(0.35) saturate(1.3)",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/js/player.js|transition",
+      "file": "ui/web_new_v2/js/player.js",
+      "property": "transition",
+      "value": "opacity 0.5s ease-in-out",
+      "text": "transition: opacity 0.5s ease-in-out",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|animation",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "animation",
+      "value": "fadeIn 0.25s ease; padding:20px",
+      "text": "animation: fadeIn 0.25s ease; padding:20px",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|animation",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "animation",
+      "value": "fadeIn 0.25s ease; padding:20px",
+      "text": "animation: fadeIn 0.25s ease; padding:20px",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|animation",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "animation",
+      "value": "fadeIn 0.3s ease",
+      "text": "animation: fadeIn 0.3s ease",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|animation",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "animation",
+      "value": "fadeIn 0.3s ease",
+      "text": "animation: fadeIn 0.3s ease",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|animation",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "animation",
+      "value": "fadeIn 0.3s ease",
+      "text": "animation: fadeIn 0.3s ease",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|animation",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "animation",
+      "value": "fadeIn 0.3s ease",
+      "text": "animation: fadeIn 0.3s ease",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|transition",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "transition",
+      "value": "opacity 0.2s; z-index:3",
+      "text": "transition: opacity 0.2s; z-index:3",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|transition",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "transition",
+      "value": "opacity 0.2s; z-index:3",
+      "text": "transition: opacity 0.2s; z-index:3",
+      "occurrence": 1
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|transition",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "transition",
+      "value": "transform 0.2s",
+      "text": "transition: transform 0.2s",
+      "occurrence": 2
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|transition",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "transition",
+      "value": "transform 0.2s",
+      "text": "transition: transform 0.2s",
+      "occurrence": 3
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|transition",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "transition",
+      "value": "transform 0.2s, background 0.2s",
+      "text": "transition: transform 0.2s, background 0.2s",
+      "occurrence": 4
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|transition",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "transition",
+      "value": "transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative",
+      "text": "transition: transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative",
+      "occurrence": 5
+    },
+    {
+      "key": "ui/web_new_v2/js/search.js|transition",
+      "file": "ui/web_new_v2/js/search.js",
+      "property": "transition",
+      "value": "transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative",
+      "text": "transition: transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative",
+      "occurrence": 6
+    },
+    {
+      "key": "ui/web_new_v2/js/settings.js|filter",
+      "file": "ui/web_new_v2/js/settings.js",
+      "property": "filter",
+      "value": "drop-shadow(0 0 10px ${pack.color})",
+      "text": "filter: drop-shadow(0 0 10px ${pack.color})",
+      "occurrence": 0
+    },
+    {
+      "key": "ui/web_new_v2/js/utils.js|animationdelay",
+      "file": "ui/web_new_v2/js/utils.js",
+      "property": "animationdelay",
+      "value": "`${Math.min(index * 0.03, 0.5)}s`",
+      "text": "animationdelay: `${Math.min(index * 0.03, 0.5)}s`",
+      "occurrence": 0
+    }
+  ]
+}

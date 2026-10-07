@@ -1,37 +1,43 @@
-# AURA Music - Development Guidelines & Rules
+# NeDotify (AURA Music) — agent rules
 
-## Project Overview
-AURA Music is a desktop music streaming and downloading application.
-- **Backend**: Python 3.14, SQLite, HTTP Proxy server, ThreadPoolExecutor, pywebview API Bridge.
-- **Frontend**: HTML5, Vanilla JavaScript, CSS (inside `ui/web_new/`), communicating with Python via pywebview JS bridge.
-- **Search & Streaming Providers**: YouTube, SoundCloud, Spotify (metadata), Yandex Music.
-- **Packaging**: PyInstaller, Inno Setup (`installer.iss`), Nuitka.
-- **Testing**: Pytest, opaque-box E2E test suites in `tests/`, `run_tests.py`.
+Windows desktop music app: Python 3.14 + pywebview (embedded WebView) + a loopback
+HTTP proxy + Vanilla JS. No build step, no bundler, no framework. The default UI
+is `ui/web_new_v2/`; `ui/web_new/` is legacy v1 behind `--ui-v1`, so edits there
+ship nothing.
 
----
+**Interpreter for every command:** `& ".venv_win\Scripts\python.exe"`. Bare
+`python` lacks pywebview/yt-dlp.
 
-## Coding Rules & Best Practices
+## The failure mode here is silence
 
-### 1. Python Backend & Concurrency
-- **Thread Safety**: All shared resources (such as `BaseMusicService._search_cache`) must be protected by threading `Lock()`.
-- **Windows Socket Handling**: In `core/proxy.py` and network streaming endpoints, catch Windows-specific socket disconnects (`WinError 10053`, `BrokenPipeError`, `ConnectionResetError`) gracefully during `wfile.write()` without raising 500 errors or crashing.
-- **Async & Thread Pools**: Keep long-running operations (database searches, audio downloads, provider scraping) off the main UI thread using `ThreadPoolExecutor`.
-- **Path Sanitization**: Always sanitize Cyrillic and forbidden Windows characters (`\ / : * ? " < > |`) when saving cached streams or downloaded music files (`utils/path_utils.py`).
+A renamed event, a hotkey id present on one side of the bridge only, an
+unserialisable `_emit` payload — each disappears without a traceback. When a
+change crosses one of those boundaries, run the named test. Do not read the diff
+and conclude.
 
-### 2. Frontend & pywebview Bridge
-- **Dual HTML5 Audio & Teardown**: In `player.js`, clear `audio.src = ""` and remove event listeners during crossfade/stop to prevent lingering background audio connections or socket leaks in WebView.
-- **Bridge Calls**: Call `window.pywebview.api.*` defensively with proper error handling and fallback UI states (loaders, toasts).
-- **DOM & UI**: Keep frontend pure Vanilla JavaScript and clean CSS without heavy third-party UI dependencies.
+- `CODING_STANDARDS.md` — read **before** editing the pywebview bridge, the
+  proxy's socket handling, a download filename, or either keybind table.
+- `.claude/skills/aura-test` — running the suite, the `network` marker, what counts
+  as done.
+- `.claude/skills/aura-run` — launching the app, the WebView2 pin, logs, shutdown.
+- `.claude/skills/aura-build` — installer, `sys._MEIPASS`, `datas`, hidden imports.
+- `STATUS.md` — what the code actually does. `docs/AUDIT.md` — what the
+  2026-10-03 audit changed.
 
-### 3. Database Integrity (SQLite)
-- **WAL Mode**: Use Write-Ahead Logging (`PRAGMA journal_mode=WAL`) for concurrent reading and writing.
-- **Integrity**: When updating `tracks` table with `is_downloaded = 1` and `file_path`, preserve original `source` provider and metadata.
-- **Transactions**: Always use parameterized queries and safe context managers (`with conn:`) to prevent database lockups.
+## Three rules that outlive the details
 
-### 4. Testing Protocols
-- Run tests via `pytest` or `python run_tests.py`.
-- Mock external network calls (YouTube, SoundCloud, Spotify, Yandex) in unit tests to ensure fast and reliable execution.
-- Maintain test coverage for Tiers 1–4 across Playback, Downloader, and Search modules.
+- **`_emit` never runs on the UI thread.** pywebview's WinForms backend marshals
+  `evaluate_js` through `Control.Invoke`, so the UI thread waits on itself and the
+  whole window freezes. `AppApi._emit` detects this and hands off to an
+  `EmitWorker` thread. Keep that branch — `tests/test_emit_thread_safety.py`
+  pins it.
+- **A new shared field joins its class's existing lock** rather than opening a
+  second one. `BaseMusicService` guards `_search_cache` / `_stream_cache` with the
+  class-level `_cache_lock`; `StreamResolver` guards `_mem` / `._inflight` with
+  `self._lock`. The rule is not statically checkable — it is a statement of
+  intent, so it stays in prose.
+- **`~/.nedotify/` is the user's library** — downloads, the SQLite database, the
+  logs. Clearing it is not a cleanup step. Ask first.
 
-### 5. Packaging & Resource Paths
-- When loading static assets (icons, HTML, JS, templates), resolve paths dynamically using `sys._MEIPASS` when frozen (PyInstaller) and `os.path.dirname(__file__)` during development.
+When a doc and the code disagree, the code wins. If a rule cannot be verified at
+a call site, delete it rather than passing it on.

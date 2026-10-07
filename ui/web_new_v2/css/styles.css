@@ -1,13 +1,60 @@
 /* ==========================================================================
-   NeDotify v2 — Modular CSS Architecture Index
-   Original monolithic stylesheet has been partitioned into isolated components.
-   Backup of original monolithic file preserved at: css/styles.old.css
+   NeDotify v2 — CSS Architecture Reference
+
+   ── THIS FILE IS NOT LOADED BY THE APP. ────────────────────────────────────
+   index.html does not link it, and nothing else does either. It is a written
+   record of how the stylesheets are split and of the order they are meant to
+   be read in — a map for humans and for tooling, nothing more. Edit it
+   freely; no pixel depends on it.
+
+   DO NOT LINK IT FROM index.html.
+   Every file in the @import list below is *already* linked individually by
+   index.html. Adding this file on top would fetch the same ~194 KB of CSS a
+   second time and, worse, re-apply every rule in it after themes.css — so the
+   cascade would no longer end with the theme overrides. The individual <link>
+   tags are the single source of truth.
+
+   AUTHORITATIVE LOAD ORDER
+   Whatever index.html lists, and only that. It currently reads:
+
+     1. css/fonts.css                   self-hosted @font-face manifest
+     2. css/tokens.css                  design tokens (colour, space, radius)
+     3. css/components/base.css         reset, layout, modals, menus, toasts
+     4. css/components/player-bar.css
+     5. css/components/player-view.css
+     6. css/components/lyrics.css
+     7. css/components/home-view.css
+     8. css/components/track-table.css
+     9. css/themes.css                  theme overrides — MUST stay last
+
+   In short: tokens -> components -> themes. fonts.css sits ahead of all of
+   them because @font-face has to exist before anything asks for the family.
+
+   ON components/visual-polish.css
+   It is listed at the end below to keep the architecture documented, but
+   index.html does NOT link it, so in the shipped app it is currently dead.
+   The @import is kept on purpose: the file is additive override CSS that is
+   designed to be switched on, and removing the line here would erase the only
+   remaining record that the pack exists. Whether it is actually loaded is
+   decided by index.html, not by this file.
+
+   Note for tooling: tools/bench/css_inventory.py treats this file as the
+   entrypoint — it parses styles.css, and hard-codes an IMPORT_ORDER list that
+   mirrors the @import chain below. That order is therefore a good description
+   of intent, but it is *not* what the browser executes — the browser never
+   sees this file.
+
+   The original monolithic stylesheet that these were split out of is not kept
+   in this directory; there is no css/styles.old.css here. Its history lives in
+   version control.
    ========================================================================== */
 
 @import "tokens.css";
 @import "components/base.css";
 @import "components/player-bar.css";
+@import "components/player-view.css";
 @import "components/lyrics.css";
 @import "components/home-view.css";
 @import "components/track-table.css";
 @import "themes.css";
+@import "components/visual-polish.css";

@@ -5,33 +5,61 @@
 
 :root {
     /* ----------------------------------------------------------------------
-       1. Core Color Palette: Theme-Adaptive System (Defaults: Cyber Blossom)
+       1. Semantic Colour Layer: Theme-Adaptive System (Cyber Blossom)
+
+       OWNERSHIP - this file owns the SEMANTIC layer, themes.css owns the RAW
+       PALETTE. Raw palette (declared by the `:root` block of themes.css, and
+       overridden per `[data-theme]`): --primary, --primary-rgb, --primary-fg,
+       --accent, --accent-glow, --border-glow, --ambient-glow, --bg-main,
+       --bg-surface, --text-main, --text-sec, --text-dim, --border,
+       --bg-panel, --bg-card, --bg-hover, --bg-active, --shadow-color.
+
+       Consequence of that split: every name below is declared EXACTLY ONCE in
+       the whole stylesheet set. The two files used to re-declare 22 of these
+       names, so which value won depended on which <link> came last in
+       index.html - correctness was an accident of the link order. Because
+       var() is resolved after the cascade, the order is now irrelevant: a
+       theme that sets `--accent` and derives `--primary` from it (every
+       non-dark preset does) is picked up automatically.
+
+       The references below therefore carry NO `var(--x, fallback)` guard: a
+       fallback would only mask a genuinely missing palette entry, and it is
+       what made the old file pair resolve differently depending on load
+       order. The one exception is --border-glow, which really is optional -
+       themes.css declares it per theme but not in `:root`, so the bare
+       `:root` (and the light theme) legitimately need the fallback.
        ---------------------------------------------------------------------- */
-    --color-bg-base: var(--bg-main, #0e0711);                 /* Velvet Obsidian */
-    --color-surface: var(--bg-card, rgba(255, 255, 255, 0.035)); /* Smoky Glass Surface */
-    --color-surface-hover: rgba(var(--color-primary-rgb, 244, 63, 94), 0.08);
-    --color-surface-active: rgba(var(--color-primary-rgb, 244, 63, 94), 0.14);
+    --color-bg-base: var(--bg-main);                         /* Velvet Obsidian */
+    --color-surface: var(--bg-card);                         /* Smoky Glass Surface */
+    --color-surface-hover: rgba(var(--primary-rgb), 0.08);
+    --color-surface-active: rgba(var(--primary-rgb), 0.14);
     
-    --color-primary: var(--primary, #f43f5e);                /* Active Theme Accent */
-    --color-primary-rgb: var(--primary-rgb, 244, 63, 94);
-    --color-primary-fg: var(--primary-fg, #ffffff);
-    --color-primary-glow: var(--accent-glow, rgba(var(--color-primary-rgb, 244, 63, 94), 0.35));
+    --color-primary: var(--primary);                         /* Active Theme Accent */
+    --color-primary-rgb: var(--primary-rgb);
+    --color-primary-fg: var(--primary-fg);
+    --color-primary-glow: var(--accent-glow);
     
     --color-accent-amber: #fb923c;           /* Sunset Amber / Vinyl Accent */
     --color-accent-amber-rgb: 251, 146, 60;
     --color-accent-cyan: #06b6d4;            /* Neon Flow / Secondary */
     
-    --color-text-main: var(--text-main, #fff5f7);              /* Warm Pearl */
-    --color-text-muted: var(--text-sec, rgba(255, 245, 247, 0.65)); /* Berry Slate */
-    --color-text-dim: var(--text-dim, rgba(255, 245, 247, 0.40));
+    --color-text-main: var(--text-main);                     /* Warm Pearl */
+    --color-text-muted: var(--text-sec);                     /* Berry Slate */
+    --color-text-dim: var(--text-dim);
     
-    --color-border: var(--border-glow, rgba(var(--color-primary-rgb, 244, 63, 94), 0.15));
-    --color-border-hover: rgba(var(--color-primary-rgb, 244, 63, 94), 0.30);
-    --color-border-glow: rgba(var(--color-primary-rgb, 244, 63, 94), 0.45);
+    --color-border: var(--border-glow, rgba(var(--primary-rgb), 0.15));
+    --color-border-hover: rgba(var(--primary-rgb), 0.30);
+    --color-border-glow: rgba(var(--primary-rgb), 0.45);
     
-    --color-success: #10b981;
-    --color-warning: #f59e0b;
-    --color-danger: #ef4444;                 /* Crimson Alert */
+    /* Derived from the raw palette rather than hard-coded. Every dark theme
+       resolves these to the exact same literals as before (--error is #ef4444
+       and --success is #10b981 in all of them), but they now follow the theme:
+       the light palette carries the darker 700-step values it needs for AA. */
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-danger: var(--error);          /* Crimson Alert */
+    /* Left literal on purpose: --shadow-color is rgba(0,0,0,0.6) while this
+       is 0.65, so aliasing it would change every dark theme's drop shadow. */
     --color-shadow: rgba(0, 0, 0, 0.65);
 
     /* ----------------------------------------------------------------------
@@ -84,22 +112,21 @@
 
     /* ----------------------------------------------------------------------
        6. Backward Compatibility Bridge Aliases
+
+       Only the two names that are pure re-exports of a token owned by the
+       other layer live here. `--background` / `--surface` were previously
+       duplicated inside themes.css as well; the per-theme blocks set
+       --bg-main / --bg-surface, and these two aliases track them, so the
+       literals the theme blocks used to repeat were pure redundancy.
+
+       Everything else that used to sit in this block (--bg-main,
+       --bg-surface, --bg-card, --bg-panel, --bg-hover, --bg-active,
+       --text-sec, --text-dim, --border, --shadow-color, --ambient-glow) is
+       raw palette and therefore declared by themes.css only. Re-declaring it
+       here is what used to make the result depend on stylesheet order.
        ---------------------------------------------------------------------- */
-    --bg-main: #0e0711;
-    --bg-surface: #170c16;
     --background: var(--color-bg-base);
-    --surface: var(--bg-surface, #170c16);
-    --bg-card: var(--color-surface);
-    --bg-panel: var(--color-surface);
-    --bg-hover: var(--color-surface-hover);
-    --bg-active: var(--color-surface-active);
-
-    --ambient-glow: var(--accent-glow, rgba(var(--color-primary-rgb, 244, 63, 94), 0.20));
-
-    --text-sec: var(--color-text-muted);
-    --text-dim: var(--color-text-dim);
-    --border: var(--color-border);
-    --shadow-color: var(--color-shadow);
+    --surface: var(--bg-surface);
 }
 
 /* --------------------------------------------------------------------------

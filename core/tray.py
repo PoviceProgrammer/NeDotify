@@ -1,5 +1,5 @@
 """
-NeDotify / AURA Music - Rich System Tray Context Menu
+NeDotify - Rich System Tray Context Menu
 Provides dynamic playback controls, track title display, and thread-safe pystray integration.
 """
 
@@ -39,9 +39,12 @@ class TrayIcon:
         ico_path = os.path.join(base, "icon.ico")
         if os.path.exists(ico_path):
             return ico_path
-        png_path = os.path.join(base, "ui", "web_new", "assets", "logo.png")
-        if os.path.exists(png_path):
-            return png_path
+        # web_new_v2 is the UI main.py loads by default (web_new only with --v1),
+        # so the tray icon must come from there; web_new is kept as a fallback.
+        for ui_dir in ("web_new_v2", "web_new"):
+            png_path = os.path.join(base, "ui", ui_dir, "assets", "logo.png")
+            if os.path.exists(png_path):
+                return png_path
         return ico_path
 
     def create_image(self):
@@ -118,7 +121,7 @@ class TrayIcon:
             is_fav = bool(self._current_track.get('is_favorite', False))
             fav_text = "💔 Удалить из любимых" if is_fav else "❤️ В любимые"
         else:
-            status_text = "AURA Music (Остановлено)"
+            status_text = "NeDotify (Остановлено)"
             fav_text = "❤️ В любимые"
 
         play_pause_label = "⏸ Пауза" if self._is_playing else "▶ Воспроизведение"
@@ -131,7 +134,7 @@ class TrayIcon:
             item("⏮ Предыдущий трек", self.on_prev),
             item(fav_text, self.on_toggle_favorite),
             Separator(),
-            item("🗔 Открыть AURA Music", self.on_show),
+            item("🗔 Открыть NeDotify", self.on_show),
             item("❌ Выход", self.on_exit)
         ]
         return Menu(*menu_items)
@@ -173,7 +176,7 @@ class TrayIcon:
                 if not img:
                     return
                 menu = self._build_menu()
-                self.icon = pystray.Icon("AURA Music", img, "AURA Music", menu)
+                self.icon = pystray.Icon("NeDotify", img, "NeDotify", menu)
                 self._is_running = True
                 self.icon.run()
             except Exception as e:

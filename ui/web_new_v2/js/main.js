@@ -7,7 +7,7 @@ import { initLibrary, loadLibrary, loadPlaylists, openPlaylistMenu, createPlayli
 import { initSettings, applySettingsFromBackend, loadSettings } from './settings.js';
 import { initParticles } from './particles.js';
 import { initVisualizer } from './visualizer.js';
-import { initEvents } from './events.js';
+import { initEvents, addPythonEventHandler } from './events.js';
 import { renderIcons, handleImageError, showTrackContextMenu, escapeHtml, checkLocalStorageQuota, showToast, initBatchActionBar } from './utils.js';
 import { initLyrics } from './lyrics.js';
 import { initEqualizer } from './equalizer.js';
@@ -17,11 +17,15 @@ import { initContextMenu } from './contextmenu.js';
 import { initHotkeys } from './hotkeys.js';
 import { initEfficiency, initBlurObserver } from './efficiency.js';
 
-// Bridge gate: resolves as soon as window.pywebview.api exists. Cold WebView2
+function isBridgeReady() {
+    return Boolean(window.pywebview?.api && typeof window.pywebview.api.get_settings === 'function');
+}
+
+// Bridge gate: resolves as soon as window.pywebview.api methods exist. Cold WebView2
 // starts can take ~16s to inject the bridge; callers await this instead of
 // exiting early, so the UI comes alive by itself on the FIRST load.
 window.awaitBridge = function awaitBridge() {
-    if (window.pywebview?.api) {
+    if (isBridgeReady()) {
         if (!window.PROXY_PORT && window.pywebview.api.get_proxy_info) {
             window.pywebview.api.get_proxy_info().then(info => {
                 if (info && info.port) {
@@ -33,19 +37,31 @@ window.awaitBridge = function awaitBridge() {
         return Promise.resolve();
     }
     return new Promise((resolve) => {
-        const check = () => {
-            if (window.pywebview?.api) {
-                if (!window.PROXY_PORT && window.pywebview.api.get_proxy_info) {
-                    window.pywebview.api.get_proxy_info().then(info => {
-                        if (info && info.port) {
-                            window.PROXY_PORT = info.port;
-                            window.PROXY_TOKEN = info.token || '';
-                        }
-                    }).catch(() => {});
-                }
-                return resolve();
+        let resolved = false;
+        const complete = () => {
+            if (resolved) return;
+            resolved = true;
+            window.removeEventListener('pywebviewready', complete);
+            if (!window.PROXY_PORT && window.pywebview.api?.get_proxy_info) {
+                window.pywebview.api.get_proxy_info().then(info => {
+                    if (info && info.port) {
+                        window.PROXY_PORT = info.port;
+                        window.PROXY_TOKEN = info.token || '';
+                    }
+                }).catch(() => {});
             }
-            setTimeout(check, 150);
+            resolve();
+        };
+
+        window.addEventListener('pywebviewready', complete, { once: true });
+        const check = () => {
+            if (isBridgeReady()) {
+                complete();
+                return;
+            }
+            if (!resolved) {
+                setTimeout(check, 100);
+            }
         };
         check();
     });
@@ -190,7 +206,7 @@ window.toggleMiniPlayerMode = toggleMiniPlayerMode;
             if (parsed) document.documentElement.style.setProperty('--primary', parsed);
         }
 
-        const transEnabled = JSON.parse(localStorage.getItem('nedotify_theme_transparency_enabled') ?? 'true');
+        const transEnabled = JSON.parse(localStorage.getItem('nedotify_theme_transparency_enabled') ?? 'false');
         const transLevel = JSON.parse(localStorage.getItem('nedotify_theme_transparency_level') ?? '80');
         const opacity = transEnabled ? (transLevel / 100) : 1.0;
         document.documentElement.style.setProperty('--app-bg-opacity', opacity);
@@ -309,16 +325,15 @@ window.toggleMiniPlayerMode = toggleMiniPlayerMode;
 function startAppInit() {
     if (window.awaitBridge) {
         window.awaitBridge().then(() => init()).catch(() => init());
-    } else if (window.pywebview?.api) {
+    } else if (isBridgeReady()) {
         init();
     }
 }
 
-if (window.pywebview?.api) {
+if (isBridgeReady()) {
     startAppInit();
 } else {
-    window.addEventListener('pywebviewready', () => startAppInit());
-    startAppInit();
+    window.addEventListener('pywebviewready', () => startAppInit(), { once: true });
 }
 
 // Fallback safety timeout: ensure init() runs even if bridge event was dropped
@@ -332,12 +347,12 @@ setTimeout(() => {
 // Bridge-dead last resort: count page loads that happened without a bridge
 // (the backend watchdog silently reloads twice), and only then show the error
 // overlay — after 45s of bridge absence on the 3rd load (initial + 2 reloads).
-if (!window.pywebview?.api) {
+if (!isBridgeReady()) {
     const strikes = parseInt(sessionStorage.getItem('nedotify_bridge_strikes') || '0', 10) + 1;
     sessionStorage.setItem('nedotify_bridge_strikes', String(strikes));
 }
 setTimeout(() => {
-    if (window.pywebview?.api) return;
+    if (isBridgeReady()) return;
     const strikes = parseInt(sessionStorage.getItem('nedotify_bridge_strikes') || '0', 10);
     if (strikes >= 3) {
         sessionStorage.removeItem('nedotify_bridge_strikes');
@@ -363,7 +378,7 @@ async function init() {
         }
 
         // 2. Fetch fresh settings asynchronously in background without blocking UI initialization
-        if (window.pywebview && window.pywebview.api) {
+        if (window.pywebview?.api?.get_settings) {
             window.pywebview.api.get_settings().then((freshSettings) => {
                 if (freshSettings) {
                     const freshStr = JSON.stringify(freshSettings);
@@ -501,12 +516,13 @@ async function init() {
                 }
             }
 
-            const _origOnPythonEvent = window.onPythonEvent;
-            window.onPythonEvent = function(eventName, data) {
-                if (_origOnPythonEvent) _origOnPythonEvent(eventName, data);
+            // P1-8: subscribe instead of decorating window.onPythonEvent. The registry in
+            // events.js lives for the whole page lifetime, so these two run whether
+            // or not initEvents() has already been reached.
+            addPythonEventHandler((eventName, data) => {
                 _lyricsTrackSync(eventName, data);
                 _handleNetworkEvent(eventName, data);
-            };
+            });
         } catch (err) {
             console.error('Lyrics sync setup failed:', err);
         }
@@ -647,9 +663,13 @@ async function loadProfile() {
             const container = document.getElementById('profile-top-tracks');
             if (container) {
                 container.innerHTML = '';
+                // One fragment insertion instead of one per row (search.js
+                // pattern): N appendChild calls invalidate layout N times.
+                const mostPlayedFragment = document.createDocumentFragment();
                 data.most_played.forEach((track, i) => {
-                    container.appendChild(createTrackElement(track, i, data.most_played, getCurrentTrack()));
+                    mostPlayedFragment.appendChild(createTrackElement(track, i, data.most_played, getCurrentTrack()));
                 });
+                container.appendChild(mostPlayedFragment);
                 if (typeof renderIcons === 'function') renderIcons();
             }
         }
@@ -659,9 +679,11 @@ async function loadProfile() {
             const container = document.getElementById('profile-recent');
             if (container) {
                 container.innerHTML = '';
+                const recentFragment = document.createDocumentFragment();
                 data.recently_played.slice(0, 10).forEach((track, i) => {
-                    container.appendChild(createTrackElement(track, i, data.recently_played, getCurrentTrack()));
+                    recentFragment.appendChild(createTrackElement(track, i, data.recently_played, getCurrentTrack()));
                 });
+                container.appendChild(recentFragment);
                 if (typeof renderIcons === 'function') renderIcons();
             }
         }
@@ -692,13 +714,11 @@ function setupProfileAndGreeting() {
     setInterval(updateGreeting, 5 * 60 * 1000);
 
     // Override the greeting when smart_home_ready replaces it
-    const origHomeReady = window.onPythonEvent;
-    window.onPythonEvent = function(eventName, data) {
-        if (origHomeReady) origHomeReady(eventName, data);
+    addPythonEventHandler((eventName) => {
         if (eventName === 'smart_home_ready' || eventName === 'authentic_home_ready') {
             updateGreeting(); // force it to our dynamic one instead of what backend says
         }
-    };
+    });
 
     // 2. Setup Profile UI
     const nicknameInput = document.getElementById('profile-name-input');
