@@ -1,0 +1,99 @@
+/* ==========================================================================
+   NeDotify v2 — Self-hosted webfonts (DM Sans + Sora)
+   Isolated from ui/web_new_v2/css/tokens.css so no design token changes.
+
+   WAS: <link> to https://fonts.googleapis.com/css2?family=DM+Sans...&family=Sora...
+   NOW: the identical WOFF2 cuts, downloaded once into
+        ui/web_new_v2/assets/fonts/ and shipped inside the app.
+
+   WHY: a desktop app has to render identically with the network unplugged.
+   The remote <link> made the appearance depend on DNS, a proxy or a firewall,
+   added an external request to every cold start, and forced the CSP to keep
+   fonts.googleapis.com + fonts.gstatic.com open forever.
+
+   CONTRACT: family names ('DM Sans', 'Sora'), weight ranges, styles and
+   unicode-range are copied verbatim from the Google Fonts CSS, so
+   --font-display / --font-body in tokens.css and --font-family in
+   components/base.css resolve to exactly the same faces as before. Nothing
+   else in the cascade changed.
+
+   The per-subset split with explicit unicode-range is kept on purpose: it is
+   what decides, character by character, which face paints a given codepoint,
+   and the browser only fetches a file when the document actually contains a
+   character inside that file's range. Dropping it would both over-fetch and
+   let a Latin face claim Cyrillic codepoints it does not contain.
+
+   KNOWN GAP — NOT AN OVERSIGHT:
+   Google serves DM Sans as latin + latin-ext only, and Sora as latin +
+   latin-ext only. Neither has a Cyrillic cut. This UI is Russian
+   (<html lang="ru">), so every Cyrillic glyph already fell through to the
+   next family in the stack ('Segoe UI' / system-ui) before this change and
+   still does; these two faces only ever paint Latin, which in practice means
+   artist / track / album names. Shipping a Cyrillic face would swap the
+   typeface under every Russian UI string, which is a design decision, not a
+   bundling fix. Do NOT "fix" it by adding one here without that decision.
+
+   Both families are variable fonts (each file carries an fvar table), so one
+   file per subset+style covers the whole requested weight axis. That is why
+   Sora has no separate 700 file: sora-latin-600-normal.woff2 serves 600 and
+   700, exactly as Google's own CSS asked for.
+   ========================================================================== */
+
+/* --- DM Sans — body (--font-body) ------------------------------------------ */
+@font-face {
+    font-family: 'DM Sans';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('../assets/fonts/dmsans-latin-ext-400-normal.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'DM Sans';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('../assets/fonts/dmsans-latin-400-normal.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* --- DM Sans — italic (the original request asked for ital 1:9..40 400..700,
+       so the real italic cuts are bundled rather than letting the browser
+       synthesise a slant from the roman file) ----------------------------- */
+@font-face {
+    font-family: 'DM Sans';
+    font-style: italic;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('../assets/fonts/dmsans-latin-ext-400-italic.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'DM Sans';
+    font-style: italic;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('../assets/fonts/dmsans-latin-400-italic.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* --- Sora — headings (--font-display), weights 600 + 700 ------------------ */
+@font-face {
+    font-family: 'Sora';
+    font-style: normal;
+    font-weight: 600 700;
+    font-display: swap;
+    src: url('../assets/fonts/sora-latin-ext-600-normal.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'Sora';
+    font-style: normal;
+    font-weight: 600 700;
+    font-display: swap;
+    src: url('../assets/fonts/sora-latin-600-normal.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

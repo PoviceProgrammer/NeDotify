@@ -1,5 +1,6 @@
 // NeDotify — Audio-Reactive Visualizer (GPU-Optimized)
 import { getIsPlaying, getVolume, getCurrentTrack, getAudioFrequencyData } from './player.js';
+import { sizeCanvasForDpr, registerCanvasDprListener } from './utils.js';
 
 let animFrameId = null;
 let bars = [];
@@ -65,10 +66,16 @@ let cachedPrimaryRgb = '255, 159, 28';
 let gradientCacheTime = 0;
 const GRADIENT_CACHE_DURATION = 5000;
 
+// cssW/cssH are the drawable size in CSS pixels; canvas.width/height are the
+// device-pixel backing store (cssW * devicePixelRatio). Every draw*() below
+// works in CSS pixels through the context's dpr scale, so no geometry, colour,
+// gradient or line width changes - only the resolution bookkeeping.
 const targets = [
-    { id: 'visualizer-canvas', canvas: null, ctx: null, primary: true },
-    { id: 'home-visualizer-canvas', canvas: null, ctx: null, primary: false }
+    { id: 'visualizer-canvas', canvas: null, ctx: null, primary: true, cssW: 0, cssH: 0 },
+    { id: 'home-visualizer-canvas', canvas: null, ctx: null, primary: false, cssW: 0, cssH: 0 }
 ];
+
+let unsubscribeDpr = null;
 
 let documentVisible = !document.hidden;
 document.addEventListener('visibilitychange', () => {
@@ -108,13 +115,22 @@ export function initVisualizer() {
     const resizeCanvas = () => {
         targets.forEach(t => {
             if (t.canvas && t.canvas.parentElement) {
-                t.canvas.width = t.canvas.parentElement.offsetWidth || 380;
-                t.canvas.height = t.canvas.parentElement.offsetHeight || 380;
+                const sized = sizeCanvasForDpr(
+                    t.canvas, t.ctx,
+                    t.canvas.parentElement.offsetWidth || 380,
+                    t.canvas.parentElement.offsetHeight || 380
+                );
+                t.cssW = sized.cssW;
+                t.cssH = sized.cssH;
             }
         });
     };
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
+    // Dragging the window between a 100% and a 150% monitor changes
+    // devicePixelRatio without firing resize, so re-run the same bookkeeping.
+    if (unsubscribeDpr) unsubscribeDpr();
+    unsubscribeDpr = registerCanvasDprListener(resizeCanvas);
 
     bars = [];
     for (let i = 0; i < BAR_COUNT; i++) {
@@ -305,8 +321,11 @@ function draw(timestamp) {
         if (parentPage && !parentPage.classList.contains('active')) return;
 
         const ctx = target.ctx;
-        const w = target.canvas.width;
-        const h = target.canvas.height;
+        // Draw in CSS pixels. The `|| canvas.width` fallback only kicks in for a
+        // canvas that never got a parentElement at init, where the old code
+        // used the backing store directly - identical at devicePixelRatio 1.
+        const w = target.cssW || target.canvas.width;
+        const h = target.cssH || target.canvas.height;
         ctx.clearRect(0, 0, w, h);
 
         const data = new Array(BAR_COUNT);

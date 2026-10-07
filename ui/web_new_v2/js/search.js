@@ -1,5 +1,5 @@
 // NeDotify — Search Module Redesign
-import { createTrackElement, renderIcons, filterVisibleTracks, escapeHtml, getCoverFallbackGradient } from './utils.js';
+import { createTrackElement, renderIcons, filterVisibleTracks, escapeHtml, getCoverFallbackGradient, openModalFocusTrap, closeModalFocusTrap } from './utils.js';
 import { getCurrentTrack } from './player.js';
 import { 
     loadArtistProfile, 
@@ -205,6 +205,10 @@ export function searchArtistProfile(artistName) {
     // Dismiss any open modal overlay immediately so search/profile is visible
     document.querySelectorAll('.modal-overlay, #album-modal-container, #playlist-modal-container').forEach(m => {
         m.style.display = 'none';
+        // These overlays are hidden behind our back, so their traps have to go
+        // with them - otherwise the next Tab would be dragged into a closed
+        // dialog.
+        closeModalFocusTrap(m);
     });
 
     isViewingArtistProfile = true;
@@ -595,6 +599,16 @@ export async function playAlbum(album, cardElement = null) {
     }
 }
 
+// The two detail overlays below hide themselves from three different paths
+// (backdrop click, the X button, and "play everything"). Routing all of them
+// through one place is what keeps visibility and the focus trap in step - a
+// modal that is display:none but still trapped would swallow every Tab.
+function hideDetailModal(modal) {
+    if (!modal) return;
+    modal.style.display = 'none';
+    closeModalFocusTrap(modal);
+}
+
 export async function openAlbumModal(album) {
     let modal = document.getElementById('album-detail-modal');
     if (!modal) {
@@ -602,7 +616,7 @@ export async function openAlbumModal(album) {
         modal.id = 'album-detail-modal';
         modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:9999; display:flex; align-items:center; justify-content:center; animation:fadeIn 0.25s ease; padding:20px;';
         modal.addEventListener('click', (e) => {
-            if (e.target === modal) modal.style.display = 'none';
+            if (e.target === modal) hideDetailModal(modal);
         });
         document.body.appendChild(modal);
     }
@@ -635,8 +649,13 @@ export async function openAlbumModal(album) {
     `;
     renderIcons();
 
+    // Initial focus: this overlay is a read-only detail view, so its X button
+    // is the only sensible landing spot. Armed after innerHTML is written,
+    // because that is when the close button exists.
+    openModalFocusTrap(modal, { initialFocus: '#close-album-modal' });
+
     document.getElementById('close-album-modal')?.addEventListener('click', () => {
-        modal.style.display = 'none';
+        hideDetailModal(modal);
     }, { once: true });
 
     let albumTracks = [];
@@ -665,7 +684,7 @@ export async function openAlbumModal(album) {
     document.getElementById('btn-play-full-album')?.addEventListener('click', () => {
         if (albumTracks.length > 0 && window.pywebview?.api?.play_track) {
             window.pywebview.api.play_track(albumTracks[0], albumTracks, 0);
-            modal.style.display = 'none';
+            hideDetailModal(modal);
         }
     }, { once: true });
 }
@@ -793,7 +812,7 @@ export async function openPlaylistModal(playlist) {
         modal.id = 'playlist-detail-modal';
         modal.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px); z-index:9999; display:flex; align-items:center; justify-content:center; animation:fadeIn 0.25s ease; padding:20px;';
         modal.addEventListener('click', (e) => {
-            if (e.target === modal) modal.style.display = 'none';
+            if (e.target === modal) hideDetailModal(modal);
         });
         document.body.appendChild(modal);
     }
@@ -826,8 +845,11 @@ export async function openPlaylistModal(playlist) {
     `;
     renderIcons();
 
+    // Initial focus: read-only detail view, so the X button.
+    openModalFocusTrap(modal, { initialFocus: '#close-playlist-modal' });
+
     document.getElementById('close-playlist-modal')?.addEventListener('click', () => {
-        modal.style.display = 'none';
+        hideDetailModal(modal);
     }, { once: true });
 
     let playlistTracks = [];
@@ -863,7 +885,7 @@ export async function openPlaylistModal(playlist) {
             } else if (window.NeDotify?.playTrack) {
                 window.NeDotify.playTrack(playlistTracks[0], playlistTracks);
             }
-            modal.style.display = 'none';
+            hideDetailModal(modal);
         }
     }, { once: true });
 }

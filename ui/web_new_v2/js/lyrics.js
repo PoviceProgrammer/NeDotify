@@ -191,6 +191,11 @@ export function initLyrics() {
 
     initMiniLyricsWidget();
 
+    // Focal-point geometry is derived from the measured viewport, so both the
+    // resize path and the webfont swap have to re-anchor the sheet.
+    bindKineticResize();
+    bindFontsReady();
+
     if (closeBtn) {
         closeBtn.addEventListener('click', () => {
             if (overlay) {
@@ -280,6 +285,68 @@ export function initLyrics() {
     });
 }
 
+// ==========================================================================
+// KINETIC TRANSFORM ENGINE (Apple Music style)
+// ==========================================================================
+//
+// The sheet is positioned by a single translateY() on the track instead of
+// native scrolling. Native scrolling was the source of the stepped, discrete
+// motion: every line change ran scrollTo(..., 'smooth'), which Chromium
+// restarts from scratch, so lines visibly snapped line-to-line. One transform
+// written once per index change, animated by one springy CSS transition, is
+// continuous and costs the compositor nothing.
+//
+// Geometry contract:
+//   viewport  clips (overflow:hidden) and supplies the focal line at 45% height
+//   track     position:relative, so line.offsetTop is already track-local
+//   track pad top    = 45% of viewport height  -> line 1 can reach the focal line
+//   track pad bottom = 55% of viewport height  -> the last line can too
+// ==========================================================================
+
+// Where the active line's centre sits, as a fraction of viewport height.
+// 0.45 rather than a dead 0.5: the active line is optically centred but the
+// small remainder below it keeps the next lines in frame, so the sheet does not
+// look like it is sitting low in an empty box.
+const LYRICS_FOCAL_RATIO = 0.45;
+
+// Past-the-edge damping. 1.0 tracks the pointer exactly (a hard stop at the
+// padding limit reads as a broken scroller); 0.35 gives the elastic give.
+const RUBBER_BAND_FACTOR = 0.35;
+
+// Wheel deltas arrive in lines on some WebView2/Chromium configurations.
+const LINE_HEIGHT_PX = 16;
+
+// Auto-follow stays suspended this long after the user's last wheel/drag, so
+// browsing the sheet is not fought by the karaoke follow.
+const MANUAL_SCROLL_PAUSE_MS = 4000;
+
+// Module-level: a single "user is browsing" clock shared by both sheets. Only
+// one sheet is ever visible, so per-container bookkeeping here would just add
+// state that has to be kept in sync.
+let lastManualScrollAt = 0;
+let followResumeTimer = null;
+let kineticResizeObserver = null;
+let kineticListenersBound = false;
+
+/**
+ * True only while the user is actively browsing the sheet.
+ *
+ * The `lastManualScrollAt !== 0` guard is load-bearing, not defensive: 0 is the
+ * "never browsed" sentinel and performance.now() starts near 0 on page load, so
+ * `now - 0` is a *small* number. Testing the difference alone would report
+ * "browsing" for the first MANUAL_SCROLL_PAUSE_MS of the app's life, and the
+ * karaoke follow would silently never run.
+ */
+function isManualBrowsing() {
+    return lastManualScrollAt !== 0 &&
+           (performance.now() - lastManualScrollAt) < MANUAL_SCROLL_PAUSE_MS;
+}
+
+/**
+ * The scrolling sheet elements. Kept as one call site so both the panel and
+ * the overlay stay in lockstep.
+ * @returns {HTMLElement[]} the `.lyrics-track` nodes.
+ */
 function getContainers() {
     return [
         document.getElementById('lyrics-content'),
@@ -287,25 +354,379 @@ function getContainers() {
     ].filter(Boolean);
 }
 
+function resolveViewport(track) {
+    const parent = track.parentElement;
+    if (parent && parent.classList.contains('lyrics-viewport')) return parent;
+    return track.closest('.player-lyrics-container, .lyrics-scroll-container') || parent || track;
+}
+
+/**
+ * Per-sheet kinematic state. Attached to the DOM node rather than kept in a
+ * module variable because there are two independent sheets (panel + overlay)
+ * with their own measurements, offsets and interaction state.
+ */
+function ensureKineticState(track) {
+    let st = track._kinetic;
+    if (st) return st;
+    st = track._kinetic = {
+        track,
+        viewport: resolveViewport(track),
+        lines: [],
+        activeEl: null,
+        lastIndex: -1,
+        manual: 0,       // extra px the user dragged/wheeled past the focal line
+        base: 0,         // transform for the focal line, negative
+        applied: '',     // last transform string written, to skip no-op writes
+        vpH: 0,
+        trackH: 0,
+        minY: 0,         // most negative allowed translateY (bottom of the sheet)
+        measured: false,
+        dirty: true,     // line cache must be rebuilt (sheet was re-rendered)
+        dragging: false,
+        pointerId: null,
+        dragStartY: 0,
+        dragStartManual: 0,
+        moved: false
+    };
+    bindKineticInput(st);
+    return st;
+}
+
+/**
+ * Re-measure and rebuild the line cache. Called after every re-render, since
+ * renderLyrics() replaces the sheet's children wholesale.
+ */
+function refreshKineticState(track) {
+    const st = ensureKineticState(track);
+    st.lines = Array.prototype.slice.call(track.querySelectorAll('.lyric-line'));
+    st.dirty = false;
+    return st;
+}
+
+/**
+ * Apply the focal-space padding and the scroll bounds.
+ *
+ * The padding is written in px rather than left to the CSS defaults because a
+ * percentage padding resolves against the box *width*, not its height — a
+ * 35%-of-viewport focal space cannot be expressed in CSS.
+ * @returns {boolean} false when the sheet is not laid out (hidden panel).
+ */
+function measureViewport(st) {
+    const vpH = st.viewport.clientHeight;
+    if (!vpH) return false;               // hidden panel: nothing meaningful to measure
+    st.vpH = vpH;
+    st.track.style.paddingTop = Math.round(vpH * LYRICS_FOCAL_RATIO) + 'px';
+    st.track.style.paddingBottom = Math.round(vpH * (1 - LYRICS_FOCAL_RATIO)) + 'px';
+    st.trackH = st.track.offsetHeight;
+    // A sheet shorter than its viewport cannot move at all.
+    st.minY = Math.min(0, vpH - st.trackH);
+    st.measured = true;
+    return true;
+}
+
+function ensureMeasured(st) {
+    if (!st.measured || st.vpH !== st.viewport.clientHeight) measureViewport(st);
+    return st.measured;
+}
+
+/**
+ * Transform that puts a line's centre on the focal line, clamped to the scroll
+ * bounds. Uses offsetTop/clientHeight (layout-local) rather than
+ * getBoundingClientRect, which would force a full paint-time flush.
+ *
+ * The focal offset is a *distance*, so the translate is its negation: the line
+ * has to travel upward out of the sheet, never downward.
+ * @param {object} st
+ * @param {HTMLElement} lineEl
+ * @returns {number} translateY in px (negative, or 0 at the very top).
+ */
+function focalOffsetFor(st, lineEl) {
+    if (!lineEl) return 0;
+    const distance = lineEl.offsetTop - (st.vpH * LYRICS_FOCAL_RATIO) + (lineEl.clientHeight / 2);
+    const y = -distance;
+    return Math.max(st.minY, Math.min(0, y));
+}
+
+/**
+ * Write the track transform. The only place in this module that touches
+ * `.style.transform`, so the write can be deduped.
+ * @param {object} st
+ * @param {number} y translateY in px (negative).
+ * @param {boolean} animate false for resize/re-render/wheel frames.
+ */
+function applyTransform(st, y, animate) {
+    // Toggle before the dedup check: an identical value still has to land with
+    // the right animation mode, otherwise a sheet left in no-anim stays frozen
+    // for every subsequent identical write.
+    st.track.classList.toggle('no-anim', !animate);
+    const next = 'translate3d(0,' + y.toFixed(2) + 'px,0)';
+    if (next === st.applied) return;
+    st.applied = next;
+    st.track.style.transform = next;
+}
+
+/**
+ * Allowed range for `manual`, expressed so that y = base - manual stays within
+ * [minY, 0]:
+ *   manual = base        -> y = 0      (very top of the sheet)
+ *   manual = base - minY -> y = minY   (very bottom)
+ *   manual = 0           -> y = base   (focal line centred)
+ */
+function manualRange(st) {
+    return { lo: st.base, hi: st.base - st.minY };
+}
+
+/**
+ * Constrain a desired manual offset to the scroll bounds, damping whatever falls
+ * outside so the sheet can be pulled past the end and springs back.
+ * @param {object} st
+ * @param {number} desired raw offset from the gesture.
+ * @returns {number} the damped offset.
+ */
+function clampManual(st, desired) {
+    const { lo, hi } = manualRange(st);
+    if (desired < lo) return lo + (desired - lo) * RUBBER_BAND_FACTOR;
+    if (desired > hi) return hi + (desired - hi) * RUBBER_BAND_FACTOR;
+    return desired;
+}
+
+function writeManual(st, manual, animate) {
+    st.manual = manual;
+    applyTransform(st, st.base - st.manual, animate);
+}
+
+/**
+ * Swap `.active` / `.past` across the sheet.
+ *
+ * Only the lines between the old and the new index change state, so a seek
+ * across a long sheet costs a handful of class writes rather than a full pass.
+ * @param {object} st
+ * @param {number} newIndex -1 for "before the first line".
+ */
+function updateLineClasses(st, newIndex) {
+    const lines = st.lines;
+    const oldIndex = st.lastIndex;
+
+    if (st.activeEl) {
+        st.activeEl.classList.remove('active');
+        st.activeEl = null;
+    }
+
+    // `.past` is a contiguous prefix [0, newIndex), so clearing the old
+    // boundary is enough — never touch the untouched middle of the sheet.
+    if (newIndex > oldIndex) {
+        for (let i = Math.max(0, oldIndex); i < newIndex; i++) {
+            if (lines[i]) lines[i].classList.add('past');
+        }
+    } else if (newIndex < oldIndex) {
+        for (let i = Math.max(0, newIndex); i < oldIndex; i++) {
+            if (lines[i]) lines[i].classList.remove('past');
+        }
+    }
+
+    if (newIndex !== -1 && lines[newIndex]) {
+        lines[newIndex].classList.add('active');
+        st.activeEl = lines[newIndex];
+    }
+
+    st.lastIndex = newIndex;
+}
+
+/**
+ * Recentre the sheet on the active line unless the user is browsing it.
+ *
+ * @param {object} st
+ * @param {boolean} animate
+ */
+function focusActiveLine(st, animate) {
+    st.base = focalOffsetFor(st, st.activeEl);
+    if (isManualBrowsing()) {
+        // Freeze the focal point under the user; the resume timer re-anchors it.
+        return;
+    }
+    st.manual = 0;
+    applyTransform(st, st.base, animate);
+}
+
+/**
+ * Wheel + drag scrubbing. The viewport no longer scrolls natively, so both
+ * gestures are mapped onto `manual` (see manualRange).
+ *
+ * Bound once per sheet. The listeners stay on the viewport and use an internal
+ * dragging flag rather than per-drag document listeners, so a sheet re-render
+ * cannot orphan a live drag the way add/removeEventListener juggling can.
+ */
+function bindKineticInput(st) {
+    const vp = st.viewport;
+
+    // Wheel: direct manipulation, so no transition — a spring here would lag
+    // the wheel and feel like ice.
+    vp.addEventListener('wheel', (e) => {
+        if (!ensureMeasured(st)) return;
+        e.preventDefault();
+        const delta = e.deltaMode === 1 ? e.deltaY * LINE_HEIGHT_PX
+            : e.deltaMode === 2 ? e.deltaY * st.vpH
+                : e.deltaY;
+        if (!delta) return;
+        // Scrolling down reveals later lines, i.e. a larger manual offset,
+        // because the transform is y = base - manual.
+        markManualInput();
+        writeManual(st, clampManual(st, st.manual + delta), false);
+    }, { passive: false });
+
+    let dragMoved = false;
+
+    vp.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || !ensureMeasured(st)) return;
+        st.dragging = true;
+        st.pointerId = e.pointerId;
+        st.dragStartY = e.clientY;
+        st.dragStartManual = st.manual;
+        dragMoved = false;
+        markManualInput();
+        try { vp.setPointerCapture(e.pointerId); } catch (_) { /* not capturable */ }
+    });
+
+    vp.addEventListener('pointermove', (e) => {
+        if (!st.dragging || e.pointerId !== st.pointerId) return;
+        const dy = e.clientY - st.dragStartY;
+        // Below the threshold this is a click on a line, not a scrub.
+        if (!dragMoved && Math.abs(dy) < 4) return;
+        if (!dragMoved) {
+            dragMoved = true;
+            st.moved = true;
+            vp.classList.add('is-dragging');
+        }
+        markManualInput();
+        // Dragging down brings earlier lines into view: y = base - manual, so
+        // downward travel decreases manual. The origin is re-read every frame
+        // instead of accumulating, so the sheet cannot drift on rubber band.
+        writeManual(st, clampManual(st, st.dragStartManual - dy), false);
+    });
+
+    const endDrag = (e) => {
+        if (!st.dragging || (e.pointerId !== undefined && e.pointerId !== st.pointerId)) return;
+        st.dragging = false;
+        vp.classList.remove('is-dragging');
+        try { vp.releasePointerCapture(st.pointerId); } catch (_) { /* already gone */ }
+        if (dragMoved) {
+            // Settle back inside the bounds with the spring, so releasing at the
+            // elastic edge eases home instead of stopping dead.
+            const { lo, hi } = manualRange(st);
+            writeManual(st, Math.max(lo, Math.min(hi, st.manual)), true);
+        }
+    };
+
+    vp.addEventListener('pointerup', endDrag);
+    vp.addEventListener('pointercancel', endDrag);
+    vp.addEventListener('lostpointercapture', endDrag);
+
+    // A scrub must not also register as a line click (which would seek). The
+    // flag is cleared here rather than in endDrag because click fires after
+    // pointerup.
+    vp.addEventListener('click', (e) => {
+        if (st.moved) {
+            e.stopPropagation();
+            e.preventDefault();
+        }
+        st.moved = false;
+    }, true);
+}
+
+/**
+ * Flag user browsing and arm the auto-follow resume.
+ *
+ * The resume is timer-driven rather than riding the next position tick: when
+ * playback is paused there are no ticks at all, so a tick-driven resume would
+ * never fire and the sheet would stay parked wherever the user left it.
+ */
+function markManualInput() {
+    lastManualScrollAt = performance.now();
+    if (followResumeTimer) clearTimeout(followResumeTimer);
+    followResumeTimer = setTimeout(resumeAutoFollow, MANUAL_SCROLL_PAUSE_MS + 60);
+}
+
+function resumeAutoFollow() {
+    followResumeTimer = null;
+    if (isManualBrowsing()) return;         // a new gesture re-armed the timer
+    lastManualScrollAt = 0;
+    getContainers().forEach(track => {
+        const st = track._kinetic;
+        if (!st || !st.measured || !st.activeEl) return;
+        st.base = focalOffsetFor(st, st.activeEl);
+        writeManual(st, 0, true);
+    });
+}
+
+/**
+ * Re-measure on viewport resize. The focal point is a fraction of the viewport,
+ * so a resize invalidates both the padding and every cached offsetTop.
+ */
+function bindKineticResize() {
+    if (kineticResizeObserver) return;
+    const ro = new ResizeObserver((entries) => {
+        let visible = false;
+        for (const entry of entries) {
+            if (entry.contentRect.height > 0) visible = true;
+        }
+        // Skip the burst of callbacks while the window is being dragged.
+        if (!visible) return;
+        getContainers().forEach(track => {
+            const st = track._kinetic;
+            if (!st || !measureViewport(st)) return;
+            st.base = focalOffsetFor(st, st.activeEl);
+            const { lo, hi } = manualRange(st);
+            writeManual(st, Math.max(lo, Math.min(hi, st.manual)), false);
+        });
+    });
+    getContainers().forEach(track => ro.observe(ensureKineticState(track).viewport));
+    kineticResizeObserver = ro;
+}
+
+/**
+ * Font swap changes every line height, so offsets measured against the fallback
+ * face are wrong. Re-anchor once the real faces are in.
+ */
+function bindFontsReady() {
+    if (kineticListenersBound || !document.fonts || !document.fonts.ready) return;
+    kineticListenersBound = true;
+    document.fonts.ready.then(() => {
+        getContainers().forEach(track => {
+            const st = track._kinetic;
+            if (!st || !st.measured) return;
+            st.base = focalOffsetFor(st, st.activeEl);
+            applyTransform(st, st.base - st.manual, false);
+        });
+    }).catch(() => { /* font loading failed: keep the measured layout */ });
+}
+
+/**
+ * Reset the sheet to its neutral pose. Called whenever the content is replaced.
+ */
 function resetLyricsScroll() {
     currentLineIndex = -1;
-    // A new track starts a new karaoke run, so do not inherit a scroll pause
+    // A new track starts a new karaoke run, so do not inherit a browse pause
     // left over from the user scrolling the previous one.
     lastManualScrollAt = 0;
-    programmaticScrollUntil = 0;
-    getContainers().forEach(c => {
-        if (c._lastActiveLyric) {
-            c._lastActiveLyric.classList.remove('active');
-            c._lastActiveLyric = null;
-        }
-        const scrollParent = c.closest('.player-lyrics-container') || c.closest('.lyrics-scroll-container') || c.parentElement;
-        if (scrollParent) {
-            scrollParent.scrollTop = 0;
-            if (typeof scrollParent.scrollTo === 'function') {
-                scrollParent.scrollTo({ top: 0, behavior: 'instant' });
-            }
-        }
-        c.scrollTop = 0;
+    getContainers().forEach(track => {
+        const st = ensureKineticState(track);
+        st.lines = [];
+        st.activeEl = null;
+        st.lastIndex = -1;
+        st.dirty = true;
+        st.measured = false;
+        st.manual = 0;
+        st.base = 0;
+        st.minY = 0;
+        st.dragging = false;
+        st.moved = false;
+        st.track.classList.remove('is-dragging');
+        st.track.style.paddingTop = '';
+        st.track.style.paddingBottom = '';
+        // Land at the top of the sheet without animating in from the previous
+        // track's position.
+        st.applied = '';
+        applyTransform(st, 0, false);
     });
 }
 
@@ -393,6 +814,10 @@ export function renderLyrics(data) {
     const containers = getContainers();
     if (!data) {
         lastLyricsData = null;
+        // The sheet's children are about to be replaced, so the cached line
+        // nodes and the measured geometry both go stale. Without this reset a
+        // later position tick would keep highlighting detached nodes.
+        resetLyricsScroll();
         containers.forEach(c => c.innerHTML = '<div class="empty-state">Текст песни не найден</div>');
         return;
     }
@@ -439,7 +864,17 @@ export function renderLyrics(data) {
                     el.addEventListener('click', (e) => {
                         e.stopPropagation();
                         seekTo(line.timeMs);
-                        scrollToElement(el, c);
+                        // Seek and re-centre in one step. Waiting for the next
+                        // position tick to re-centre left the sheet parked on
+                        // the old line for a frame or two after the click.
+                        const st = ensureKineticState(c);
+                        if (!st.measured || !ensureMeasured(st)) return;
+                        // The click is an explicit intent to be on this line, so
+                        // it also clears any active browse pause.
+                        lastManualScrollAt = 0;
+                        st.base = focalOffsetFor(st, el);
+                        st.manual = 0;
+                        applyTransform(st, st.base, true);
                     });
                     c.appendChild(el);
                 });
@@ -479,6 +914,14 @@ export function renderLyrics(data) {
             }
             c.appendChild(el);
         });
+        // No timestamps means no focal line and no karaoke follow, but the sheet
+        // is usually far taller than the viewport, so it still needs its focal
+        // padding and bounds measured or the wheel would have nothing to move.
+        const st = refreshKineticState(c);
+        if (ensureMeasured(st)) {
+            st.base = 0;
+            writeManual(st, 0, false);
+        }
     });
 }
 
@@ -512,57 +955,13 @@ export function parseLrc(lrcText) {
     return result;
 }
 
-// Karaoke auto-scroll vs. the user's own scrolling. Auto-follow only resumes
-// after this many ms without manual input, otherwise every wheel tick is
-// yanked back to the active line on the next line change, which reads as
-// "scrolling does not work".
-const MANUAL_SCROLL_PAUSE_MS = 4000;
-let lastManualScrollAt = 0;
-let programmaticScrollUntil = 0;
-
-// A scroll event that arrives while no programmatic scroll is in flight is the
-// user's own (wheel, drag, keyboard, scrollbar).
-function noteScrollEvents(el) {
-    if (!el || el._scrollGuardBound) return;
-    el._scrollGuardBound = true;
-    el.addEventListener('scroll', () => {
-        if (performance.now() < programmaticScrollUntil) return;
-        lastManualScrollAt = performance.now();
-    }, { passive: true });
-}
-
-function autoScrollPaused() {
-    return (performance.now() - lastManualScrollAt) < MANUAL_SCROLL_PAUSE_MS;
-}
-
-function scrollToElement(targetLine, c) {
-    if (!targetLine || !c) return;
-    if (autoScrollPaused()) return;
-    const scrollParent = c.closest('.player-lyrics-container') || c.closest('.lyrics-scroll-container') || c.parentElement;
-    if (!scrollParent) return;
-    noteScrollEvents(scrollParent);
-
-    const parentRect = scrollParent.getBoundingClientRect();
-    if (parentRect.height === 0) return; // Hidden container
-
-    const lineRect = targetLine.getBoundingClientRect();
-    const relativeTop = lineRect.top - parentRect.top + scrollParent.scrollTop;
-    const targetScroll = relativeTop - (scrollParent.clientHeight / 2) + (lineRect.height / 2);
-
-    programmaticScrollUntil = performance.now() + 900;
-    if (typeof scrollParent.scrollTo === 'function') {
-        scrollParent.scrollTo({
-            top: Math.max(0, targetScroll),
-            behavior: 'smooth'
-        });
-    } else if (typeof targetLine.scrollIntoView === 'function') {
-        targetLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-}
-
 /**
  * Update active lyric line based on current playback position in milliseconds.
  * Unified unit: Milliseconds (ms) to match parsed LRC timeMs and currentOffsetMs.
+ *
+ * `timeupdate` fires ~4x/second and almost every tick lands on the same line,
+ * so this is written to do *zero* layout work unless the index actually moved:
+ * no getBoundingClientRect, no scrollTop, no class writes on the steady path.
  * @param {number} posMs - Playback position in milliseconds.
  */
 export function updateLyricsPosition(posMs) {
@@ -574,36 +973,28 @@ export function updateLyricsPosition(posMs) {
 
         const effectivePos = lastPosMs + currentOffsetMs;
 
+        // Binary search: a long song has hundreds of lines and the linear scan
+        // ran on every tick.
         let newIndex = -1;
-        for (let i = 0; i < parsedLyrics.length; i++) {
-            if (effectivePos >= parsedLyrics[i].timeMs) {
-                newIndex = i;
+        let lo = 0;
+        let hi = parsedLyrics.length - 1;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (parsedLyrics[mid].timeMs <= effectivePos) {
+                newIndex = mid;
+                lo = mid + 1;
             } else {
-                break;
+                hi = mid - 1;
             }
         }
 
         if (newIndex !== currentLineIndex) {
-            getContainers().forEach(c => {
-                if (c._lastActiveLyric) {
-                    c._lastActiveLyric.classList.remove('active');
-                } else {
-                    const prev = c.querySelector('.lyric-line.active');
-                    if (prev) prev.classList.remove('active');
-                }
-
-                if (newIndex !== -1) {
-                    const targetLine = c.querySelector(`.lyric-line[data-index="${newIndex}"]`);
-                    if (targetLine) {
-                        targetLine.classList.add('active');
-                        c._lastActiveLyric = targetLine;
-                        scrollToElement(targetLine, c);
-                    } else {
-                        c._lastActiveLyric = null;
-                    }
-                } else {
-                    c._lastActiveLyric = null;
-                }
+            getContainers().forEach(track => {
+                const st = ensureKineticState(track);
+                if (st.dirty) refreshKineticState(track);
+                ensureMeasured(st);
+                updateLineClasses(st, newIndex);
+                focusActiveLine(st, true);
             });
             currentLineIndex = newIndex;
 
@@ -616,6 +1007,24 @@ export function updateLyricsPosition(posMs) {
                     translation: currentTranslationMap[parsedLyrics[newIndex]?.text] || ''
                 }
             }));
+        } else {
+            // Steady path. Stays free of layout work in the common case, with one
+            // exception: a sheet whose viewport had zero height while the panel
+            // was hidden (`.view-page` is display:none) could not be measured,
+            // so its transform is still the neutral translateY(0) and the active
+            // line sits wherever the padding happens to put it -- possibly out
+            // of view. Re-anchor the moment the viewport becomes measurable.
+            //
+            // The `!st.measured` guard is what keeps this free: once a sheet is
+            // measured it is skipped entirely, so this costs a single property
+            // read per tick and only while a sheet is still unmeasured.
+            getContainers().forEach(track => {
+                const st = track._kinetic;
+                if (!st || st.measured || !st.activeEl) return;
+                if (!ensureMeasured(st)) return;
+                st.base = focalOffsetFor(st, st.activeEl);
+                writeManual(st, 0, true);
+            });
         }
     } catch(e) {
         console.error("Lyrics updateLyricsPosition Error:", e);

@@ -1,0 +1,1431 @@
+{
+  "label": "combo-2000trk",
+  "scenario": "combo",
+  "generated_at": "2026-10-04T09:54:59",
+  "command": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Scripts\\python.exe tools\\bench\\run_bench.py --scenario combo --reps 3 --tracks 2000 --profile-mode warm --seconds 20 --rounds 2 --timeout 400",
+  "args": {
+    "scenario": "combo",
+    "reps": 3,
+    "tracks": 2000,
+    "history_per_track": 0,
+    "seconds": 20.0,
+    "rounds": 2,
+    "query": "Daft Punk",
+    "settle_sec": 2.0,
+    "sample_interval": 1.0,
+    "warmup_sec": 5.0,
+    "timeout": 400.0,
+    "port": 9222,
+    "cookie_mode": "pinned",
+    "profile_mode": "warm",
+    "keep_profile": false,
+    "label": null,
+    "list": false
+  },
+  "code_fingerprint": "bacbe8bbfcb138ea",
+  "code_fingerprint_files": {
+    "main.py": "b802bf11142a27b5",
+    "core/__init__.py": "e3b0c44298fc1c14",
+    "core/api.py": "4a7cfb3cfa7a84dc",
+    "core/app.py": "95a24d32c895d80d",
+    "core/database.py": "bd240f6447cf41e6",
+    "core/downloader.py": "6fe8faa776c9dd2b",
+    "core/plugins.py": "6953d4f350236ba7",
+    "core/proxy.py": "eaafd1bf846e09bd",
+    "core/resolver.py": "8a04734d3de8920f",
+    "core/services/__init__.py": "e3b0c44298fc1c14",
+    "core/services/discord_rpc.py": "cd633e06b9893e8e",
+    "core/services/recommendation.py": "c4bb64a492cb5125",
+    "core/session.py": "6c494e4ee46c05e1",
+    "core/settings.py": "d549c275ba670bfb",
+    "core/tray.py": "4f60c2fb2f59ef9c",
+    "services/__init__.py": "e3b0c44298fc1c14",
+    "services/artist_service.py": "2d15a99059498d59",
+    "services/audio_fingerprint_service.py": "d98724158bc0c9ca",
+    "services/base_service.py": "9e27eb59ed861234",
+    "services/lastfm_service.py": "3161d43cd3987fa1",
+    "services/lufs_scanner.py": "3b9bc464cdb38aa0",
+    "services/lyrics_service.py": "85fc1dbba3153179",
+    "services/playlist_import_service.py": "f1313425044fe9b7",
+    "services/recommendation_service.py": "0576ef24af3ce50c",
+    "services/soundcloud_service.py": "09e67bbeb5613ce4",
+    "services/spotify_service.py": "f13f1d97ff294a7d",
+    "services/taste_profile.py": "3a85da16d83038df",
+    "services/track_resolver.py": "ab1af810a7ea007f",
+    "services/vk_service.py": "116d4c3eb3428756",
+    "services/watchdog_service.py": "0139453dd30c8fd2",
+    "services/yandex_service.py": "a5e37cd657c30dd9",
+    "services/youtube_service.py": "ff551282b4ec01d0",
+    "services/zapret_service.py": "167b19d49e3c5bae",
+    "ui/web_new_v2/css/components/base.css": "2c8e786b10184fc2",
+    "ui/web_new_v2/css/components/home-view.css": "6673b240e655e586",
+    "ui/web_new_v2/css/components/lyrics.css": "d560875f9af9399d",
+    "ui/web_new_v2/css/components/player-bar.css": "6f333f0f9cfc1931",
+    "ui/web_new_v2/css/components/player-view.css": "6f965583a0ab869c",
+    "ui/web_new_v2/css/components/track-table.css": "dbaa4385736e74e2",
+    "ui/web_new_v2/css/components/visual-polish.css": "305bcbcdcd9f3ebd",
+    "ui/web_new_v2/css/styles.css": "375078f71915d088",
+    "ui/web_new_v2/css/themes.css": "4c0a6f9f0efdd0f1",
+    "ui/web_new_v2/css/tokens.css": "7b57a81ffcd1c9f9",
+    "ui/web_new_v2/index.html": "a784bb8acaaf9051",
+    "ui/web_new_v2/js/artist_profile.js": "0444ec53bc090b20",
+    "ui/web_new_v2/js/boot.js": "777c9693276aa3b0",
+    "ui/web_new_v2/js/contextmenu.js": "cf18b6596b901c5f",
+    "ui/web_new_v2/js/debug.js": "892e74da72f8f218",
+    "ui/web_new_v2/js/efficiency.js": "3c5eb7d5fb558819",
+    "ui/web_new_v2/js/equalizer.js": "5636c7e26dbc22fe",
+    "ui/web_new_v2/js/events.js": "136dd92f11246b17",
+    "ui/web_new_v2/js/hls.min.js": "f12ee0acc43eb001",
+    "ui/web_new_v2/js/home.js": "f8ae2d6a53ce5628",
+    "ui/web_new_v2/js/hotkeys.js": "46a23621522fdd3f",
+    "ui/web_new_v2/js/library.js": "571f5eca03342a74",
+    "ui/web_new_v2/js/lucide.min.js": "6a9d33f1e1feea81",
+    "ui/web_new_v2/js/lyrics.js": "4dfea2c820d99780",
+    "ui/web_new_v2/js/main.js": "401c4bce7301d271",
+    "ui/web_new_v2/js/onboarding.js": "7ac913d088b69b87",
+    "ui/web_new_v2/js/pages.js": "56363894178816e2",
+    "ui/web_new_v2/js/particles.js": "cd8fab684373ae63",
+    "ui/web_new_v2/js/player.js": "4ed014d1f459dc01",
+    "ui/web_new_v2/js/queue.js": "764796d94bf52997",
+    "ui/web_new_v2/js/search.js": "6823df2eafdad0f5",
+    "ui/web_new_v2/js/settings.js": "1b1e4bea3c232808",
+    "ui/web_new_v2/js/utils.js": "307c00e4da7c9c23",
+    "ui/web_new_v2/js/visualizer.js": "71efb7daa839f05e",
+    "tools/bench/__init__.py": "6e84a771debc38ec",
+    "tools/bench/bench_child.py": "ecddb23a053bfe8f",
+    "tools/bench/build_hotspots.py": "953a66b90deee403",
+    "tools/bench/cdp.py": "03e0144a790c4d2a",
+    "tools/bench/check_pstats_consistency.py": "c2d22128e3136d5c",
+    "tools/bench/css_inventory.py": "d34c183a4761379c",
+    "tools/bench/dom_nesting.py": "4c300f72b417a027",
+    "tools/bench/import_chains.py": "da306e670f306354",
+    "tools/bench/js_census.py": "6f0c0676baadbd8a",
+    "tools/bench/lucide_node_count.js": "bbd27cf2c599b41c",
+    "tools/bench/procsampler.py": "00a485c7cf2442b0",
+    "tools/bench/profile.py": "d815e43caca790c0",
+    "tools/bench/pyprof_child.py": "12e86d2eab6bfc5b",
+    "tools/bench/query_pstats.py": "88b8aaf012445f72",
+    "tools/bench/read_pyprof.py": "081035f64ece90b1",
+    "tools/bench/report_numbers.py": "8195e5a386424ab2",
+    "tools/bench/run_bench.py": "490c054e3f92f5e8",
+    "tools/bench/run_pyprof.py": "7fdd5b7bc75dd4c8",
+    "tools/bench/scenarios.py": "22d0dd4203713025",
+    "tools/bench/sleepscan.py": "2c252026b2d9297f",
+    "tools/bench/thread_lineage.py": "e97d6c2230564f11",
+    "tools/bench/track_row_nodes.js": "322392c5d4cc1115",
+    "tools/bench/verify_frontend_report.py": "5d4d05fa9821b161",
+    "tools/check_lock_nesting.py": "6163a79c7b055ea2",
+    "tools/check_shadow_imports.py": "465e18257cd768ab",
+    "tools/visual_guard/__init__.py": "36a49c724d4f835a",
+    "tools/visual_guard/capture.py": "9dbea257e2ae3be5",
+    "tools/visual_guard/diff.py": "44dfef9da6e3fd29",
+    "tools/visual_guard/fixtures.py": "500f7e2404940189",
+    "tools/visual_guard/run_guard.py": "e2d923acd9939a37"
+  },
+  "aggregate": {
+    "n_runs": 3,
+    "medians": {
+      "child.data.feed.duplicate_methods": 0,
+      "child.data.feed.lastfm_requests": 0,
+      "child.data.feed.wall_ms": 5020.1,
+      "child.data.idle.perf.AdSubframes": 0,
+      "child.data.idle.perf.ArrayBufferContents": 0,
+      "child.data.idle.perf.AudioHandlers": 16,
+      "child.data.idle.perf.AudioWorkletProcessors": 0,
+      "child.data.idle.perf.ContextLifecycleStateObservers": 13,
+      "child.data.idle.perf.DetachedScriptStates": 0,
+      "child.data.idle.perf.DevToolsCommandDuration": 0.19,
+      "child.data.idle.perf.Documents": 2,
+      "child.data.idle.perf.DomContentLoaded": 307370.83,
+      "child.data.idle.perf.FirstMeaningfulPaint": 307370.84,
+      "child.data.idle.perf.Frames": 2,
+      "child.data.idle.perf.JSEventListeners": 972,
+      "child.data.idle.perf.JSHeapTotalSize": 4456448,
+      "child.data.idle.perf.JSHeapUsedSize": 3144024,
+      "child.data.idle.perf.LayoutCount": 2706,
+      "child.data.idle.perf.LayoutDuration": 0.92,
+      "child.data.idle.perf.LayoutObjects": 1962,
+      "child.data.idle.perf.MediaKeySessions": 0,
+      "child.data.idle.perf.MediaKeys": 0,
+      "child.data.idle.perf.NavigationStart": 307370.71,
+      "child.data.idle.perf.Nodes": 10881,
+      "child.data.idle.perf.ProcessTime": 19.21,
+      "child.data.idle.perf.RTCPeerConnections": 0,
+      "child.data.idle.perf.RecalcStyleCount": 3655,
+      "child.data.idle.perf.RecalcStyleDuration": 0.58,
+      "child.data.idle.perf.ResourceFetchers": 2,
+      "child.data.idle.perf.Resources": 215,
+      "child.data.idle.perf.ScriptDuration": 1.57,
+      "child.data.idle.perf.TaskDuration": 13.36,
+      "child.data.idle.perf.TaskOtherDuration": 9.98,
+      "child.data.idle.perf.ThreadTime": 13.12,
+      "child.data.idle.perf.Timestamp": 307431.02,
+      "child.data.idle.perf.UACSSResources": 0,
+      "child.data.idle.perf.V8CompileDuration": 0.0,
+      "child.data.idle.perf.V8PerContextDatas": 1,
+      "child.data.idle.perf.WorkerGlobalScopes": 0,
+      "child.data.idle.seconds": 20.0,
+      "child.data.idle.summary.n_children_max": 7,
+      "child.data.idle.summary.n_samples": 13,
+      "child.data.idle.summary.python_cpu_pct.max": 0.0,
+      "child.data.idle.summary.python_cpu_pct.mean": 0.0,
+      "child.data.idle.summary.python_cpu_pct.median": 0.0,
+      "child.data.idle.summary.python_cpu_pct.p95": 0.0,
+      "child.data.idle.summary.python_rss_mb.max": 179.72,
+      "child.data.idle.summary.python_rss_mb.mean": 178.62,
+      "child.data.idle.summary.python_rss_mb.median": 179.64,
+      "child.data.idle.summary.python_rss_mb.p95": 179.72,
+      "child.data.idle.summary.python_threads_max": 41,
+      "child.data.idle.summary.tree_cpu_pct.max": 0.0,
+      "child.data.idle.summary.tree_cpu_pct.mean": 0.0,
+      "child.data.idle.summary.tree_cpu_pct.median": 0.0,
+      "child.data.idle.summary.tree_cpu_pct.p95": 0.0,
+      "child.data.idle.summary.tree_rss_mb.max": 754.77,
+      "child.data.idle.summary.tree_rss_mb.mean": 753.14,
+      "child.data.idle.summary.tree_rss_mb.median": 754.35,
+      "child.data.idle.summary.tree_rss_mb.p95": 754.77,
+      "child.data.idle.summary.webview_cpu_pct.max": 0.0,
+      "child.data.idle.summary.webview_cpu_pct.mean": 0.0,
+      "child.data.idle.summary.webview_cpu_pct.median": 0.0,
+      "child.data.idle.summary.webview_cpu_pct.p95": 0.0,
+      "child.data.idle.summary.webview_rss_mb.max": 575.05,
+      "child.data.idle.summary.webview_rss_mb.mean": 574.51,
+      "child.data.idle.summary.webview_rss_mb.median": 574.69,
+      "child.data.idle.summary.webview_rss_mb.p95": 575.05,
+      "child.data.idle.summary.window_sec": 13.8,
+      "child.data.idle.warmup_sec": 5.0,
+      "child.data.perf_at_end.AdSubframes": 0,
+      "child.data.perf_at_end.ArrayBufferContents": 0,
+      "child.data.perf_at_end.AudioHandlers": 16,
+      "child.data.perf_at_end.AudioWorkletProcessors": 0,
+      "child.data.perf_at_end.ContextLifecycleStateObservers": 13,
+      "child.data.perf_at_end.DetachedScriptStates": 0,
+      "child.data.perf_at_end.DevToolsCommandDuration": 0.19,
+      "child.data.perf_at_end.Documents": 2,
+      "child.data.perf_at_end.DomContentLoaded": 307370.83,
+      "child.data.perf_at_end.FirstMeaningfulPaint": 307370.84,
+      "child.data.perf_at_end.Frames": 2,
+      "child.data.perf_at_end.JSEventListeners": 972,
+      "child.data.perf_at_end.JSHeapTotalSize": 4456448,
+      "child.data.perf_at_end.JSHeapUsedSize": 3144024,
+      "child.data.perf_at_end.LayoutCount": 2706,
+      "child.data.perf_at_end.LayoutDuration": 0.92,
+      "child.data.perf_at_end.LayoutObjects": 1962,
+      "child.data.perf_at_end.MediaKeySessions": 0,
+      "child.data.perf_at_end.MediaKeys": 0,
+      "child.data.perf_at_end.NavigationStart": 307370.71,
+      "child.data.perf_at_end.Nodes": 10881,
+      "child.data.perf_at_end.ProcessTime": 19.21,
+      "child.data.perf_at_end.RTCPeerConnections": 0,
+      "child.data.perf_at_end.RecalcStyleCount": 3655,
+      "child.data.perf_at_end.RecalcStyleDuration": 0.58,
+      "child.data.perf_at_end.ResourceFetchers": 2,
+      "child.data.perf_at_end.Resources": 215,
+      "child.data.perf_at_end.ScriptDuration": 1.57,
+      "child.data.perf_at_end.TaskDuration": 13.36,
+      "child.data.perf_at_end.TaskOtherDuration": 9.98,
+      "child.data.perf_at_end.ThreadTime": 13.12,
+      "child.data.perf_at_end.Timestamp": 307431.02,
+      "child.data.perf_at_end.UACSSResources": 0,
+      "child.data.perf_at_end.V8CompileDuration": 0.0,
+      "child.data.perf_at_end.V8PerContextDatas": 1,
+      "child.data.perf_at_end.WorkerGlobalScopes": 0,
+      "child.data.scroll[0].longFramesOver50ms_total": 0,
+      "child.data.scroll[0].medianDerivedFps": 60.0,
+      "child.data.scroll[0].medianFrameMs": 16.7,
+      "child.data.scroll[0].p95FrameMs_worst": 16.8,
+      "child.data.scroll[0].rounds": 2,
+      "child.data.scroll[0].rows_rendered": 0,
+      "child.data.scroll[0].runs[0].clientHeight": 0,
+      "child.data.scroll[0].runs[0].derivedFps": 60,
+      "child.data.scroll[0].runs[0].frames": 240,
+      "child.data.scroll[0].runs[0].longFramesOver50ms": 0,
+      "child.data.scroll[0].runs[0].meanFrameMs": 16.67,
+      "child.data.scroll[0].runs[0].medianFrameMs": 16.7,
+      "child.data.scroll[0].runs[0].p95FrameMs": 16.8,
+      "child.data.scroll[0].runs[0].scrollHeight": 0,
+      "child.data.scroll[0].runs[0].worstFrameMs": 16.9,
+      "child.data.scroll[0].runs[1].clientHeight": 0,
+      "child.data.scroll[0].runs[1].derivedFps": 60,
+      "child.data.scroll[0].runs[1].frames": 240,
+      "child.data.scroll[0].runs[1].longFramesOver50ms": 0,
+      "child.data.scroll[0].runs[1].meanFrameMs": 16.67,
+      "child.data.scroll[0].runs[1].medianFrameMs": 16.7,
+      "child.data.scroll[0].runs[1].p95FrameMs": 16.8,
+      "child.data.scroll[0].runs[1].scrollHeight": 0,
+      "child.data.scroll[0].runs[1].worstFrameMs": 17.2,
+      "child.data.scroll[0].worstFrameMs_worst": 17.2,
+      "child.data.scroll[1].longFramesOver50ms_total": 0,
+      "child.data.scroll[1].medianDerivedFps": 60.0,
+      "child.data.scroll[1].medianFrameMs": 16.7,
+      "child.data.scroll[1].p95FrameMs_worst": 16.8,
+      "child.data.scroll[1].rounds": 2,
+      "child.data.scroll[1].rows_rendered": 0,
+      "child.data.scroll[1].runs[0].clientHeight": 0,
+      "child.data.scroll[1].runs[0].derivedFps": 60,
+      "child.data.scroll[1].runs[0].frames": 240,
+      "child.data.scroll[1].runs[0].longFramesOver50ms": 0,
+      "child.data.scroll[1].runs[0].meanFrameMs": 16.67,
+      "child.data.scroll[1].runs[0].medianFrameMs": 16.7,
+      "child.data.scroll[1].runs[0].p95FrameMs": 16.8,
+      "child.data.scroll[1].runs[0].scrollHeight": 0,
+      "child.data.scroll[1].runs[0].worstFrameMs": 17.2,
+      "child.data.scroll[1].runs[1].clientHeight": 0,
+      "child.data.scroll[1].runs[1].derivedFps": 60,
+      "child.data.scroll[1].runs[1].frames": 240,
+      "child.data.scroll[1].runs[1].longFramesOver50ms": 0,
+      "child.data.scroll[1].runs[1].meanFrameMs": 16.67,
+      "child.data.scroll[1].runs[1].medianFrameMs": 16.7,
+      "child.data.scroll[1].runs[1].p95FrameMs": 16.8,
+      "child.data.scroll[1].runs[1].scrollHeight": 0,
+      "child.data.scroll[1].runs[1].worstFrameMs": 17,
+      "child.data.scroll[1].worstFrameMs_worst": 17.3,
+      "child.data.search.medianMs": 8298.4,
+      "child.data.search.rounds": 2,
+      "child.data.search.runs[0].completedAfterMs": 8577.2,
+      "child.data.search.runs[0].events[0].t": 764,
+      "child.data.search.runs[0].events[1].t": 1149.2,
+      "child.data.search.runs[0].events[2].t": 1454.3,
+      "child.data.search.runs[0].events[3].t": 8569.7,
+      "child.data.search.runs[0].events[4].t": 8577.2,
+      "child.data.search.runs[0].resultCards": 29,
+      "child.data.search.runs[1].completedAfterMs": 8019.6,
+      "child.data.search.runs[1].events[0].t": 14.2,
+      "child.data.search.runs[1].events[1].t": 42.3,
+      "child.data.search.runs[1].events[2].t": 67.3,
+      "child.data.search.runs[1].events[3].t": 8016.7,
+      "child.data.search.runs[1].events[4].t": 8019.6,
+      "child.data.search.runs[1].resultCards": 29,
+      "child.data.startup.app_ready_since_reload_ms": 393.2,
+      "child.data.startup.dcl_since_nav_ms": 126,
+      "child.data.startup.dom_nodes": 3487,
+      "child.data.startup.fcp_since_nav_ms": 136,
+      "child.data.startup.load_event_ms": 162.2,
+      "child.data.startup.python_startup_marker_ms.AppCore initialized": 57.0,
+      "child.data.startup.python_startup_marker_ms.webview loop starting": 103.0,
+      "child.data.startup.python_startup_marker_ms.window created": 102.0,
+      "child.data.startup.python_startup_marker_ms.window loaded": 2157.0,
+      "child.finished_at": 1791096765.1,
+      "child.perf.AdSubframes": 0,
+      "child.perf.ArrayBufferContents": 0,
+      "child.perf.AudioHandlers": 16,
+      "child.perf.AudioWorkletProcessors": 0,
+      "child.perf.ContextLifecycleStateObservers": 13,
+      "child.perf.DetachedScriptStates": 0,
+      "child.perf.DevToolsCommandDuration": 0.19,
+      "child.perf.Documents": 2,
+      "child.perf.DomContentLoaded": 307370.83,
+      "child.perf.FirstMeaningfulPaint": 307370.84,
+      "child.perf.Frames": 2,
+      "child.perf.JSEventListeners": 972,
+      "child.perf.JSHeapTotalSize": 4456448,
+      "child.perf.JSHeapUsedSize": 3144024,
+      "child.perf.LayoutCount": 2706,
+      "child.perf.LayoutDuration": 0.92,
+      "child.perf.LayoutObjects": 1962,
+      "child.perf.MediaKeySessions": 0,
+      "child.perf.MediaKeys": 0,
+      "child.perf.NavigationStart": 307370.71,
+      "child.perf.Nodes": 10881,
+      "child.perf.ProcessTime": 19.21,
+      "child.perf.RTCPeerConnections": 0,
+      "child.perf.RecalcStyleCount": 3656,
+      "child.perf.RecalcStyleDuration": 0.58,
+      "child.perf.ResourceFetchers": 2,
+      "child.perf.Resources": 215,
+      "child.perf.ScriptDuration": 1.57,
+      "child.perf.TaskDuration": 13.36,
+      "child.perf.TaskOtherDuration": 9.98,
+      "child.perf.ThreadTime": 13.12,
+      "child.perf.Timestamp": 307431.03,
+      "child.perf.UACSSResources": 0,
+      "child.perf.V8CompileDuration": 0.0,
+      "child.perf.V8PerContextDatas": 1,
+      "child.perf.WorkerGlobalScopes": 0,
+      "child.started_at": 1791096702.44,
+      "cold_start.interpreter_and_import_ms": 610.5,
+      "cold_start.to_webview_loop_ms": 748.1,
+      "cold_start.to_window_created_ms": 747.1,
+      "cold_start.to_window_loaded_ms": 2767.5
+    }
+  },
+  "runs": [
+    {
+      "ok": true,
+      "exit_code": 0,
+      "wall_sec": 56.89,
+      "cold_start": {
+        "interpreter_and_import_ms": 687.1,
+        "to_window_created_ms": 747.1,
+        "to_window_loaded_ms": 4351.1,
+        "to_webview_loop_ms": 748.1
+      },
+      "startup_markers_ms": {
+        "AppCore initialized": 31.0,
+        "window created": 60.0,
+        "webview loop starting": 60.0,
+        "window loaded": 3664.0
+      },
+      "seed": {
+        "db_path": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\nedotify_storage.db",
+        "tracks": 2000,
+        "history": 0,
+        "covers": 12,
+        "cookie_mode": "pinned",
+        "cookie_jar": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\bench_cookies.txt"
+      },
+      "child": {
+        "scenario": "combo",
+        "mode": "bench",
+        "started_at": 1791096643.0395598,
+        "ok": true,
+        "error": null,
+        "data": {
+          "startup": {
+            "python_startup_marker_ms": {
+              "AppCore initialized": 31.0,
+              "window created": 60.0,
+              "webview loop starting": 60.0,
+              "window loaded": 3664.0
+            },
+            "fcp_since_nav_ms": 1728,
+            "app_ready_since_reload_ms": 1780.5,
+            "dcl_since_nav_ms": 1734.2000000476837,
+            "load_event_ms": 1781.9000000357628,
+            "dom_nodes": 2752,
+            "js_event_listeners": null,
+            "note": "app_ready is measured from a warm reload; end-to-end cold start is cold_start.* in the parent report"
+          },
+          "feed": {
+            "wall_ms": 5020.1,
+            "lastfm_requests": 14,
+            "lastfm_methods": [
+              "artist.gettoptracks",
+              "chart.gettoptracks",
+              "artist.gettoptracks",
+              "artist.gettoptracks",
+              "artist.gettoptracks",
+              "artist.gettoptracks",
+              "artist.gettoptracks",
+              "artist.gettoptracks",
+              "artist.gettoptracks",
+              "artist.gettoptracks",
+              "artist.gettoptracks",
+              "artist.gettoptracks",
+              "chart.gettoptracks",
+              "artist.gettoptracks"
+            ],
+            "unique_methods": [
+              "artist.gettoptracks",
+              "chart.gettoptracks"
+            ],
+            "duplicate_methods": 12,
+            "note": "outbound HTTP call count, measured with a dummy key and a fake session so nothing leaves the machine"
+          },
+          "scroll": [
+            {
+              "label": "library_2000",
+              "selector": "#lib-active-tracks",
+              "rounds": 2,
+              "medianFrameMs": 16.7,
+              "medianDerivedFps": 59.6,
+              "p95FrameMs_worst": 16.8,
+              "worstFrameMs_worst": 66.7,
+              "longFramesOver50ms_total": 1,
+              "rows_rendered": 0,
+              "runs": [
+                {
+                  "frames": 240,
+                  "meanFrameMs": 16.88,
+                  "medianFrameMs": 16.7,
+                  "p95FrameMs": 16.8,
+                  "worstFrameMs": 66.7,
+                  "longFramesOver50ms": 1,
+                  "derivedFps": 59.3,
+                  "scrollHeight": 0,
+                  "clientHeight": 0
+                },
+                {
+                  "frames": 240,
+                  "meanFrameMs": 16.67,
+                  "medianFrameMs": 16.7,
+                  "p95FrameMs": 16.8,
+                  "worstFrameMs": 17.7,
+                  "longFramesOver50ms": 0,
+                  "derivedFps": 60,
+                  "scrollHeight": 0,
+                  "clientHeight": 0
+                }
+              ]
+            },
+            {
+              "label": "search_results",
+              "selector": "#search-results",
+              "rounds": 2,
+              "medianFrameMs": 16.7,
+              "medianDerivedFps": 60.0,
+              "p95FrameMs_worst": 16.8,
+              "worstFrameMs_worst": 17.4,
+              "longFramesOver50ms_total": 0,
+              "rows_rendered": 0,
+              "runs": [
+                {
+                  "frames": 240,
+                  "meanFrameMs": 16.67,
+                  "medianFrameMs": 16.7,
+                  "p95FrameMs": 16.8,
+                  "worstFrameMs": 17.4,
+                  "longFramesOver50ms": 0,
+                  "derivedFps": 60,
+                  "scrollHeight": 0,
+                  "clientHeight": 0
+                },
+                {
+                  "frames": 240,
+                  "meanFrameMs": 16.67,
+                  "medianFrameMs": 16.7,
+                  "p95FrameMs": 16.8,
+                  "worstFrameMs": 16.9,
+                  "longFramesOver50ms": 0,
+                  "derivedFps": 60,
+                  "scrollHeight": 0,
+                  "clientHeight": 0
+                }
+              ]
+            }
+          ],
+          "search": {
+            "query": "Daft Punk",
+            "rounds": 2,
+            "medianMs": 847.7,
+            "runs": [
+              {
+                "query": "Daft Punk",
+                "completedAfterMs": 1576.3999999761581,
+                "events": [
+                  {
+                    "name": "search_results",
+                    "t": 764
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 1193.199999988079
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 1480
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 1537.5
+                  },
+                  {
+                    "name": "search_completed",
+                    "t": 1576.3999999761581
+                  }
+                ],
+                "resultCards": 49
+              },
+              {
+                "query": "Daft Punk",
+                "completedAfterMs": 119,
+                "events": [
+                  {
+                    "name": "search_results",
+                    "t": 9.800000011920929
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 42.30000001192093
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 67.30000001192093
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 112.19999998807907
+                  },
+                  {
+                    "name": "search_completed",
+                    "t": 119
+                  }
+                ],
+                "resultCards": 49
+              }
+            ]
+          },
+          "idle": {
+            "seconds": 20.0,
+            "warmup_sec": 5.0,
+            "summary": {
+              "n_samples": 13,
+              "window_sec": 13.8,
+              "python_cpu_pct": {
+                "mean": 0.0,
+                "median": 0.0,
+                "p95": 0.0,
+                "max": 0.0
+              },
+              "webview_cpu_pct": {
+                "mean": 0.0,
+                "median": 0.0,
+                "p95": 0.0,
+                "max": 0.0
+              },
+              "tree_cpu_pct": {
+                "mean": 0.0,
+                "median": 0.0,
+                "p95": 0.0,
+                "max": 0.0
+              },
+              "python_rss_mb": {
+                "mean": 172.01,
+                "median": 172.01,
+                "p95": 172.01,
+                "max": 172.01
+              },
+              "webview_rss_mb": {
+                "mean": 536.76,
+                "median": 545.5,
+                "p95": 546.61,
+                "max": 546.61
+              },
+              "tree_rss_mb": {
+                "mean": 708.77,
+                "median": 717.51,
+                "p95": 718.62,
+                "max": 718.62
+              },
+              "python_threads_max": 41,
+              "n_children_max": 6
+            },
+            "perf": {
+              "Timestamp": 307358.114798,
+              "AudioHandlers": 0,
+              "AudioWorkletProcessors": 0,
+              "Documents": 2,
+              "Frames": 2,
+              "JSEventListeners": 1115,
+              "LayoutObjects": 1962,
+              "MediaKeySessions": 0,
+              "MediaKeys": 0,
+              "Nodes": 12277,
+              "Resources": 225,
+              "ContextLifecycleStateObservers": 12,
+              "V8PerContextDatas": 1,
+              "WorkerGlobalScopes": 0,
+              "UACSSResources": 0,
+              "RTCPeerConnections": 0,
+              "ResourceFetchers": 2,
+              "AdSubframes": 0,
+              "DetachedScriptStates": 0,
+              "ArrayBufferContents": 0,
+              "LayoutCount": 2706,
+              "RecalcStyleCount": 5380,
+              "LayoutDuration": 0.923629,
+              "RecalcStyleDuration": 0.677515,
+              "DevToolsCommandDuration": 0.203524,
+              "ScriptDuration": 1.573731,
+              "V8CompileDuration": 6.2e-05,
+              "TaskDuration": 13.36121,
+              "TaskOtherDuration": 9.982749,
+              "ThreadTime": 13.119843,
+              "ProcessTime": 19.2099,
+              "JSHeapUsedSize": 2767316,
+              "JSHeapTotalSize": 4456448,
+              "FirstMeaningfulPaint": 307312.956897,
+              "DomContentLoaded": 307312.963941,
+              "NavigationStart": 307311.22995
+            }
+          },
+          "perf_at_end": {
+            "Timestamp": 307358.117015,
+            "AudioHandlers": 0,
+            "AudioWorkletProcessors": 0,
+            "Documents": 2,
+            "Frames": 2,
+            "JSEventListeners": 1115,
+            "LayoutObjects": 1962,
+            "MediaKeySessions": 0,
+            "MediaKeys": 0,
+            "Nodes": 12277,
+            "Resources": 225,
+            "ContextLifecycleStateObservers": 12,
+            "V8PerContextDatas": 1,
+            "WorkerGlobalScopes": 0,
+            "UACSSResources": 0,
+            "RTCPeerConnections": 0,
+            "ResourceFetchers": 2,
+            "AdSubframes": 0,
+            "DetachedScriptStates": 0,
+            "ArrayBufferContents": 0,
+            "LayoutCount": 2706,
+            "RecalcStyleCount": 5380,
+            "LayoutDuration": 0.923629,
+            "RecalcStyleDuration": 0.677515,
+            "DevToolsCommandDuration": 0.203828,
+            "ScriptDuration": 1.573743,
+            "V8CompileDuration": 6.2e-05,
+            "TaskDuration": 13.361572,
+            "TaskOtherDuration": 9.982795,
+            "ThreadTime": 13.120234,
+            "ProcessTime": 19.210386,
+            "JSHeapUsedSize": 2767316,
+            "JSHeapTotalSize": 4456448,
+            "FirstMeaningfulPaint": 307312.956897,
+            "DomContentLoaded": 307312.963941,
+            "NavigationStart": 307311.22995
+          }
+        },
+        "perf": {
+          "Timestamp": 307358.119784,
+          "AudioHandlers": 0,
+          "AudioWorkletProcessors": 0,
+          "Documents": 2,
+          "Frames": 2,
+          "JSEventListeners": 1115,
+          "LayoutObjects": 1962,
+          "MediaKeySessions": 0,
+          "MediaKeys": 0,
+          "Nodes": 12277,
+          "Resources": 225,
+          "ContextLifecycleStateObservers": 12,
+          "V8PerContextDatas": 1,
+          "WorkerGlobalScopes": 0,
+          "UACSSResources": 0,
+          "RTCPeerConnections": 0,
+          "ResourceFetchers": 2,
+          "AdSubframes": 0,
+          "DetachedScriptStates": 0,
+          "ArrayBufferContents": 0,
+          "LayoutCount": 2706,
+          "RecalcStyleCount": 5380,
+          "LayoutDuration": 0.923629,
+          "RecalcStyleDuration": 0.677515,
+          "DevToolsCommandDuration": 0.204091,
+          "ScriptDuration": 1.573756,
+          "V8CompileDuration": 6.2e-05,
+          "TaskDuration": 13.361914,
+          "TaskOtherDuration": 9.982861,
+          "ThreadTime": 13.120652,
+          "ProcessTime": 19.210896,
+          "JSHeapUsedSize": 2767316,
+          "JSHeapTotalSize": 4456448,
+          "FirstMeaningfulPaint": 307312.956897,
+          "DomContentLoaded": 307312.963941,
+          "NavigationStart": 307311.22995
+        },
+        "finished_at": 1791096692.1862524
+      },
+      "stdout_tail": "ting '5216463352418905')\\n    at eval (eval at <anonymous> (:4:29), <anonymous>:1:80)\\n    at <anonymous>:4:29\", 'message': \"Cannot set properties of undefined (setting '5216463352418905')\"}\n09:50:47.123 CRITICAL: Uncaught exception in thread Thread-56 (_call)\nTraceback (most recent call last):\n  File \"C:\\Users\\Артур\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1082, in _bootstrap_inner\n    self._context.run(self.run)\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^\n  File \"C:\\Users\\Артур\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1024, in run\n    self._target(*self._args, **self._kwargs)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\util.py\", line 250, in _call\n    window.evaluate_js(code)\n    ~~~~~~~~~~~~~~~~~~^^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\window.py\", line 50, in wrapper\n    return function(self, *args, **kwargs)\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\window.py\", line 487, in evaluate_js\n    raise JavascriptException(result)\nwebview.errors.JavascriptException: {'name': 'TypeError', 'stack': \"TypeError: Cannot set properties of undefined (setting '4695492753389662')\\n    at eval (eval at <anonymous> (:4:29), <anonymous>:1:73)\\n    at <anonymous>:4:29\", 'message': \"Cannot set properties of undefined (setting '4695492753389662')\"}\n09:50:47.124 CRITICAL: Uncaught exception in thread Thread-59 (_call)\nTraceback (most recent call last):\n  File \"C:\\Users\\Артур\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1082, in _bootstrap_inner\n    self._context.run(self.run)\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^\n  File \"C:\\Users\\Артур\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1024, in run\n    self._target(*self._args, **self._kwargs)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\util.py\", line 250, in _call\n    window.evaluate_js(code)\n    ~~~~~~~~~~~~~~~~~~^^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\window.py\", line 50, in wrapper\n    return function(self, *args, **kwargs)\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\window.py\", line 487, in evaluate_js\n    raise JavascriptException(result)\nwebview.errors.JavascriptException: {'name': 'TypeError', 'stack': \"TypeError: Cannot set properties of undefined (setting '7593773083734584')\\n    at eval (eval at <anonymous> (:4:29), <anonymous>:1:69)\\n    at <anonymous>:4:29\", 'message': \"Cannot set properties of undefined (setting '7593773083734584')\"}\n09:50:47.126 INFO: [startup] window loaded (+3664ms)\n[bench] app_ready at +34ms\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n09:50:55.968 WARNING: Last.fm HTTP 403 (Forbidden/Unauthorized). Disabling key.\n09:50:55.969 WARNING: Last.fm HTTP 403 (Forbidden/Unauthorized). Disabling key.\n09:50:55.970 WARNING: Disabling invalid/blocked Last.fm API key: bench-...\n09:50:55.970 INFO: Using stale cached response for artist.gettoptracks\n09:50:55.970 INFO: Using stale cached response for chart.gettoptracks\n09:50:56.009 WARNING: Last.fm HTTP 403 (Forbidden/Unauthorized). Disabling key.\n09:50:56.010 INFO: Using stale cached response for chart.gettoptracks\n09:51:10.450 INFO: api.py -> search called: query='Daft Punk', source='all', result_type='None'\n09:51:11.378 INFO: Yandex Music client initialized (anonymous).\n09:51:12.034 INFO: api.py -> search called: query='Daft Punk', source='all', result_type='None'\n[bench] destroy issued at +0.190s\n09:51:32.594 INFO: Cleaning up AppCore resources...\n09:51:32.828 INFO: Local HTTP stream proxy stopped\n",
+      "profile_root": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile"
+    },
+    {
+      "ok": true,
+      "exit_code": 0,
+      "wall_sec": 96.33,
+      "cold_start": {
+        "interpreter_and_import_ms": 610.5,
+        "to_window_created_ms": 790.5,
+        "to_window_loaded_ms": 2767.5,
+        "to_webview_loop_ms": 791.5
+      },
+      "startup_markers_ms": {
+        "AppCore initialized": 93.0,
+        "window created": 180.0,
+        "webview loop starting": 181.0,
+        "window loaded": 2157.0
+      },
+      "seed": {
+        "db_path": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\nedotify_storage.db",
+        "tracks": 2000,
+        "history": 0,
+        "covers": 12,
+        "cookie_mode": "pinned",
+        "cookie_jar": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\bench_cookies.txt"
+      },
+      "child": {
+        "scenario": "combo",
+        "mode": "bench",
+        "started_at": 1791096702.4396992,
+        "ok": true,
+        "error": null,
+        "data": {
+          "startup": {
+            "python_startup_marker_ms": {
+              "AppCore initialized": 93.0,
+              "window created": 180.0,
+              "webview loop starting": 181.0,
+              "window loaded": 2157.0
+            },
+            "fcp_since_nav_ms": 136,
+            "app_ready_since_reload_ms": 185.5,
+            "dcl_since_nav_ms": 126,
+            "load_event_ms": 162.19999998807907,
+            "dom_nodes": 3488,
+            "js_event_listeners": null,
+            "note": "app_ready is measured from a warm reload; end-to-end cold start is cold_start.* in the parent report"
+          },
+          "feed": {
+            "wall_ms": 5030.0,
+            "lastfm_requests": 0,
+            "lastfm_methods": [],
+            "unique_methods": [],
+            "duplicate_methods": 0,
+            "note": "outbound HTTP call count, measured with a dummy key and a fake session so nothing leaves the machine"
+          },
+          "scroll": [
+            {
+              "label": "library_2000",
+              "selector": "#lib-active-tracks",
+              "rounds": 2,
+              "medianFrameMs": 16.7,
+              "medianDerivedFps": 60.0,
+              "p95FrameMs_worst": 16.9,
+              "worstFrameMs_worst": 17.2,
+              "longFramesOver50ms_total": 0,
+              "rows_rendered": 0,
+              "runs": [
+                {
+                  "frames": 240,
+                  "meanFrameMs": 16.67,
+                  "medianFrameMs": 16.7,
+                  "p95FrameMs": 16.8,
+                  "worstFrameMs": 16.9,
+                  "longFramesOver50ms": 0,
+                  "derivedFps": 60,
+                  "scrollHeight": 0,
+                  "clientHeight": 0
+                },
+                {
+                  "frames": 240,
+                  "meanFrameMs": 16.67,
+                  "medianFrameMs": 16.7,
+                  "p95FrameMs": 16.9,
+                  "worstFrameMs": 17.2,
+                  "longFramesOver50ms": 0,
+                  "derivedFps": 60,
+                  "scrollHeight": 0,
+                  "clientHeight": 0
+                }
+              ]
+            },
+            {
+              "label": "search_results",
+              "selector": "#search-results",
+              "rounds": 2,
+              "medianFrameMs": 16.7,
+              "medianDerivedFps": 60.0,
+              "p95FrameMs_worst": 16.8,
+              "worstFrameMs_worst": 17,
+              "longFramesOver50ms_total": 0,
+              "rows_rendered": 0,
+              "runs": [
+                {
+                  "frames": 240,
+                  "meanFrameMs": 16.67,
+                  "medianFrameMs": 16.7,
+                  "p95FrameMs": 16.8,
+                  "worstFrameMs": 17,
+                  "longFramesOver50ms": 0,
+                  "derivedFps": 60,
+                  "scrollHeight": 0,
+                  "clientHeight": 0
+                },
+                {
+                  "frames": 240,
+                  "meanFrameMs": 16.67,
+                  "medianFrameMs": 16.7,
+                  "p95FrameMs": 16.8,
+                  "worstFrameMs": 17,
+                  "longFramesOver50ms": 0,
+                  "derivedFps": 60,
+                  "scrollHeight": 0,
+                  "clientHeight": 0
+                }
+              ]
+            }
+          ],
+          "search": {
+            "query": "Daft Punk",
+            "rounds": 2,
+            "medianMs": 8422.8,
+            "runs": [
+              {
+                "query": "Daft Punk",
+                "completedAfterMs": 8813.5,
+                "events": [
+                  {
+                    "name": "search_results",
+                    "t": 820.3999999761581
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 1049.800000011921
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 1454.300000011921
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 8805.5
+                  },
+                  {
+                    "name": "search_completed",
+                    "t": 8813.5
+                  }
+                ],
+                "resultCards": 29
+              },
+              {
+                "query": "Daft Punk",
+                "completedAfterMs": 8032.199999988079,
+                "events": [
+                  {
+                    "name": "search_results",
+                    "t": 14.199999988079071
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 38.40000003576279
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 60.19999998807907
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 8023.699999988079
+                  },
+                  {
+                    "name": "search_completed",
+                    "t": 8032.199999988079
+                  }
+                ],
+                "resultCards": 29
+              }
+            ]
+          },
+          "idle": {
+            "seconds": 20.0,
+            "warmup_sec": 5.0,
+            "summary": {
+              "n_samples": 12,
+              "window_sec": 13.0,
+              "python_cpu_pct": {
+                "mean": 0.0,
+                "median": 0.0,
+                "p95": 0.0,
+                "max": 0.0
+              },
+              "webview_cpu_pct": {
+                "mean": 0.0,
+                "median": 0.0,
+                "p95": 0.0,
+                "max": 0.0
+              },
+              "tree_cpu_pct": {
+                "mean": 0.0,
+                "median": 0.0,
+                "p95": 0.0,
+                "max": 0.0
+              },
+              "python_rss_mb": {
+                "mean": 178.62,
+                "median": 179.64,
+                "p95": 179.72,
+                "max": 179.72
+              },
+              "webview_rss_mb": {
+                "mean": 574.51,
+                "median": 574.69,
+                "p95": 575.05,
+                "max": 575.05
+              },
+              "tree_rss_mb": {
+                "mean": 753.14,
+                "median": 754.35,
+                "p95": 754.77,
+                "max": 754.77
+              },
+              "python_threads_max": 40,
+              "n_children_max": 7
+            },
+            "perf": {
+              "Timestamp": 307431.02192,
+              "AudioHandlers": 16,
+              "AudioWorkletProcessors": 0,
+              "Documents": 2,
+              "Frames": 2,
+              "JSEventListeners": 968,
+              "LayoutObjects": 2467,
+              "MediaKeySessions": 0,
+              "MediaKeys": 0,
+              "Nodes": 10843,
+              "Resources": 206,
+              "ContextLifecycleStateObservers": 13,
+              "V8PerContextDatas": 1,
+              "WorkerGlobalScopes": 0,
+              "UACSSResources": 0,
+              "RTCPeerConnections": 0,
+              "ResourceFetchers": 2,
+              "AdSubframes": 0,
+              "DetachedScriptStates": 0,
+              "ArrayBufferContents": 0,
+              "LayoutCount": 3636,
+              "RecalcStyleCount": 3655,
+              "LayoutDuration": 1.467139,
+              "RecalcStyleDuration": 0.580204,
+              "DevToolsCommandDuration": 0.172331,
+              "ScriptDuration": 2.068778,
+              "V8CompileDuration": 9.9e-05,
+              "TaskDuration": 18.991624,
+              "TaskOtherDuration": 14.703073,
+              "ThreadTime": 17.466073,
+              "ProcessTime": 27.669252,
+              "JSHeapUsedSize": 3327732,
+              "JSHeapTotalSize": 4718592,
+              "FirstMeaningfulPaint": 307370.840264,
+              "DomContentLoaded": 307370.833685,
+              "NavigationStart": 307370.707766
+            }
+          },
+          "perf_at_end": {
+            "Timestamp": 307431.024434,
+            "AudioHandlers": 16,
+            "AudioWorkletProcessors": 0,
+            "Documents": 2,
+            "Frames": 2,
+            "JSEventListeners": 968,
+            "LayoutObjects": 2467,
+            "MediaKeySessions": 0,
+            "MediaKeys": 0,
+            "Nodes": 10843,
+            "Resources": 206,
+            "ContextLifecycleStateObservers": 13,
+            "V8PerContextDatas": 1,
+            "WorkerGlobalScopes": 0,
+            "UACSSResources": 0,
+            "RTCPeerConnections": 0,
+            "ResourceFetchers": 2,
+            "AdSubframes": 0,
+            "DetachedScriptStates": 0,
+            "ArrayBufferContents": 0,
+            "LayoutCount": 3636,
+            "RecalcStyleCount": 3655,
+            "LayoutDuration": 1.467139,
+            "RecalcStyleDuration": 0.580204,
+            "DevToolsCommandDuration": 0.172604,
+            "ScriptDuration": 2.068778,
+            "V8CompileDuration": 9.9e-05,
+            "TaskDuration": 18.992013,
+            "TaskOtherDuration": 14.703189,
+            "ThreadTime": 17.466512,
+            "ProcessTime": 27.670065,
+            "JSHeapUsedSize": 3327732,
+            "JSHeapTotalSize": 4718592,
+            "FirstMeaningfulPaint": 307370.840264,
+            "DomContentLoaded": 307370.833685,
+            "NavigationStart": 307370.707766
+          }
+        },
+        "perf": {
+          "Timestamp": 307431.029844,
+          "AudioHandlers": 16,
+          "AudioWorkletProcessors": 0,
+          "Documents": 2,
+          "Frames": 2,
+          "JSEventListeners": 968,
+          "LayoutObjects": 2469,
+          "MediaKeySessions": 0,
+          "MediaKeys": 0,
+          "Nodes": 10843,
+          "Resources": 206,
+          "ContextLifecycleStateObservers": 13,
+          "V8PerContextDatas": 1,
+          "WorkerGlobalScopes": 0,
+          "UACSSResources": 0,
+          "RTCPeerConnections": 0,
+          "ResourceFetchers": 2,
+          "AdSubframes": 0,
+          "DetachedScriptStates": 0,
+          "ArrayBufferContents": 0,
+          "LayoutCount": 3637,
+          "RecalcStyleCount": 3656,
+          "LayoutDuration": 1.467403,
+          "RecalcStyleDuration": 0.580317,
+          "DevToolsCommandDuration": 0.17284,
+          "ScriptDuration": 2.069739,
+          "V8CompileDuration": 9.9e-05,
+          "TaskDuration": 18.996165,
+          "TaskOtherDuration": 14.705767,
+          "ThreadTime": 17.470786,
+          "ProcessTime": 27.676272,
+          "JSHeapUsedSize": 3330060,
+          "JSHeapTotalSize": 4718592,
+          "FirstMeaningfulPaint": 307370.840264,
+          "DomContentLoaded": 307370.833685,
+          "NavigationStart": 307370.707766
+        },
+        "finished_at": 1791096765.0960703
+      },
+      "stdout_tail": "ady at +3ms\n09:51:45.174 INFO: Last.fm API key not configured — set the LASTFM_API_KEY environment variable or auth.lastfm_api_key in settings. Last.fm features are disabled.\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n09:51:53.850 WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n09:52:02.001 WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n09:52:08.182 INFO: api.py -> search called: query='Daft Punk', source='all', result_type='None'\n09:52:09.161 INFO: Yandex Music client initialized (anonymous).\n09:52:10.156 WARNING: Could not scrape SoundCloud client_id: HTTPSConnectionPool(host='soundcloud.com', port=443): Max retries exceeded with url: / (Caused by ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\"))\n09:52:16.982 WARNING: soundcloud search timed out after 8.0s\n09:52:17.000 INFO: api.py -> search called: query='Daft Punk', source='all', result_type='None'\n09:52:18.773 WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n09:52:25.018 WARNING: soundcloud search timed out after 8.0s\n09:52:26.985 WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n09:52:35.135 WARNING: Could not scrape SoundCloud client_id: HTTPSConnectionPool(host='soundcloud.com', port=443): Max retries exceeded with url: / (Caused by ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\"))\n[bench] destroy issued at +0.142s\n09:52:45.450 INFO: Cleaning up AppCore resources...\n09:52:45.631 INFO: Local HTTP stream proxy stopped\nERROR: [soundcloud:search] Unable to download webpage: HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0) (caused by TransportError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0)\"))\n09:52:46.333 WARNING: SoundCloud search failed: ERROR: [soundcloud:search] Unable to download webpage: HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0) (caused by TransportError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0)\")). Performing Youtube fallback...\n09:52:46.334 INFO: soundcloud search failed: Поиск недоступен: cannot schedule new futures after interpreter shutdown\n09:53:00.310 WARNING: Could not scrape SoundCloud client_id: HTTPSConnectionPool(host='soundcloud.com', port=443): Max retries exceeded with url: / (Caused by ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\"))\nERROR: [soundcloud:search] Unable to download webpage: HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0) (caused by TransportError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0)\"))\n09:53:10.591 WARNING: SoundCloud search failed: ERROR: [soundcloud:search] Unable to download webpage: HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0) (caused by TransportError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0)\")). Performing Youtube fallback...\n09:53:10.593 INFO: soundcloud search failed: Поиск недоступен: cannot schedule new futures after interpreter shutdown\n",
+      "profile_root": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile"
+    },
+    {
+      "ok": true,
+      "exit_code": 0,
+      "wall_sec": 96.54,
+      "cold_start": {
+        "interpreter_and_import_ms": 587.1,
+        "to_window_created_ms": 689.1,
+        "to_window_loaded_ms": 2644.1,
+        "to_webview_loop_ms": 690.1
+      },
+      "startup_markers_ms": {
+        "AppCore initialized": 57.0,
+        "window created": 102.0,
+        "webview loop starting": 103.0,
+        "window loaded": 2057.0
+      },
+      "seed": {
+        "db_path": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\nedotify_storage.db",
+        "tracks": 2000,
+        "history": 0,
+        "covers": 12,
+        "cookie_mode": "pinned",
+        "cookie_jar": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\bench_cookies.txt"
+      },
+      "child": {
+        "scenario": "combo",
+        "mode": "bench",
+        "started_at": 1791096801.3063278,
+        "ok": true,
+        "error": null,
+        "data": {
+          "startup": {
+            "python_startup_marker_ms": {
+              "AppCore initialized": 57.0,
+              "window created": 102.0,
+              "webview loop starting": 103.0,
+              "window loaded": 2057.0
+            },
+            "fcp_since_nav_ms": 76,
+            "app_ready_since_reload_ms": 393.2,
+            "dcl_since_nav_ms": 64.69999998807907,
+            "load_event_ms": 78.59999996423721,
+            "dom_nodes": 3487,
+            "js_event_listeners": null,
+            "note": "app_ready is measured from a warm reload; end-to-end cold start is cold_start.* in the parent report"
+          },
+          "feed": {
+            "wall_ms": 5008.4,
+            "lastfm_requests": 0,
+            "lastfm_methods": [],
+            "unique_methods": [],
+            "duplicate_methods": 0,
+            "note": "outbound HTTP call count, measured with a dummy key and a fake session so nothing leaves the machine"
+          },
+          "scroll": [
+            {
+              "label": "library_2000",
+              "selector": "#lib-active-tracks",
+              "rounds": 2,
+              "medianFrameMs": 16.7,
+              "medianDerivedFps": 60.0,
+              "p95FrameMs_worst": 16.8,
+              "worstFrameMs_worst": 17.1,
+              "longFramesOver50ms_total": 0,
+              "rows_rendered": 0,
+              "runs": [
+                {
+                  "frames": 240,
+                  "meanFrameMs": 16.67,
+                  "medianFrameMs": 16.7,
+                  "p95FrameMs": 16.8,
+                  "worstFrameMs": 16.9,
+                  "longFramesOver50ms": 0,
+                  "derivedFps": 60,
+                  "scrollHeight": 0,
+                  "clientHeight": 0
+                },
+                {
+                  "frames": 240,
+                  "meanFrameMs": 16.67,
+                  "medianFrameMs": 16.7,
+                  "p95FrameMs": 16.8,
+                  "worstFrameMs": 17.1,
+                  "longFramesOver50ms": 0,
+                  "derivedFps": 60,
+                  "scrollHeight": 0,
+                  "clientHeight": 0
+                }
+              ]
+            },
+            {
+              "label": "search_results",
+              "selector": "#search-results",
+              "rounds": 2,
+              "medianFrameMs": 16.7,
+              "medianDerivedFps": 60.0,
+              "p95FrameMs_worst": 16.9,
+              "worstFrameMs_worst": 17.3,
+              "longFramesOver50ms_total": 0,
+              "rows_rendered": 0,
+              "runs": [
+                {
+                  "frames": 240,
+                  "meanFrameMs": 16.67,
+                  "medianFrameMs": 16.7,
+                  "p95FrameMs": 16.9,
+                  "worstFrameMs": 17.2,
+                  "longFramesOver50ms": 0,
+                  "derivedFps": 60,
+                  "scrollHeight": 0,
+                  "clientHeight": 0
+                },
+                {
+                  "frames": 240,
+                  "meanFrameMs": 16.67,
+                  "medianFrameMs": 16.7,
+                  "p95FrameMs": 16.8,
+                  "worstFrameMs": 17.3,
+                  "longFramesOver50ms": 0,
+                  "derivedFps": 60,
+                  "scrollHeight": 0,
+                  "clientHeight": 0
+                }
+              ]
+            }
+          ],
+          "search": {
+            "query": "Daft Punk",
+            "rounds": 2,
+            "medianMs": 8298.4,
+            "runs": [
+              {
+                "query": "Daft Punk",
+                "completedAfterMs": 8577.199999988079,
+                "events": [
+                  {
+                    "name": "search_results",
+                    "t": 568.9000000357628
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 1149.199999988079
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 1358.199999988079
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 8569.699999988079
+                  },
+                  {
+                    "name": "search_completed",
+                    "t": 8577.199999988079
+                  }
+                ],
+                "resultCards": 29
+              },
+              {
+                "query": "Daft Punk",
+                "completedAfterMs": 8019.599999964237,
+                "events": [
+                  {
+                    "name": "search_results",
+                    "t": 23
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 53.19999998807907
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 81.69999998807907
+                  },
+                  {
+                    "name": "search_results",
+                    "t": 8016.699999988079
+                  },
+                  {
+                    "name": "search_completed",
+                    "t": 8019.599999964237
+                  }
+                ],
+                "resultCards": 29
+              }
+            ]
+          },
+          "idle": {
+            "seconds": 20.0,
+            "warmup_sec": 5.0,
+            "summary": {
+              "n_samples": 13,
+              "window_sec": 13.8,
+              "python_cpu_pct": {
+                "mean": 0.0,
+                "median": 0.0,
+                "p95": 0.0,
+                "max": 0.0
+              },
+              "webview_cpu_pct": {
+                "mean": 0.0,
+                "median": 0.0,
+                "p95": 0.0,
+                "max": 0.0
+              },
+              "tree_cpu_pct": {
+                "mean": 0.0,
+                "median": 0.0,
+                "p95": 0.0,
+                "max": 0.0
+              },
+              "python_rss_mb": {
+                "mean": 184.87,
+                "median": 185.74,
+                "p95": 185.81,
+                "max": 185.81
+              },
+              "webview_rss_mb": {
+                "mean": 576.26,
+                "median": 577.17,
+                "p95": 578.12,
+                "max": 578.12
+              },
+              "tree_rss_mb": {
+                "mean": 761.12,
+                "median": 762.88,
+                "p95": 763.87,
+                "max": 763.87
+              },
+              "python_threads_max": 41,
+              "n_children_max": 7
+            },
+            "perf": {
+              "Timestamp": 307529.693081,
+              "AudioHandlers": 16,
+              "AudioWorkletProcessors": 0,
+              "Documents": 2,
+              "Frames": 2,
+              "JSEventListeners": 972,
+              "LayoutObjects": 1914,
+              "MediaKeySessions": 0,
+              "MediaKeys": 0,
+              "Nodes": 10881,
+              "Resources": 215,
+              "ContextLifecycleStateObservers": 13,
+              "V8PerContextDatas": 1,
+              "WorkerGlobalScopes": 0,
+              "UACSSResources": 0,
+              "RTCPeerConnections": 0,
+              "ResourceFetchers": 2,
+              "AdSubframes": 0,
+              "DetachedScriptStates": 0,
+              "ArrayBufferContents": 0,
+              "LayoutCount": 35,
+              "RecalcStyleCount": 61,
+              "LayoutDuration": 0.034433,
+              "RecalcStyleDuration": 0.032445,
+              "DevToolsCommandDuration": 0.185729,
+              "ScriptDuration": 0.92405,
+              "V8CompileDuration": 9e-05,
+              "TaskDuration": 3.747623,
+              "TaskOtherDuration": 2.570876,
+              "ThreadTime": 4.819304,
+              "ProcessTime": 9.704983,
+              "JSHeapUsedSize": 3144024,
+              "JSHeapTotalSize": 3932160,
+              "FirstMeaningfulPaint": 307472.007012,
+              "DomContentLoaded": 307469.560356,
+              "NavigationStart": 307469.498118
+            }
+          },
+          "perf_at_end": {
+            "Timestamp": 307529.695231,
+            "AudioHandlers": 16,
+            "AudioWorkletProcessors": 0,
+            "Documents": 2,
+            "Frames": 2,
+            "JSEventListeners": 972,
+            "LayoutObjects": 1914,
+            "MediaKeySessions": 0,
+            "MediaKeys": 0,
+            "Nodes": 10881,
+            "Resources": 215,
+            "ContextLifecycleStateObservers": 13,
+            "V8PerContextDatas": 1,
+            "WorkerGlobalScopes": 0,
+            "UACSSResources": 0,
+            "RTCPeerConnections": 0,
+            "ResourceFetchers": 2,
+            "AdSubframes": 0,
+            "DetachedScriptStates": 0,
+            "ArrayBufferContents": 0,
+            "LayoutCount": 35,
+            "RecalcStyleCount": 61,
+            "LayoutDuration": 0.034433,
+            "RecalcStyleDuration": 0.032445,
+            "DevToolsCommandDuration": 0.186005,
+            "ScriptDuration": 0.92405,
+            "V8CompileDuration": 9e-05,
+            "TaskDuration": 3.747959,
+            "TaskOtherDuration": 2.570936,
+            "ThreadTime": 4.819695,
+            "ProcessTime": 9.705866,
+            "JSHeapUsedSize": 3144024,
+            "JSHeapTotalSize": 3932160,
+            "FirstMeaningfulPaint": 307472.007012,
+            "DomContentLoaded": 307469.560356,
+            "NavigationStart": 307469.498118
+          }
+        },
+        "perf": {
+          "Timestamp": 307529.698094,
+          "AudioHandlers": 16,
+          "AudioWorkletProcessors": 0,
+          "Documents": 2,
+          "Frames": 2,
+          "JSEventListeners": 972,
+          "LayoutObjects": 1914,
+          "MediaKeySessions": 0,
+          "MediaKeys": 0,
+          "Nodes": 10881,
+          "Resources": 215,
+          "ContextLifecycleStateObservers": 13,
+          "V8PerContextDatas": 1,
+          "WorkerGlobalScopes": 0,
+          "UACSSResources": 0,
+          "RTCPeerConnections": 0,
+          "ResourceFetchers": 2,
+          "AdSubframes": 0,
+          "DetachedScriptStates": 0,
+          "ArrayBufferContents": 0,
+          "LayoutCount": 35,
+          "RecalcStyleCount": 61,
+          "LayoutDuration": 0.034433,
+          "RecalcStyleDuration": 0.032445,
+          "DevToolsCommandDuration": 0.186236,
+          "ScriptDuration": 0.92405,
+          "V8CompileDuration": 9e-05,
+          "TaskDuration": 3.748214,
+          "TaskOtherDuration": 2.57096,
+          "ThreadTime": 4.819978,
+          "ProcessTime": 9.706346,
+          "JSHeapUsedSize": 3144024,
+          "JSHeapTotalSize": 3932160,
+          "FirstMeaningfulPaint": 307472.007012,
+          "DomContentLoaded": 307469.560356,
+          "NavigationStart": 307469.498118
+        },
+        "finished_at": 1791096863.7641077
+      },
+      "stdout_tail": " Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n[bench] CDP attached\n09:53:23.667 INFO: [startup] window loaded (+2057ms)\n[bench] new doc committed at +20ms, interactive at +393ms (FCP 76ms since navStart)\n[bench] app_ready at +5ms\n09:53:32.291 WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n09:53:40.381 WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n09:53:47.130 INFO: api.py -> search called: query='Daft Punk', source='all', result_type='None'\n09:53:47.900 INFO: Yandex Music client initialized (anonymous).\n09:53:48.543 WARNING: Could not scrape SoundCloud client_id: HTTPSConnectionPool(host='soundcloud.com', port=443): Max retries exceeded with url: / (Caused by ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\"))\n09:53:55.692 WARNING: soundcloud search timed out after 8.0s\n09:53:55.717 INFO: api.py -> search called: query='Daft Punk', source='all', result_type='None'\n09:53:57.198 WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n09:54:03.728 WARNING: soundcloud search timed out after 8.0s\n09:54:05.361 WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n09:54:13.530 WARNING: Could not scrape SoundCloud client_id: HTTPSConnectionPool(host='soundcloud.com', port=443): Max retries exceeded with url: / (Caused by ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\"))\n[bench] destroy issued at +0.087s\n09:54:24.076 INFO: Cleaning up AppCore resources...\n09:54:24.465 INFO: Local HTTP stream proxy stopped\nERROR: [soundcloud:search] Unable to download webpage: HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0) (caused by TransportError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0)\"))\n09:54:24.885 WARNING: SoundCloud search failed: ERROR: [soundcloud:search] Unable to download webpage: HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0) (caused by TransportError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0)\")). Performing Youtube fallback...\n09:54:24.887 INFO: soundcloud search failed: Поиск недоступен: cannot schedule new futures after interpreter shutdown\n09:54:38.893 WARNING: Could not scrape SoundCloud client_id: HTTPSConnectionPool(host='soundcloud.com', port=443): Max retries exceeded with url: / (Caused by ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\"))\nERROR: [soundcloud:search] Unable to download webpage: HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0) (caused by TransportError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0)\"))\n09:54:49.112 WARNING: SoundCloud search failed: ERROR: [soundcloud:search] Unable to download webpage: HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0) (caused by TransportError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=10.0)\")). Performing Youtube fallback...\n09:54:49.113 INFO: soundcloud search failed: Поиск недоступен: cannot schedule new futures after interpreter shutdown\n",
+      "profile_root": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile"
+    }
+  ]
+}

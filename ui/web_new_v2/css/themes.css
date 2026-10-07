@@ -1,6 +1,29 @@
 /* =============================================
    NeDotify — Theme System
    Multi-theme architecture based on background and accent color
+
+   OWNERSHIP
+   ---------
+   This file owns the RAW PALETTE and nothing else: --primary, --primary-rgb,
+   --primary-fg, --accent, --accent-glow, --border-glow, --ambient-glow,
+   --bg-main, --bg-surface, --text-main, --text-sec, --text-dim, --border,
+   --bg-panel, --bg-card, --bg-hover, --bg-active, --shadow-color,
+   --success, --error, --warning.
+
+   tokens.css owns the SEMANTIC layer (--color-*) and derives it from these
+   names. The `--color-*` block that used to sit at the bottom of the `:root`
+   rule below ("Dynamic Design-Token Bridge") was a second definition of nine
+   tokens that tokens.css already declared. Because index.html links
+   themes.css LAST, that block silently won, so the token layer only worked
+   because of the link order. It is gone: every `--color-*` token now has
+   exactly one declaration, in tokens.css.
+
+   Nothing is lost by that. The bridge existed to propagate a theme's
+   `--primary` into `--color-primary`, and that still happens - var() is
+   resolved after the cascade, so a preset that only sets `--accent` and then
+   derives `--primary: var(--accent)` is picked up by tokens.css just the
+   same. In fact it is now order-independent: this file can be linked before
+   tokens.css and every theme resolves identically.
    ============================================= */
 
 :root {
@@ -27,17 +50,6 @@
     --error: #ef4444;
     --warning: #f59e0b;
     --shadow-color: rgba(0, 0, 0, 0.6);
-
-    /* Dynamic Design-Token Bridge: Sync v2 tokens with active theme */
-    --color-primary: var(--primary);
-    --color-primary-rgb: var(--primary-rgb);
-    --color-primary-fg: var(--primary-fg);
-    --color-primary-glow: var(--accent-glow);
-    --color-border: var(--border-glow, rgba(var(--primary-rgb), 0.15));
-    --color-border-hover: rgba(var(--primary-rgb), 0.30);
-    --color-border-glow: rgba(var(--primary-rgb), 0.45);
-    --color-surface-hover: rgba(var(--primary-rgb), 0.08);
-    --color-surface-active: rgba(var(--primary-rgb), 0.14);
 }
 
 /* 1. AMOLED */
@@ -65,8 +77,9 @@
     --primary: #a855f7;
     --primary-rgb: 168, 85, 247;
     --primary-fg: #ffffff;
-    --background: #0a0a0f;
-    --surface: #14141d;
+    /* --background / --surface used to be repeated here as literals. They are
+       plain aliases of --bg-main / --bg-surface and are single-sourced in
+       tokens.css section 6, so the copies only added a second place to edit. */
 }
 
 /* 3. Midnight */
@@ -307,4 +320,103 @@
     --primary: var(--accent);
     --primary-rgb: 6, 182, 212;
     --primary-fg: #ffffff;
+}
+
+/* ==========================================================================
+   23. Light - the missing half of the theme_mode switch.
+
+   THE BUG THIS FIXES
+   ------------------
+   js/settings.js `applyThemeMode()` writes `data-theme="light"` when the user
+   picks Light (theme_mode = dark | light | system), and
+   tools/visual_guard/fixtures.py has a "light" capture fixture. Nothing in
+   this file matched `[data-theme="light"]`, so every declaration fell back to
+   `:root` and a user who explicitly chose Light got the dark palette. This
+   block is purely additive - no dark theme above is touched.
+
+   ALPHA NOTE - read this before editing any value below.
+   `--text-main`, `--text-sec`, `--text-dim`, `--border`, `--bg-panel`,
+   `--bg-card`, `--bg-hover`, `--bg-active`, `--border-glow` and every
+   `--color-*` derived from them are translucent. The browser composites them
+   over whatever is behind them - a card, a sidebar, a custom background image
+   - not just over `--bg-main`. So every ratio below is stated for the WORST
+   case: composited onto pure white (`--bg-surface`, the lightest backdrop in
+   the app) as well as onto `--bg-main`. A value that clears both clears
+   everything lighter. The case named in visual-polish.css is the toast: it
+   renders as `color-mix(in srgb, var(--bg-surface) 92%, transparent)`, i.e.
+   ~#fefeff, and `--text-main` on it is 17.76:1, `--text-sec` 7.06:1.
+
+   MEASURED RATIOS (WCAG 2.x, sRGB, composited - not eyeballed)
+   -----------------------------------------------------------
+     --text-main  #1b1425 on #ffffff      17.90:1   AA body (needs 4.5)
+     --text-main  #1b1425 on #f6f4fa      16.40:1   AA body
+     --text-main  on --bg-card           15.14:1   AA body
+     --text-sec   a=0.72 on #ffffff       7.11:1   AA body
+     --text-sec   a=0.72 on #f6f4fa       6.81:1   AA body
+     --text-dim   a=0.66 on #ffffff       5.75:1   AA body
+     --text-dim   a=0.66 on #f6f4fa       5.58:1   AA body
+     --text-dim   a=0.66 on toast         5.72:1   AA body
+     --border     a=0.55 on #ffffff       3.97:1   UI border (needs 3.0)
+     --border     a=0.55 on #f6f4fa       3.88:1   UI border
+     --border     a=0.55 on toast         3.99:1   UI border
+     --color-border (via --border-glow)   3.29:1   UI border
+     --primary-fg #1b1425 on --primary    4.52:1   AA body
+     --success    #047857 on #ffffff      5.48:1   AA body
+     --error      #b91c1c on #ffffff      6.47:1   AA body
+     --error      #b91c1c on toast        6.42:1   AA body
+     --warning    #a16207 on #ffffff      4.92:1   AA body
+
+   THREE DEVIATIONS FROM THE DARK PALETTE, all deliberate:
+     * `--border` at 0.55 alpha is far heavier than the dark themes' 0.08.
+       Inverting a dark palette means the hairline has to be dark ink, not
+       white at 8%; 0.08 alpha over white is 1.34:1, i.e. invisible. 0.55
+       clears the 3:1 bar. This is the most visible consequence of the
+       inversion and the easiest thing to dial back if it reads too heavy.
+     * `--bg-hover` / `--bg-active` stay as translucent washes at 0.08 /
+       0.14 (1.18:1 / 1.34:1 composited). They are state fills, not text and
+       not boundaries: pushing a full-width row fill to 3:1 needs ~0.46 alpha,
+       which paints a mid-grey slab on every hover. The boundary you actually
+       need to see is `--border`, which does clear 3:1.
+     * `--success` / `--error` / `--warning` drop to their 700 steps. The dark
+       palette's #10b981 / #ef4444 / #f59e0b are 2.54 / 3.76 / 2.15 on white,
+       and `.toast.error` paints body-size text in `--error`.
+
+   Held fixed on purpose: the brand accent stays #a855f7. That leaves text
+   painted directly in `--primary` at 3.96:1 on white, below AA - a property
+   of the accent rather than of this palette. Only the ink ON the accent moves
+   (`--primary-fg`): white-on-#a855f7 is 3.96:1, so it becomes the dark ink at
+   4.52:1.
+   ========================================================================== */
+:root[data-theme="light"] {
+    --bg-main: #f6f4fa;                    /* Warm paper, one step off white */
+    --bg-surface: #ffffff;                 /* Cards, sheets, the toast surface */
+
+    --bg-panel: rgba(27, 20, 37, 0.04);
+    --bg-card: rgba(27, 20, 37, 0.04);
+    --bg-hover: rgba(27, 20, 37, 0.08);
+    --bg-active: rgba(27, 20, 37, 0.14);
+
+    --text-main: #1b1425;                  /* 17.90:1 on --bg-surface */
+    --text-sec: rgba(27, 20, 37, 0.72);    /*  7.11:1 on --bg-surface */
+    --text-dim: rgba(27, 20, 37, 0.66);    /*  5.75:1 on --bg-surface */
+
+    --border: rgba(27, 20, 37, 0.55);       /*  3.97:1 - see the note above */
+
+    --shadow-color: rgba(27, 20, 37, 0.18);
+
+    /* Brand accent unchanged; only the ink sitting on it changes. */
+    --primary: #a855f7;
+    --primary-rgb: 168, 85, 247;
+    --primary-fg: #1b1425;
+    --accent: #a855f7;
+    --accent-glow: rgba(168, 85, 247, 0.30);
+    --ambient-glow: rgba(168, 85, 247, 0.12);
+    /* Feeds --color-border, which paints real 1px borders (stat cards, the
+       theme switcher, the now-playing sheet), so it has to clear 3:1 on white
+       too - not merely read as a faint tint. */
+    --border-glow: rgba(124, 58, 237, 0.70);
+
+    --success: #047857;
+    --error: #b91c1c;
+    --warning: #a16207;
 }

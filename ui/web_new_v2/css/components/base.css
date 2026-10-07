@@ -27,6 +27,80 @@
     --bg: var(--color-bg-base, var(--bg-main, #0e0711));
     --text: var(--color-text-main, var(--text-main, #ffffff));
 
+    /* ── Text alpha ladder ──────────────────────────────────────────────────
+       The three steps that no existing token could express. themes.css owns
+       --text-main (alpha 1.0), --text-sec (0.7) and --text-dim (0.45); the
+       component CSS also painted literal rgba(255,255,255, …) values at 0.32,
+       0.50 and 0.92. Those alphas have no token equivalent, so aliasing them
+       onto --text-sec/--text-dim would have silently re-tinted them.
+
+       Each dark value below is the EXACT literal it replaces, so every one of
+       the 22 dark themes renders byte-identically to before this block
+       existed. They are declared here rather than in tokens.css because
+       themes.css/tokens.css are owned elsewhere; `:root` here resolves
+       before any theme block regardless of link order (var() is resolved
+       after the cascade), so this is order-independent.
+
+       Light values live in the `[data-theme="light"]` block further down, and
+       were picked as the SMALLEST alpha of the light ink (#1b1425) that still
+       clears WCAG AA 4.5:1 against the real composited backdrop - see the
+       measured ratios in that block. */
+    --text-faint:  rgba(255, 255, 255, 0.32);  /* resting lyric line, dimmed */
+    --text-soft:   rgba(255, 255, 255, 0.5);   /* library empty state       */
+    --text-bright: rgba(255, 255, 255, 0.92);  /* lyric hover pre-focus    */
+}
+
+/* ==========================================================================
+   Light theme — the alpha ladder, inverted.
+
+   WHY ONLY THESE THREE, AND NOT THE OTHER ~30 WHITE `color:` LITERALS
+   ---------------------------------------------------------------------
+   This palette is a real inversion: #1b1425 ink on #ffffff/#f6f4fa paper.
+   Converting a white literal to a dark ink is only correct if the element
+   actually sits on that paper. Most of them do not - the component CSS
+   hard-codes its own dark chrome, and those surfaces are NOT inverted by
+   themes.css, so white ink stays correct there and converting it would
+   have produced near-invisible dark-on-dark text. Traced chains:
+
+     .search-capsule        rgba(22,20,18,.85)    stays dark  -> leave white
+     .glass-modal-card      rgba(22,24,29,.85)    stays dark  -> leave white
+     .rich-track-menu       rgba(20,18,16,.94)    stays dark  -> leave white
+     .custom-glass-dropdown rgba(20,22,28,.95)    stays dark  -> leave white
+     #mini-player-overlay   rgba(15,15,20,.96) !  stays dark  -> leave white
+     #lyrics-overlay        rgba(14, 7,17,.88)    stays dark  -> leave white
+     .settings-modal-card   rgba(20,14,24,.88)    stays dark  -> leave white
+       (the 0.55 black scrim under it composites to rgb(114,114,114),
+        and the card over that to rgb(31,31,40): still a dark surface)
+
+   That covers ::placeholder, input/textarea, .opt-card, .glass-modal-label,
+   .theme-card-name, .font-cat-btn, .custom-color-label, .rich-menu-*,
+   .custom-glass-dropdown-item, .search-clear, #mini-player-overlay .mp-*,
+   .font-card-name / .lib-empty-sub / .opt-box-sub (already token-routed).
+   .artist-avatar-fallback span sits on an inline gradient from
+   FALLBACK_GRADIENTS (js/utils.js) - saturated mid-tones, theme-independent.
+
+   The selectors converted to tokens below are exactly the ones whose painted
+   backdrop IS the theme-aware surface stack (#main-content /
+   .player-glass-card / .lib-right-content), so in the light theme their old
+   white ink measured 1.01-1.03:1 - genuinely invisible.
+
+   MEASURED (WCAG 2.x, sRGB, composited over the real backdrop, not eyeballed)
+     --text-faint  a=0.62 -> rgb(110,105,117)  4.87:1 on .player-glass-card
+     --text-soft   a=0.64 -> rgb(108,104,115)  5.33:1 on .lib-right-content
+     --text-bright a=0.92 -> rgb( 44, 38, 54) 13.35:1 on .player-glass-card
+
+   Each is the smallest alpha clearing 4.5:1. Note this RE-COMPRESSES the
+   ladder in light (0.62/0.64/0.92 vs dark 0.32/0.50/0.92): alpha cannot go
+   below ~0.59 of #1b1425 and stay AA on white paper, so the dim->bright
+   ordering is preserved but the bottom of the range is lifted. Ordering is
+   what the lyrics progression depends on, and it holds in both themes.
+   ========================================================================== */
+[data-theme="light"] {
+    --text-faint:  rgba(27, 20, 37, 0.62);  /*  4.87:1 on .player-glass-card */
+    --text-soft:   rgba(27, 20, 37, 0.64);  /*  5.33:1 on .lib-right-content */
+    --text-bright: rgba(27, 20, 37, 0.92);  /* 13.35:1 on .player-glass-card */
+}
+
     /* ── Performance-controlled variables ── */
     --glass-blur: 8px;          /* User-controlled backdrop blur */
     --blur-sm:    calc(var(--glass-blur) * 0.75); /* Small blur (cards, search) */
@@ -39,6 +113,31 @@
     --player-glow-blur: 40px;   /* Ambient glow blur under album art */
     --player-glow-opacity: 0.5; /* Ambient glow opacity */
     --ambient-blur: 50px;       /* App-container ambient radial blur */
+
+    /* ── Focus ring ─────────────────────────────────────────────────────────
+       The one definition of the keyboard focus indicator. It used to live
+       only in components/visual-polish.css, which index.html does not link,
+       so on the stylesheets that ARE loaded every control that suppresses the
+       native outline had no focus state at all. Same value as the polish pack,
+       declared here instead so it resolves on the real cascade. */
+    --ring: 0 0 0 3px rgba(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)), 0.35);
+
+    /* ── Stacking order ─────────────────────────────────────────────────────
+       Only the overlay layers. Each value is the literal it replaces, so the
+       resolved numbers are byte-for-byte what they were; what changes is that
+       a layer can now be moved in one place instead of by hunting magic
+       numbers through five different selectors.
+
+       --z-dropdown and --z-modal share 9999 and stay separate tokens on
+       purpose: a menu and a modal are mutually exclusive, so the equality is a
+       fact about the UI and not a reason to fuse the two names. The remaining
+       layers each have their own value and so get their own token. */
+    --z-dropdown: 9999;         /* #custom-context-menu, .custom-glass-dropdown-menu */
+    --z-modal: 9999;            /* .modal-overlay */
+    --z-rich-menu: 99999;       /* .rich-track-menu */
+    --z-splash: 99999;          /* #app-splash */
+    --z-toast: 10001;           /* #toast-container */
+    --z-mini-player: 999999;    /* #mini-player-overlay */
 }
 
 /* ── Performance Preset: Medium ── */
@@ -134,7 +233,7 @@
 #app-splash {
     position: fixed;
     inset: 0;
-    z-index: 99999;
+    z-index: var(--z-splash);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -336,10 +435,36 @@ a { color: var(--primary); text-decoration: none; }
 }
 
 /* ─── Layout ─── */
+/* min-width/min-height are a safety net, not a design constraint, and they
+   mirror `min_size` in main.py. They exist so that if the window ever gets
+   below that floor anyway - a DPI rounding artefact, a display change, or a
+   caller that builds the window itself - the flex children still get a width
+   they can be laid out in, instead of being crushed.
+
+   The arithmetic that sets the floor:
+     #player-bar is position:fixed, inset 24px each side, and its grid tracks
+     are minmax(240px, 1.2fr) / 2fr / minmax(160px, 0.8fr). The middle track can
+     collapse to 0 but the two side tracks cannot, so the bar needs
+     240 + 160 = 400px of content box. Add its own padding
+     (16px + 24px = 40px) and 2px of border and 48px of page inset and the
+     window must be at least 490px wide or the bar overflows its own box.
+     The sidebar (200px + a 12px margin) and #main-content (12px each side)
+     together only need 236px, so the bar is the binding constraint.
+   Vertically the bar reserves 20 + 84 = 104px at the bottom, and the content
+   columns carry a 12px top and a 116px bottom margin, which leaves
+   height - 128px of usable band. 640px keeps that band at 512px, above the
+   480px min-height .artist-profile-layout asks for.
+
+   At or above the window floor these are inert - 600x640 is below the 900px
+   rail breakpoint, so the rail layout stays reachable - and because body is
+   `overflow: hidden` a viewport narrower than the floor clips rather than
+   growing a scrollbar. */
 #app-container {
     display: flex;
     height: 100vh;
     width: 100vw;
+    min-width: 600px;
+    min-height: 640px;
     position: relative;
     z-index: 10;
     background-color: transparent;
@@ -443,7 +568,7 @@ html.has-custom-bg #player-bar {
 #sidebar {
     width: 200px;
     min-width: 200px;
-    margin: 12px 0 calc(var(--player-bar-height, 84px) + 32px) 12px;
+    margin: 12px 0 calc(var(--player-bar-height, 84px) + var(--player-bar-offset, 20px) + 32px) 12px;
     border-radius: 24px;
     background: color-mix(in srgb, var(--bg-main) calc(var(--app-bg-opacity) * 55%), transparent);
     backdrop-filter: blur(var(--blur-md));
@@ -454,9 +579,149 @@ html.has-custom-bg #player-bar {
     padding: 30px 0 20px 0;
     z-index: 10;
     overflow-y: auto;
+    overflow-x: hidden;
     border: 1px solid var(--border);
     box-shadow: 0 4px 16px var(--shadow-color);
     contain: layout style;
+    /* Rail collapse. Width is transitioned on both properties because the flex
+       item would otherwise be sized by min-width and snap. */
+    transition: width 0.26s cubic-bezier(0.4, 0, 0.2, 1),
+                min-width 0.26s cubic-bezier(0.4, 0, 0.2, 1),
+                padding 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Collapsed rail (icon-only) ───────────────────────────────────────────
+   #sidebar.is-collapsed is set by initSidebarCollapse() in pages.js and
+   persisted in localStorage. The nav items stay fully clickable here; only
+   their text is collapsed, and each carries a title= tooltip because an
+   icon-only row with no label is otherwise unidentifiable. */
+#sidebar.is-collapsed {
+    width: 64px;
+    min-width: 64px;
+}
+
+#sidebar.is-collapsed .sidebar-logo {
+    position: relative;
+    width: 100%;
+    padding: 0;
+    gap: 0;
+    justify-content: center;
+}
+
+#sidebar.is-collapsed .nav-item {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+}
+
+/* Section headers ("Меню", "Аккаунт & Опции") collapse to nothing rather than
+   display:none, which would snap the row heights instead of animating. */
+#sidebar.is-collapsed .nav-section-label {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-left: 0;
+    padding-right: 0;
+    overflow: hidden;
+}
+
+/* Keep the first item off the logo when the header above it collapses. */
+#sidebar.is-collapsed .nav-item:first-of-type {
+    margin-top: 8px;
+}
+
+.sidebar-logo-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+/* Both title variants are in the DOM; CSS picks which one is visible so the
+   swap cannot be interrupted by a JS textContent write mid-transition.
+   display:block is load-bearing: max-width does not apply to an inline box, so
+   an inline label would just get clipped by the rail instead of collapsing. */
+.sidebar-logo-text {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+    transition: opacity 0.18s ease, max-width 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+    max-width: 120px;
+}
+
+/* Nudge the wordmark off the logo icon. Only the expanded variant: the
+   collapsed "N" must stay dead-centre in the rail, so it resets the offset. */
+.sidebar-logo-full {
+    margin-left: 7px;
+}
+
+.sidebar-logo-initial {
+    display: none;
+    max-width: 40px;
+    text-align: center;
+}
+
+/* Collapsed: only the initial letter remains. The pack/logo icon is dropped too -
+   icon + "N" side by side did not fit the 64px rail and left the header looking
+   like two unrelated glyphs. */
+#sidebar.is-collapsed .sidebar-logo-icon {
+    display: none;
+}
+
+#sidebar.is-collapsed .sidebar-logo-full {
+    display: block;
+    opacity: 0;
+    max-width: 0;
+    /* The expanded wordmark's nudge must not survive into the collapsed rail. */
+    margin-left: 0;
+}
+
+/* The collapsed header centres the "N" by taking it OUT of the flex flow
+   instead of trying to out-flex the sibling. .sidebar-logo-full has to stay in
+   flow (it is what crossfades), and any width/margin it carries - even at
+   max-width:0 - participates in the flex layout and skews the result. Absolute
+   positioning makes the centring independent of it entirely, which is what a
+   "must be dead centre" requirement actually needs. The containing block is
+   #sidebar.is-collapsed .sidebar-logo above (position:relative). */
+#sidebar.is-collapsed .sidebar-logo-initial {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    max-width: none;
+    margin-left: 0;
+    text-align: center;
+    pointer-events: none;
+}
+
+/* Nav labels collapse by width so the icons slide rather than blinking out. */
+.nav-label {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: opacity 0.16s ease, max-width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    max-width: 140px;
+}
+
+#sidebar.is-collapsed .nav-label {
+    opacity: 0;
+    max-width: 0;
+}
+
+#sidebar.is-collapsed .nav-section-label,
+#sidebar.is-collapsed .nav-label {
+    pointer-events: none;
+}
+
+/* Icons must not shrink while the rail narrows. */
+.nav-item > i,
+.nav-item > svg {
+    flex: 0 0 auto;
 }
 
 .sidebar-logo {
@@ -466,13 +731,20 @@ html.has-custom-bg #player-bar {
     gap: 12px;
     width: calc(100% - 32px);
     padding: 0 12px;
-    margin-bottom: 32px;
+    /* 32px here left the Меню group floating well below the title; the rail has
+       a spacer that already owns the free space, so this only needs to be a
+       visual gap. */
+    margin-bottom: 10px;
     color: var(--accent);
     font-weight: 700;
     font-size: 18px;
     box-sizing: border-box;
 }
-.sidebar-logo span { display: inline; } /* Show text */
+/* Legacy "Show text" forcing removed: `.sidebar-logo span` / `.nav-item span`
+   are (0,1,1) and silently outrank the (0,1,0) rules that drive the collapsed
+   rail, which is how "N" stayed visible next to "NeDotify". The labels below are
+   explicit block-level boxes now so max-width is actually animatable - max-width
+   has no effect on an inline box. */
 
 .nav-section-label {
     display: block;
@@ -484,6 +756,15 @@ html.has-custom-bg #player-bar {
     color: var(--text-dim);
     font-weight: 600;
     letter-spacing: 0.5px;
+    /* Collapsed-rail counterpart animates max-height/opacity/margin, so those
+       four have to be transitionable. */
+    max-height: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: max-height 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.16s ease,
+                margin 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                padding 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .nav-item {
@@ -514,7 +795,6 @@ html.has-custom-bg #player-bar {
     box-shadow: 0 4px 12px var(--accent-glow);
 }
 .nav-item .nav-indicator { display: none; } /* Removed vertical line */
-.nav-item span { display: inline; } /* Show text */
 
 
 .sidebar-spacer { flex: 1; }
@@ -524,7 +804,7 @@ html.has-custom-bg #player-bar {
     flex: 1;
     display: flex;
     flex-direction: column;
-    margin: 12px 12px calc(var(--player-bar-height, 84px) + 32px) 12px;
+    margin: 12px 12px calc(var(--player-bar-height, 84px) + var(--player-bar-offset, 20px) + 32px) 12px;
     background: color-mix(in srgb, var(--bg-surface) calc(var(--app-bg-opacity) * 75%), transparent);
     border-radius: 24px;
     overflow: hidden;
@@ -872,7 +1152,9 @@ input, textarea {
     border-radius: 20px;
     background: transparent;
     border: none;
-    color: rgba(255, 255, 255, 0.7);
+    /* 0.7 was byte-identical to --text-sec in every dark theme; routing it
+       through the token makes the pill legible on the light theme's paper. */
+    color: var(--text-sec);
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -1247,7 +1529,7 @@ input, textarea {
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 20px;
     padding: 6px;
-    z-index: 99999;
+    z-index: var(--z-rich-menu);
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 30px rgba(0, 0, 0, 0.4);
     display: none;
     animation: menuPop 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -1385,8 +1667,8 @@ input, textarea {
     bottom: 100px;
     left: 50%;
     transform: translateX(-50%);
-    /* Above modals (9999) and onboarding (10000) so status toasts are never hidden. */
-    z-index: 10001;
+    /* Above --z-modal and the onboarding layer (10000) so status toasts are never hidden. */
+    z-index: var(--z-toast);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -1635,12 +1917,31 @@ select option {
         width: 70px;
         min-width: 70px;
         padding: 30px 0 20px 0;
-        margin: 12px 0 calc(var(--player-bar-height, 84px) + 24px) 12px;
+        margin: 12px 0 calc(var(--player-bar-height, 84px) + var(--player-bar-offset, 20px) + 24px) 12px;
     }
     .sidebar-logo span, .nav-section-label, .nav-item span {
         display: none;
     }
+    /* ...but the collapsed rail's own affordance has to stay reachable, or a
+       narrow window leaves the rail permanently icon-only with no way back.
+       `.sidebar-logo .sidebar-logo-initial` is (0,2,0), which outranks the
+       blanket `.sidebar-logo span` (0,1,1) above on class count.
+       Centred by absolute inset rather than by flex, for the same reason as the
+       .is-collapsed rule: the hidden wordmark sibling must not be able to skew
+       it. */
+    .sidebar-logo .sidebar-logo-initial {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 1;
+        max-width: none;
+        margin-left: 0;
+        pointer-events: none;
+    }
     .sidebar-logo {
+        position: relative;
         justify-content: center;
         padding: 0;
         width: 100%;
@@ -2072,7 +2373,7 @@ select option {
 .modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 9999;
+    z-index: var(--z-modal);
     background: rgba(0, 0, 0, 0.65);
     display: flex;
     align-items: center;
@@ -2255,7 +2556,7 @@ body.mini-player-active {
     width: 100% !important;
     height: 100% !important;
     min-height: 0 !important;
-    z-index: 999999 !important;
+    z-index: var(--z-mini-player) !important;
     background: rgba(15, 15, 20, 0.96) !important;
     color: #ffffff !important;
     padding: 8px 12px !important;
@@ -2676,7 +2977,9 @@ body.mini-player-active .lyrics-overlay {
     align-items: center;
     justify-content: center;
     text-align: center;
-    color: rgba(255, 255, 255, 0.5);
+    /* Sits on .lib-right-content, which follows the theme surface stack, so
+       this is the one genuinely invisible 0.5 literal in the light theme. */
+    color: var(--text-soft);
 }
 
 .lib-empty-title {
@@ -3405,7 +3708,7 @@ button:active, .icon-btn:active, .play-btn:active {
     border-radius: 8px;
     padding: 5px 0;
     min-width: 200px;
-    z-index: 9999;
+    z-index: var(--z-dropdown);
     box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     opacity: 0;
     pointer-events: none;
@@ -3599,7 +3902,7 @@ html.limit-state-focus.unfocused-minimized #home-visualizer-canvas {
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    z-index: 9999;
+    z-index: var(--z-dropdown);
     min-width: 190px;
     overflow: hidden;
     padding: 4px;
@@ -3774,7 +4077,7 @@ body.unfocused-animations-disabled .aura-orb {
 #mini-lyrics-widget {
     position: fixed;
     right: 24px;
-    bottom: calc(var(--player-bar-height, 84px) + 24px);
+    bottom: calc(var(--player-bar-height, 84px) + var(--player-bar-offset, 20px) + 24px);
     width: 380px;
     max-width: calc(100vw - 48px);
     background: color-mix(in srgb, var(--color-surface, #170c16) calc(var(--app-bg-opacity, 1) * 88%), rgba(14, 7, 17, 0.92));
@@ -4043,7 +4346,7 @@ body.unfocused-animations-disabled .aura-orb {
 
 #batch-action-bar {
     position: fixed;
-    bottom: calc(var(--player-bar-height, 84px) + 20px);
+    bottom: calc(var(--player-bar-height, 84px) + var(--player-bar-offset, 20px) + 20px);
     left: 50%;
     transform: translateX(-50%) translateY(0);
     background: color-mix(in srgb, var(--color-surface, #170c16) 90%, rgba(14, 7, 17, 0.9));
@@ -4181,5 +4484,65 @@ body.unfocused-animations-disabled .aura-orb {
     animation: pulse-yellow-glow 2s ease-in-out forwards !important;
     border-color: rgba(234, 179, 8, 0.8) !important;
     border-radius: var(--radius-sm, 8px);
+}
+
+/* ==========================================================================
+   KEYBOARD FOCUS
+   ==========================================================================
+   Eleven blocks in this file set `outline: none` - the element reset above,
+   then one per control family (.settings-input, .settings-select,
+   .search-capsule .search-input, .slider-input, .eq-slider,
+   .glass-modal-input, .lib-sidebar-input, .opt-card/.opt-toggle-btn,
+   .settings-search-input). With the outline gone and no replacement anywhere
+   in the loaded cascade, Tab moved through the whole app with no visible
+   cursor at all: a keyboard user could not tell focus had landed, let alone
+   where.
+
+   This block closes that gap and nothing else.
+
+   WHY :focus-visible AND NOT :focus
+   :focus-visible is the pseudo-class the browser already applies only to
+   keyboard-originated focus. Every control here also fires :focus on a plain
+   mouse click, so styling :focus would draw a ring on every click and change
+   how the app looks today. Styling :focus-visible adds a state that did not
+   previously exist rather than altering an existing one.
+
+   WHY box-shadow AND NOT outline
+   --ring is already a shadow, and matching it keeps one focus treatment in the
+   app instead of two that drift apart. None of these selectors declares a
+   box-shadow of its own (checked across every loaded stylesheet), so the ring
+   cannot overwrite a resting elevation. The one exception is called out below.
+
+   WHY THIS IS AT THE END OF THE FILE
+   Source order decides ties, and several of these selectors have a plain
+   :focus rule with identical specificity later in this file - notably
+   .glass-modal-input:focus. Placed here, the ring wins those ties
+   deterministically instead of depending on where each rule happens to sit.
+
+   No motion properties are involved, by design: the ring appears and
+   disappears with the focus itself. */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.settings-input:focus-visible,
+.text-input:focus-visible,
+.settings-select:focus-visible,
+.search-capsule .search-input:focus-visible,
+.slider-input:focus-visible,
+.eq-slider:focus-visible,
+.glass-modal-input:focus-visible,
+.lib-sidebar-input:focus-visible,
+.opt-card:focus-visible,
+.opt-toggle-btn:focus-visible,
+.settings-search-input:focus-visible {
+    box-shadow: var(--ring);
+}
+
+/* .glass-modal-input:focus above already paints a glow and, being
+   (0,2,0) like the rule over it, would win on source order. Re-state the glow
+   here so the ring is laid on top of it instead of replacing it. */
+.glass-modal-input:focus-visible {
+    box-shadow: var(--ring), 0 0 20px rgba(16, 185, 129, 0.3);
 }
 

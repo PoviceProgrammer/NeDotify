@@ -1,0 +1,318 @@
+{
+  "label": "combo-2000trk",
+  "scenario": "combo",
+  "generated_at": "2026-10-04T09:48:13",
+  "command": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Scripts\\python.exe tools\\bench\\run_bench.py --scenario combo --reps 5 --tracks 2000 --profile-mode warm --seconds 60 --rounds 3 --timeout 400",
+  "args": {
+    "scenario": "combo",
+    "reps": 5,
+    "tracks": 2000,
+    "history_per_track": 0,
+    "seconds": 60.0,
+    "rounds": 3,
+    "query": "Daft Punk",
+    "settle_sec": 2.0,
+    "sample_interval": 1.0,
+    "warmup_sec": 5.0,
+    "timeout": 400.0,
+    "port": 9222,
+    "cookie_mode": "pinned",
+    "profile_mode": "warm",
+    "keep_profile": false,
+    "label": null,
+    "list": false
+  },
+  "code_fingerprint": "517480d9f5e26c04",
+  "code_fingerprint_files": {
+    "main.py": "b802bf11142a27b5",
+    "core/__init__.py": "e3b0c44298fc1c14",
+    "core/api.py": "4a7cfb3cfa7a84dc",
+    "core/app.py": "95a24d32c895d80d",
+    "core/database.py": "bd240f6447cf41e6",
+    "core/downloader.py": "6fe8faa776c9dd2b",
+    "core/plugins.py": "6953d4f350236ba7",
+    "core/proxy.py": "eaafd1bf846e09bd",
+    "core/resolver.py": "8a04734d3de8920f",
+    "core/services/__init__.py": "e3b0c44298fc1c14",
+    "core/services/discord_rpc.py": "cd633e06b9893e8e",
+    "core/services/recommendation.py": "c4bb64a492cb5125",
+    "core/session.py": "6c494e4ee46c05e1",
+    "core/settings.py": "d549c275ba670bfb",
+    "core/tray.py": "4f60c2fb2f59ef9c",
+    "services/__init__.py": "e3b0c44298fc1c14",
+    "services/artist_service.py": "2d15a99059498d59",
+    "services/audio_fingerprint_service.py": "d98724158bc0c9ca",
+    "services/base_service.py": "9e27eb59ed861234",
+    "services/lastfm_service.py": "3161d43cd3987fa1",
+    "services/lufs_scanner.py": "3b9bc464cdb38aa0",
+    "services/lyrics_service.py": "85fc1dbba3153179",
+    "services/playlist_import_service.py": "f1313425044fe9b7",
+    "services/recommendation_service.py": "0576ef24af3ce50c",
+    "services/soundcloud_service.py": "09e67bbeb5613ce4",
+    "services/spotify_service.py": "f13f1d97ff294a7d",
+    "services/taste_profile.py": "3a85da16d83038df",
+    "services/track_resolver.py": "ab1af810a7ea007f",
+    "services/vk_service.py": "116d4c3eb3428756",
+    "services/watchdog_service.py": "0139453dd30c8fd2",
+    "services/yandex_service.py": "a5e37cd657c30dd9",
+    "services/youtube_service.py": "ff551282b4ec01d0",
+    "services/zapret_service.py": "167b19d49e3c5bae",
+    "ui/web_new_v2/css/components/base.css": "2c8e786b10184fc2",
+    "ui/web_new_v2/css/components/home-view.css": "6673b240e655e586",
+    "ui/web_new_v2/css/components/lyrics.css": "d560875f9af9399d",
+    "ui/web_new_v2/css/components/player-bar.css": "6f333f0f9cfc1931",
+    "ui/web_new_v2/css/components/player-view.css": "6f965583a0ab869c",
+    "ui/web_new_v2/css/components/track-table.css": "dbaa4385736e74e2",
+    "ui/web_new_v2/css/components/visual-polish.css": "305bcbcdcd9f3ebd",
+    "ui/web_new_v2/css/styles.css": "375078f71915d088",
+    "ui/web_new_v2/css/themes.css": "4c0a6f9f0efdd0f1",
+    "ui/web_new_v2/css/tokens.css": "7b57a81ffcd1c9f9",
+    "ui/web_new_v2/index.html": "a784bb8acaaf9051",
+    "ui/web_new_v2/js/artist_profile.js": "0444ec53bc090b20",
+    "ui/web_new_v2/js/boot.js": "777c9693276aa3b0",
+    "ui/web_new_v2/js/contextmenu.js": "cf18b6596b901c5f",
+    "ui/web_new_v2/js/debug.js": "892e74da72f8f218",
+    "ui/web_new_v2/js/efficiency.js": "3c5eb7d5fb558819",
+    "ui/web_new_v2/js/equalizer.js": "5636c7e26dbc22fe",
+    "ui/web_new_v2/js/events.js": "136dd92f11246b17",
+    "ui/web_new_v2/js/hls.min.js": "f12ee0acc43eb001",
+    "ui/web_new_v2/js/home.js": "f8ae2d6a53ce5628",
+    "ui/web_new_v2/js/hotkeys.js": "46a23621522fdd3f",
+    "ui/web_new_v2/js/library.js": "571f5eca03342a74",
+    "ui/web_new_v2/js/lucide.min.js": "6a9d33f1e1feea81",
+    "ui/web_new_v2/js/lyrics.js": "4dfea2c820d99780",
+    "ui/web_new_v2/js/main.js": "401c4bce7301d271",
+    "ui/web_new_v2/js/onboarding.js": "7ac913d088b69b87",
+    "ui/web_new_v2/js/pages.js": "56363894178816e2",
+    "ui/web_new_v2/js/particles.js": "cd8fab684373ae63",
+    "ui/web_new_v2/js/player.js": "4ed014d1f459dc01",
+    "ui/web_new_v2/js/queue.js": "764796d94bf52997",
+    "ui/web_new_v2/js/search.js": "6823df2eafdad0f5",
+    "ui/web_new_v2/js/settings.js": "1b1e4bea3c232808",
+    "ui/web_new_v2/js/utils.js": "307c00e4da7c9c23",
+    "ui/web_new_v2/js/visualizer.js": "71efb7daa839f05e",
+    "tools/bench/__init__.py": "6e84a771debc38ec",
+    "tools/bench/bench_child.py": "6d59142cb8698f45",
+    "tools/bench/build_hotspots.py": "953a66b90deee403",
+    "tools/bench/cdp.py": "03e0144a790c4d2a",
+    "tools/bench/check_pstats_consistency.py": "c2d22128e3136d5c",
+    "tools/bench/css_inventory.py": "d34c183a4761379c",
+    "tools/bench/dom_nesting.py": "4c300f72b417a027",
+    "tools/bench/import_chains.py": "da306e670f306354",
+    "tools/bench/js_census.py": "6f0c0676baadbd8a",
+    "tools/bench/lucide_node_count.js": "bbd27cf2c599b41c",
+    "tools/bench/procsampler.py": "00a485c7cf2442b0",
+    "tools/bench/profile.py": "d815e43caca790c0",
+    "tools/bench/pyprof_child.py": "12e86d2eab6bfc5b",
+    "tools/bench/query_pstats.py": "88b8aaf012445f72",
+    "tools/bench/read_pyprof.py": "081035f64ece90b1",
+    "tools/bench/report_numbers.py": "8195e5a386424ab2",
+    "tools/bench/run_bench.py": "490c054e3f92f5e8",
+    "tools/bench/run_pyprof.py": "7fdd5b7bc75dd4c8",
+    "tools/bench/scenarios.py": "22d0dd4203713025",
+    "tools/bench/sleepscan.py": "2c252026b2d9297f",
+    "tools/bench/thread_lineage.py": "e97d6c2230564f11",
+    "tools/bench/track_row_nodes.js": "322392c5d4cc1115",
+    "tools/bench/verify_frontend_report.py": "5d4d05fa9821b161",
+    "tools/check_lock_nesting.py": "6163a79c7b055ea2",
+    "tools/check_shadow_imports.py": "465e18257cd768ab",
+    "tools/visual_guard/__init__.py": "36a49c724d4f835a",
+    "tools/visual_guard/capture.py": "9dbea257e2ae3be5",
+    "tools/visual_guard/diff.py": "44dfef9da6e3fd29",
+    "tools/visual_guard/fixtures.py": "500f7e2404940189",
+    "tools/visual_guard/run_guard.py": "e2d923acd9939a37"
+  },
+  "aggregate": {
+    "n_runs": 5,
+    "medians": {
+      "child.finished_at": 1791096445.58,
+      "child.started_at": 1791096441.15,
+      "cold_start.interpreter_and_import_ms": 633.8,
+      "cold_start.to_webview_loop_ms": 706.0,
+      "cold_start.to_window_created_ms": 705.0,
+      "cold_start.to_window_loaded_ms": 2172.0
+    }
+  },
+  "runs": [
+    {
+      "ok": false,
+      "exit_code": 0,
+      "wall_sec": 13.48,
+      "cold_start": {
+        "interpreter_and_import_ms": 692.5,
+        "to_window_created_ms": 767.5,
+        "to_window_loaded_ms": 2790.5,
+        "to_webview_loop_ms": 768.5
+      },
+      "startup_markers_ms": {
+        "AppCore initialized": 43.0,
+        "window created": 75.0,
+        "webview loop starting": 76.0,
+        "window loaded": 2098.0
+      },
+      "seed": {
+        "db_path": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\nedotify_storage.db",
+        "tracks": 2000,
+        "history": 0,
+        "covers": 12,
+        "cookie_mode": "pinned",
+        "cookie_jar": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\bench_cookies.txt"
+      },
+      "child": {
+        "scenario": "combo",
+        "mode": "bench",
+        "started_at": 1791096409.279762,
+        "ok": false,
+        "error": "Traceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 305, in driver\n    out[\"feed\"] = scenarios.scenario_feed(ctx)\n                  ~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\scenarios.py\", line 191, in scenario_feed\n    return ctx.measure_feed()\n           ~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 139, in measure_feed\n    t1 = self.sess.wait_event  # noqa: F841  (kept for clarity)\n         ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'CDPSession' object has no attribute 'wait_event'\n",
+        "data": {},
+        "finished_at": 1791096413.9744
+      },
+      "stdout_tail": "[bench] waiting for CDP target...\nStarting NeDotify...\n09:46:49.625 INFO: [startup] process started\n09:46:49.665 INFO: Local HTTP stream proxy started on port 61154\n09:46:49.666 INFO: Plugins are disabled (general.plugins_enabled = false); skipping plugin discovery.\n09:46:49.668 INFO: [startup] AppCore initialized (+43ms)\n09:46:49.699 INFO: pystray not available; tray disabled.\n09:46:49.700 INFO: [startup] window created (+75ms)\n09:46:49.700 INFO: [startup] WebView2 runtime setting: default\n09:46:49.701 INFO: [startup] webview loop starting (+76ms)\n09:46:50.348 INFO: [startup] bridge-free close and fallback asset endpoints registered\n09:46:51.293 INFO: [startup] window loaded (+1668ms)\n09:46:51.293 INFO: [startup] bridge initialized after 1 load attempt(s)\n09:46:51.531 INFO: yt-dlp auto-update finished safely.\n09:46:51.533 INFO: Last.fm API key not configured — set the LASTFM_API_KEY environment variable or auth.lastfm_api_key in settings. Last.fm features are disabled.\n[bench] CDP attached\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n09:46:51.723 INFO: [startup] window loaded (+2098ms)\n[bench] new doc committed at +23ms, interactive at +392ms (FCP 136ms since navStart)\n[bench] app_ready at +2ms\nTraceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 305, in driver\n    out[\"feed\"] = scenarios.scenario_feed(ctx)\n                  ~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\scenarios.py\", line 191, in scenario_feed\n    return ctx.measure_feed()\n           ~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 139, in measure_feed\n    t1 = self.sess.wait_event  # noqa: F841  (kept for clarity)\n         ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'CDPSession' object has no attribute 'wait_event'\n[bench] destroy issued at +0.061s\n09:46:54.247 INFO: Cleaning up AppCore resources...\n09:46:54.522 INFO: Local HTTP stream proxy stopped\n",
+      "profile_root": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile"
+    },
+    {
+      "ok": false,
+      "exit_code": 0,
+      "wall_sec": 13.55,
+      "cold_start": {
+        "interpreter_and_import_ms": 653.6,
+        "to_window_created_ms": 714.6,
+        "to_window_loaded_ms": 2087.6,
+        "to_webview_loop_ms": 715.6
+      },
+      "startup_markers_ms": {
+        "AppCore initialized": 30.0,
+        "window created": 61.0,
+        "webview loop starting": 62.0,
+        "window loaded": 1434.0
+      },
+      "seed": {
+        "db_path": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\nedotify_storage.db",
+        "tracks": 2000,
+        "history": 0,
+        "covers": 12,
+        "cookie_mode": "pinned",
+        "cookie_jar": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\bench_cookies.txt"
+      },
+      "child": {
+        "scenario": "combo",
+        "mode": "bench",
+        "started_at": 1791096425.1667697,
+        "ok": false,
+        "error": "Traceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 305, in driver\n    out[\"feed\"] = scenarios.scenario_feed(ctx)\n                  ~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\scenarios.py\", line 191, in scenario_feed\n    return ctx.measure_feed()\n           ~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 139, in measure_feed\n    t1 = self.sess.wait_event  # noqa: F841  (kept for clarity)\n         ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'CDPSession' object has no attribute 'wait_event'\n",
+        "data": {},
+        "finished_at": 1791096429.0126812
+      },
+      "stdout_tail": "[bench] waiting for CDP target...\nStarting NeDotify...\n09:47:05.521 INFO: [startup] process started\n09:47:05.545 INFO: yt-dlp update skipped (last update 0.0h ago)\n09:47:05.549 INFO: Local HTTP stream proxy started on port 49921\n09:47:05.549 INFO: Plugins are disabled (general.plugins_enabled = false); skipping plugin discovery.\n09:47:05.551 INFO: [startup] AppCore initialized (+30ms)\n09:47:05.581 INFO: pystray not available; tray disabled.\n09:47:05.582 INFO: [startup] window created (+61ms)\n09:47:05.583 INFO: [startup] WebView2 runtime setting: default\n09:47:05.583 INFO: [startup] webview loop starting (+62ms)\n09:47:06.224 INFO: [startup] bridge-free close and fallback asset endpoints registered\n[bench] CDP attached\n09:47:06.863 INFO: [startup] window loaded (+1342ms)\n09:47:06.864 INFO: [startup] bridge initialized after 1 load attempt(s)\n[bench] new doc committed at +40ms, interactive at +195ms (FCP Nonems since navStart)\n09:47:06.955 INFO: [startup] window loaded (+1434ms)\n[bench] app_ready at +3ms\n09:47:07.126 INFO: Last.fm API key not configured — set the LASTFM_API_KEY environment variable or auth.lastfm_api_key in settings. Last.fm features are disabled.\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\nTraceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 305, in driver\n    out[\"feed\"] = scenarios.scenario_feed(ctx)\n                  ~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\scenarios.py\", line 191, in scenario_feed\n    return ctx.measure_feed()\n           ~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 139, in measure_feed\n    t1 = self.sess.wait_event  # noqa: F841  (kept for clarity)\n         ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'CDPSession' object has no attribute 'wait_event'\n[bench] destroy issued at +0.035s\n09:47:09.256 INFO: Cleaning up AppCore resources...\n09:47:09.617 INFO: Local HTTP stream proxy stopped\n",
+      "profile_root": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile"
+    },
+    {
+      "ok": false,
+      "exit_code": 0,
+      "wall_sec": 14.38,
+      "cold_start": {
+        "interpreter_and_import_ms": 568.3,
+        "to_window_created_ms": 694.3,
+        "to_window_loaded_ms": 2576.3,
+        "to_webview_loop_ms": 695.3
+      },
+      "startup_markers_ms": {
+        "AppCore initialized": 65.0,
+        "window created": 126.0,
+        "webview loop starting": 127.0,
+        "window loaded": 2008.0
+      },
+      "seed": {
+        "db_path": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\nedotify_storage.db",
+        "tracks": 2000,
+        "history": 0,
+        "covers": 12,
+        "cookie_mode": "pinned",
+        "cookie_jar": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\bench_cookies.txt"
+      },
+      "child": {
+        "scenario": "combo",
+        "mode": "bench",
+        "started_at": 1791096441.1520813,
+        "ok": false,
+        "error": "Traceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 305, in driver\n    out[\"feed\"] = scenarios.scenario_feed(ctx)\n                  ~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\scenarios.py\", line 191, in scenario_feed\n    return ctx.measure_feed()\n           ~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 139, in measure_feed\n    t1 = self.sess.wait_event  # noqa: F841  (kept for clarity)\n         ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'CDPSession' object has no attribute 'wait_event'\n",
+        "data": {},
+        "finished_at": 1791096445.5810006
+      },
+      "stdout_tail": "[bench] waiting for CDP target...\nStarting NeDotify...\n09:47:21.498 INFO: [startup] process started\n09:47:21.549 INFO: yt-dlp update skipped (last update 0.0h ago)\n09:47:21.558 INFO: Local HTTP stream proxy started on port 60995\n09:47:21.559 INFO: Plugins are disabled (general.plugins_enabled = false); skipping plugin discovery.\n09:47:21.563 INFO: [startup] AppCore initialized (+65ms)\n09:47:21.622 INFO: pystray not available; tray disabled.\n09:47:21.624 INFO: [startup] window created (+126ms)\n09:47:21.625 INFO: [startup] WebView2 runtime setting: default\n09:47:21.625 INFO: [startup] webview loop starting (+127ms)\n09:47:22.467 INFO: [startup] bridge-free close and fallback asset endpoints registered\n09:47:23.035 INFO: [startup] window loaded (+1537ms)\n09:47:23.035 INFO: [startup] bridge initialized after 1 load attempt(s)\n09:47:23.257 INFO: Last.fm API key not configured — set the LASTFM_API_KEY environment variable or auth.lastfm_api_key in settings. Last.fm features are disabled.\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n[bench] CDP attached\n09:47:23.506 INFO: [startup] window loaded (+2008ms)\n[bench] new doc committed at +21ms, interactive at +156ms (FCP 76ms since navStart)\n[bench] app_ready at +5ms\nTraceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 305, in driver\n    out[\"feed\"] = scenarios.scenario_feed(ctx)\n                  ~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\scenarios.py\", line 191, in scenario_feed\n    return ctx.measure_feed()\n           ~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 139, in measure_feed\n    t1 = self.sess.wait_event  # noqa: F841  (kept for clarity)\n         ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'CDPSession' object has no attribute 'wait_event'\n[bench] destroy issued at +0.041s\n09:47:25.832 INFO: Cleaning up AppCore resources...\n09:47:26.106 INFO: Local HTTP stream proxy stopped\n",
+      "profile_root": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile"
+    },
+    {
+      "ok": false,
+      "exit_code": 0,
+      "wall_sec": 14.0,
+      "cold_start": {
+        "interpreter_and_import_ms": 633.8,
+        "to_window_created_ms": 701.8,
+        "to_window_loaded_ms": 2138.8,
+        "to_webview_loop_ms": 703.8
+      },
+      "startup_markers_ms": {
+        "AppCore initialized": 39.0,
+        "window created": 68.0,
+        "webview loop starting": 70.0,
+        "window loaded": 1505.0
+      },
+      "seed": {
+        "db_path": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\nedotify_storage.db",
+        "tracks": 2000,
+        "history": 0,
+        "covers": 12,
+        "cookie_mode": "pinned",
+        "cookie_jar": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\bench_cookies.txt"
+      },
+      "child": {
+        "scenario": "combo",
+        "mode": "bench",
+        "started_at": 1791096458.0019464,
+        "ok": false,
+        "error": "Traceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 305, in driver\n    out[\"feed\"] = scenarios.scenario_feed(ctx)\n                  ~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\scenarios.py\", line 191, in scenario_feed\n    return ctx.measure_feed()\n           ~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 139, in measure_feed\n    t1 = self.sess.wait_event  # noqa: F841  (kept for clarity)\n         ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'CDPSession' object has no attribute 'wait_event'\n",
+        "data": {},
+        "finished_at": 1791096461.9394755
+      },
+      "stdout_tail": "\\n    at <anonymous>:4:29\", 'message': \"Cannot set properties of undefined (setting '03190125591266857')\"}\n09:47:39.869 CRITICAL: Uncaught exception in thread Thread-68 (_call)\nTraceback (most recent call last):\n  File \"C:\\Users\\Артур\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1082, in _bootstrap_inner\n    self._context.run(self.run)\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^\n  File \"C:\\Users\\Артур\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1024, in run\n    self._target(*self._args, **self._kwargs)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\util.py\", line 250, in _call\n    window.evaluate_js(code)\n    ~~~~~~~~~~~~~~~~~~^^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\window.py\", line 50, in wrapper\n    return function(self, *args, **kwargs)\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\window.py\", line 487, in evaluate_js\n    raise JavascriptException(result)\nwebview.errors.JavascriptException: {'name': 'TypeError', 'stack': \"TypeError: Cannot set properties of undefined (setting '554413339664981')\\n    at eval (eval at <anonymous> (:4:29), <anonymous>:1:72)\\n    at <anonymous>:4:29\", 'message': \"Cannot set properties of undefined (setting '554413339664981')\"}\n09:47:39.869 CRITICAL: Uncaught exception in thread Thread-71 (_call)\nTraceback (most recent call last):\n  File \"C:\\Users\\Артур\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1082, in _bootstrap_inner\n    self._context.run(self.run)\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^\n  File \"C:\\Users\\Артур\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib\\threading.py\", line 1024, in run\n    self._target(*self._args, **self._kwargs)\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\util.py\", line 250, in _call\n    window.evaluate_js(code)\n    ~~~~~~~~~~~~~~~~~~^^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\window.py\", line 50, in wrapper\n    return function(self, *args, **kwargs)\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\window.py\", line 487, in evaluate_js\n    raise JavascriptException(result)\nwebview.errors.JavascriptException: {'name': 'TypeError', 'stack': \"TypeError: Cannot set properties of undefined (setting '7981818336932581')\\n    at eval (eval at <anonymous> (:4:29), <anonymous>:1:69)\\n    at <anonymous>:4:29\", 'message': \"Cannot set properties of undefined (setting '7981818336932581')\"}\n09:47:39.870 INFO: [startup] window loaded (+1505ms)\n[bench] app_ready at +32ms\nTraceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 305, in driver\n    out[\"feed\"] = scenarios.scenario_feed(ctx)\n                  ~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\scenarios.py\", line 191, in scenario_feed\n    return ctx.measure_feed()\n           ~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 139, in measure_feed\n    t1 = self.sess.wait_event  # noqa: F841  (kept for clarity)\n         ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'CDPSession' object has no attribute 'wait_event'\n09:47:42.007 INFO: Last.fm API key not configured — set the LASTFM_API_KEY environment variable or auth.lastfm_api_key in settings. Last.fm features are disabled.\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n[bench] destroy issued at +0.030s\n09:47:42.180 INFO: Cleaning up AppCore resources...\n09:47:42.464 INFO: Local HTTP stream proxy stopped\n",
+      "profile_root": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile"
+    },
+    {
+      "ok": false,
+      "exit_code": 0,
+      "wall_sec": 16.62,
+      "cold_start": {
+        "interpreter_and_import_ms": 624.0,
+        "to_window_created_ms": 705.0,
+        "to_window_loaded_ms": 2172.0,
+        "to_webview_loop_ms": 706.0
+      },
+      "startup_markers_ms": {
+        "AppCore initialized": 46.0,
+        "window created": 81.0,
+        "webview loop starting": 82.0,
+        "window loaded": 1548.0
+      },
+      "seed": {
+        "db_path": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\nedotify_storage.db",
+        "tracks": 2000,
+        "history": 0,
+        "covers": 12,
+        "cookie_mode": "pinned",
+        "cookie_jar": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\bench_cookies.txt"
+      },
+      "child": {
+        "scenario": "combo",
+        "mode": "bench",
+        "started_at": 1791096474.5438423,
+        "ok": false,
+        "error": "Traceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 305, in driver\n    out[\"feed\"] = scenarios.scenario_feed(ctx)\n                  ~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\scenarios.py\", line 191, in scenario_feed\n    return ctx.measure_feed()\n           ~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 139, in measure_feed\n    t1 = self.sess.wait_event  # noqa: F841  (kept for clarity)\n         ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'CDPSession' object has no attribute 'wait_event'\n",
+        "data": {},
+        "finished_at": 1791096478.4669187
+      },
+      "stdout_tail": "or', 'stack': \"TypeError: Cannot set properties of undefined (setting '469871069243456')\\n    at eval (eval at <anonymous> (:4:29), <anonymous>:1:68)\\n    at <anonymous>:4:29\", 'message': \"Cannot set properties of undefined (setting '469871069243456')\"}\n09:47:56.445 INFO: [startup] window loaded (+1548ms)\nTraceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 305, in driver\n    out[\"feed\"] = scenarios.scenario_feed(ctx)\n                  ~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\scenarios.py\", line 191, in scenario_feed\n    return ctx.measure_feed()\n           ~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\bench_child.py\", line 139, in measure_feed\n    t1 = self.sess.wait_event  # noqa: F841  (kept for clarity)\n         ^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'CDPSession' object has no attribute 'wait_event'\n09:47:58.565 INFO: Last.fm API key not configured — set the LASTFM_API_KEY environment variable or auth.lastfm_api_key in settings. Last.fm features are disabled.\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n[bench] destroy issued at +0.033s\n09:47:58.715 INFO: Cleaning up AppCore resources...\n09:47:58.999 INFO: Local HTTP stream proxy stopped\n[pywebview] Error occurred in script\nTraceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\platforms\\edgechromium.py\", line 126, in evaluate_js\n    self.webview.Invoke(Func[Object](lambda: self.webview.ExecuteScriptAsync(script).ContinueWith(\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        Action[Task[String]](lambda task: _callback(json.loads(task.Result))),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        self.syncContextTaskScheduler,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )))\n    ^^^\nSystem.ComponentModel.InvalidAsynchronousStateException: При вызове данного метода произошла ошибка.  Поток-получатель больше не существует.\n\n   в System.Windows.Forms.Control.WaitForWaitHandle(WaitHandle waitHandle)\n\n   в System.Windows.Forms.Control.MarshaledInvoke(Control caller, Delegate method, Object[] args, Boolean synchronous)\n\n   в System.Windows.Forms.Control.Invoke(Delegate method, Object[] args)\n09:47:59.716 ERROR: Error occurred in script\nTraceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Lib\\site-packages\\webview\\platforms\\edgechromium.py\", line 126, in evaluate_js\n    self.webview.Invoke(Func[Object](lambda: self.webview.ExecuteScriptAsync(script).ContinueWith(\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        Action[Task[String]](lambda task: _callback(json.loads(task.Result))),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        self.syncContextTaskScheduler,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )))\n    ^^^\nSystem.ComponentModel.InvalidAsynchronousStateException: При вызове данного метода произошла ошибка.  Поток-получатель больше не существует.\n\n   в System.Windows.Forms.Control.WaitForWaitHandle(WaitHandle waitHandle)\n\n   в System.Windows.Forms.Control.MarshaledInvoke(Control caller, Delegate method, Object[] args, Boolean synchronous)\n\n   в System.Windows.Forms.Control.Invoke(Delegate method, Object[] args)\n09:48:00.880 WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ConnectionResetError(10054, 'Удаленный хост принудительно разорвал существующее подключение', None, 10054, None)': /assets/55-163991f5.js\n",
+      "profile_root": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile"
+    }
+  ]
+}

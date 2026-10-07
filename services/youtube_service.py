@@ -10,7 +10,7 @@ import re
 import threading
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from services.base_service import BaseMusicService
+from services.base_service import BaseMusicService, normalize_proxy_url
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ class YouTubeService(BaseMusicService):
             session = TimeoutSession()
             adapter = HTTPAdapter(pool_connections=30, pool_maxsize=30, max_retries=2)
             session.mount("https://", adapter)
-            proxy = self.settings.get("auth", "proxy_url", "") if self.settings else ""
+            proxy = normalize_proxy_url(self.settings.get("auth", "proxy_url", "")) if self.settings else ""
             if proxy:
                 session.proxies = {"http": proxy, "https": proxy}
             self._ytmusic = YTMusic(language="ru", location="RU", requests_session=session)
@@ -151,7 +151,7 @@ class YouTubeService(BaseMusicService):
 
         if HAS_YTMUSIC:
             if self.settings:
-                proxy = self.settings.get("auth", "proxy_url", "")
+                proxy = normalize_proxy_url(self.settings.get("auth", "proxy_url", ""))
 
                 import requests
                 from requests.adapters import HTTPAdapter
@@ -223,9 +223,17 @@ class YouTubeService(BaseMusicService):
             "noplaylist": True,
             "nocheckcertificate": True,
             "skip_download": True,
-            "socket_timeout": 5,
-            "retries": 1,
-            "extractor_retries": 1,
+            "socket_timeout": 30,
+            "retries": 10,
+            "extractor_retries": 3,
+            "fragment_retries": 10,
+            "file_access_retries": 3,
+            # Throughput. All four default to a single connection, which is why
+            # downloads crawled: DASH fragments were fetched one at a time and
+            # the file was streamed through a single 32KB-ish socket.
+            "concurrent_fragment_downloads": 4,
+            "http_chunk_size": 10 * 1024 * 1024,
+            "buffersize": 1024 * 1024,
             "source_address": "0.0.0.0",
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
@@ -233,13 +241,21 @@ class YouTubeService(BaseMusicService):
         }
 
         if fallback:
-            # android_music is the one pinned client that still resolves
-            # without a PO token, so it is worth naming explicitly here.
-            opts["extractor_args"] = {
-                "youtube": {"player_client": ["android_music"]}
-            }
+            # A wider ladder for the odd track whose "bestaudio" is missing.
+            #
+            # NB: do NOT pin `player_client` here, and do NOT set
+            # `ignoreerrors`. Both were present until this was diagnosed, and
+            # together they made *every* download fail silently:
+            #   - the pinned `android_music` client answers "The page needs to
+            #     be reloaded" (PO token gate) and returns 0 formats, where
+            #     yt-dlp's own default returns 48 formats / 5 audio streams on
+            #     the same video;
+            #   - `ignoreerrors` then swallowed that error, so
+            #     extract_info() returned a partial/empty dict and the failure
+            #     surfaced as the useless "Не удалось извлечь информацию" instead
+            #     of the actionable gating message from _yt_gating_error().
+            # Letting the error propagate is what makes that mapping reachable.
             opts["format"] = "bestaudio/best/ba/b/worst"
-            opts["ignoreerrors"] = True
 
         if self.settings:
             cookies_file_path = self.settings.get("auth", "cookies_file_path", "")
@@ -248,7 +264,7 @@ class YouTubeService(BaseMusicService):
             configured_browser = self.settings.get("auth", "browser_cookies", "none")
             if configured_browser and configured_browser != "none":
                 opts["cookiesfrombrowser"] = (configured_browser,)
-            proxy = self.settings.get("auth", "proxy_url", "")
+            proxy = normalize_proxy_url(self.settings.get("auth", "proxy_url", ""))
             if proxy:
                 opts["proxy"] = proxy
 

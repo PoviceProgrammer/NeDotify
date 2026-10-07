@@ -1,5 +1,5 @@
 // NeDotify — Library Module (Favorites, Playlists, Local Files)
-import { createTrackElement, renderIcons, escapeHtml } from './utils.js';
+import { createTrackElement, renderIcons, escapeHtml, openModalFocusTrap, closeModalFocusTrap } from './utils.js';
 import { getCurrentTrack } from './player.js';
 
 let currentContextTrack = null;
@@ -129,12 +129,16 @@ export function initLibrary() {
                 modalIP.style.display = 'flex';
                 const inputUrl = document.getElementById('modal-ip-url');
                 if (inputUrl) inputUrl.focus();
+                // Initial focus: the URL field is the only real input of the
+                // dialog, so it doubles as the trap's first stop.
+                openModalFocusTrap(modalIP, { initialFocus: '#modal-ip-url' });
             }
         });
     }
 
     const closeIP = () => {
         if (modalIP) modalIP.style.display = 'none';
+        closeModalFocusTrap(modalIP);
         const statusEl = document.getElementById('modal-ip-status');
         if (statusEl) statusEl.style.display = 'none';
         const submitBtn = document.getElementById('modal-ip-submit');
@@ -377,9 +381,15 @@ function makeLibraryBatchRenderer(container, tracks) {
     const renderNext = () => {
         const start = rendered;
         const end = Math.min(tracks.length, start + LIB_BATCH_SIZE);
+        // Rows go into a fragment and land in one insertion (search.js pattern):
+        // 50 appendChild calls would invalidate layout 50 times per batch. The
+        // scroll loader below reads scrollHeight only AFTER renderNext returns,
+        // so it still observes exactly the same growth per batch.
+        const fragment = document.createDocumentFragment();
         for (let i = start; i < end; i++) {
-            container.appendChild(createTrackElement(tracks[i], i, tracks, getCurrentTrack()));
+            fragment.appendChild(createTrackElement(tracks[i], i, tracks, getCurrentTrack()));
         }
+        container.appendChild(fragment);
         rendered = end;
         renderIcons();
         return end;
@@ -753,12 +763,20 @@ function showDeletePlaylistModal(playlistName) {
         // Re-render icons inside modal
         if (window.lucide) setTimeout(() => window.lucide.createIcons(), 10);
 
+        // Initial focus: a destructive, irreversible confirmation, so the trap
+        // starts on Cancel rather than on Confirm - a stray Enter or Space must
+        // not be able to delete a playlist.
+        openModalFocusTrap(modal, { initialFocus: '#modal-dpl-cancel' });
+
         const close = (result) => {
             if (card) {
                 card.style.transition = 'transform 0.18s ease, opacity 0.18s ease';
                 card.style.transform = 'scale(0.92)';
                 card.style.opacity = '0';
             }
+            // Release the trap before the 180ms scale-out so Tab is not dragged
+            // back into a dialog that is on its way out.
+            closeModalFocusTrap(modal);
             setTimeout(() => {
                 modal.style.display = 'none';
                 if (card) { card.style.transform = ''; card.style.opacity = ''; }
@@ -993,10 +1011,17 @@ export async function createPlaylist() {
 
     input.value = '';
     modal.style.display = 'flex';
+    // The pre-existing 50ms focus() is kept: it is what makes the caret land
+    // after the overlay's own paint, and the trap's focus is additive.
     setTimeout(() => input.focus(), 50);
+    // Initial focus: the name field is the single purpose of this dialog.
+    // The Escape keydown stays on the input, untouched, so the trap never
+    // swallows it.
+    openModalFocusTrap(modal, { initialFocus: '#modal-cp-input' });
 
     const closeModal = () => {
         modal.style.display = 'none';
+        closeModalFocusTrap(modal);
         closeBtn?.removeEventListener('click', closeModal);
         cancelBtn?.removeEventListener('click', closeModal);
         submitBtn?.removeEventListener('click', handleSubmit);

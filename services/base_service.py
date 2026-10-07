@@ -8,10 +8,56 @@ import logging
 import sys
 import time
 import threading
+import urllib.parse
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+
+# Proxy schemes a provider client can actually dial. Anything else is not a
+# proxy we know how to use.
+_PROXY_SCHEMES = frozenset({"http", "https", "socks4", "socks4a", "socks5", "socks5h"})
+
+
+def normalize_proxy_url(raw: Any) -> str:
+    """Return `raw` when it is a usable proxy URL, otherwise "" (direct egress).
+
+    `auth.proxy_url` is a free-text settings field, and both `requests` and
+    yt-dlp accept a bare token in it: they prepend "http://" and dial that name.
+    So an unparseable value does not fail loudly at the point of configuration -
+    it becomes the proxy for EVERY provider call and takes search, stream
+    resolution and downloads down together with
+
+        ProxyError: Unable to connect to proxy, NameResolutionError(...)
+
+    which reads like a network outage rather than a bad settings value, even
+    though direct egress works fine.
+
+    Requiring an explicit scheme matches what the UI documents for the field
+    (placeholder "http://127.0.0.1:1080" in ui/web_new_v2/index.html). Ignoring
+    an unusable value is strictly better than applying it, and the rejection is
+    logged so the cause stays visible instead of silently changing behaviour.
+    """
+    if not raw or not isinstance(raw, str):
+        return ""
+    value = raw.strip()
+    if not value:
+        return ""
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        scheme = parsed.scheme.lower()
+        hostname = parsed.hostname
+    except ValueError:
+        scheme, hostname = "", None
+    if scheme in _PROXY_SCHEMES and hostname:
+        return value
+    logger.warning(
+        "Ignoring unusable auth.proxy_url %r: expected a full URL such as "
+        "'http://127.0.0.1:1080'. Falling back to a direct connection.",
+        raw,
+    )
+    return ""
 
 
 class _SharedExecutor:

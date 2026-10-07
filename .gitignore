@@ -40,6 +40,12 @@ restored_sources/
 backups/
 
 # Tests, Audits, Benchmarks & Reports
+# A bench run snapshots the entire runtime environment into `_warm_profile/`:
+# AppData (OneAuth account tokens, IdentityCache, INetCookies), the WebView2
+# profile, the pip cache and bench cookies. Reproducible by rerunning the bench,
+# and it carries live credentials, so it stays out of version control.
+tools/bench/results/_warm_profile/
+*.pstats
 # NOTE: `tests/` and `run_tests.py` were listed here, which silently kept the
 # whole pytest suite out of version control. They are tracked on purpose now:
 # every regression test must survive a fresh clone.

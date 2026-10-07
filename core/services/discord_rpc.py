@@ -127,7 +127,7 @@ class DiscordRPCService:
                         "details": title[:128],
                         "state": f"от {artist}"[:128] if artist else "NeDotify Player",
                         "large_image": "aura_logo",
-                        "large_text": "AURA Music Player",
+                        "large_text": "NeDotify Player",
                         "small_image": "play",
                         "small_text": "Воспроизводится",
                         "buttons": [

@@ -1,0 +1,919 @@
+{
+  "label": "idle_states-2000trk",
+  "scenario": "idle_states",
+  "generated_at": "2026-10-04T10:35:47",
+  "command": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\.venv_win\\Scripts\\python.exe tools\\bench\\run_bench.py --scenario idle_states --reps 3 --tracks 2000 --profile-mode warm --seconds 30 --timeout 400",
+  "args": {
+    "scenario": "idle_states",
+    "reps": 3,
+    "tracks": 2000,
+    "history_per_track": 0,
+    "seconds": 30.0,
+    "rounds": 3,
+    "query": "Daft Punk",
+    "settle_sec": 2.0,
+    "sample_interval": 1.0,
+    "warmup_sec": 5.0,
+    "timeout": 400.0,
+    "port": 9222,
+    "cookie_mode": "pinned",
+    "profile_mode": "warm",
+    "keep_profile": false,
+    "label": null,
+    "list": false
+  },
+  "code_fingerprint": "d0410b76b245f274",
+  "code_fingerprint_files": {
+    "main.py": "b802bf11142a27b5",
+    "core/__init__.py": "e3b0c44298fc1c14",
+    "core/api.py": "4a7cfb3cfa7a84dc",
+    "core/app.py": "b4299ccf6c8712b6",
+    "core/database.py": "bd240f6447cf41e6",
+    "core/downloader.py": "6fe8faa776c9dd2b",
+    "core/plugins.py": "6953d4f350236ba7",
+    "core/proxy.py": "eaafd1bf846e09bd",
+    "core/resolver.py": "8a04734d3de8920f",
+    "core/services/__init__.py": "e3b0c44298fc1c14",
+    "core/services/discord_rpc.py": "cd633e06b9893e8e",
+    "core/services/recommendation.py": "c4bb64a492cb5125",
+    "core/session.py": "6c494e4ee46c05e1",
+    "core/settings.py": "d549c275ba670bfb",
+    "core/tray.py": "4f60c2fb2f59ef9c",
+    "services/__init__.py": "e3b0c44298fc1c14",
+    "services/artist_service.py": "2d15a99059498d59",
+    "services/audio_fingerprint_service.py": "d98724158bc0c9ca",
+    "services/base_service.py": "9e27eb59ed861234",
+    "services/lastfm_service.py": "3161d43cd3987fa1",
+    "services/lufs_scanner.py": "3b9bc464cdb38aa0",
+    "services/lyrics_service.py": "85fc1dbba3153179",
+    "services/playlist_import_service.py": "f1313425044fe9b7",
+    "services/recommendation_service.py": "0576ef24af3ce50c",
+    "services/soundcloud_service.py": "09e67bbeb5613ce4",
+    "services/spotify_service.py": "f13f1d97ff294a7d",
+    "services/taste_profile.py": "3a85da16d83038df",
+    "services/track_resolver.py": "ab1af810a7ea007f",
+    "services/vk_service.py": "116d4c3eb3428756",
+    "services/watchdog_service.py": "0139453dd30c8fd2",
+    "services/yandex_service.py": "a5e37cd657c30dd9",
+    "services/youtube_service.py": "ff551282b4ec01d0",
+    "services/zapret_service.py": "167b19d49e3c5bae",
+    "ui/web_new_v2/css/components/base.css": "2c8e786b10184fc2",
+    "ui/web_new_v2/css/components/home-view.css": "6673b240e655e586",
+    "ui/web_new_v2/css/components/lyrics.css": "d560875f9af9399d",
+    "ui/web_new_v2/css/components/player-bar.css": "6f333f0f9cfc1931",
+    "ui/web_new_v2/css/components/player-view.css": "6f965583a0ab869c",
+    "ui/web_new_v2/css/components/track-table.css": "dbaa4385736e74e2",
+    "ui/web_new_v2/css/components/visual-polish.css": "305bcbcdcd9f3ebd",
+    "ui/web_new_v2/css/styles.css": "375078f71915d088",
+    "ui/web_new_v2/css/themes.css": "4c0a6f9f0efdd0f1",
+    "ui/web_new_v2/css/tokens.css": "7b57a81ffcd1c9f9",
+    "ui/web_new_v2/index.html": "a784bb8acaaf9051",
+    "ui/web_new_v2/js/artist_profile.js": "0444ec53bc090b20",
+    "ui/web_new_v2/js/boot.js": "777c9693276aa3b0",
+    "ui/web_new_v2/js/contextmenu.js": "cf18b6596b901c5f",
+    "ui/web_new_v2/js/debug.js": "892e74da72f8f218",
+    "ui/web_new_v2/js/efficiency.js": "3c5eb7d5fb558819",
+    "ui/web_new_v2/js/equalizer.js": "5636c7e26dbc22fe",
+    "ui/web_new_v2/js/events.js": "136dd92f11246b17",
+    "ui/web_new_v2/js/hls.min.js": "f12ee0acc43eb001",
+    "ui/web_new_v2/js/home.js": "f8ae2d6a53ce5628",
+    "ui/web_new_v2/js/hotkeys.js": "46a23621522fdd3f",
+    "ui/web_new_v2/js/library.js": "571f5eca03342a74",
+    "ui/web_new_v2/js/lucide.min.js": "6a9d33f1e1feea81",
+    "ui/web_new_v2/js/lyrics.js": "4dfea2c820d99780",
+    "ui/web_new_v2/js/main.js": "401c4bce7301d271",
+    "ui/web_new_v2/js/onboarding.js": "7ac913d088b69b87",
+    "ui/web_new_v2/js/pages.js": "56363894178816e2",
+    "ui/web_new_v2/js/particles.js": "cd8fab684373ae63",
+    "ui/web_new_v2/js/player.js": "4ed014d1f459dc01",
+    "ui/web_new_v2/js/queue.js": "764796d94bf52997",
+    "ui/web_new_v2/js/search.js": "6823df2eafdad0f5",
+    "ui/web_new_v2/js/settings.js": "1b1e4bea3c232808",
+    "ui/web_new_v2/js/utils.js": "307c00e4da7c9c23",
+    "ui/web_new_v2/js/visualizer.js": "71efb7daa839f05e",
+    "tools/bench/__init__.py": "6e84a771debc38ec",
+    "tools/bench/bench_child.py": "4829102abfc6db74",
+    "tools/bench/build_hotspots.py": "953a66b90deee403",
+    "tools/bench/cdp.py": "03e0144a790c4d2a",
+    "tools/bench/check_pstats_consistency.py": "c2d22128e3136d5c",
+    "tools/bench/css_inventory.py": "d34c183a4761379c",
+    "tools/bench/dom_nesting.py": "4c300f72b417a027",
+    "tools/bench/import_chains.py": "da306e670f306354",
+    "tools/bench/js_census.py": "6f0c0676baadbd8a",
+    "tools/bench/lucide_node_count.js": "bbd27cf2c599b41c",
+    "tools/bench/procsampler.py": "6f7d32c38bfc2ebc",
+    "tools/bench/profile.py": "d815e43caca790c0",
+    "tools/bench/pyprof_child.py": "12e86d2eab6bfc5b",
+    "tools/bench/query_pstats.py": "88b8aaf012445f72",
+    "tools/bench/read_pyprof.py": "081035f64ece90b1",
+    "tools/bench/report_numbers.py": "8195e5a386424ab2",
+    "tools/bench/run_bench.py": "76edd1a44e74a668",
+    "tools/bench/run_pyprof.py": "7fdd5b7bc75dd4c8",
+    "tools/bench/scenarios.py": "193247841b2a99ba",
+    "tools/bench/sleepscan.py": "2c252026b2d9297f",
+    "tools/bench/thread_lineage.py": "e97d6c2230564f11",
+    "tools/bench/track_row_nodes.js": "322392c5d4cc1115",
+    "tools/bench/verify_frontend_report.py": "5d4d05fa9821b161",
+    "tools/check_lock_nesting.py": "6163a79c7b055ea2",
+    "tools/check_shadow_imports.py": "465e18257cd768ab",
+    "tools/visual_guard/__init__.py": "36a49c724d4f835a",
+    "tools/visual_guard/capture.py": "9dbea257e2ae3be5",
+    "tools/visual_guard/diff.py": "44dfef9da6e3fd29",
+    "tools/visual_guard/fixtures.py": "500f7e2404940189",
+    "tools/visual_guard/run_guard.py": "e2d923acd9939a37"
+  },
+  "aggregate": {
+    "n_runs": 3,
+    "medians": {
+      "child.data.hwnd": 9110232,
+      "child.data.states.minimized.n_samples": 28,
+      "child.data.states.minimized.summary.n_children_max": 7,
+      "child.data.states.minimized.summary.n_samples": 28,
+      "child.data.states.minimized.summary.python_cpu_pct.max": 17.1,
+      "child.data.states.minimized.summary.python_cpu_pct.mean": 8.87,
+      "child.data.states.minimized.summary.python_cpu_pct.median": 8.51,
+      "child.data.states.minimized.summary.python_cpu_pct.p95": 11.87,
+      "child.data.states.minimized.summary.python_rss_mb.max": 176.12,
+      "child.data.states.minimized.summary.python_rss_mb.mean": 176.1,
+      "child.data.states.minimized.summary.python_rss_mb.median": 176.12,
+      "child.data.states.minimized.summary.python_rss_mb.p95": 176.12,
+      "child.data.states.minimized.summary.python_threads_max": 32,
+      "child.data.states.minimized.summary.tree_cpu_pct.max": 54.34,
+      "child.data.states.minimized.summary.tree_cpu_pct.mean": 12.82,
+      "child.data.states.minimized.summary.tree_cpu_pct.median": 10.63,
+      "child.data.states.minimized.summary.tree_cpu_pct.p95": 22.44,
+      "child.data.states.minimized.summary.tree_rss_mb.max": 752.38,
+      "child.data.states.minimized.summary.tree_rss_mb.mean": 698.13,
+      "child.data.states.minimized.summary.tree_rss_mb.median": 696.77,
+      "child.data.states.minimized.summary.tree_rss_mb.p95": 751.66,
+      "child.data.states.minimized.summary.webview_cpu_pct.max": 11.53,
+      "child.data.states.minimized.summary.webview_cpu_pct.mean": 3.73,
+      "child.data.states.minimized.summary.webview_cpu_pct.median": 1.42,
+      "child.data.states.minimized.summary.webview_cpu_pct.p95": 10.81,
+      "child.data.states.minimized.summary.webview_rss_mb.max": 575.8,
+      "child.data.states.minimized.summary.webview_rss_mb.mean": 521.58,
+      "child.data.states.minimized.summary.webview_rss_mb.median": 520.65,
+      "child.data.states.minimized.summary.webview_rss_mb.p95": 575.54,
+      "child.data.states.minimized.summary.window_sec": 29.9,
+      "child.data.states.restored.n_samples": 27,
+      "child.data.states.restored.summary.n_children_max": 7,
+      "child.data.states.restored.summary.n_samples": 27,
+      "child.data.states.restored.summary.python_cpu_pct.max": 71.0,
+      "child.data.states.restored.summary.python_cpu_pct.mean": 12.23,
+      "child.data.states.restored.summary.python_cpu_pct.median": 10.86,
+      "child.data.states.restored.summary.python_cpu_pct.p95": 19.37,
+      "child.data.states.restored.summary.python_rss_mb.max": 175.13,
+      "child.data.states.restored.summary.python_rss_mb.mean": 175.13,
+      "child.data.states.restored.summary.python_rss_mb.median": 175.13,
+      "child.data.states.restored.summary.python_rss_mb.p95": 175.13,
+      "child.data.states.restored.summary.python_threads_max": 29,
+      "child.data.states.restored.summary.tree_cpu_pct.max": 257.39,
+      "child.data.states.restored.summary.tree_cpu_pct.mean": 140.84,
+      "child.data.states.restored.summary.tree_cpu_pct.median": 139.36,
+      "child.data.states.restored.summary.tree_cpu_pct.p95": 170.24,
+      "child.data.states.restored.summary.tree_rss_mb.max": 788.3,
+      "child.data.states.restored.summary.tree_rss_mb.mean": 767.43,
+      "child.data.states.restored.summary.tree_rss_mb.median": 764.21,
+      "child.data.states.restored.summary.tree_rss_mb.p95": 785.98,
+      "child.data.states.restored.summary.webview_cpu_pct.max": 186.38,
+      "child.data.states.restored.summary.webview_cpu_pct.mean": 128.61,
+      "child.data.states.restored.summary.webview_cpu_pct.median": 128.21,
+      "child.data.states.restored.summary.webview_cpu_pct.p95": 162.2,
+      "child.data.states.restored.summary.webview_rss_mb.max": 612.57,
+      "child.data.states.restored.summary.webview_rss_mb.mean": 592.29,
+      "child.data.states.restored.summary.webview_rss_mb.median": 589.08,
+      "child.data.states.restored.summary.webview_rss_mb.p95": 609.75,
+      "child.data.states.restored.summary.window_sec": 30.6,
+      "child.data.states.visible_idle.n_samples": 27,
+      "child.data.states.visible_idle.summary.n_children_max": 7,
+      "child.data.states.visible_idle.summary.n_samples": 27,
+      "child.data.states.visible_idle.summary.python_cpu_pct.max": 95.95,
+      "child.data.states.visible_idle.summary.python_cpu_pct.mean": 15.79,
+      "child.data.states.visible_idle.summary.python_cpu_pct.median": 13.21,
+      "child.data.states.visible_idle.summary.python_cpu_pct.p95": 19.37,
+      "child.data.states.visible_idle.summary.python_rss_mb.max": 161.43,
+      "child.data.states.visible_idle.summary.python_rss_mb.mean": 161.18,
+      "child.data.states.visible_idle.summary.python_rss_mb.median": 161.42,
+      "child.data.states.visible_idle.summary.python_rss_mb.p95": 161.43,
+      "child.data.states.visible_idle.summary.python_threads_max": 32,
+      "child.data.states.visible_idle.summary.tree_cpu_pct.max": 211.96,
+      "child.data.states.visible_idle.summary.tree_cpu_pct.mean": 112.81,
+      "child.data.states.visible_idle.summary.tree_cpu_pct.median": 110.64,
+      "child.data.states.visible_idle.summary.tree_cpu_pct.p95": 139.24,
+      "child.data.states.visible_idle.summary.tree_rss_mb.max": 801.39,
+      "child.data.states.visible_idle.summary.tree_rss_mb.mean": 745.14,
+      "child.data.states.visible_idle.summary.tree_rss_mb.median": 734.49,
+      "child.data.states.visible_idle.summary.tree_rss_mb.p95": 800.7,
+      "child.data.states.visible_idle.summary.webview_cpu_pct.max": 135.26,
+      "child.data.states.visible_idle.summary.webview_cpu_pct.mean": 96.15,
+      "child.data.states.visible_idle.summary.webview_cpu_pct.median": 97.86,
+      "child.data.states.visible_idle.summary.webview_cpu_pct.p95": 124.93,
+      "child.data.states.visible_idle.summary.webview_rss_mb.max": 641.21,
+      "child.data.states.visible_idle.summary.webview_rss_mb.mean": 583.94,
+      "child.data.states.visible_idle.summary.webview_rss_mb.median": 572.98,
+      "child.data.states.visible_idle.summary.webview_rss_mb.p95": 640.52,
+      "child.data.states.visible_idle.summary.window_sec": 30.0,
+      "child.finished_at": 1791099222.51,
+      "child.perf.AdSubframes": 0,
+      "child.perf.ArrayBufferContents": 0,
+      "child.perf.AudioHandlers": 16,
+      "child.perf.AudioWorkletProcessors": 0,
+      "child.perf.ContextLifecycleStateObservers": 13,
+      "child.perf.DetachedScriptStates": 0,
+      "child.perf.DevToolsCommandDuration": 0.15,
+      "child.perf.Documents": 2,
+      "child.perf.DomContentLoaded": 309782.01,
+      "child.perf.FirstMeaningfulPaint": 309782.01,
+      "child.perf.Frames": 2,
+      "child.perf.JSEventListeners": 712,
+      "child.perf.JSHeapTotalSize": 10084352,
+      "child.perf.JSHeapUsedSize": 8833492,
+      "child.perf.LayoutCount": 25,
+      "child.perf.LayoutDuration": 0.03,
+      "child.perf.LayoutObjects": 1914,
+      "child.perf.MediaKeySessions": 0,
+      "child.perf.MediaKeys": 0,
+      "child.perf.NavigationStart": 309781.94,
+      "child.perf.Nodes": 8730,
+      "child.perf.ProcessTime": 14.28,
+      "child.perf.RTCPeerConnections": 0,
+      "child.perf.RecalcStyleCount": 61,
+      "child.perf.RecalcStyleDuration": 0.03,
+      "child.perf.ResourceFetchers": 2,
+      "child.perf.Resources": 190,
+      "child.perf.ScriptDuration": 1.44,
+      "child.perf.TaskDuration": 5.86,
+      "child.perf.TaskOtherDuration": 4.22,
+      "child.perf.ThreadTime": 6.87,
+      "child.perf.Timestamp": 309888.44,
+      "child.perf.UACSSResources": 0,
+      "child.perf.V8CompileDuration": 0.0,
+      "child.perf.V8PerContextDatas": 1,
+      "child.perf.WorkerGlobalScopes": 0,
+      "child.started_at": 1791099113.74,
+      "cold_start.interpreter_and_import_ms": 646.0,
+      "cold_start.to_webview_loop_ms": 728.0,
+      "cold_start.to_window_created_ms": 727.0,
+      "cold_start.to_window_loaded_ms": 2596.0
+    }
+  },
+  "runs": [
+    {
+      "ok": true,
+      "exit_code": 0,
+      "wall_sec": 115.51,
+      "cold_start": {
+        "interpreter_and_import_ms": 601.9,
+        "to_window_created_ms": 698.9,
+        "to_window_loaded_ms": 2222.9,
+        "to_webview_loop_ms": 699.9
+      },
+      "startup_markers_ms": {
+        "AppCore initialized": 55.0,
+        "window created": 97.0,
+        "webview loop starting": 98.0,
+        "window loaded": 1621.0
+      },
+      "seed": {
+        "db_path": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\nedotify_storage.db",
+        "tracks": 2000,
+        "history": 0,
+        "covers": 12,
+        "cookie_mode": "pinned",
+        "cookie_jar": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\bench_cookies.txt"
+      },
+      "child": {
+        "scenario": "idle_states",
+        "mode": "bench",
+        "started_at": 1791098995.6555235,
+        "ok": true,
+        "error": null,
+        "data": {
+          "hwnd": 9306820,
+          "states": {
+            "visible_idle": {
+              "summary": {
+                "n_samples": 27,
+                "window_sec": 30.4,
+                "python_cpu_pct": {
+                  "mean": 14.51,
+                  "median": 13.28,
+                  "p95": 24.58,
+                  "max": 29.88
+                },
+                "webview_cpu_pct": {
+                  "mean": 103.24,
+                  "median": 102.2,
+                  "p95": 125.82,
+                  "max": 135.26
+                },
+                "tree_cpu_pct": {
+                  "mean": 117.75,
+                  "median": 116.27,
+                  "p95": 140.54,
+                  "max": 146.42
+                },
+                "python_rss_mb": {
+                  "mean": 152.78,
+                  "median": 153.1,
+                  "p95": 153.11,
+                  "max": 153.11
+                },
+                "webview_rss_mb": {
+                  "mean": 577.78,
+                  "median": 568.52,
+                  "p95": 624.42,
+                  "max": 631.95
+                },
+                "tree_rss_mb": {
+                  "mean": 730.57,
+                  "median": 720.89,
+                  "p95": 776.51,
+                  "max": 784.04
+                },
+                "python_threads_max": 31,
+                "n_children_max": 7
+              },
+              "document_hidden": false,
+              "visibility_state": "visible",
+              "n_samples": 27
+            },
+            "minimized": {
+              "summary": {
+                "n_samples": 28,
+                "window_sec": 29.8,
+                "python_cpu_pct": {
+                  "mean": 10.9,
+                  "median": 8.51,
+                  "p95": 12.97,
+                  "max": 74.3
+                },
+                "webview_cpu_pct": {
+                  "mean": 3.73,
+                  "median": 2.8,
+                  "p95": 10.81,
+                  "max": 11.53
+                },
+                "tree_cpu_pct": {
+                  "mean": 14.63,
+                  "median": 11.35,
+                  "p95": 23.79,
+                  "max": 74.3
+                },
+                "python_rss_mb": {
+                  "mean": 167.83,
+                  "median": 167.86,
+                  "p95": 167.86,
+                  "max": 167.86
+                },
+                "webview_rss_mb": {
+                  "mean": 516.84,
+                  "median": 512.73,
+                  "p95": 587.67,
+                  "max": 587.67
+                },
+                "tree_rss_mb": {
+                  "mean": 684.67,
+                  "median": 680.59,
+                  "p95": 755.53,
+                  "max": 755.53
+                },
+                "python_threads_max": 31,
+                "n_children_max": 7
+              },
+              "document_hidden": true,
+              "visibility_state": "hidden",
+              "n_samples": 28
+            },
+            "restored": {
+              "summary": {
+                "n_samples": 27,
+                "window_sec": 30.2,
+                "python_cpu_pct": {
+                  "mean": 12.23,
+                  "median": 10.86,
+                  "p95": 19.37,
+                  "max": 36.93
+                },
+                "webview_cpu_pct": {
+                  "mean": 128.61,
+                  "median": 128.21,
+                  "p95": 162.2,
+                  "max": 171.78
+                },
+                "tree_cpu_pct": {
+                  "mean": 140.84,
+                  "median": 139.36,
+                  "p95": 170.24,
+                  "max": 184.15
+                },
+                "python_rss_mb": {
+                  "mean": 167.87,
+                  "median": 167.87,
+                  "p95": 167.87,
+                  "max": 167.87
+                },
+                "webview_rss_mb": {
+                  "mean": 585.45,
+                  "median": 582.79,
+                  "p95": 601.03,
+                  "max": 601.69
+                },
+                "tree_rss_mb": {
+                  "mean": 753.33,
+                  "median": 750.66,
+                  "p95": 768.9,
+                  "max": 769.56
+                },
+                "python_threads_max": 28,
+                "n_children_max": 7
+              },
+              "document_hidden": false,
+              "visibility_state": "visible",
+              "n_samples": 27
+            }
+          }
+        },
+        "perf": {
+          "Timestamp": 309770.119652,
+          "AudioHandlers": 16,
+          "AudioWorkletProcessors": 0,
+          "Documents": 2,
+          "Frames": 2,
+          "JSEventListeners": 703,
+          "LayoutObjects": 1914,
+          "MediaKeySessions": 0,
+          "MediaKeys": 0,
+          "Nodes": 8730,
+          "Resources": 190,
+          "ContextLifecycleStateObservers": 13,
+          "V8PerContextDatas": 1,
+          "WorkerGlobalScopes": 0,
+          "UACSSResources": 0,
+          "RTCPeerConnections": 0,
+          "ResourceFetchers": 2,
+          "AdSubframes": 0,
+          "DetachedScriptStates": 0,
+          "ArrayBufferContents": 0,
+          "LayoutCount": 25,
+          "RecalcStyleCount": 60,
+          "LayoutDuration": 0.121762,
+          "RecalcStyleDuration": 0.043662,
+          "DevToolsCommandDuration": 0.155074,
+          "ScriptDuration": 1.474848,
+          "V8CompileDuration": 7.2e-05,
+          "TaskDuration": 6.045716,
+          "TaskOtherDuration": 4.250298,
+          "ThreadTime": 7.038889,
+          "ProcessTime": 14.283234,
+          "JSHeapUsedSize": 7961612,
+          "JSHeapTotalSize": 10084352,
+          "FirstMeaningfulPaint": 309663.741085,
+          "DomContentLoaded": 309663.507081,
+          "NavigationStart": 309663.375064
+        },
+        "finished_at": 1791099104.1857064
+      },
+      "stdout_tail": "[bench] waiting for CDP target...\nStarting NeDotify...\n10:29:56.006 INFO: [startup] process started\n10:29:56.059 INFO: Local HTTP stream proxy started on port 56183\n10:29:56.060 INFO: Plugins are disabled (general.plugins_enabled = false); skipping plugin discovery.\n10:29:56.061 INFO: [startup] AppCore initialized (+55ms)\n10:29:56.102 INFO: pystray not available; tray disabled.\n10:29:56.103 INFO: [startup] window created (+97ms)\n10:29:56.104 INFO: [startup] WebView2 runtime setting: default\n10:29:56.104 INFO: [startup] webview loop starting (+98ms)\n10:29:56.817 INFO: [startup] bridge-free close and fallback asset endpoints registered\n10:29:57.389 INFO: yt-dlp auto-update finished safely.\n[bench] CDP attached\n10:29:57.456 INFO: [startup] window loaded (+1450ms)\n10:29:57.457 INFO: [startup] bridge initialized after 1 load attempt(s)\n10:29:57.627 INFO: [startup] window loaded (+1621ms)\n[bench] new doc committed at +27ms, interactive at +233ms (FCP 120ms since navStart)\n[bench] app_ready at +5ms\n10:29:57.788 INFO: Last.fm API key not configured — set the LASTFM_API_KEY environment variable or auth.lastfm_api_key in settings. Last.fm features are disabled.\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n10:30:06.477 WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n10:30:14.825 WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n10:30:23.075 WARNING: Could not scrape SoundCloud client_id: HTTPSConnectionPool(host='soundcloud.com', port=443): Max retries exceeded with url: / (Caused by ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\"))\n[bench] destroy issued at +0.155s\n10:31:44.561 INFO: Cleaning up AppCore resources...\n10:31:45.015 INFO: Local HTTP stream proxy stopped\n",
+      "profile_root": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile"
+    },
+    {
+      "ok": true,
+      "exit_code": 0,
+      "wall_sec": 115.39,
+      "cold_start": {
+        "interpreter_and_import_ms": 708.1,
+        "to_window_created_ms": 823.1,
+        "to_window_loaded_ms": 2677.1,
+        "to_webview_loop_ms": 824.1
+      },
+      "startup_markers_ms": {
+        "AppCore initialized": 78.0,
+        "window created": 115.0,
+        "webview loop starting": 116.0,
+        "window loaded": 1969.0
+      },
+      "seed": {
+        "db_path": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\nedotify_storage.db",
+        "tracks": 2000,
+        "history": 0,
+        "covers": 12,
+        "cookie_mode": "pinned",
+        "cookie_jar": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\bench_cookies.txt"
+      },
+      "child": {
+        "scenario": "idle_states",
+        "mode": "bench",
+        "started_at": 1791099113.7421434,
+        "ok": true,
+        "error": null,
+        "data": {
+          "hwnd": 9110232,
+          "states": {
+            "visible_idle": {
+              "summary": {
+                "n_samples": 27,
+                "window_sec": 30.0,
+                "python_cpu_pct": {
+                  "mean": 15.79,
+                  "median": 12.38,
+                  "p95": 16.73,
+                  "max": 95.95
+                },
+                "webview_cpu_pct": {
+                  "mean": 93.77,
+                  "median": 93.88,
+                  "p95": 119.37,
+                  "max": 165.63
+                },
+                "tree_cpu_pct": {
+                  "mean": 109.56,
+                  "median": 104.76,
+                  "p95": 131.58,
+                  "max": 261.58
+                },
+                "python_rss_mb": {
+                  "mean": 161.18,
+                  "median": 161.52,
+                  "p95": 161.53,
+                  "max": 161.53
+                },
+                "webview_rss_mb": {
+                  "mean": 584.95,
+                  "median": 572.98,
+                  "p95": 645.24,
+                  "max": 645.48
+                },
+                "tree_rss_mb": {
+                  "mean": 746.13,
+                  "median": 734.49,
+                  "p95": 804.81,
+                  "max": 805.05
+                },
+                "python_threads_max": 32,
+                "n_children_max": 7
+              },
+              "document_hidden": false,
+              "visibility_state": "visible",
+              "n_samples": 27
+            },
+            "minimized": {
+              "summary": {
+                "n_samples": 28,
+                "window_sec": 29.9,
+                "python_cpu_pct": {
+                  "mean": 8.87,
+                  "median": 8.5,
+                  "p95": 10.04,
+                  "max": 16.98
+                },
+                "webview_cpu_pct": {
+                  "mean": 3.95,
+                  "median": 1.42,
+                  "p95": 12.62,
+                  "max": 37.36
+                },
+                "tree_cpu_pct": {
+                  "mean": 12.82,
+                  "median": 10.63,
+                  "p95": 22.44,
+                  "max": 54.34
+                },
+                "python_rss_mb": {
+                  "mean": 176.55,
+                  "median": 176.55,
+                  "p95": 176.58,
+                  "max": 176.58
+                },
+                "webview_rss_mb": {
+                  "mean": 521.58,
+                  "median": 521.51,
+                  "p95": 550.87,
+                  "max": 575.8
+                },
+                "tree_rss_mb": {
+                  "mean": 698.13,
+                  "median": 698.09,
+                  "p95": 727.45,
+                  "max": 752.38
+                },
+                "python_threads_max": 32,
+                "n_children_max": 7
+              },
+              "document_hidden": true,
+              "visibility_state": "hidden",
+              "n_samples": 28
+            },
+            "restored": {
+              "summary": {
+                "n_samples": 27,
+                "window_sec": 30.6,
+                "python_cpu_pct": {
+                  "mean": 13.49,
+                  "median": 11.57,
+                  "p95": 15.74,
+                  "max": 71.0
+                },
+                "webview_cpu_pct": {
+                  "mean": 142.14,
+                  "median": 148.68,
+                  "p95": 175.62,
+                  "max": 186.38
+                },
+                "tree_cpu_pct": {
+                  "mean": 155.63,
+                  "median": 159.09,
+                  "p95": 189.03,
+                  "max": 257.39
+                },
+                "python_rss_mb": {
+                  "mean": 176.53,
+                  "median": 176.53,
+                  "p95": 176.53,
+                  "max": 176.53
+                },
+                "webview_rss_mb": {
+                  "mean": 593.53,
+                  "median": 589.93,
+                  "p95": 609.75,
+                  "max": 612.57
+                },
+                "tree_rss_mb": {
+                  "mean": 770.06,
+                  "median": 766.46,
+                  "p95": 786.28,
+                  "max": 789.1
+                },
+                "python_threads_max": 29,
+                "n_children_max": 7
+              },
+              "document_hidden": false,
+              "visibility_state": "visible",
+              "n_samples": 27
+            }
+          }
+        },
+        "perf": {
+          "Timestamp": 309888.441149,
+          "AudioHandlers": 16,
+          "AudioWorkletProcessors": 0,
+          "Documents": 2,
+          "Frames": 2,
+          "JSEventListeners": 712,
+          "LayoutObjects": 1914,
+          "MediaKeySessions": 0,
+          "MediaKeys": 0,
+          "Nodes": 8730,
+          "Resources": 190,
+          "ContextLifecycleStateObservers": 13,
+          "V8PerContextDatas": 1,
+          "WorkerGlobalScopes": 0,
+          "UACSSResources": 0,
+          "RTCPeerConnections": 0,
+          "ResourceFetchers": 2,
+          "AdSubframes": 0,
+          "DetachedScriptStates": 0,
+          "ArrayBufferContents": 0,
+          "LayoutCount": 23,
+          "RecalcStyleCount": 61,
+          "LayoutDuration": 0.029366,
+          "RecalcStyleDuration": 0.034718,
+          "DevToolsCommandDuration": 0.140069,
+          "ScriptDuration": 1.443295,
+          "V8CompileDuration": 0.000111,
+          "TaskDuration": 5.864157,
+          "TaskOtherDuration": 4.216598,
+          "ThreadTime": 6.870705,
+          "ProcessTime": 14.287826,
+          "JSHeapUsedSize": 8833492,
+          "JSHeapTotalSize": 9822208,
+          "FirstMeaningfulPaint": 309782.007848,
+          "DomContentLoaded": 309782.010267,
+          "NavigationStart": 309781.939954
+        },
+        "finished_at": 1791099222.5133085
+      },
+      "stdout_tail": "[bench] waiting for CDP target...\nStarting NeDotify...\n10:31:54.147 INFO: [startup] process started\n10:31:54.214 INFO: yt-dlp update skipped (last update 0.0h ago)\n10:31:54.222 INFO: Local HTTP stream proxy started on port 61280\n10:31:54.222 INFO: Plugins are disabled (general.plugins_enabled = false); skipping plugin discovery.\n10:31:54.224 INFO: [startup] AppCore initialized (+78ms)\n10:31:54.262 INFO: pystray not available; tray disabled.\n10:31:54.262 INFO: [startup] window created (+115ms)\n10:31:54.263 INFO: [startup] WebView2 runtime setting: default\n10:31:54.263 INFO: [startup] webview loop starting (+116ms)\n10:31:55.196 INFO: [startup] bridge-free close and fallback asset endpoints registered\n10:31:55.742 INFO: [startup] window loaded (+1595ms)\n10:31:55.742 INFO: [startup] bridge initialized after 1 load attempt(s)\n10:31:55.932 INFO: Last.fm API key not configured — set the LASTFM_API_KEY environment variable or auth.lastfm_api_key in settings. Last.fm features are disabled.\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n[bench] CDP attached\n10:31:56.116 INFO: [startup] window loaded (+1969ms)\n[bench] new doc committed at +20ms, interactive at +149ms (FCP 68ms since navStart)\n[bench] app_ready at +3ms\n10:32:04.653 WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n10:32:12.831 WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n10:32:21.025 WARNING: Could not scrape SoundCloud client_id: HTTPSConnectionPool(host='soundcloud.com', port=443): Max retries exceeded with url: / (Caused by ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\"))\n[bench] destroy issued at +0.116s\n10:33:42.849 INFO: Cleaning up AppCore resources...\n10:33:43.061 INFO: Local HTTP stream proxy stopped\n",
+      "profile_root": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile"
+    },
+    {
+      "ok": true,
+      "exit_code": 0,
+      "wall_sec": 114.31,
+      "cold_start": {
+        "interpreter_and_import_ms": 646.0,
+        "to_window_created_ms": 727.0,
+        "to_window_loaded_ms": 2596.0,
+        "to_webview_loop_ms": 728.0
+      },
+      "startup_markers_ms": {
+        "AppCore initialized": 47.0,
+        "window created": 82.0,
+        "webview loop starting": 82.0,
+        "window loaded": 1951.0
+      },
+      "seed": {
+        "db_path": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\nedotify_storage.db",
+        "tracks": 2000,
+        "history": 0,
+        "covers": 12,
+        "cookie_mode": "pinned",
+        "cookie_jar": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile\\.nedotify\\bench_cookies.txt"
+      },
+      "child": {
+        "scenario": "idle_states",
+        "mode": "bench",
+        "started_at": 1791099231.6011996,
+        "ok": true,
+        "error": null,
+        "data": {
+          "hwnd": 5965538,
+          "states": {
+            "visible_idle": {
+              "summary": {
+                "n_samples": 27,
+                "window_sec": 30.0,
+                "python_cpu_pct": {
+                  "mean": 16.66,
+                  "median": 13.21,
+                  "p95": 19.37,
+                  "max": 115.62
+                },
+                "webview_cpu_pct": {
+                  "mean": 96.15,
+                  "median": 97.86,
+                  "p95": 124.93,
+                  "max": 125.98
+                },
+                "tree_cpu_pct": {
+                  "mean": 112.81,
+                  "median": 110.64,
+                  "p95": 139.24,
+                  "max": 211.96
+                },
+                "python_rss_mb": {
+                  "mean": 161.2,
+                  "median": 161.42,
+                  "p95": 161.43,
+                  "max": 161.43
+                },
+                "webview_rss_mb": {
+                  "mean": 583.94,
+                  "median": 573.8,
+                  "p95": 640.52,
+                  "max": 641.21
+                },
+                "tree_rss_mb": {
+                  "mean": 745.14,
+                  "median": 735.04,
+                  "p95": 800.7,
+                  "max": 801.39
+                },
+                "python_threads_max": 32,
+                "n_children_max": 7
+              },
+              "document_hidden": false,
+              "visibility_state": "visible",
+              "n_samples": 27
+            },
+            "minimized": {
+              "summary": {
+                "n_samples": 29,
+                "window_sec": 30.8,
+                "python_cpu_pct": {
+                  "mean": 8.49,
+                  "median": 8.53,
+                  "p95": 11.87,
+                  "max": 17.1
+                },
+                "webview_cpu_pct": {
+                  "mean": 2.33,
+                  "median": 1.42,
+                  "p95": 7.91,
+                  "max": 8.44
+                },
+                "tree_cpu_pct": {
+                  "mean": 10.82,
+                  "median": 9.93,
+                  "p95": 19.78,
+                  "max": 22.8
+                },
+                "python_rss_mb": {
+                  "mean": 176.1,
+                  "median": 176.12,
+                  "p95": 176.12,
+                  "max": 176.12
+                },
+                "webview_rss_mb": {
+                  "mean": 523.21,
+                  "median": 520.65,
+                  "p95": 575.54,
+                  "max": 575.54
+                },
+                "tree_rss_mb": {
+                  "mean": 699.31,
+                  "median": 696.77,
+                  "p95": 751.66,
+                  "max": 751.66
+                },
+                "python_threads_max": 32,
+                "n_children_max": 7
+              },
+              "document_hidden": true,
+              "visibility_state": "hidden",
+              "n_samples": 29
+            },
+            "restored": {
+              "summary": {
+                "n_samples": 28,
+                "window_sec": 30.9,
+                "python_cpu_pct": {
+                  "mean": 11.78,
+                  "median": 8.47,
+                  "p95": 23.67,
+                  "max": 81.41
+                },
+                "webview_cpu_pct": {
+                  "mean": 111.56,
+                  "median": 109.36,
+                  "p95": 138.09,
+                  "max": 267.47
+                },
+                "tree_cpu_pct": {
+                  "mean": 123.34,
+                  "median": 119.29,
+                  "p95": 149.12,
+                  "max": 348.88
+                },
+                "python_rss_mb": {
+                  "mean": 175.13,
+                  "median": 175.13,
+                  "p95": 175.13,
+                  "max": 175.13
+                },
+                "webview_rss_mb": {
+                  "mean": 592.29,
+                  "median": 589.08,
+                  "p95": 610.85,
+                  "max": 613.16
+                },
+                "tree_rss_mb": {
+                  "mean": 767.43,
+                  "median": 764.21,
+                  "p95": 785.98,
+                  "max": 788.3
+                },
+                "python_threads_max": 29,
+                "n_children_max": 7
+              },
+              "document_hidden": false,
+              "visibility_state": "visible",
+              "n_samples": 28
+            }
+          }
+        },
+        "perf": {
+          "Timestamp": 310006.415648,
+          "AudioHandlers": 16,
+          "AudioWorkletProcessors": 0,
+          "Documents": 2,
+          "Frames": 2,
+          "JSEventListeners": 712,
+          "LayoutObjects": 1914,
+          "MediaKeySessions": 0,
+          "MediaKeys": 0,
+          "Nodes": 8730,
+          "Resources": 190,
+          "ContextLifecycleStateObservers": 13,
+          "V8PerContextDatas": 1,
+          "WorkerGlobalScopes": 0,
+          "UACSSResources": 0,
+          "RTCPeerConnections": 0,
+          "ResourceFetchers": 2,
+          "AdSubframes": 0,
+          "DetachedScriptStates": 0,
+          "ArrayBufferContents": 0,
+          "LayoutCount": 25,
+          "RecalcStyleCount": 63,
+          "LayoutDuration": 0.030267,
+          "RecalcStyleDuration": 0.034869,
+          "DevToolsCommandDuration": 0.151318,
+          "ScriptDuration": 1.22272,
+          "V8CompileDuration": 8.1e-05,
+          "TaskDuration": 4.64169,
+          "TaskOtherDuration": 3.202435,
+          "ThreadTime": 6.390232,
+          "ProcessTime": 12.631281,
+          "JSHeapUsedSize": 9336120,
+          "JSHeapTotalSize": 10084352,
+          "FirstMeaningfulPaint": 309899.857866,
+          "DomContentLoaded": 309899.845579,
+          "NavigationStart": 309899.784676
+        },
+        "finished_at": 1791099340.4818597
+      },
+      "stdout_tail": "[bench] waiting for CDP target...\nStarting NeDotify...\n10:33:52.000 INFO: [startup] process started\n10:33:52.036 INFO: yt-dlp update skipped (last update 0.1h ago)\n10:33:52.044 INFO: Local HTTP stream proxy started on port 59030\n10:33:52.044 INFO: Plugins are disabled (general.plugins_enabled = false); skipping plugin discovery.\n10:33:52.046 INFO: [startup] AppCore initialized (+47ms)\n10:33:52.081 INFO: pystray not available; tray disabled.\n10:33:52.081 INFO: [startup] window created (+82ms)\n10:33:52.082 INFO: [startup] WebView2 runtime setting: default\n10:33:52.082 INFO: [startup] webview loop starting (+82ms)\n10:33:52.929 INFO: [startup] bridge-free close and fallback asset endpoints registered\n10:33:53.530 INFO: [startup] window loaded (+1530ms)\n10:33:53.530 INFO: [startup] bridge initialized after 1 load attempt(s)\n10:33:53.722 INFO: Last.fm API key not configured — set the LASTFM_API_KEY environment variable or auth.lastfm_api_key in settings. Last.fm features are disabled.\n[PROFILE] Signals — history:0, favorites:118, downloads:500, playlist_tracks:0\n[bench] CDP attached\n10:33:53.950 INFO: [startup] window loaded (+1951ms)\n[bench] new doc committed at +18ms, interactive at +142ms (FCP 76ms since navStart)\n[bench] app_ready at +3ms\n10:34:02.482 WARNING: Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n10:34:10.672 WARNING: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\")': /\n10:34:18.810 WARNING: Could not scrape SoundCloud client_id: HTTPSConnectionPool(host='soundcloud.com', port=443): Max retries exceeded with url: / (Caused by ReadTimeoutError(\"HTTPSConnectionPool(host='soundcloud.com', port=443): Read timed out. (read timeout=8.0)\"))\n[bench] destroy issued at +0.068s\n10:35:40.766 INFO: Cleaning up AppCore resources...\n10:35:40.772 INFO: Local HTTP stream proxy stopped\n",
+      "profile_root": "C:\\Users\\Артур\\NeDotify\\AURA_Music_backup\\AURA_Music_main\\tools\\bench\\results\\_warm_profile"
+    }
+  ]
+}

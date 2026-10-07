@@ -564,6 +564,14 @@ function renderFontCards(activeCat = 'system') {
     const container = document.getElementById('font-cards-grid');
     if (!container) return;
 
+    // The picker families (Inter, Outfit, Roboto, Montserrat, Plus Jakarta
+    // Sans) are remote and loaded on demand by boot.js. Request them here -
+    // i.e. when the picker is actually rendered - so a cold start does not
+    // pay for them. Idempotent; a failed/offline load just leaves the fallback.
+    if (typeof window.NeDotifyEnsurePickerFonts === 'function') {
+        try { window.NeDotifyEnsurePickerFonts(); } catch (e) {}
+    }
+
     const currentFont = getComputedStyle(document.documentElement).getPropertyValue('--font-family').trim() || "'Inter', sans-serif";
 
     container.innerHTML = '';
@@ -1012,37 +1020,14 @@ export function initKeybinds() {
     }
 }
 
-function triggerKeybindAction(actionId) {
-    switch(actionId) {
-        case 'play_pause':
-            document.getElementById('pb-btn-play')?.click();
-            break;
-        case 'next_track':
-            document.getElementById('pb-btn-next')?.click();
-            break;
-        case 'prev_track':
-            document.getElementById('pb-btn-prev')?.click();
-            break;
-        case 'volume_up':
-            window.NeDotify?.adjustVolume?.(5);
-            break;
-        case 'volume_down':
-            window.NeDotify?.adjustVolume?.(-5);
-            break;
-        case 'toggle_mute':
-            document.getElementById('pb-volume-btn')?.click();
-            break;
-        case 'toggle_lyrics':
-            document.getElementById('pp-btn-lyrics')?.click();
-            break;
-        case 'toggle_mini':
-            document.getElementById('btn-mini-player')?.click();
-            break;
-    }
-}
-
-function formatKeyName(code) {
-    if (!code) return 'Не назначено';
+/**
+ * Human label for a single bare KeyboardEvent.code - no modifiers.
+ * Split out of formatKeyName() so the combo splitter below can reuse it.
+ * @param {string} code
+ * @returns {string}
+ */
+function formatBaseKeyName(code) {
+    if (!code) return code;
     const translations = {
         'Space': 'Пробел',
         'ArrowRight': 'Стрелка Вправо',
@@ -1078,6 +1063,39 @@ function formatKeyName(code) {
     if (code.startsWith('Digit')) return `Цифра ${code.replace('Digit', '')}`;
     if (code.startsWith('Numpad')) return `Нумпад ${code.replace('Numpad', '')}`;
     return code;
+}
+
+// Modifier names exactly as parseKeyEventCombo() emits them, in the order it
+// pushes them. 'Meta' is the Windows key.
+const KEYBIND_MODIFIER_LABELS = {
+    'Ctrl': 'Ctrl',
+    'Alt': 'Alt',
+    'Shift': 'Shift',
+    'Meta': 'Win'
+};
+
+/**
+ * Human label for a full combo string as stored in activeKeybinds.
+ *
+ * parseKeyEventCombo() joins the modifiers and the base key with '+', so
+ * 'Ctrl+ArrowRight' is a TWO-part string. This used to look the whole string up
+ * in a map that only ever contained bare codes, miss, and fall through to
+ * `return code` - which is why every modified default rendered as the literal
+ * text "Ctrl+ArrowRight" in the Settings list, while the unmodified 'ArrowRight'
+ * correctly rendered as "Стрелка Вправо". Any binding the user made with a
+ * modifier held down was equally unreadable. Split on '+' and label each part.
+ */
+function formatKeyName(code) {
+    if (!code) return 'Не назначено';
+    const parts = String(code).split('+').filter(Boolean);
+    if (parts.length === 0) return 'Не назначено';
+
+    const labels = parts.map(part =>
+        Object.prototype.hasOwnProperty.call(KEYBIND_MODIFIER_LABELS, part)
+            ? KEYBIND_MODIFIER_LABELS[part]
+            : formatBaseKeyName(part)
+    );
+    return labels.join(' + ');
 }
 
 function renderKeybindsList() {
@@ -2100,10 +2118,15 @@ export function applyIconPack(packId) {
         }
     };
 
-    // Logo
+    // Logo. Write into the .sidebar-logo-icon slot only: the rail title is the
+    // collapse/expand toggle and owns two .sidebar-logo-text variants
+    // ("NeDotify" / the collapsed "N"). Replacing logoEl.innerHTML wholesale
+    // used to leave a bare text node here, which silently destroyed that
+    // structure the first time a user switched icon packs.
     const logoEl = document.querySelector('.sidebar-logo');
     if (logoEl) {
-        logoEl.innerHTML = `<i data-lucide="${map.logo}" style="width:24px;height:24px;filter:drop-shadow(0 0 10px ${pack.color});"></i> NeDotify`;
+        const iconSlot = logoEl.querySelector('.sidebar-logo-icon') || logoEl;
+        iconSlot.innerHTML = `<i data-lucide="${map.logo}" style="width:24px;height:24px;filter:drop-shadow(0 0 10px ${pack.color});"></i>`;
     }
 
     // Player bar transport controls

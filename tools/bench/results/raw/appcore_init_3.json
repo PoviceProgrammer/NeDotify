@@ -1,0 +1,1 @@
+{"mode": "appcore_init", "seconds": 0.040323900000657886, "ms": 40.323900000657886, "n_threads_after": 9, "threads_after": ["CacheCleanup", "MainThread", "Thread-1 (_process_queue)", "Thread-2", "Thread-3 (_process_pending)", "Thread-6 (_bg)", "Thread-7 (serve_forever)", "Thread-8 (_scan_loop)", "ThreadPoolExecutor-1_0"]}

@@ -1,4 +1,4 @@
-import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml, updatePlayingTrackInDOM } from './utils.js';
+import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml, updatePlayingTrackInDOM, sizeCanvasForDpr, registerCanvasDprListener } from './utils.js';
 
 let currentTrack = null;
 let isPlaying = false;
@@ -1764,7 +1764,22 @@ window.addEventListener('resize', () => {
     document.querySelectorAll('.waveform-canvas').forEach(cv => {
         cv._wfW = undefined;
         cv._wfH = undefined;
+        cv._wfBw = undefined;
+        cv._wfBh = undefined;
     });
+});
+
+// A drag between a 100% and a 150% monitor changes devicePixelRatio without a
+// resize event. Drop the cached backing-store size too, so the next render
+// re-rasterises the waveform at the new scale instead of leaving it soft.
+registerCanvasDprListener(() => {
+    document.querySelectorAll('.waveform-canvas').forEach(cv => {
+        cv._wfBw = undefined;
+        cv._wfBh = undefined;
+        cv._wfPlayed = -1;
+        cv._wfStatic = false;
+    });
+    try { renderWaveforms(currentPosMs / (currentDuration || 1)); } catch (e) {}
 });
 
 export async function fetchAndRenderWaveform(track) {
@@ -1833,6 +1848,7 @@ function drawWaveformToCanvas(canvas, peaks, progressPct) {
     const ctx = canvas.getContext('2d');
 
     // C-5: cached element size (invalidated on window resize / track change)
+    // These are CSS pixels; the backing store is derived from them below.
     const parent = canvas.parentElement;
     let w = canvas._wfW;
     if (w === undefined || w === 0) {
@@ -1843,9 +1859,13 @@ function drawWaveformToCanvas(canvas, peaks, progressPct) {
         h = canvas._wfH = parent.clientHeight || 20;
     }
 
-    if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
+    // Backing store follows devicePixelRatio; every drawing call below keeps
+    // using the CSS-pixel w/h, and the context carries the dpr scale. At
+    // dpr === 1 the backing store is exactly w x h, as it was before.
+    const sized = sizeCanvasForDpr(canvas, ctx, w, h);
+    if (canvas._wfBw !== sized.bw || canvas._wfBh !== sized.bh) {
+        canvas._wfBw = sized.bw;
+        canvas._wfBh = sized.bh;
         canvas._wfPlayed = -1;
         canvas._wfStatic = false;
     }

@@ -83,9 +83,50 @@ export function formatListeningTime(ms) {
     return parts.join(' ');
 }
 
-export function showToast(message, type = 'info') {
+// Live-region contract for #toast-container.
+//
+// The container is declared STATICALLY in index.html and is never built at
+// toast time. That is the whole point: `role="status"` / `aria-live="polite"`
+// only announces text that is inserted into a region which is already in the
+// accessibility tree, so a container created on demand by the first toast would
+// be announced by nobody. Both writers below therefore only ever *look the
+// container up* - they bail out rather than create one - and the one-time
+// bootstrap further down guarantees the element exists from first paint.
+let toastContainerMissingLogged = false;
+
+function getToastContainer() {
     const container = document.getElementById('toast-container');
+    if (!container && !toastContainerMissingLogged) {
+        toastContainerMissingLogged = true;
+        console.warn('#toast-container is missing - toasts, and their live-region announcements, are dropped');
+    }
+    return container;
+}
+
+// Bootstrap the live region before anything can write into it. A no-op on the
+// shipped markup; it only fires if the element is ever missing from index.html,
+// and it runs at document-ready rather than lazily at the first toast, which is
+// what keeps the region announceable.
+(function ensureToastContainer() {
+    if (typeof document === 'undefined') return;
+    const ensure = () => {
+        if (!document.body || document.getElementById('toast-container')) return;
+        const el = document.createElement('div');
+        el.id = 'toast-container';
+        document.body.appendChild(el);
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', ensure);
+    } else {
+        ensure();
+    }
+})();
+
+export function showToast(message, type = 'info') {
+    const container = getToastContainer();
     if (!container) return;
+    // The toast node itself carries no ARIA: the container is the single live
+    // region, so adding role/aria-live here as well would announce twice.
     // Cap stacking: never more than 4 visible toasts.
     while (container.children.length >= 4) {
         container.firstElementChild?.remove();
@@ -105,6 +146,303 @@ if (typeof window !== 'undefined' && !window.__nedotifyToastBridgeArmed) {
         const d = e?.detail || {};
         showToast(d.msg || d.message || '', d.type || 'info');
     });
+}
+
+// ---------------------------------------------------------------------------
+// Modal focus trap (dependency-free, ~40 lines)
+//
+// Every modal in this app is shown by flipping `style.display` on a
+// `position: fixed` overlay. That already removes the overlay from the
+// accessibility tree and from the tab order while it is hidden, which is why no
+// `aria-hidden` / `inert` juggling is needed here - juggling it is the classic
+// way to make the entire app invisible to a screen reader, and `aria-modal` on
+// the overlay covers the background for AT that honours it.
+//
+// What was missing is the other half of the contract: Tab walked straight out
+// of an open dialog into the page behind it, and closing one dropped focus on
+// <body>, so the next Tab restarted from the top of the document.
+//
+// Deliberate non-goals:
+//   * the trap ONLY touches Tab. Escape, Enter and every other key fall through
+//     untouched, so the existing Escape/Enter handlers keep working verbatim;
+//   * the listeners live on `document`, not on the modal, because the modals
+//     are re-created and their innerHTML is rewritten between opens.
+// ---------------------------------------------------------------------------
+
+const MODAL_FOCUSABLE_SELECTOR = [
+    'a[href]', 'area[href]',
+    'input:not([disabled]):not([type="hidden"])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    'button:not([disabled])',
+    '[tabindex]:not([tabindex="-1"])',
+    '[contenteditable="true"]',
+].join(',');
+
+// modal element -> { previous, onKeyDown }
+const modalTraps = new Map();
+
+// Layout check rather than `offsetParent`: offsetParent is null for a
+// position:fixed element and for anything inside a display:none subtree, which
+// is exactly the distinction we want but for the wrong reason. getClientRects()
+// answers "does this box take up space right now" directly.
+function hasLayoutBox(el) {
+    if (!el || typeof el.getClientRects !== 'function') return false;
+    try { return el.getClientRects().length > 0; } catch (e) { return false; }
+}
+
+export function getModalFocusables(modal) {
+    if (!modal || typeof modal.querySelectorAll !== 'function') return [];
+    return Array.prototype.filter.call(
+        modal.querySelectorAll(MODAL_FOCUSABLE_SELECTOR),
+        (el) => hasLayoutBox(el) && !el.disabled && el.getAttribute('aria-hidden') !== 'true'
+    );
+}
+
+function resolveInitialFocus(modal, initialFocus) {
+    if (initialFocus) {
+        const el = typeof initialFocus === 'string'
+            ? modal.querySelector(initialFocus)
+            : initialFocus;
+        if (el && hasLayoutBox(el) && !el.disabled) return el;
+    }
+    return getModalFocusables(modal)[0] || null;
+}
+
+/**
+ * Arm the trap for an already-visible modal.
+ *
+ * @param {Element}  modal            overlay that is currently displayed
+ * @param {Object}   [options]
+ * @param {string|Element} [options.initialFocus]  preferred first stop;
+ *        falls back to the first focusable descendant
+ * @param {Element}  [options.returnFocusTo]       override the remembered origin
+ * @returns {boolean} whether a trap is now armed
+ */
+export function openModalFocusTrap(modal, options = {}) {
+    if (!modal || typeof modal.addEventListener !== 'function') return false;
+    // Re-opening an already-trapped modal must not stack traps or leak a
+    // document listener; the newest open owns the return-focus target.
+    closeModalFocusTrap(modal);
+
+    const active = document.activeElement;
+    const previous = (options.returnFocusTo && options.returnFocusTo.isConnected)
+        ? options.returnFocusTo
+        : (active && active !== document.body ? active : null);
+
+    const onKeyDown = (e) => {
+        // Self-heal if the overlay was hidden by a path that did not close the
+        // trap (e.g. searchArtistProfile() blanks every .modal-overlay).
+        if (!hasLayoutBox(modal)) {
+            closeModalFocusTrap(modal);
+            return;
+        }
+        if (e.key !== 'Tab' || e.ctrlKey || e.altKey || e.metaKey) return;
+
+        const stops = getModalFocusables(modal);
+        if (stops.length === 0) {
+            // Nothing inside is focusable yet: keep focus where it is rather
+            // than letting the browser walk into the background.
+            e.preventDefault();
+            return;
+        }
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        const focused = document.activeElement;
+        if (!modal.contains(focused)) {
+            e.preventDefault();
+            try { (e.shiftKey ? last : first).focus(); } catch (err) {}
+            return;
+        }
+        if (e.shiftKey && focused === first) {
+            e.preventDefault();
+            try { last.focus(); } catch (err) {}
+        } else if (!e.shiftKey && focused === last) {
+            e.preventDefault();
+            try { first.focus(); } catch (err) {}
+        }
+    };
+
+    // Capture phase on document: a modal that calls stopPropagation() on its own
+    // keydown cannot starve the trap.
+    document.addEventListener('keydown', onKeyDown, true);
+    modalTraps.set(modal, { previous, onKeyDown });
+
+    const initial = resolveInitialFocus(modal, options.initialFocus);
+    if (initial) {
+        try { initial.focus({ preventScroll: true }); }
+        catch (e) { try { initial.focus(); } catch (e2) {} }
+    }
+    return true;
+}
+
+/**
+ * Release the trap and hand focus back to whatever had it before the modal
+ * opened. Idempotent: calling it for a modal that was never trapped, or twice
+ * for the same open, is a no-op.
+ */
+export function closeModalFocusTrap(modal, options = {}) {
+    const trap = modal && modalTraps.get(modal);
+    if (!trap) return false;
+    modalTraps.delete(modal);
+    document.removeEventListener('keydown', trap.onKeyDown, true);
+
+    const target = trap.previous;
+    if (!options.skipRestore && target && target.isConnected && typeof target.focus === 'function') {
+        // preventScroll keeps a restored focus from jumping the page behind the
+        // overlay the way a plain focus() can.
+        try { target.focus({ preventScroll: true }); }
+        catch (e) { try { target.focus(); } catch (e2) {} }
+    }
+    return true;
+}
+
+export function isModalFocusTrapped(modal) {
+    return !!(modal && modalTraps.has(modal));
+}
+
+/**
+ * True when `node` sits inside a modal that currently has the focus trap armed
+ * and is still visible.
+ *
+ * This exists for the global keybind dispatcher in hotkeys.js. The dispatcher is
+ * the one place that calls preventDefault(), and Space/Enter on a focused button
+ * are clicks the browser has not fired yet - so once a trap can move focus into
+ * a dialog, an unguarded Space bind would cancel the very button the user just
+ * tabbed to. hotkeys.js checks this before dispatching; the trap itself stays a
+ * pure Tab-cycler.
+ *
+ * Narrow on purpose: a modal that was hidden without closing its trap, or a
+ * node outside every trapped modal, both return false, so no binding changes
+ * behaviour outside an open dialog.
+ */
+export function isFocusInsideModalTrap(node) {
+    if (!node) return false;
+    let inside = false;
+    modalTraps.forEach((_trap, modal) => {
+        if (!inside && hasLayoutBox(modal) && modal.contains(node)) inside = true;
+    });
+    return inside;
+}
+
+// ---------------------------------------------------------------------------
+// HiDPI canvas bookkeeping
+//
+// Windows at 125% / 150% / 200% scaling is the common case, and every <canvas>
+// in this app was sized 1 device pixel per CSS pixel, so all of it looked soft.
+// `window.devicePixelRatio` is the browser's own per-monitor value: it is
+// authoritative, needs no pywebview round-trip, and it updates by itself when
+// the window is dragged onto a monitor with a different scale.
+//
+// core/api.py's `_get_scale_factor()` is NOT involved here. It exists so that
+// the coordinates handed to pywebview's move()/resize() stay in logical pixels;
+// it is a window-placement concern, not a rendering one.
+//
+// At dpr === 1 every helper below is the identity: the backing store equals the
+// CSS size, and `setTransform(1, 0, 0, 1, 0, 0)` is the default transform, so a
+// 100%-scaled display renders byte-for-byte as it did before.
+// ---------------------------------------------------------------------------
+
+export function getCanvasDpr() {
+    const raw = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    return (typeof raw === 'number' && isFinite(raw) && raw > 0) ? raw : 1;
+}
+
+/**
+ * Size a canvas backing store to `cssW` x `cssH` CSS pixels at the current
+ * devicePixelRatio and leave the 2D context scaled, so all drawing code can
+ * keep using CSS-pixel coordinates.
+ *
+ * @returns {{cssW:number, cssH:number, bw:number, bh:number, dpr:number}}
+ *          cssW/cssH are the logical drawable size, bw/bh the backing store.
+ */
+export function sizeCanvasForDpr(canvas, ctx, cssW, cssH) {
+    const dpr = getCanvasDpr();
+    const w = Math.max(0, Math.round(cssW));
+    const h = Math.max(0, Math.round(cssH));
+    const bw = Math.round(w * dpr);
+    const bh = Math.round(h * dpr);
+    if (canvas.width !== bw || canvas.height !== bh) {
+        // Assigning width/height resets the context state, so the transform has
+        // to be (re)applied every time - harmless when it is already set.
+        canvas.width = bw;
+        canvas.height = bh;
+    }
+    if (ctx && typeof ctx.setTransform === 'function') {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    return { cssW: w, cssH: h, bw, bh, dpr };
+}
+
+/**
+ * Same as sizeCanvasForDpr, for a canvas whose CSS box is NOT already pinned
+ * by a stylesheet. A canvas element with no CSS width/height takes its layout
+ * size from its width/height attributes, so growing the backing store to
+ * cssW * dpr would also grow the element on screen. Pinning the CSS box to the
+ * CSS-pixel size decouples the two.
+ *
+ * At dpr === 1 the pinned box equals the size the element already had from its
+ * attributes, so nothing moves.
+ */
+export function sizeCanvasForDprWithCssBox(canvas, ctx, cssW, cssH) {
+    const sized = sizeCanvasForDpr(canvas, ctx, cssW, cssH);
+    if (canvas.style) {
+        canvas.style.width = sized.cssW + 'px';
+        canvas.style.height = sized.cssH + 'px';
+    }
+    return sized;
+}
+
+// dpr-change subscribers, shared by every canvas-owning module.
+const canvasDprListeners = new Set();
+let dprMediaQuery = null;
+let dprMediaQueryKey = '';
+
+function dprQueryFor(dpr) {
+    if (typeof window === 'undefined' || !window.matchMedia) return null;
+    try {
+        return window.matchMedia(`(resolution: ${dpr}dppx)`);
+    } catch (e) {
+        return null;
+    }
+}
+
+function armDprQuery() {
+    const dpr = getCanvasDpr();
+    const key = String(dpr);
+    if (dprMediaQuery && dprMediaQueryKey === key) return;
+    if (dprMediaQuery && typeof dprMediaQuery.removeEventListener === 'function') {
+        dprMediaQuery.removeEventListener('change', onDprMediaChange);
+    }
+    dprMediaQuery = dprQueryFor(dpr);
+    dprMediaQueryKey = key;
+    if (dprMediaQuery && typeof dprMediaQuery.addEventListener === 'function') {
+        // The query has to name the *current* ratio, so it is re-armed from
+        // inside the handler instead of listening to a fixed query forever.
+        dprMediaQuery.addEventListener('change', onDprMediaChange);
+    }
+}
+
+function onDprMediaChange() {
+    armDprQuery();
+    canvasDprListeners.forEach((cb) => {
+        try { cb(getCanvasDpr()); }
+        catch (e) { console.warn('canvas dpr listener failed', e); }
+    });
+}
+
+/**
+ * Run `callback()` whenever the effective devicePixelRatio changes, e.g. when
+ * Windows drags the window from a 100% monitor onto a 150% one. Window resize
+ * is handled separately by each canvas owner.
+ *
+ * @returns {Function} unsubscribe
+ */
+export function registerCanvasDprListener(callback) {
+    if (typeof callback !== 'function') return () => {};
+    canvasDprListeners.add(callback);
+    armDprQuery();
+    return () => canvasDprListeners.delete(callback);
 }
 
 export function extractDominantColor(imgEl) {
@@ -419,6 +757,9 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
             if (artistName && artistName !== 'Unknown') {
                 document.querySelectorAll('.modal-overlay, #album-modal-container, #playlist-modal-container').forEach(m => {
                     m.style.display = 'none';
+                    // Same reason as in searchArtistProfile(): an overlay hidden
+                    // behind our back must not keep its focus trap armed.
+                    closeModalFocusTrap(m);
                 });
                 if (window.searchArtistProfile) {
                     window.searchArtistProfile(artistName);
@@ -1004,6 +1345,9 @@ export function openEditTagsModal(track) {
     modal.style.display = 'flex';
     modal.classList.remove('hidden');
     renderIcons();
+    // Initial focus: the title field is the first field of the form and the one
+    // the user almost always wants to change.
+    openModalFocusTrap(modal, { initialFocus: '#modal-et-title' });
 
     const closeBtn = document.getElementById('modal-et-close');
     const cancelBtn = document.getElementById('modal-et-cancel');
@@ -1013,6 +1357,7 @@ export function openEditTagsModal(track) {
     function closeModal() {
         modal.style.display = 'none';
         modal.classList.add('hidden');
+        closeModalFocusTrap(modal);
     }
 
     if (closeBtn) closeBtn.onclick = closeModal;

@@ -21,6 +21,20 @@
     position: relative;
     box-sizing: border-box;
     overflow: hidden;
+    /* The cover-derived ambient backdrop (#player-bg-glow) is painted from the
+       track art by player.js, and it is this element's overflow:hidden that
+       forms its visible edge - the glow is `inset: -20px` plus `scale(1.1)`, so
+       it always overruns the clip and rounding the glow itself would change
+       nothing on screen. Round the clip instead, concentrically with the two
+       .player-glass-card children: those sit on the padding above and use
+       --radius-lg, which puts their corner-arc centres at
+       (padding-left + R, padding-top + R) measured from this box's corner.
+       Matching that here makes the backdrop follow the cards' arc rather than
+       cutting a hard square through it.
+       Keep in sync with the padding above:
+         horizontal radius = --radius-lg + horizontal padding
+         vertical radius   = --radius-lg + vertical padding */
+    border-radius: calc(var(--radius-lg) + 8px) calc(var(--radius-lg) + 12px);
 }
 
 .player-bg-glow {
@@ -146,16 +160,37 @@
     margin-bottom: var(--space-xs);
 }
 
+/* Two explicit rows: [modes + view] over [transport].
+   The card's content box is ~282px, and nine 34px controls plus gaps need
+   ~354px, so the previous single row could not fit — it wrapped its last
+   button onto an orphan line, which is what made the row look arbitrary. */
 .player-card-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    width: 100%;
+    max-width: 100%;
+    margin-top: var(--space-xs);
+}
+
+.pcc-row {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    width: 100%;
     max-width: 100%;
-    flex-wrap: wrap;
-    row-gap: 6px;
-    margin-top: var(--space-xs);
+}
+
+.pcc-row-secondary .btn-ctrl {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+}
+
+/* Slightly wider rhythm so prev/play/next read as one unit. */
+.pcc-row-transport {
+    gap: 10px;
 }
 
 .player-card-controls .btn-ctrl {

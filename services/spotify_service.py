@@ -10,7 +10,7 @@ import requests
 import urllib.parse
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
-from services.base_service import BaseMusicService
+from services.base_service import BaseMusicService, normalize_proxy_url
 from requests.adapters import HTTPAdapter
 
 logger = logging.getLogger(__name__)
@@ -99,10 +99,13 @@ class SpotifyService(BaseMusicService):
         self.settings = settings
         self._executor = ThreadPoolExecutor(max_workers=5)
         self.logger = logging.getLogger(__name__)
-        if self.settings:
-            proxy = self.settings.get("auth", "proxy_url", "")
-            if proxy:
-                _session.proxies = {"http": proxy, "https": proxy}
+        # `_session` is module-level and shared by every instance, so this has to
+        # ASSIGN rather than only overwrite when set: with the old `if proxy:`
+        # form an instance built with no/unusable proxy left the previous
+        # instance's proxy installed on the shared session, so the stale value
+        # outlived the configuration that set it.
+        proxy = normalize_proxy_url(self.settings.get("auth", "proxy_url", "")) if self.settings else ""
+        _session.proxies = {"http": proxy, "https": proxy} if proxy else {}
 
     def search(self, query: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, limit: int = 20, result_type: str = None):
         def _search_thread():

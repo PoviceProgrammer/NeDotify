@@ -1,10 +1,20 @@
 // NeDotify — Particles Module (GPU-Optimized)
+import { getCanvasDpr, sizeCanvasForDpr, registerCanvasDprListener } from './utils.js';
+
 let canvas = null;
 let ctx = null;
 let animFrameId = null;
 let lastFrameTime = 0;
 let isParticlesRunning = false;
 let animateFn = null;
+let unsubscribeDpr = null;
+
+// Logical (CSS pixel) size of the particle field. The backing store is
+// cssW/cssH * devicePixelRatio; particles are positioned and drawn in the
+// logical space through the context's dpr scale, so at devicePixelRatio 1 every
+// coordinate below is exactly what it was before.
+let cssW = 0;
+let cssH = 0;
 
 let particles = [];
 let mouse = { x: -1000, y: -1000, active: false };
@@ -41,17 +51,44 @@ document.addEventListener('visibilitychange', () => {
 
 const WHITE_PARTICLE = '#ffffff';
 
+// Sprite rasterisation follows the display scale: a sprite built at CSS size
+// and then drawn through a dpr-scaled context would be resampled from a
+// 1-device-pixel bitmap and go soft on a 150% display. Every builder below
+// therefore renders into a canvas of (cssSize * dpr) device pixels, applies the
+// same dpr scale to its own context so all its drawing maths stays in CSS
+// pixels, and reports the CSS destination size back to the caller. At dpr === 1
+// the device size equals the CSS size, so each builder is bit-identical to the
+// unscaled one and every draw call lands on the same pixels as before.
+function spriteDeviceSize(cssSize, dpr) {
+    return Math.max(1, Math.ceil(cssSize * dpr));
+}
+function spriteCssSize(deviceSize, dpr) {
+    return dpr === 1 ? deviceSize : deviceSize / dpr;
+}
+function applySpriteScale(c, dpr) {
+    if (typeof c.setTransform === 'function') c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    else c.scale(dpr, dpr);
+}
+
+function clearSpriteCaches() {
+    emojiSpriteCache.clear();
+    emblemSpriteCache.clear();
+    flagSpriteCache.clear();
+    dotSpriteCache.clear();
+}
+
 // O-7: pre-rendered emoji sprites (offscreen canvas, once per size/symbol)
 const emojiSpriteCache = new Map();
-function getEmojiSprite(symbol, fontStr) {
-    const key = symbol + '|' + fontStr;
+function getEmojiSprite(symbol, fontStr, dpr) {
+    const key = symbol + '|' + fontStr + '|' + dpr;
     let sprite = emojiSpriteCache.get(key);
     if (!sprite) {
         const size = Math.ceil(parseFloat(fontStr) * 1.5) + 6;
         const cv = document.createElement('canvas');
-        cv.width = size;
-        cv.height = size;
+        cv.width = spriteDeviceSize(size, dpr);
+        cv.height = spriteDeviceSize(size, dpr);
         const c = cv.getContext('2d');
+        applySpriteScale(c, dpr);
         c.font = fontStr;
         c.textAlign = 'center';
         c.textBaseline = 'middle';
@@ -59,7 +96,7 @@ function getEmojiSprite(symbol, fontStr) {
         c.shadowColor = 'rgba(255, 255, 255, 0.4)';
         c.shadowBlur = 3;
         c.fillText(symbol, size / 2, size / 2);
-        sprite = { canvas: cv, size };
+        sprite = { canvas: cv, size, destW: spriteCssSize(cv.width, dpr), destH: spriteCssSize(cv.height, dpr) };
         emojiSpriteCache.set(key, sprite);
     }
     return sprite;
@@ -67,16 +104,17 @@ function getEmojiSprite(symbol, fontStr) {
 
 // Cached Coat of Arms (Герб РФ) sprite generator for high-performance rendering
 const emblemSpriteCache = new Map();
-function getCoatRfSprite(w, h) {
-    const key = `${Math.round(w)}x${Math.round(h)}`;
+function getCoatRfSprite(w, h, dpr) {
+    const key = `${Math.round(w)}x${Math.round(h)}@${dpr}`;
     let sprite = emblemSpriteCache.get(key);
     if (!sprite) {
         const cv = document.createElement('canvas');
-        cv.width = Math.ceil(w + 6);
-        cv.height = Math.ceil(h + 6);
+        cv.width = spriteDeviceSize(w + 6, dpr);
+        cv.height = spriteDeviceSize(h + 6, dpr);
         const c = cv.getContext('2d');
-        const cx = cv.width / 2;
-        const cy = cv.height / 2;
+        applySpriteScale(c, dpr);
+        const cx = spriteCssSize(cv.width, dpr) / 2;
+        const cy = spriteCssSize(cv.height, dpr) / 2;
         const x = cx - w / 2;
         const y = cy - h / 2;
 
@@ -106,7 +144,7 @@ function getCoatRfSprite(w, h) {
         c.textBaseline = 'middle';
         c.fillText('🦅', cx, cy - 1);
 
-        sprite = { canvas: cv, sizeW: cv.width, sizeH: cv.height };
+        sprite = { canvas: cv, sizeW: spriteCssSize(cv.width, dpr), sizeH: spriteCssSize(cv.height, dpr) };
         emblemSpriteCache.set(key, sprite);
     }
     return sprite;
@@ -114,14 +152,15 @@ function getCoatRfSprite(w, h) {
 
 // Cached Russian Tricolor (Флаг РФ) sprite generator
 const flagSpriteCache = new Map();
-function getFlagRfSprite(w, h) {
-    const key = `${Math.round(w)}x${Math.round(h)}`;
+function getFlagRfSprite(w, h, dpr) {
+    const key = `${Math.round(w)}x${Math.round(h)}@${dpr}`;
     let sprite = flagSpriteCache.get(key);
     if (!sprite) {
         const cv = document.createElement('canvas');
-        cv.width = Math.ceil(w + 4);
-        cv.height = Math.ceil(h + 4);
+        cv.width = spriteDeviceSize(w + 4, dpr);
+        cv.height = spriteDeviceSize(h + 4, dpr);
         const c = cv.getContext('2d');
+        applySpriteScale(c, dpr);
         const x = 2;
         const y = 2;
         const stripeH = h / 3;
@@ -143,7 +182,7 @@ function getFlagRfSprite(w, h) {
         c.lineWidth = 0.8;
         c.strokeRect(x, y, w, h);
 
-        sprite = { canvas: cv, sizeW: cv.width, sizeH: cv.height };
+        sprite = { canvas: cv, sizeW: spriteCssSize(cv.width, dpr), sizeH: spriteCssSize(cv.height, dpr) };
         flagSpriteCache.set(key, sprite);
     }
     return sprite;
@@ -151,18 +190,19 @@ function getFlagRfSprite(w, h) {
 
 // Cached Soft Bokeh Blurred Dot sprite generator
 const dotSpriteCache = new Map();
-function getBlurredDotSprite(radius) {
+function getBlurredDotSprite(radius, dpr) {
     const rKey = Math.max(1, Math.round(radius * 2) / 2);
-    let sprite = dotSpriteCache.get(rKey);
+    let sprite = dotSpriteCache.get(rKey + '@' + dpr);
     if (!sprite) {
         const spriteRadius = Math.max(8, rKey * 2.8);
         const cv = document.createElement('canvas');
-        const d = Math.ceil(spriteRadius * 2);
+        const d = spriteDeviceSize(spriteRadius * 2, dpr);
         cv.width = d;
         cv.height = d;
         const c = cv.getContext('2d');
-        const cx = d / 2;
-        const cy = d / 2;
+        applySpriteScale(c, dpr);
+        const cx = spriteCssSize(d, dpr) / 2;
+        const cy = spriteCssSize(d, dpr) / 2;
 
         const grad = c.createRadialGradient(cx, cy, 0, cx, cy, spriteRadius);
         grad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
@@ -176,8 +216,8 @@ function getBlurredDotSprite(radius) {
         c.arc(cx, cy, spriteRadius, 0, Math.PI * 2);
         c.fill();
 
-        sprite = { canvas: cv, size: d, offset: cx };
-        dotSpriteCache.set(rKey, sprite);
+        sprite = { canvas: cv, size: spriteCssSize(d, dpr), offset: cx, destW: spriteCssSize(d, dpr), destH: spriteCssSize(d, dpr) };
+        dotSpriteCache.set(rKey + '@' + dpr, sprite);
     }
     return sprite;
 }
@@ -195,6 +235,8 @@ export function stopParticles() {
     }
     canvas = null;
     ctx = null;
+    cssW = 0;
+    cssH = 0;
 }
 
 export function initParticles() {
@@ -240,13 +282,15 @@ export function initParticles() {
     // Debounced resize with coordinate rescaling
     const performResize = () => {
         if (!canvas) return;
-        const oldW = canvas.width || window.innerWidth;
-        const oldH = canvas.height || window.innerHeight;
+        const oldW = cssW || canvas.width || window.innerWidth;
+        const oldH = cssH || canvas.height || window.innerHeight;
         const newW = window.innerWidth;
         const newH = window.innerHeight;
 
-        canvas.width = newW;
-        canvas.height = newH;
+        // Backing store follows the display scale; particles stay in CSS px.
+        sizeCanvasForDpr(canvas, ctx, newW, newH);
+        cssW = newW;
+        cssH = newH;
 
         if (oldW > 0 && oldH > 0 && (oldW !== newW || oldH !== newH) && particles.length > 0) {
             const scaleX = newW / oldW;
@@ -268,6 +312,14 @@ export function initParticles() {
 
     window.removeEventListener('resize', onResize);
     window.addEventListener('resize', onResize);
+
+    // A drag between monitors changes devicePixelRatio without a resize event,
+    // so the backing store (and every cached sprite) is rebuilt on that too.
+    if (unsubscribeDpr) unsubscribeDpr();
+    unsubscribeDpr = registerCanvasDprListener(() => {
+        clearSpriteCaches();
+        performResize();
+    });
 
     const onMiniPlayerToggled = () => {
         if (document.body.classList.contains('mini-player-active')) {
@@ -348,8 +400,8 @@ export function initParticles() {
         else if (particleShape === 'sparkle') symbol = '✨';
 
         return {
-            x: Math.random() * (canvas.width || window.innerWidth || 800),
-            y: Math.random() * (canvas.height || window.innerHeight || 600),
+            x: Math.random() * (cssW || window.innerWidth || 800),
+            y: Math.random() * (cssH || window.innerHeight || 600),
             vx: (Math.random() - 0.5) * 0.4,
             vy: Math.random() * speed + 0.35,
             radius: radius,
@@ -366,25 +418,25 @@ export function initParticles() {
         ctx.globalAlpha = p.opacity;
 
         if (p.shape === 'dot') {
-            const sprite = getBlurredDotSprite(p.radius);
-            ctx.drawImage(sprite.canvas, p.x - sprite.offset, p.y - sprite.offset);
+            const sprite = getBlurredDotSprite(p.radius, drawDpr);
+            ctx.drawImage(sprite.canvas, p.x - sprite.offset, p.y - sprite.offset, sprite.destW, sprite.destH);
         } else if (p.shape === 'flag_rf') {
             const w = Math.max(18, p.radius * 3.8);
             const h = Math.max(12, w * 0.67);
-            const sprite = getFlagRfSprite(w, h);
-            ctx.drawImage(sprite.canvas, p.x - sprite.sizeW / 2, p.y - sprite.sizeH / 2);
+            const sprite = getFlagRfSprite(w, h, drawDpr);
+            ctx.drawImage(sprite.canvas, p.x - sprite.sizeW / 2, p.y - sprite.sizeH / 2, sprite.sizeW, sprite.sizeH);
         } else if (p.shape === 'coat_rf' || p.shape === 'eagle_rf') {
             const w = Math.max(18, p.radius * 3.6);
             const h = Math.max(22, w * 1.2);
-            const sprite = getCoatRfSprite(w, h);
-            ctx.drawImage(sprite.canvas, p.x - sprite.sizeW / 2, p.y - sprite.sizeH / 2);
+            const sprite = getCoatRfSprite(w, h, drawDpr);
+            ctx.drawImage(sprite.canvas, p.x - sprite.sizeW / 2, p.y - sprite.sizeH / 2, sprite.sizeW, sprite.sizeH);
         } else {
             if (p.symbol) {
-                const sprite = getEmojiSprite(p.symbol, p.fontStr);
-                ctx.drawImage(sprite.canvas, p.x - sprite.size / 2, p.y - sprite.size / 2);
+                const sprite = getEmojiSprite(p.symbol, p.fontStr, drawDpr);
+                ctx.drawImage(sprite.canvas, p.x - sprite.size / 2, p.y - sprite.size / 2, sprite.destW, sprite.destH);
             } else {
-                const sprite = getBlurredDotSprite(p.radius);
-                ctx.drawImage(sprite.canvas, p.x - sprite.offset, p.y - sprite.offset);
+                const sprite = getBlurredDotSprite(p.radius, drawDpr);
+                ctx.drawImage(sprite.canvas, p.x - sprite.offset, p.y - sprite.offset, sprite.destW, sprite.destH);
             }
         }
     }
@@ -414,13 +466,16 @@ export function initParticles() {
         }
 
         if (!ctx || !canvas) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Sprites are rasterised for the scale the backing store was sized at, so a
+        // mid-session dpr change cannot mix sprite densities within a frame.
+        const drawDpr = getCanvasDpr();
+        ctx.clearRect(0, 0, cssW || window.innerWidth, cssH || window.innerHeight);
         ctx.globalAlpha = 1;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        const screenW = canvas.width || window.innerWidth;
-        const screenH = canvas.height || window.innerHeight;
+        const screenW = cssW || window.innerWidth;
+        const screenH = cssH || window.innerHeight;
 
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];

@@ -663,9 +663,13 @@ async function loadProfile() {
             const container = document.getElementById('profile-top-tracks');
             if (container) {
                 container.innerHTML = '';
+                // One fragment insertion instead of one per row (search.js
+                // pattern): N appendChild calls invalidate layout N times.
+                const mostPlayedFragment = document.createDocumentFragment();
                 data.most_played.forEach((track, i) => {
-                    container.appendChild(createTrackElement(track, i, data.most_played, getCurrentTrack()));
+                    mostPlayedFragment.appendChild(createTrackElement(track, i, data.most_played, getCurrentTrack()));
                 });
+                container.appendChild(mostPlayedFragment);
                 if (typeof renderIcons === 'function') renderIcons();
             }
         }
@@ -675,9 +679,11 @@ async function loadProfile() {
             const container = document.getElementById('profile-recent');
             if (container) {
                 container.innerHTML = '';
+                const recentFragment = document.createDocumentFragment();
                 data.recently_played.slice(0, 10).forEach((track, i) => {
-                    container.appendChild(createTrackElement(track, i, data.recently_played, getCurrentTrack()));
+                    recentFragment.appendChild(createTrackElement(track, i, data.recently_played, getCurrentTrack()));
                 });
+                container.appendChild(recentFragment);
                 if (typeof renderIcons === 'function') renderIcons();
             }
         }

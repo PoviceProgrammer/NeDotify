@@ -130,7 +130,13 @@ function renderQueue(tracks, currentIndex) {
     }
 
     content.innerHTML = '';
-    
+
+    // Build every row into a fragment and insert once (search.js pattern):
+    // N appendChild calls would invalidate layout N times. No layout read
+    // happens below, and the getBoundingClientRect() calls live in the
+    // dragover/drop handlers, which can only fire after this loop returns.
+    const fragment = document.createDocumentFragment();
+
     tracks.forEach((track, index) => {
         const item = document.createElement('div');
         item._trackData = track;
@@ -272,9 +278,10 @@ function renderQueue(tracks, currentIndex) {
             }
         });
 
-        content.appendChild(item);
+        fragment.appendChild(item);
     });
 
+    content.appendChild(fragment);
     renderIcons();
 }
 

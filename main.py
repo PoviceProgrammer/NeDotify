@@ -285,7 +285,27 @@ def main():
         js_api=api,
         width=1100,
         height=800,
-        min_size=(100, 40),
+        # The frameless window is freely resizable, and the old (100, 40)
+        # floor let it be dragged down to a strip in which the layout is
+        # unusable: #sidebar is pinned at min-width 200px, #main-content has
+        # only 12px of margin on each side, and body is `overflow: hidden`, so
+        # everything past the first ~236px was simply clipped with no way to
+        # reach it. The real floor is set by #player-bar, which is position:
+        # fixed with a 24px inset and grid tracks of minmax(240px, 1.2fr) and
+        # minmax(160px, 0.8fr): the middle track can collapse but the two side
+        # tracks cannot, so the bar needs 400px + 40px padding + 2px border +
+        # 48px of page inset = 490px. 600px clears that with room to spare.
+        #
+        # 640px tall reserves the player's 20 + 84px at the bottom plus the
+        # 12px/116px content margins, leaving a 512px content band - above the
+        # 480px .artist-profile-layout asks for.
+        #
+        # 600px is deliberately NOT above the 900px rail breakpoint or the
+        # 600px mobile breakpoint, so both responsive layouts stay reachable;
+        # at 600px exactly the @media (max-width: 600px) rule still matches.
+        # Mirrored by min-width/min-height on #app-container in
+        # ui/web_new_v2/css/components/base.css.
+        min_size=(600, 640),
         frameless=True,
         fullscreen=False,
         transparent=is_transparent,

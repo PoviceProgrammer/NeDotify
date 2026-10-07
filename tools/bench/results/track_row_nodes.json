@@ -1,0 +1,97 @@
+{
+  "schema": "nedotify.track-row-nodes.v1",
+  "generated_by": "tools/bench/track_row_nodes.js",
+  "method": "template literal extracted from ui/web_new_v2/js/utils.js (createTrackElement), substituted with runtime-equivalent helper output, parsed with a tag scanner, then expanded by the real ICONS map read out of ui/web_new_v2/js/lucide.min.js. No rendering engine involved; counts are exact for this template.",
+  "template_source": {
+    "file": "ui/web_new_v2/js/utils.js",
+    "lines": "338-368",
+    "function": "createTrackElement"
+  },
+  "variants": {
+    "minimal": {
+      "leftover_template_holes": [],
+      "elements_authored_html": 23,
+      "tag_histogram": {
+        "div": 7,
+        "svg": 1,
+        "path": 1,
+        "circle": 2,
+        "i": 5,
+        "span": 2,
+        "button": 4
+      },
+      "data_lucide_icons_in_row": {
+        "play": 2,
+        "check": 2,
+        "heart": 2,
+        "plus": 3,
+        "more-horizontal": 4
+      },
+      "lucide_added_nodes": 8,
+      "dom_nodes_after_render": 31
+    },
+    "typical_library_row": {
+      "leftover_template_holes": [],
+      "elements_authored_html": 26,
+      "tag_histogram": {
+        "div": 8,
+        "svg": 1,
+        "path": 1,
+        "circle": 2,
+        "img": 1,
+        "i": 6,
+        "span": 2,
+        "button": 4
+      },
+      "data_lucide_icons_in_row": {
+        "play": 2,
+        "youtube": 3,
+        "download": 4,
+        "heart": 2,
+        "plus": 3,
+        "more-horizontal": 4
+      },
+      "lucide_added_nodes": 12,
+      "dom_nodes_after_render": 38
+    },
+    "multi_artist_row": {
+      "leftover_template_holes": [],
+      "elements_authored_html": 27,
+      "tag_histogram": {
+        "div": 8,
+        "svg": 1,
+        "path": 1,
+        "circle": 2,
+        "img": 1,
+        "i": 6,
+        "span": 3,
+        "button": 4
+      },
+      "data_lucide_icons_in_row": {
+        "play": 2,
+        "youtube": 3,
+        "download": 4,
+        "heart": 2,
+        "plus": 3,
+        "more-horizontal": 4
+      },
+      "lucide_added_nodes": 12,
+      "dom_nodes_after_render": 39
+    }
+  },
+  "library_scenarios": {
+    "minimal": {
+      "nodes_per_row": 31,
+      "nodes_for_2000_tracks": 62000
+    },
+    "typical_library_row": {
+      "nodes_per_row": 38,
+      "nodes_for_2000_tracks": 76000
+    },
+    "multi_artist_row": {
+      "nodes_per_row": 39,
+      "nodes_for_2000_tracks": 78000
+    }
+  },
+  "lucide_icons_used_across_app": 101
+}

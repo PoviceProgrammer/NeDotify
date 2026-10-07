@@ -9,7 +9,7 @@ import logging
 import time
 import collections
 from concurrent.futures import ThreadPoolExecutor
-from services.base_service import BaseMusicService
+from services.base_service import BaseMusicService, normalize_proxy_url
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class SoundCloudService(BaseMusicService):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
         if self.settings:
-            proxy = self.settings.get('auth', 'proxy_url', '')
+            proxy = normalize_proxy_url(self.settings.get('auth', 'proxy_url', ''))
             if proxy:
                 self._session.proxies = {'http': proxy, 'https': proxy}
         
@@ -163,7 +163,7 @@ class SoundCloudService(BaseMusicService):
                 'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'},
             }
             if self.settings:
-                proxy = self.settings.get('auth', 'proxy_url', '')
+                proxy = normalize_proxy_url(self.settings.get('auth', 'proxy_url', ''))
                 if proxy:
                     ydl_opts['proxy'] = proxy
                 import os
@@ -192,7 +192,7 @@ class SoundCloudService(BaseMusicService):
                 'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'},
             }
             if self.settings:
-                proxy = self.settings.get('auth', 'proxy_url', '')
+                proxy = normalize_proxy_url(self.settings.get('auth', 'proxy_url', ''))
                 if proxy:
                     ydl_opts['proxy'] = proxy
             store["search"] = yt_dlp.YoutubeDL(ydl_opts)
@@ -664,6 +664,17 @@ class SoundCloudService(BaseMusicService):
                 'no_warnings': True,
                 'format': 'bestaudio/best',
                 'outtmpl': os.path.join(output_dir, f'sc_{ts}.%(ext)s'),
+                # Same throughput settings as the YouTube path: without them
+                # yt-dlp fetches one connection with a small buffer, which is
+                # the slowest configuration available.
+                'concurrent_fragment_downloads': 4,
+                'http_chunk_size': 10 * 1024 * 1024,
+                'buffersize': 1024 * 1024,
+                'retries': 10,
+                'extractor_retries': 3,
+                'fragment_retries': 10,
+                'file_access_retries': 3,
+                'socket_timeout': 30,
             }
             with yt_dlp.YoutubeDL(dl_opts) as sc_ydl:
                 sc_info = sc_ydl.extract_info(sc_url_str, download=True)

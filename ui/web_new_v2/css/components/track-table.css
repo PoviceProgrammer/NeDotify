@@ -39,8 +39,27 @@
     transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.2s ease;
     user-select: none;
     position: relative;
+    /* Off-screen rows of a long list skip layout/paint/style work. The
+       intrinsic size has to be the row's REAL height, because it is what the
+       scrollport measures an unrendered row as: get it wrong and the list's
+       scrollHeight is short by (real - declared) px per unrendered row, so the
+       scrollbar thumb grows as you scroll (the classic content-visibility
+       jitter). It is also the height `getBoundingClientRect()` reports for a
+       skipped row, which library.js / utils.js multi-select rely on.
+
+       Height derivation (all from this file + the box-sizing:border-box reset
+       in base.css:16-20; nothing else in the cascade touches these boxes -
+       themes.css has no .track-* rule and base.css has no .track-item rule):
+         .track-cover-wrap   height: 48px  (fixed, this file)  <- tallest child
+         .track-info         13px*1.5 + 2px gap + 11px*1.5 = 38px
+         .track-actions      14px icons (opacity:0 but still laid out)
+         .track-duration-*   11px text -> 16.5px; .track-more-btn 28px on hover
+         => content 48px + padding 8px*2 + border 1px*2 = 66px  (box, gap excluded)
+       `auto` keeps the last-measured size once a row has been rendered, so 66px
+       is only the pre-first-render placeholder - and it is exactly right, so
+       the two agree and the scrollbar never moves. */
     content-visibility: auto;
-    contain-intrinsic-size: auto 56px;
+    contain-intrinsic-size: auto 66px;
     animation: fadeIn 0.3s ease forwards;
 }
 
