@@ -134,7 +134,11 @@ def test_close_checkpoints_the_wal(tmp_path):
 
 
 def test_close_logs_an_unclosable_connection(tmp_path, caplog):
-    """A foreign-thread handle raises ProgrammingError; it must be visible."""
+    """A foreign-thread handle raises ProgrammingError; it must be visible.
+
+    Reported as ONE summary line: a long-running session can hold hundreds of
+    these, and a warning per connection flooded app.log on every shutdown.
+    """
     path = str(tmp_path / "foreign.db")
     db = DatabaseManager(path)
     db.set_setting("a.b", 1, "general")
@@ -142,9 +146,10 @@ def test_close_logs_an_unclosable_connection(tmp_path, caplog):
 
     with caplog.at_level("WARNING"):
         db.close()
-    assert any(
-        "close a database connection" in r.message for r in caplog.records
-    ), [r.message for r in caplog.records]
+    close_logs = [r.message for r in caplog.records if "could not be closed" in r.message]
+    assert close_logs, [r.message for r in caplog.records]
+    assert len(close_logs) == 1, f"expected one summary line, got {len(close_logs)}"
+    assert "1 database connection(s)" in close_logs[0]
 
     keep.set()
     thread.join(5)

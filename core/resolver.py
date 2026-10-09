@@ -20,6 +20,11 @@ _MEM_TTL = 3600.0        # in-memory URL lifetime (seconds)
 _MEM_MAX_SIZE = 1024     # in-memory cache cap; least recently used entry is evicted on overflow
 _RESOLVE_TIMEOUT = 12.0  # max wait for a single-flight resolution
 _DB_MAX_AGE = 14400      # DB stream_cache max age (seconds) — googlevideo URLs expire in ~6h
+#: A key whose cascade just produced nothing is skipped for this long. Short on
+#: purpose: a DRM-protected or deleted track keeps the same answer for good,
+#: while a network blip is retried two minutes later instead of forever.
+_FAIL_TTL = 120.0
+_FAIL_MAX_SIZE = 512
 
 
 class _Flight:
@@ -43,6 +48,7 @@ class StreamResolver:
         self._lock = threading.Lock()
         self._mem = {}      # key -> (url, ts)
         self._inflight = {} # key -> _Flight
+        self._failed = {}   # key -> ts of a cascade that produced no URL
         self._stats = {
             "mem_hits": 0,
             "db_hits": 0,
@@ -68,6 +74,51 @@ class StreamResolver:
         if len(self._mem) >= _MEM_MAX_SIZE:
             self._mem.pop(next(iter(self._mem)), None)
         self._mem[key] = value
+
+    def _mark_failed(self, key) -> None:
+        """Remember that this key's cascade produced no URL. Caller must hold ``self._lock``."""
+        self._failed.pop(key, None)
+        if len(self._failed) >= _FAIL_MAX_SIZE:
+            self._failed.pop(next(iter(self._failed)), None)
+        self._failed[key] = time.time()
+
+    def _is_failed(self, key) -> bool:
+        """True while a fresh "no URL" verdict stands for this key."""
+        with self._lock:
+            failed_at = self._failed.get(key)
+            if failed_at is None:
+                return False
+            if time.time() - failed_at > _FAIL_TTL:
+                self._failed.pop(key, None)
+                return False
+            return True
+
+    def is_unavailable(self, source: str, source_id) -> bool:
+        """True when this track is known not to resolve (see ``mark_unavailable``)."""
+        return self._is_failed(self._key(source, source_id))
+
+    def mark_unavailable(self, source: str, source_id, reason: Optional[str] = None) -> None:
+        """Record that this track cannot be resolved, without running the cascade.
+
+        For a provider that can tell "this track is gone" apart from "the
+        network hiccupped" — a DRM-protected, private or deleted upload. The
+        next :meth:`resolve` answers None straight away, so the caller can move
+        on to the next track instead of walking the same cascade again. Pass the
+        provider's own verdict through ``mark_unavailable`` rather than letting
+        every failed cascade be remembered: this one is deliberately not a
+        fallback for ``resolve`` returning nothing on its own.
+        """
+        key = self._key(source, source_id)
+        with self._lock:
+            self._mark_failed(key)
+        logger.info(
+            f"Marked {source}:{source_id} unavailable: {reason or 'no playable stream'}"
+        )
+
+    def clear_unavailable(self, source: str, source_id) -> None:
+        """Forget a recorded "no URL" verdict, so the track is tried again."""
+        with self._lock:
+            self._failed.pop(self._key(source, source_id), None)
 
     @staticmethod
     def _url_expired(url: Optional[str]) -> bool:
@@ -126,6 +177,15 @@ class StreamResolver:
         if cached:
             return cached
 
+        # A track a provider already declared unplayable costs nothing to skip.
+        # Without this the whole cascade (up to three provider searches plus two
+        # stream extractions) reruns on every request for the same dead track.
+        if self._is_failed(key):
+            logger.info(
+                f"Skipping resolution of {source}:{source_id}: already known unavailable"
+            )
+            return None
+
         owner = False
         with self._lock:
             flight = self._inflight.get(key)
@@ -172,7 +232,14 @@ class StreamResolver:
         self._persist(source, source_id, stream_url)
 
     def invalidate(self, source: str, source_id) -> None:
-        """Drop a dead URL from memory and clear it in the DB (keeps downloaded-file rows)."""
+        """Drop a dead URL from memory and clear it in the DB (keeps downloaded-file rows).
+
+        Deliberately leaves any "known unavailable" verdict in place: the proxy
+        calls this on every upstream 403 and then re-resolves, so clearing it
+        here would re-open the retry loop this memo exists to stop. A URL that
+        was merely expired carries no verdict to preserve, and a real recovery
+        goes through :meth:`refresh`, which clears it.
+        """
         key = self._key(source, source_id)
         with self._lock:
             self._mem.pop(key, None)
@@ -186,6 +253,9 @@ class StreamResolver:
         key = self._key(source, source_id)
         with self._lock:
             self._mem_set(key, (url, time.time()))
+            # A URL that exists is proof the track resolves, so any recorded
+            # verdict for it is stale.
+            self._failed.pop(key, None)
         if self._db is not None:
             try:
                 self._db.cache_stream(source, str(source_id), url)

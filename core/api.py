@@ -450,15 +450,47 @@ class AppApi:
         # Windows 11 Snap Layouts: a frameless window has no caption, so Windows
         # never offers the layout grid on the maximise button. Best-effort - a
         # failure here must not stop the app from starting.
+        #
+        # Deferred on purpose: at set_window() time the native handle usually
+        # does not exist yet (pywebview has not created the WinForms window),
+        # and a plain "hwnd is None, try nothing" would silently skip the whole
+        # feature. A short retry loop covers that race instead.
         try:
-            from core.snap_layouts import SnapLayouts
-            hwnd = self._get_hwnd()
-            if hwnd:
-                self._snap_layouts = SnapLayouts(hwnd)
-                if self._snap_layouts.install():
-                    logger.info("Snap Layouts enabled")
+            threading.Thread(target=self._install_snap_layouts, daemon=True).start()
         except Exception as e:
             logger.warning("Snap Layouts unavailable: %s", e)
+
+    def _install_snap_layouts(self, attempts: int = 20, delay: float = 0.25):
+        """Install the Snap Layouts WndProc once the HWND exists."""
+        if sys.platform != "win32":
+            return False
+        try:
+            from core.snap_layouts import SnapLayouts
+        except Exception as e:
+            logger.warning("Snap Layouts module unavailable: %s", e)
+            return False
+
+        for _ in range(attempts):
+            hwnd = None
+            try:
+                hwnd = self._get_hwnd()
+            except Exception:
+                logger.debug("Snap Layouts hwnd lookup failed", exc_info=True)
+            if hwnd:
+                try:
+                    snap = SnapLayouts(hwnd)
+                    if snap.install():
+                        self._snap_layouts = snap
+                        logger.info("Snap Layouts enabled on hwnd=%s", hwnd)
+                        return True
+                    logger.warning("Snap Layouts subclass rejected (hwnd=%s)", hwnd)
+                    return False
+                except Exception as e:
+                    logger.warning("Snap Layouts install failed: %s", e)
+                    return False
+            time.sleep(delay)
+        logger.warning("Snap Layouts skipped: no window handle after %.1fs", attempts * delay)
+        return False
 
         if getattr(self, "_tray", None):
             self._tray.start()

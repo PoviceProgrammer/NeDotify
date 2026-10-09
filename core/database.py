@@ -1836,16 +1836,29 @@ class DatabaseManager:
 
         A connection created on another thread cannot be used (let alone
         closed) from here - sqlite3 raises ProgrammingError - so those handles
-        survive until their own thread ends. That used to be swallowed with a
-        bare ``except: pass``, hiding both the failure and the WAL writes the
-        checkpoint was supposed to preserve; the failure is now logged.
+        survive until their own thread ends and are released when their thread
+        dies. That used to be swallowed with a bare ``except: pass``; the
+        failure is now reported, but as ONE summary line: there can be hundreds
+        of these at shutdown, and logging each one flooded app.log with the same
+        message and turned the signal into noise.
         """
         self._checkpoint_wal()
         self.close_thread_connection()
+        failed = 0
+        first_error = None
         with self._conns_lock:
             for conn in list(self._all_conns):
                 try:
                     conn.close()
                 except Exception as e:
-                    logger.warning("Failed to close a database connection: %s", e)
+                    failed += 1
+                    if first_error is None:
+                        first_error = str(e)
             self._all_conns.clear()
+        if failed:
+            logger.warning(
+                "%d database connection(s) could not be closed from the main "
+                "thread (created on another thread); they were released when "
+                "that thread exited. First error: %s",
+                failed, first_error,
+            )

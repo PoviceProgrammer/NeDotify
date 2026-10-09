@@ -44,6 +44,45 @@ WS_SYSMENU = 0x00080000
 WS_MAXIMIZEBOX = 0x00010000
 WS_THICKFRAME = 0x00040000
 GWL_WNDPROC = -4
+GWL_STYLE = -16
+
+# A window procedure must be a real ctypes callback object. Passing the bound
+# method straight to SetWindowLongPtr fails with "method object cannot be
+# interpreted as an integer": ctypes cannot take the address of a Python
+# method, only of a function pointer it built itself.
+LRESULT = ctypes.c_long
+WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, wintypes.UINT,
+                             ctypes.c_size_t, ctypes.c_ssize_t)
+
+# WPARAM/LPARAM are pointer-sized. Without explicit argtypes ctypes coerces a
+# 64-bit lparam into a 32-bit C int and every call carrying a high-bit message
+# parameter dies with "OverflowError: int too long to convert" from inside the
+# callback - printed as "Exception ignored while calling ctypes callback
+# function", which is how the frameless window lost its WndProc.
+LPARAM = ctypes.c_ssize_t
+
+
+def _configure_user32():
+    """Pin argument types once; ctypes caches the function object."""
+    u = ctypes.windll.user32
+    for fn, argtypes in (
+        (u.DefWindowProcW, [wintypes.HWND, wintypes.UINT, ctypes.c_size_t, LPARAM]),
+        (u.CallWindowProcW, [WNDPROC, wintypes.HWND, wintypes.UINT, ctypes.c_size_t, LPARAM]),
+        (u.GetClientRect, [wintypes.HWND, ctypes.c_void_p]),
+    ):
+        try:
+            fn.argtypes = argtypes
+            fn.restype = LRESULT if fn is not u.GetClientRect else ctypes.c_int
+        except Exception:
+            logger.debug("could not configure %s", getattr(fn, "__name__", fn), exc_info=True)
+
+
+def _def_window_proc(hwnd, msg, wparam, lparam):
+    return ctypes.windll.user32.DefWindowProcW(wintypes.HWND(hwnd), msg, wparam, LPARAM(lparam))
+
+
+def _call_window_proc(proc, hwnd, msg, wparam, lparam):
+    return ctypes.windll.user32.CallWindowProcW(proc, wintypes.HWND(hwnd), msg, wparam, LPARAM(lparam))
 
 # How many CSS pixels from the edge count as a resize/snap grip. The JS side
 # reports the button rectangle; the edges are a fixed inset so the grip does
@@ -51,6 +90,12 @@ GWL_WNDPROC = -4
 EDGE_GRIP_CSS = 6
 
 LONG_PTR = ctypes.c_ssize_t if sys.maxsize > 2 ** 32 else ctypes.c_int
+
+if sys.platform == "win32":
+    try:
+        _configure_user32()
+    except Exception:
+        logging.getLogger(__name__).debug("user32 not configured yet", exc_info=True)
 
 
 def _dpi_scale(hwnd):
@@ -77,30 +122,60 @@ class SnapLayouts:
         # Client-relative rect of the maximise button, filled by JS.
         self._btn_rect = None
         self._edge_grip = EDGE_GRIP_CSS
+        # The live WINFUNCTYPE callback; must outlive the subclass.
+        self._proc = None
 
     # ── public ────────────────────────────────────────────────────────────
 
     def install(self):
         if sys.platform != "win32" or not self.hwnd:
             return False
+        old_style = None
         try:
             user32 = ctypes.windll.user32
-            # Without these Windows refuses to snap a window it does not
-            # consider a normal, caption-bearing top-level window.
-            style = user32.GetWindowLongW(self.hwnd, -16)  # GWL_STYLE
-            user32.SetWindowLongW(self.hwnd, -16, style | WS_SYSMENU | WS_MAXIMIZEBOX | WS_THICKFRAME)
-
-            self._edge_grip = int(round(EDGE_GRIP_CSS * _dpi_scale(self.hwnd)))
             SetWindowLongPtr = ctypes.windll.user32.SetWindowLongPtrW
             SetWindowLongPtr.argtypes = [wintypes.HWND, ctypes.c_int, LONG_PTR]
             SetWindowLongPtr.restype = LONG_PTR
-            self._old_wndproc = SetWindowLongPtr(self.hwnd, GWL_WNDPROC, LONG_PTR(self._wndproc))
-            if not self._old_wndproc:
+
+            # The callback object must be kept alive for as long as the window
+            # uses it: once _proc is collected the shell calls into freed
+            # memory, so it is stored on self alongside the instance.
+            self._proc = WNDPROC(self._wndproc)
+
+            old_style = user32.GetWindowLongW(self.hwnd, GWL_STYLE)
+            # Only WS_MAXIMIZEBOX is added. Adding WS_THICKFRAME (or WS_SYSMENU)
+            # to a frameless window without a matching WS_CAPTION makes Windows
+            # recompute the non-client area, which collapses the client rect and
+            # leaves the WebView2 child rendering as a black rectangle - the
+            # window became unusable while this line was in place. MAXIMIZEBOX
+            # alone is what tells Windows the window may maximise, which is the
+            # flag the Snap Layout flyout keys off, and it cannot affect layout.
+            user32.SetWindowLongW(self.hwnd, GWL_STYLE, old_style | WS_MAXIMIZEBOX)
+
+            self._edge_grip = int(round(EDGE_GRIP_CSS * _dpi_scale(self.hwnd)))
+            # argtypes[2] is LONG_PTR, so pass a plain integer address. Passing
+            # the c_void_p object itself raises "argument 3: 'c_void_p' object
+            # cannot be interpreted as an integer".
+            proc_addr = ctypes.cast(self._proc, ctypes.c_void_p).value
+            prev = SetWindowLongPtr(self.hwnd, GWL_WNDPROC, proc_addr)
+            if not prev:
                 raise OSError("SetWindowLongPtr(GWL_WNDPROC) returned 0")
+            self._old_wndproc = prev
+            # CallWindowProcW needs a callable, not a bare address, or the
+            # original procedure is invoked through the wrong signature.
+            self._old_proc = WNDPROC(prev)
             self._installed = True
             logger.info("SnapLayouts: installed on hwnd=%s", self.hwnd)
             return True
         except Exception as e:
+            # Roll the style back: a mutated style with no live WndProc left the
+            # frameless window rendering as a black rectangle.
+            self._proc = None
+            if old_style is not None:
+                try:
+                    ctypes.windll.user32.SetWindowLongW(self.hwnd, -16, old_style)
+                except Exception:
+                    logger.debug("SnapLayouts: style rollback failed", exc_info=True)
             logger.warning("SnapLayouts: not installed (%s)", e)
             self._installed = False
             return False
@@ -174,17 +249,19 @@ class SnapLayouts:
         return HTCLIENT
 
     def _wndproc(self, hwnd, msg, wparam, lparam):
+        # Registered as a WINFUNCTYPE, so the return value must be LRESULT.
+        # Returning a bare int works for small codes but is not the declared
+        # type; ctypes truncates it the same way either way.
         try:
             if msg == WM_NCHITTEST:
-                return self._hit_test(lparam)
+                return LRESULT(self._hit_test(lparam)).value
         except Exception:
             logger.debug("SnapLayouts: hit test failed", exc_info=True)
         # Anything else goes to the original window procedure (DefWindowProc
         # for the messages the original one does not care about).
         try:
-            if self._old_wndproc:
-                return ctypes.windll.user32.CallWindowProcW(
-                    LONG_PTR(self._old_wndproc), wintypes.HWND(hwnd), msg, wparam, lparam)
+            if self._old_proc:
+                return _call_window_proc(self._old_proc, hwnd, msg, wparam, lparam)
         except Exception:
             logger.debug("SnapLayouts: CallWindowProc failed", exc_info=True)
-        return ctypes.windll.user32.DefWindowProcW(wintypes.HWND(hwnd), msg, wparam, lparam)
+        return _def_window_proc(hwnd, msg, wparam, lparam)

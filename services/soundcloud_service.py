@@ -61,6 +61,68 @@ import re
 import urllib.parse as urllib_parse
 from requests.adapters import HTTPAdapter
 
+
+#: Extraction failures that no retry can fix. yt-dlp raises these for
+#: DRM/licence-protected uploads (its own "This video is DRM protected",
+#: extractor/soundcloud.py::report_drm), and for private or deleted tracks.
+#: The same answer comes back on every re-resolution, so re-asking is what
+#: turned one unplayable track into an endless retry loop.
+_UNAVAILABLE_MARKS = (
+    'drm',
+    'private video',
+    'video unavailable',
+    'this video is unavailable',
+    'has been removed',
+    'does not exist',
+)
+
+#: How long a track stays marked unplayable. Long enough to outlive the retry
+#: storm around one click (proxy self-heal plus the two player.js retries all
+#: land within seconds), short enough that a track its owner re-enables is
+#: picked up again in the same session.
+_UNAVAILABLE_TTL = 3600
+
+_UNAVAILABLE_MSG = 'Трек недоступен: защищён DRM или снят автором'
+
+
+def _is_drm_transcoding(transcoding: dict) -> bool:
+    """True when a transcoding is DRM-protected.
+
+    Same rule yt-dlp applies in `extractor/soundcloud.py::_extract_info_dict`:
+    a ``ctr-``/``cbc-`` protocol means common-encryption media, which the
+    player cannot decode and which the CDN answers with 403. Reusing the rule
+    instead of guessing from the media URL keeps the two extractors in step.
+    """
+    protocol = str((transcoding or {}).get('format', {}).get('protocol') or '').lower()
+    return protocol.startswith(('ctr-', 'cbc-'))
+
+
+def _is_unplayable_error(exc) -> bool:
+    """True when an extraction error describes the track, not the network."""
+    text = str(exc).lower()
+    return any(mark in text for mark in _UNAVAILABLE_MARKS)
+
+
+#: HTTP statuses that mean "this media is not for you", as opposed to a server
+#: that is busy or a socket that timed out. Only these are treated as final;
+#: 5xx and transport errors leave the track retryable.
+_MEDIA_DENIED_STATUSES = frozenset({401, 403, 404, 410})
+
+
+def _unavailable_key(track_url) -> str:
+    """One key per track, however the caller spelled the id.
+
+    ``2301904229``, ``https://api-v2.soundcloud.com/tracks/2301904229`` and a
+    permalink must share one entry, or the memo misses the very call that was
+    going to repeat the failure.
+    """
+    raw = str(track_url or '').strip()
+    numeric = re.search(r'/tracks/(\d+)', raw) or re.fullmatch(r'(\d+)', raw)
+    if numeric:
+        return f'sc_unavailable:{numeric.group(1)}'
+    return f'sc_unavailable:{raw.lower()}'
+
+
 class SoundCloudService(BaseMusicService):
     """Client-side SoundCloud audio extraction using high-speed v2 REST API & yt-dlp fallback."""
 
@@ -77,6 +139,15 @@ class SoundCloudService(BaseMusicService):
         self._client_id_lock = threading.Lock()
         self._related_cache = _TTLCache(max_entries=100, ttl_seconds=600)
         self._waveform_cache = _TTLCache(max_entries=100, ttl_seconds=600)
+        # Tracks that cannot be extracted at all (DRM / private / deleted).
+        # Reuses the bounded _TTLCache, so a bad track cannot grow the memo and
+        # a fixed one comes back after the TTL.
+        self._unavailable_cache = _TTLCache(max_entries=200, ttl_seconds=_UNAVAILABLE_TTL)
+        # Media URLs already probed as servable this session. A cache hit that
+        # has not been through the probe yet still has to be checked, so a URL
+        # cached before an upload became DRM-protected is not handed to the
+        # player; after the first check the replay cost is gone.
+        self._verified_cache = _TTLCache(max_entries=200, ttl_seconds=_UNAVAILABLE_TTL)
         
         self._session = requests.Session()
         adapter = HTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=2)
@@ -422,15 +493,83 @@ class SoundCloudService(BaseMusicService):
             "source_url": data.get("permalink_url") or f"https://soundcloud.com/{track_id}",
         }
 
+    def _mark_unavailable(self, track_url, reason: str) -> None:
+        """Remember a track no retry can fix, and drop its cached stream URL.
+
+        Two things have to happen together. The memo makes the next
+        ``get_stream_url`` answer from memory, so a proxy 403 no longer turns
+        into another full resolution; dropping the cached URL stops the dead
+        one from being handed out again before that memo is consulted.
+        """
+        self.logger.info(f'SoundCloud {track_url} cannot be extracted: {reason}')
+        self._unavailable_cache.set(_unavailable_key(track_url), reason)
+        # The service cache is shared with every other provider; the
+        # "soundcloud:" prefix keeps this from touching another provider's entry.
+        with self._cache_lock:
+            self._stream_cache.pop(f'soundcloud:{track_url}', None)
+
+    def _media_url_is_servable(self, url: str) -> bool:
+        """Ask the CDN for the first byte instead of trusting the URL.
+
+        The api-v2 payload lists a media URL for DRM-protected tracks too, and
+        that URL answers 403 to every playback attempt. Caching it unchecked is
+        what made each play start with a 403 that the proxy then tried to
+        "heal" into the same dead URL. One ranged GET settles it here, where the
+        answer can still change the outcome, instead of at the player.
+
+        Only a denial counts as final: a 5xx or a transport error returns True
+        so a flaky network cannot mark a perfectly good track unplayable.
+        """
+        try:
+            probe = self._session.get(
+                url,
+                timeout=3.0,
+                headers={'Range': 'bytes=0-1'},
+                stream=True,
+            )
+            try:
+                status = probe.status_code
+            finally:
+                probe.close()
+            return status not in _MEDIA_DENIED_STATUSES
+        except Exception as e:
+            self.logger.debug(f'SoundCloud media probe failed for {url[:80]}: {e}')
+            return True
+
     def get_stream_url(self, track_url: str, callback: Callable = None, error_callback: Callable = None, quality: str = "high", **kwargs):
         """Extract direct audio stream URL from a SoundCloud track."""
-        info = self.get_from_cache(f"soundcloud:{track_url}")
+        cache_key = f"soundcloud:{track_url}"
+        info = self.get_from_cache(cache_key)
         if info:
-            if callback:
-                callback(info.get('stream_url'), info)
+            cached_url = info.get('stream_url')
+            # A cached URL is not automatically good: one written before the
+            # upload became DRM-protected is dead, and serving it is what starts
+            # the 403 loop. Probe it once per session, then trust the cache.
+            if cached_url and self._verified_cache.get(cached_url) is None:
+                if self._media_url_is_servable(cached_url):
+                    self._verified_cache.set(cached_url, True)
+                else:
+                    self._mark_unavailable(track_url, 'CDN refused the cached media URL')
+                    info = None
+            if info:
+                if callback:
+                    callback(cached_url, info)
+                return
+
+        # A track the CDN already refused to serve once is not asked again.
+        # The cache lookup above comes first on purpose: when the YouTube
+        # fallback below succeeded, its URL lives in that cache and must keep
+        # being served. Only a fresh resolution is short-circuited here, which
+        # is what stops proxy 403 -> invalidate -> re-resolve from repeating
+        # the same permanent failure on every click.
+        unavailable = self._unavailable_cache.get(_unavailable_key(track_url))
+        if unavailable:
+            self.logger.info(
+                f'SoundCloud {track_url} is unavailable ({unavailable}); not re-resolving'
+            )
+            if error_callback:
+                error_callback(_UNAVAILABLE_MSG)
             return
-            
-        
 
         def _extract():
             stream_url = None
@@ -438,6 +577,7 @@ class SoundCloudService(BaseMusicService):
                 cid = self._get_client_id()
                 track_id = None
                 t_url = None
+                api_meta = {}
 
                 if str(track_url).isdigit():
                     track_id = str(track_url)
@@ -462,16 +602,51 @@ class SoundCloudService(BaseMusicService):
                             transcodings = media.get('transcodings', [])
                             stream_url = None
 
+                            # The YouTube fallback below needs a query even when
+                            # extraction is impossible, and this payload is the
+                            # only place left to read the title from.
+                            api_meta = {
+                                'title': t_data.get('title', '') or '',
+                                'uploader': (t_data.get('user') or {}).get('username', '') or '',
+                            }
+
+                            # A DRM transcoding resolves to a media URL the CDN
+                            # answers with 403 and no player can decode, so it
+                            # must never become a cached stream_url: caching one
+                            # is what made every later play start with a 403.
+                            has_drm = False
                             sorted_tc = sorted(transcodings, key=lambda x: 0 if x.get('format', {}).get('protocol') == 'progressive' else 1)
 
                             for tc in sorted_tc:
+                                if _is_drm_transcoding(tc):
+                                    has_drm = True
+                                    continue
                                 tc_url = f"{tc['url']}?client_id={cid}"
                                 tc_resp = self._session.get(tc_url, timeout=2.5)
                                 if tc_resp.status_code == 200:
                                     s_candidate = tc_resp.json().get('url')
-                                    if s_candidate and 'preview' not in s_candidate:
+                                    if s_candidate and 'preview' not in s_candidate and '.m3u8' not in s_candidate:
                                         stream_url = s_candidate
                                         break
+
+                            if stream_url and not self._media_url_is_servable(stream_url):
+                                # The CDN refused the media itself. This is the
+                                # same permanent condition yt-dlp reports as
+                                # "This video is DRM protected", seen one step
+                                # earlier: record it now and let the fallback
+                                # below answer instead of caching a dead URL.
+                                self._mark_unavailable(track_url, 'CDN refused the media URL')
+                                stream_url = None
+
+                            if stream_url and has_drm:
+                                # A track whose transcodings include common
+                                # encryption is not one to serve from this path:
+                                # yt-dlp reaches the same verdict.
+                                self.logger.info(
+                                    f'SoundCloud {track_url} exposes DRM-protected transcodings; ignoring the media URL'
+                                )
+                                self._mark_unavailable(track_url, 'DRM-protected transcodings')
+                                stream_url = None
 
                             if stream_url:
                                 artwork = t_data.get('artwork_url') or ''
@@ -485,7 +660,7 @@ class SoundCloudService(BaseMusicService):
                                     'source_id': str(t_data.get('id')),
                                     'stream_url': stream_url
                                 }
-                                self.set_to_cache(f"soundcloud:{track_url}", metadata)
+                                self.set_to_cache(cache_key, metadata)
                                 if callback:
                                     callback(stream_url, metadata)
                                 return
@@ -500,7 +675,17 @@ class SoundCloudService(BaseMusicService):
                             url_to_extract = f'https://soundcloud.com/{url_to_extract}'
                         
                     ydl = self._get_ydl()
-                    info = ydl.extract_info(url_to_extract, download=False)
+                    try:
+                        info = ydl.extract_info(url_to_extract, download=False)
+                    except Exception as exc:
+                        if not _is_unplayable_error(exc):
+                            raise
+                        # DRM, private or deleted: this verdict is about the
+                        # track, not the network, and yt-dlp will repeat it on
+                        # every re-resolution. Remember it, then fall through to
+                        # the YouTube fallback instead of aborting the track.
+                        self._mark_unavailable(track_url, str(exc))
+                        info = None
                     
                     if info:
                         s_candidate = info.get('url')
@@ -517,10 +702,13 @@ class SoundCloudService(BaseMusicService):
                         search_artist = info.get('uploader', '') if info else ''
                         
                         if not search_title and not search_artist:
-                            cached_info = self.get_from_cache(f"soundcloud:{track_url}")
+                            cached_info = self.get_from_cache(cache_key)
                             if cached_info:
                                 search_title = cached_info.get('title', '')
                                 search_artist = cached_info.get('artist', '')
+                            else:
+                                search_title = api_meta.get('title', '')
+                                search_artist = api_meta.get('uploader', '')
                                 
                         if not search_title:
                             if error_callback:
@@ -541,7 +729,7 @@ class SoundCloudService(BaseMusicService):
                                         'source_id': str(info.get('id') or '') if info else '',
                                         'stream_url': yt_url
                                     }
-                                    self.set_to_cache(f"soundcloud:{track_url}", final_metadata)
+                                    self.set_to_cache(cache_key, final_metadata)
                                     if callback:
                                         callback(yt_url, final_metadata)
                                         
@@ -549,7 +737,16 @@ class SoundCloudService(BaseMusicService):
                                     if error_callback:
                                         error_callback(f'Ошибка резервного YouTube-потока: {err}')
                                         
-                                yt.get_stream_url(best_match['source_url'], callback=yt_stream_cb, error_callback=yt_err_cb)
+                                # A YouTube search result carries no 'source_url'
+                                # key (youtube_service builds it with only
+                                # source/source_id/...). Indexing it raised
+                                # KeyError('source_url') and killed the whole
+                                # fallback; the video id is the correct input.
+                                yt_target = best_match.get('source_url') or best_match.get('source_id')
+                                if yt_target:
+                                    yt.get_stream_url(yt_target, callback=yt_stream_cb, error_callback=yt_err_cb)
+                                elif error_callback:
+                                    error_callback('Резервный YouTube-поиск не вернул идентификатор трека')
                             else:
                                 if error_callback:
                                     error_callback('Трек не найден на SoundCloud и YouTube')
@@ -570,7 +767,7 @@ class SoundCloudService(BaseMusicService):
                             'source_id': str(info.get('id') or ''),
                             'stream_url': stream_url
                         }
-                        self.set_to_cache(f"soundcloud:{track_url}", metadata)
+                        self.set_to_cache(cache_key, metadata)
                         if callback:
                             callback(stream_url, metadata)
                         return
