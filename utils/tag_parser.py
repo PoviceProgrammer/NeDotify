@@ -118,6 +118,30 @@ def parse_tags(filepath: str) -> dict:
     return result
 
 
+def extract_embedded_lyrics(filepath: str) -> str:
+    """Return embedded lyrics text (ID3 USLT, Vorbis LYRICS, MP4 ©lyr), or '' if none."""
+    if not HAS_MUTAGEN:
+        return ""
+    try:
+        ext = os.path.splitext(filepath)[1].lower()
+        audio = MutagenFile(filepath)
+        if audio is None or audio.tags is None:
+            return ""
+        texts = []
+        if ext == '.mp3':
+            for key in audio.tags:
+                if key.startswith('USLT'):
+                    texts.append(str(audio.tags[key].text))
+        elif ext in ('.m4a', '.mp4', '.aac'):
+            texts.extend(str(v) for v in audio.tags.get('\xa9lyr', []))
+        else:
+            for key in ('LYRICS', 'UNSYNCEDLYRICS', 'lyrics', 'unsyncedlyrics'):
+                texts.extend(str(v) for v in audio.tags.get(key, []))
+        return "\n".join(t.strip() for t in texts if t and t.strip())
+    except Exception:
+        return ""
+
+
 def _get_tag(audio, key: str, default=None):
     """Safely get a tag value."""
     try:
@@ -237,9 +261,9 @@ def write_tags(
     import tempfile
     import base64
 
-    # Create a temporary backup for atomic transaction
-    temp_dir = tempfile.gettempdir()
-    backup_path = os.path.join(temp_dir, f"aura_tag_backup_{os.path.basename(filepath)}")
+    # Create a unique temporary backup for atomic transaction
+    backup_fd, backup_path = tempfile.mkstemp(prefix="aura_tag_backup_", suffix=os.path.splitext(filepath)[1])
+    os.close(backup_fd)
     shutil.copy2(filepath, backup_path)
 
     try:

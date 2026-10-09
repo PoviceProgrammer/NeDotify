@@ -345,8 +345,18 @@ class CacheManager:
             self.logger.warning(f"Blocked unsafe cover URL: {url[:100]}")
             return None
 
+        import urllib.error
         import urllib.request
         from urllib.parse import urlparse
+
+        class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+            """Re-check every redirect hop so a public URL cannot bounce into an internal host."""
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                if not _is_ssrf_safe_url(newurl):
+                    raise urllib.error.URLError(f"unsafe redirect target: {newurl[:100]}")
+                return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+        opener = urllib.request.build_opener(_SafeRedirectHandler)
 
         path = urlparse(url).path
         ext = os.path.splitext(path)[1]
@@ -362,7 +372,7 @@ class CacheManager:
         tmp_path = filepath + f".{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.part"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=10) as response, open(tmp_path, 'wb') as f:
+            with opener.open(req, timeout=10) as response, open(tmp_path, 'wb') as f:
                 shutil.copyfileobj(response, f)
             if os.path.getsize(tmp_path) == 0:
                 raise ValueError("empty cover response")

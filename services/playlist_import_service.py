@@ -23,8 +23,9 @@ class UnsupportedPlaylistService(PlaylistImportError):
 class PlaylistImportService:
     """Service to parse, resolve, and normalize playlists from URLs or local files."""
 
-    def __init__(self, ydl_factory: Optional[Callable] = None):
+    def __init__(self, ydl_factory: Optional[Callable] = None, settings: Any = None):
         self.ydl_factory = ydl_factory
+        self.settings = settings
 
     def _get_ydl(self, options: dict):
         if self.ydl_factory:
@@ -188,7 +189,7 @@ class PlaylistImportService:
         svc = None
         try:
             from services.soundcloud_service import SoundCloudService
-            svc = SoundCloudService()
+            svc = SoundCloudService(settings=self.settings)
         except Exception:
             return
 

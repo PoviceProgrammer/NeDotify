@@ -291,9 +291,12 @@ window.toggleMiniPlayerMode = toggleMiniPlayerMode;
                     bgUrl = JSON.parse(customBgRaw);
                 }
             } catch(e) {}
-            if (bgUrl && typeof bgUrl === 'string' && bgUrl.trim() !== '') {
-                const blur = JSON.parse(localStorage.getItem('nedotify_theme_bg_blur') || '0');
-                const dim = JSON.parse(localStorage.getItem('nedotify_theme_bg_dim') || '30');
+            const safeBg = typeof bgUrl === 'string' && /^(https?:|file:|data:image\/|[a-zA-Z]:[\\/]|\/)/i.test(bgUrl.trim());
+            if (safeBg) {
+                const blurRaw = Number(JSON.parse(localStorage.getItem('nedotify_theme_bg_blur') || '0'));
+                const dimRaw = Number(JSON.parse(localStorage.getItem('nedotify_theme_bg_dim') || '30'));
+                const blur = Number.isFinite(blurRaw) ? Math.min(Math.max(blurRaw, 0), 100) : 0;
+                const dim = Number.isFinite(dimRaw) ? Math.min(Math.max(dimRaw, 0), 100) : 30;
                 document.documentElement.classList.add('has-custom-bg');
                 document.body.classList.add('has-custom-bg');
                 document.documentElement.classList.remove('resource-bg-disabled');

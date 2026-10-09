@@ -15,6 +15,7 @@ let currentType = 'tracks';    // Default filter is 'Треки' as shown in scr
 let allResults = [];
 let currentSearchQuery = '';   // Track the latest query sent
 let searchBatchRafId = null;
+let lastResultKey = null;
 
 let isViewingArtistProfile = false;
 
@@ -267,6 +268,16 @@ export function onSearchResults(data) {
     }
     if (data.query && currentSearchQuery && data.query !== currentSearchQuery) {
         return; // Stale result — ignore
+    }
+    // The reset key identifies the *request*, so it must use the source the user
+    // picked (currentSource), never data.source: with source='all' the backend
+    // streams one chunk per provider (local/youtube/soundcloud/spotify) and a
+    // provider-derived key would clear allResults on every chunk, leaving only
+    // the last provider that answered.
+    const resultKey = `${data.query || ''}|${currentSource}|${data.type || currentType}`;
+    if (resultKey !== lastResultKey) {
+        lastResultKey = resultKey;
+        allResults = [];
     }
     const incoming = Array.isArray(data.tracks) ? data.tracks : [];
     if (incoming.length > 0) {

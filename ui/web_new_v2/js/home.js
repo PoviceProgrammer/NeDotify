@@ -7,6 +7,17 @@ let homeLoadGeneration = 0;
 // Helper to stagger bridge calls and prevent backend burst / thread pool congestion
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+function applyCoverBackground(el, rawUrl) {
+    if (!el || !rawUrl) return;
+    try {
+        const u = new URL(String(rawUrl));
+        if (u.protocol !== 'https:' && u.protocol !== 'data:') return;
+        // u.href is already percent-encoded by the URL parser; encodeURI on top
+        // would double-encode it ("%20" -> "%2520").
+        el.style.backgroundImage = `url("${u.href}")`;
+    } catch (e) {}
+}
+
 function renderSkeletons(containerId, count = 4) {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -552,7 +563,7 @@ export function renderAuthenticHome(sections) {
                 const card = document.createElement('div');
                 card.className = 'feed-card';
                 card.innerHTML = `
-                    <div class="feed-card-cover" style="background-image: url('${escapeHtml(item.cover_url)}')">
+                    <div class="feed-card-cover">
                         <div class="feed-card-overlay">
                             <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px"></i></button>
                         </div>
@@ -560,6 +571,7 @@ export function renderAuthenticHome(sections) {
                     <div class="feed-card-title">${escapeHtml(item.title)}</div>
                     <div class="feed-card-sub">${escapeHtml(item.artist || (item.type === 'album' ? 'Альбом' : 'Микс'))}</div>
                 `;
+                applyCoverBackground(card.querySelector('.feed-card-cover'), item.cover_url);
                 card.onclick = async () => {
                     if (window.pywebview && window.pywebview.api && window.pywebview.api.get_playlist_tracks) {
                         window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Загрузка: ${item.title}...`, type: 'info' } }));
@@ -583,7 +595,7 @@ export function renderAuthenticHome(sections) {
                 const card = document.createElement('div');
                 card.className = 'feed-card';
                 card.innerHTML = `
-                    <div class="feed-card-cover" style="background-image: url('${escapeHtml(item.cover_url)}')">
+                    <div class="feed-card-cover">
                         <div class="feed-card-overlay">
                             <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px"></i></button>
                         </div>
@@ -591,6 +603,7 @@ export function renderAuthenticHome(sections) {
                     <div class="feed-card-title">${escapeHtml(item.title)}</div>
                     <div class="feed-card-sub">${escapeHtml(item.artist || 'Специально для вас')}</div>
                 `;
+                applyCoverBackground(card.querySelector('.feed-card-cover'), item.cover_url);
                 card.onclick = () => {
                     if (window.pywebview && window.pywebview.api && window.pywebview.api.play_track) {
                         window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Включаю: ${item.title}...`, type: 'info' } }));
@@ -673,7 +686,7 @@ export async function attachPlaylistCollage(pl, coverEl) {
     // card by its playlist id - otherwise the collage is lost to a re-render.
     if (!coverEl.isConnected) {
         const fresh = document.querySelector(
-            `#home-playlists .feed-card[data-pl-id="${String(pid)}"] .feed-card-cover, #home-quick-access .quick-access-card[data-pl-id="${String(pid)}"] .qa-cover`);
+            `#home-playlists .feed-card[data-pl-id="${CSS.escape(String(pid))}"] .feed-card-cover, #home-quick-access .quick-access-card[data-pl-id="${CSS.escape(String(pid))}"] .qa-cover`);
         if (!fresh) return;
         coverEl = fresh;
     }
@@ -715,10 +728,14 @@ export function renderHomePlaylists(playlists) {
         attachPlaylistCollage(pl, card.querySelector('.feed-card-cover'));
         card.addEventListener('click', async () => {
             if (window.pywebview?.api?.get_playlist_tracks) {
-                const res = await window.pywebview.api.get_playlist_tracks(pl.id);
-                const tracks = Array.isArray(res) ? res : (res && Array.isArray(res.tracks) ? res.tracks : []);
-                if (tracks && tracks.length > 0) {
-                    window.pywebview.api.play_track(tracks[0], tracks);
+                try {
+                    const res = await window.pywebview.api.get_playlist_tracks(pl.id);
+                    const tracks = Array.isArray(res) ? res : (res && Array.isArray(res.tracks) ? res.tracks : []);
+                    if (tracks && tracks.length > 0) {
+                        window.pywebview.api.play_track(tracks[0], tracks);
+                    }
+                } catch (err) {
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Не удалось открыть плейлист', type: 'error' } }));
                 }
             }
         });
@@ -887,7 +904,7 @@ function createFeedCard(track, trackList = null, trackIndex = 0) {
                 <div style="position: absolute; bottom: -20%; right: -20%; width: 140%; height: 100%; background: linear-gradient(to top right, rgba(0,0,0,0.4), transparent); border-top-left-radius: 50%; transform: rotate(-15deg);"></div>
                 
                 <!-- If there's a cover_url, show it subtly or as a small badge. Otherwise just colors. -->
-                ${track.cover_url && !track.cover_url.includes('hqdefault') ? `<div style="position:absolute; bottom: -10px; right: -10px; width: 60%; height: 60%; border-radius: 12px; background-image: url('${escapeHtml(track.cover_url)}'); background-size: cover; box-shadow: 0 8px 16px rgba(0,0,0,0.4); transform: rotate(-10deg); opacity: 0.8;"></div>` : ''}
+                ${track.cover_url && !track.cover_url.includes('hqdefault') ? `<div class="pl-cover-badge" style="position:absolute; bottom: -10px; right: -10px; width: 60%; height: 60%; border-radius: 12px; background-size: cover; box-shadow: 0 8px 16px rgba(0,0,0,0.4); transform: rotate(-10deg); opacity: 0.8;"></div>` : ''}
                 
                 <!-- YT Music style persistent play icon ring -->
                 <div style="position: absolute; top: 12px; left: 12px; width: 32px; height: 32px; border-radius: 50%; background: #000; border: 2px solid hsl(${hue1}, 80%, 70%); display:flex; align-items:center; justify-content:center; box-shadow: 0 4px 8px rgba(0,0,0,0.3);">
@@ -901,6 +918,7 @@ function createFeedCard(track, trackList = null, trackIndex = 0) {
             <div class="feed-card-title">${escapeHtml(track.title)}</div>
             <div class="feed-card-sub">${escapeHtml(track.artist || 'Микс')}</div>
         `;
+        applyCoverBackground(card.querySelector('.pl-cover-badge'), track.cover_url);
         card.addEventListener('click', () => {
             if (window.pywebview?.api?.play_track && track.tracks && track.tracks.length > 0) {
                 window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Включаю: ${track.title}...`, type: 'info' } }));
@@ -1048,14 +1066,17 @@ export function renderTopArtists(artists) {
 }
 
 let currentWrappedPeriod = 'week';
+let wrappedLoadGeneration = 0;
 
 export async function loadWrappedStats(period = 'week') {
     currentWrappedPeriod = period;
+    const gen = ++wrappedLoadGeneration;
     await window.awaitBridge();
     if (!window.pywebview?.api || !window.pywebview.api.get_wrapped_stats) return;
 
     try {
         const stats = await window.pywebview.api.get_wrapped_stats(period);
+        if (gen !== wrappedLoadGeneration) return;
         renderWrappedUI(stats);
     } catch (e) {
         console.error("Error loading wrapped stats:", e);

@@ -71,25 +71,29 @@ audioA.crossOrigin = "anonymous";
 let audioB = new Audio();
 audioB.crossOrigin = "anonymous";
 let activeAudio = audioA;
-let hlsInstance = null;
+// HLS instance lives on its audio element: prefetch loads the inactive element and
+// must not tear down the stream the active element is still playing.
+function destroyHls(audioEl) {
+    if (audioEl && audioEl._hls) {
+        try { audioEl._hls.destroy(); } catch(e) {}
+        audioEl._hls = null;
+    }
+}
 
 function loadAudioSource(audioEl, src) {
-    if (hlsInstance) {
-        try { hlsInstance.destroy(); } catch(e) {}
-        hlsInstance = null;
-    }
+    destroyHls(audioEl);
     // Reset stale src so a fast skip never fires error/stall handlers for the old stream
     try { audioEl.removeAttribute('src'); audioEl.src = ''; audioEl.load(); } catch(e) {}
 
     const isHls = typeof src === 'string' && (src.includes('.m3u8') || src.includes('/playlist') || src.includes('format=m3u8'));
     if (isHls && window.Hls && window.Hls.isSupported()) {
         try {
-            hlsInstance = new window.Hls({
+            audioEl._hls = new window.Hls({
                 enableWorker: true,
                 lowLatencyMode: false
             });
-            hlsInstance.loadSource(src);
-            hlsInstance.attachMedia(audioEl);
+            audioEl._hls.loadSource(src);
+            audioEl._hls.attachMedia(audioEl);
             return;
         } catch(he) {
             console.warn('HLS.js initialization error, falling back to direct src:', he);
@@ -248,7 +252,17 @@ export function setEq(preamp, bands) {
 let currentTrackRetries = 0;
 let streamRetryTimer = null;
 let lastRetriedTrackId = null;
+let pendingResume = null;
 const STALL_FALLBACK_MS = 10000;
+
+function findQueueIndex(q, track) {
+    const idx = q.findIndex(t => t && (
+        (t.id !== undefined && track.id !== undefined && String(t.id) === String(track.id)) ||
+        (t.source_id && track.source_id && String(t.source_id) === String(track.source_id)) ||
+        (t.title === track.title && (t.artist || '') === (track.artist || ''))
+    ));
+    return idx < 0 ? 0 : idx;
+}
 
 function handleStreamError(audio, reason) {
     if (audio !== activeAudio || !currentTrack) return;
@@ -269,6 +283,7 @@ function handleStreamError(audio, reason) {
     console.warn(`Audio stream error (${reason}), retry attempt ${currentTrackRetries} for:`, currentTrack.title);
     
     if (currentTrackRetries <= 2) {
+        const resumeMs = Math.round((audio.currentTime || 0) * 1000);
         streamRetryTimer = setTimeout(() => {
             streamRetryTimer = null;
             if (audio === activeAudio && currentTrack && String(currentTrack.id || currentTrack.source_id || currentTrack.title || '') === trackIdKey) {
@@ -277,7 +292,13 @@ function handleStreamError(audio, reason) {
                     const cleanTrack = (currentTrack.source === 'local' && currentTrack.file_path)
                         ? { ...currentTrack }
                         : { ...currentTrack, file_path: undefined, stream_url: undefined };
-                    window.pywebview.api.play_track(cleanTrack);
+                    const q = Array.isArray(window.currentQueue) ? window.currentQueue : null;
+                    pendingResume = { key: trackIdKey, ms: resumeMs };
+                    if (q && q.length > 0) {
+                        window.pywebview.api.play_track(cleanTrack, q, findQueueIndex(q, cleanTrack));
+                    } else {
+                        window.pywebview.api.play_track(cleanTrack);
+                    }
                 }
             }
         }, 1500 * currentTrackRetries);
@@ -286,9 +307,11 @@ function handleStreamError(audio, reason) {
         currentTrackRetries = 0;
         lastRetriedTrackId = null;
         window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Не удалось воспроизвести: ${currentTrack.title || 'трек'}`, type: 'error' } }));
+        pendingResume = null;
         if (activeAudio) {
             try { activeAudio.pause(); } catch(e) {}
             try { activeAudio.currentTime = 0; } catch(e) {}
+            destroyHls(activeAudio);
             activeAudio.src = '';
             try { activeAudio.load(); } catch(e) {}
         }
@@ -323,6 +346,13 @@ function setupAudioEvents(audio) {
         currentTrackRetries = 0;
     });
     audio.addEventListener('canplay', () => disarmStallFallback(audio));
+    audio.addEventListener('loadedmetadata', () => {
+        if (audio === activeAudio && pendingResume && pendingResume.ms > 0
+            && pendingResume.key === String(currentTrack?.id || currentTrack?.source_id || currentTrack?.title || '')) {
+            try { audio.currentTime = pendingResume.ms / 1000; } catch(e) {}
+        }
+        pendingResume = null;
+    });
     audio.addEventListener('progress', () => disarmStallFallback(audio));
     audio.addEventListener('seeking', () => {
         if (audio === activeAudio) {
@@ -388,8 +418,12 @@ function setupAudioEvents(audio) {
         if (audio === activeAudio) {
             let advanced = false;
             if (window.pywebview?.api?.next_track) {
-                const nextRes = await window.pywebview.api.next_track();
-                if (nextRes) advanced = true;
+                try {
+                    const nextRes = await window.pywebview.api.next_track();
+                    if (nextRes) advanced = true;
+                } catch(e) {
+                    console.error('next_track on ended failed:', e);
+                }
             } else {
                 api('next_track');
             }
@@ -480,6 +514,7 @@ export function playTrack(track, streamUrl) {
         disarmStallFallback(oldAudio);
         try { oldAudio.pause(); } catch(e) {}
         try { oldAudio.currentTime = 0; } catch(e) {}
+        destroyHls(oldAudio);
         oldAudio.removeAttribute('src');
         oldAudio.src = '';
         try { oldAudio.load(); } catch(e) {}
@@ -583,13 +618,7 @@ export function togglePlayPause() {
                 // the queue (shuffle/repeat/next) instead of resolving solo.
                 const q = Array.isArray(window.currentQueue) ? window.currentQueue : null;
                 if (q && q.length > 0) {
-                    let idx = q.findIndex(t => t && currentTrack && (
-                        (t.id !== undefined && currentTrack.id !== undefined && String(t.id) === String(currentTrack.id)) ||
-                        (t.source_id && currentTrack.source_id && String(t.source_id) === String(currentTrack.source_id)) ||
-                        (t.title === currentTrack.title && (t.artist || '') === (currentTrack.artist || ''))
-                    ));
-                    if (idx < 0) idx = 0;
-                    window.pywebview.api.play_track(currentTrack, q, idx);
+                    window.pywebview.api.play_track(currentTrack, q, findQueueIndex(q, currentTrack));
                 } else if (window.pywebview?.api?.get_queue) {
                     window.pywebview.api.get_queue().then(queueState => {
                         const tracks = (queueState && queueState.tracks) || [];
@@ -902,15 +931,19 @@ export function initPlayer() {
         scheduleVolumeRpc(currentVolume, true);
     };
 
-    // Volume icon mute toggle
+    // Volume icon mute toggle: backend owns the persisted mute state
     const volBtn = document.getElementById('pb-volume-btn');
-    if (volBtn) volBtn.addEventListener('click', () => {
-        isMuted = !isMuted;
-        activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
-        const vfill = document.getElementById('pb-volume-fill');
-        if (vfill) vfill.style.opacity = isMuted ? '0.3' : '1';
-        updateVolumeIcon(currentVolume, isMuted);
+    if (volBtn) volBtn.addEventListener('click', async () => {
+        let next = !isMuted;
+        if (window.pywebview?.api?.toggle_mute) {
+            try { next = !!(await window.pywebview.api.toggle_mute()); } catch(e) {}
+        }
+        applyMuteState(next);
     });
+    window.awaitBridge?.().then(async () => {
+        if (!window.pywebview?.api?.is_muted) return;
+        try { applyMuteState(!!(await window.pywebview.api.is_muted())); } catch(e) {}
+    }).catch(() => {});
 
     // Three-dot track options menu
     const optBtn = document.getElementById('pb-btn-options');
@@ -1129,6 +1162,7 @@ function animateProgress(timestamp) {
                                             // Route through the HLS-aware loader, never raw .src.
                                             loadAudioSource(inactiveAudio, nextTrack.stream_url);
                                         } catch (preErr) {
+                                            destroyHls(inactiveAudio);
                                             inactiveAudio.src = "";
                                             inactiveAudio.removeAttribute("src");
                                             try { inactiveAudio.load(); } catch(e) {}
@@ -1311,7 +1345,7 @@ export function onTrackChanged(track) {
     if (isInitialLoad) {
         isInitialLoad = false;
         if (track.stream_url) {
-            activeAudio.src = track.stream_url;
+            loadAudioSource(activeAudio, track.stream_url);
         }
         activeAudio.pause();
         isPlaying = false;
@@ -1461,6 +1495,23 @@ export function onTrackChanged(track) {
 
     updateLikeButtons();
     renderIcons();
+}
+
+export function stopPlaybackForQueueEnd() {
+    // The backend reports the queue is exhausted, but that says nothing about the
+    // audio element: pressing "next" on the last track leaves the current stream
+    // playing while the UI already says "stopped". Release the socket the same
+    // way the other teardown sites do (CODING_STANDARDS: src="" + load()).
+    try {
+        if (activeAudio && !activeAudio.paused) activeAudio.pause();
+        destroyHls(activeAudio);
+        activeAudio.removeAttribute('src');
+        activeAudio.src = '';
+        activeAudio.load();
+    } catch (e) {
+        console.debug('queue_ended teardown failed:', e);
+    }
+    window._pendingResolveKey = null;
 }
 
 export function onStateChanged(state) {
@@ -1636,6 +1687,14 @@ function updateRepeatIcon(btn, mode) {
         btn.innerHTML = '<i data-lucide="repeat" style="width:16px;height:16px"></i>';
     }
     renderIcons();
+}
+
+export function applyMuteState(muted) {
+    isMuted = !!muted;
+    if (activeAudio) activeAudio.volume = isMuted ? 0 : Math.min(1.0, Math.max(0.0, (currentVolume / 100) * currentReplayGain));
+    const vfill = document.getElementById('pb-volume-fill');
+    if (vfill) vfill.style.opacity = isMuted ? '0.3' : '1';
+    updateVolumeIcon(currentVolume, isMuted);
 }
 
 function updateVolumeIcon(volume, isMuted) {

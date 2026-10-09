@@ -7,7 +7,7 @@
          injected script would be remote code execution. 'unsafe-inline' is required
          for style attributes used throughout the UI, but script-src stays locked to
          same-origin files, so no inline or remote script can execute. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: http://127.0.0.1:*; media-src 'self' blob: http://127.0.0.1:* https:; connect-src 'self' http://127.0.0.1:* https:; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: http://127.0.0.1:*; media-src 'self' blob: http://127.0.0.1:* https:; connect-src 'self' http://127.0.0.1:* https:; object-src 'none'; base-uri 'none'; form-action 'none'">
     <title>NeDotify</title>
     <!-- Fonts: Sora (Headings) + DM Sans (Body). Self-hosted WOFF2 cuts live in
          assets/fonts/ and are declared by css/fonts.css, so no font CDN is
@@ -92,7 +92,7 @@
              clicks there must never move the window. -->
         <div class="mp-cover-wrap pywebview-drag-region">
             <svg id="mp-cover-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px;height:20px;opacity:0.6;position:absolute;top:calc(50% - 10px);left:calc(50% - 10px);"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-            <img id="mp-cover" src="" alt="Cover" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:8px;" onload="this.style.display='block'" onerror="this.onerror=null;this.style.display='none'">
+            <img id="mp-cover" src="" alt="Cover" style="display:none; width:100%; height:100%; object-fit:cover; border-radius:8px;" data-show-on-load="1">
         </div>
 
         <div class="mp-info pywebview-drag-region">
@@ -2029,6 +2029,28 @@
     </div>
 </div>
 
+<!-- Delete Duplicate Track Confirmation Modal -->
+<div id="modal-delete-duplicate" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Удаление дубликата" style="display:none;">
+    <div class="glass-modal-card" style="max-width:360px; text-align:center;">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:16px; padding:8px 0 4px;">
+            <div style="width:52px; height:52px; border-radius:50%; background:rgba(239,68,68,0.15); border:1.5px solid rgba(239,68,68,0.35); display:flex; align-items:center; justify-content:center;">
+                <i data-lucide="trash-2" style="width:24px;height:24px;color:#ef4444;"></i>
+            </div>
+            <div>
+                <div style="font-size:16px; font-weight:700; color:var(--text-main); margin-bottom:6px;">Удалить дубликат?</div>
+                <div id="modal-ddup-name" style="font-size:13px; color:var(--text-sec); line-height:1.5;">Трек будет удалён из медиатеки и с диска без возможности восстановления.</div>
+            </div>
+        </div>
+        <div class="glass-modal-footer" style="margin-top:8px;">
+            <button class="filter-btn" id="modal-ddup-cancel" style="flex:1;">Отмена</button>
+            <button id="modal-ddup-confirm" style="flex:1; padding:9px 0; border-radius:10px; border:none; background:rgba(239,68,68,0.85); color:#fff; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:background 0.2s;">
+                <i data-lucide="trash-2" style="width:14px;height:14px;"></i>
+                Удалить
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Import Playlist Glassmorphism Modal -->
 <div id="modal-import-playlist" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-import-playlist-title" style="display: none;">
     <div class="glass-modal-card" style="max-width: 500px;">
@@ -2068,7 +2090,7 @@
             <!-- Cover Art Column -->
             <div style="display:flex; flex-direction:column; align-items:center; gap:10px; width:130px; flex-shrink:0;">
                 <div style="position:relative; width:120px; height:120px; border-radius:10px; overflow:hidden; border:1px solid rgba(255,255,255,0.15); background:rgba(0,0,0,0.3);">
-                    <img id="modal-et-cover-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%2318181b'/%3E%3Cpath d='M40 60V30l25-5v35' stroke='%2371717a' stroke-width='4' fill='none'/%3E%3Ccircle cx='35' cy='60' r='8' fill='%2371717a'/%3E%3Ccircle cx='60' cy='55' r='8' fill='%2371717a'/%3E%3C/svg%3E" alt="" style="width:100%; height:100%; object-fit:cover;" onerror="this.onerror=null;this.style.display='none';">
+                    <img id="modal-et-cover-img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%2318181b'/%3E%3Cpath d='M40 60V30l25-5v35' stroke='%2371717a' stroke-width='4' fill='none'/%3E%3Ccircle cx='35' cy='60' r='8' fill='%2371717a'/%3E%3Ccircle cx='60' cy='55' r='8' fill='%2371717a'/%3E%3C/svg%3E" alt="" style="width:100%; height:100%; object-fit:cover;" data-hide-on-error="1">
                 </div>
                 <button class="filter-btn" id="modal-et-btn-cover" style="width:100%; font-size:11px; padding:6px 4px; display:flex; align-items:center; justify-content:center; gap:4px; cursor:pointer;">
                     <i data-lucide="image" style="width:12px;height:12px"></i> Обложка

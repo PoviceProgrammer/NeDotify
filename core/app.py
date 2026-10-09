@@ -109,6 +109,14 @@ class AppCore:
         self.cache = CacheManager(self.db, self.settings)
         self.scanner = FileScanner(self.db)
 
+        # Set by cleanup() as its first act. The deferred zapret autostart runs
+        # on its own thread (see start_zapret_if_enabled), so without this the
+        # teardown could call zapret.stop() first and the in-flight start would
+        # then launch the process anyway, leaving it orphaned for the rest of
+        # the session. An Event, not a lock: it is set once and only read.
+        self._shutting_down = threading.Event()
+        self._zapret_start_thread = None
+
         # C-3: stream URL cache + single-flight coordinator
         self.resolver = StreamResolver(self.db)
 
@@ -129,7 +137,7 @@ class AppCore:
         self.downloader = DownloadManager(self)
         self.plugins = PluginManager(self)
         self.zapret = ZapretService(self.settings)
-        self.playlist_importer = PlaylistImportService()
+        self.playlist_importer = PlaylistImportService(settings=self.settings)
         self.watchdog = WatchdogService(self)
         self.lufs_scanner = LufsScannerService(self)
         self.audio_fingerprint = AudioFingerprintService()
@@ -237,11 +245,28 @@ class AppCore:
                 mode = self.settings.get("zapret", "mode", "youtube_discord")
                 custom_args = self.settings.get("zapret", "custom_args", "")
                 bin_path = self.settings.get("zapret", "binary_path", "")
-                threading.Thread(
-                    target=self.zapret.start,
-                    kwargs={"mode": mode, "custom_args": custom_args, "binary_path": bin_path},
-                    daemon=True
-                ).start()
+
+                def _start_worker():
+                    # Re-checked on this thread: cleanup() may have started
+                    # between the check below and here.
+                    if self._shutting_down.is_set():
+                        logger.info("Zapret autostart skipped: shutdown in progress")
+                        return
+                    self.zapret.start(mode=mode, custom_args=custom_args, binary_path=bin_path)
+
+                with self._service_lock:
+                    if self._shutting_down.is_set():
+                        logger.info("Zapret autostart skipped: shutdown in progress")
+                        return
+                    worker = threading.Thread(
+                        target=_start_worker,
+                        name="ZapretAutostart",
+                        daemon=True,
+                    )
+                    # Kept so cleanup() can wait for an in-flight start instead
+                    # of racing it (the thread is short-lived by design).
+                    self._zapret_start_thread = worker
+                worker.start()
         except Exception as ze:
             logger.error(f"Failed to auto-start Zapret: {ze}")
 
@@ -431,11 +456,27 @@ class AppCore:
         """
         logger.info("Cleaning up AppCore resources...")
 
+        # First act, before any stop(): background starters must see this and
+        # decline to launch anything new for a core that is going away.
+        if getattr(self, "_shutting_down", None) is not None:
+            self._shutting_down.set()
+
         def _step(name, fn):
             try:
                 fn()
             except Exception:
                 logger.warning("Cleanup step %r failed", name, exc_info=True)
+
+        # Wait for an in-flight zapret autostart before stopping zapret, so the
+        # start cannot finish (and spawn the process) after stop() returned.
+        # Bounded: the thread is a single zapret.start() call, and a hang here
+        # must not hold up the rest of the teardown.
+        _zapret_thread = getattr(self, "_zapret_start_thread", None)
+        if _zapret_thread is not None and _zapret_thread.is_alive():
+            try:
+                _zapret_thread.join(5)
+            except Exception:
+                logger.warning("Joining the zapret autostart thread failed", exc_info=True)
 
         if getattr(self, "watchdog", None):
             _step("watchdog.stop", self.watchdog.stop)

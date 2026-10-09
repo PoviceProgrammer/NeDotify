@@ -48,7 +48,9 @@ class RecommendationService(BaseMusicService):
         self.youtube_service = youtube_service
 
         self.lastfm = LastFMService(settings=settings)
-        self.resolver = TrackResolver(db=db, soundcloud_service=soundcloud_service, youtube_service=youtube_service)
+        # settings= matters: without it the resolver's fallback path builds
+        # providers that ignore the configured proxy and cookies file.
+        self.resolver = TrackResolver(db=db, settings=settings, soundcloud_service=soundcloud_service, youtube_service=youtube_service)
 
     @property
     def available(self) -> bool:

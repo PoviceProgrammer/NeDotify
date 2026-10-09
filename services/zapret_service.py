@@ -30,7 +30,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Dict, Any, Tuple, List, Optional, Set
+from typing import Dict, Any, Tuple, List, Optional, Sequence, Set
 
 logger = logging.getLogger(__name__)
 
@@ -85,15 +85,39 @@ def sanitize_zapret_args(raw_args: str) -> List[str]:
     return tokens
 
 
-def validate_zapret_binary(path: str) -> bool:
-    """True only for an existing file whose name is an approved winws binary."""
+def validate_zapret_binary(path: str, app_dir: Optional[str] = None,
+                          extra_roots: Optional[Sequence[str]] = None) -> bool:
+    """True only for an existing local file with an approved winws name.
+
+    Rejects UNC/network paths and paths without a drive letter. When roots are
+    given (``app_dir`` plus ``extra_roots``), the file must live inside one of
+    them - that is what keeps an arbitrary path out of an elevated launch.
+    `extra_roots` exists because the shipped layout has two legitimate roots:
+    ~/.nedotify/zapret (downloaded binaries) and the application directory
+    itself (repo checkout in dev, sys._MEIPASS in the frozen build), where
+    find_binary() also looks for bin/winws.exe.
+    """
     if not path:
+        return False
+    if path.startswith(("\\\\", "//")) or not re.match(r'^[A-Za-z]:[\\/]', path):
         return False
     try:
         if not os.path.isfile(path):
             return False
     except OSError:
         return False
+    roots = [r for r in ([app_dir] if app_dir else []) + list(extra_roots or []) if r]
+    if roots:
+        norm = os.path.normcase(os.path.abspath(path))
+        for root in roots:
+            base = os.path.normcase(os.path.abspath(root))
+            try:
+                if os.path.commonpath([norm, base]) == base:
+                    break
+            except ValueError:
+                continue  # different drive
+        else:
+            return False
     return os.path.basename(path).lower() in _ALLOWED_BINARY_NAMES
 
 
@@ -153,6 +177,12 @@ class ZapretService:
 
         self.app_dir = os.path.join(os.path.expanduser("~"), ".nedotify", "zapret")
         self.logs_dir = os.path.join(os.path.expanduser("~"), ".nedotify", "logs")
+        # Second legitimate root for the binary: the application directory
+        # (repo checkout under `python main.py`, sys._MEIPASS in the frozen
+        # build). find_binary() also looks for bin/winws.exe there, so the
+        # elevated-launch check has to accept it.
+        self.base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self._rejected_binary_path: Optional[str] = None
         os.makedirs(self.app_dir, exist_ok=True)
         os.makedirs(self.logs_dir, exist_ok=True)
 
@@ -560,9 +590,10 @@ class ZapretService:
     def find_binary(self, custom_path=None) -> str | None:
         """Find path to winws.exe, zapret.exe or winws binary."""
         if custom_path:
-            if validate_zapret_binary(custom_path):
+            if validate_zapret_binary(custom_path, self.app_dir, extra_roots=[self.base_dir]):
                 return custom_path
             logger.warning("Rejected binary_path %r: not an approved winws executable", custom_path)
+            self._rejected_binary_path = custom_path
 
         candidates = [
             os.path.join(self.app_dir, "winws.exe"),
@@ -875,6 +906,15 @@ class ZapretService:
         active), it is restarted with the new strategy instead of a silent no-op."""
         exe = self.find_binary(binary_path)
         if not exe:
+            # A user-configured path that failed validation used to be dropped
+            # silently, so the user saw only "winws.exe not found" and had no
+            # idea their setting was the problem.
+            rejected = getattr(self, "_rejected_binary_path", None)
+            if rejected:
+                return False, (
+                    f"Путь к winws.exe отклонён: {rejected}. Ожидается winws.exe, "
+                    "zapret.exe или winws в папке zapret или рядом с программой."
+                )
             # Try auto-downloading if missing (network I/O — outside the lock)
             logger.info("Zapret binary not found. Attempting automatic download...")
             ok, dl_msg = self.download_binaries()
@@ -983,7 +1023,7 @@ class ZapretService:
         import ctypes
         logger.info("Elevating Zapret via ShellExecuteW 'runas'...")
 
-        if not validate_zapret_binary(exe):
+        if not validate_zapret_binary(exe, self.app_dir, extra_roots=[self.base_dir]):
             msg = f"Отказано в запуске: {os.path.basename(exe)} не является разрешённым исполняемым файлом Zapret."
             logger.error(msg)
             return False, msg

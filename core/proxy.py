@@ -230,7 +230,15 @@ def _safe_stream_local_path(raw_path, db) -> str:
     try:
         if not raw_path:
             return ''
-        candidate = os.path.normpath(str(raw_path))
+        raw = str(raw_path).strip()
+        # UNC and file://host/ paths make realpath()/isfile() open an SMB
+        # connection on Windows, so they are refused before any FS access.
+        if raw.startswith(('\\\\', '//')) or raw.lower().startswith('file:'):
+            logger.warning('Refused /api/stream read of UNC/file-URL path: %s', raw[:120])
+            return ''
+        candidate = os.path.normpath(raw)
+        if not os.path.splitdrive(candidate)[0]:
+            return ''
         if os.path.splitext(candidate)[1].lower() not in AUDIO_EXTENSIONS:
             return ''
         resolved = os.path.realpath(candidate)
@@ -342,9 +350,10 @@ def _parse_byte_range(range_header, file_size):
 
 class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Custom redirect handler that validates all redirect destinations against SSRF protection."""
-    def __init__(self, max_redirects=5):
+    def __init__(self, max_redirects=5, source=''):
         self.max_redirects = max_redirects
         self.redirect_count = 0
+        self.source = source
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         self.redirect_count += 1
@@ -352,12 +361,18 @@ class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
             raise urllib.error.HTTPError(req.full_url, code, "Too many redirects (max 5)", headers, fp)
         if not _is_ssrf_safe_url(newurl):
             raise urllib.error.HTTPError(req.full_url, code, f"SSRF blocked redirect destination: {newurl}", headers, fp)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is not None and _host_of(newurl) != _host_of(req.full_url):
+            if not _host_allows_credentials(newurl, self.source):
+                for store in (new_req.headers, new_req.unredirected_hdrs):
+                    for name in [k for k in store if k.lower() in ('authorization', 'cookie')]:
+                        del store[name]
+        return new_req
 
 
-def _safe_urlopen(req, timeout=12.0):
+def _safe_urlopen(req, timeout=12.0, source=''):
     """Open URL using custom SafeRedirectHandler enforcing strict SSRF checks on every redirect."""
-    opener = urllib.request.build_opener(SafeRedirectHandler(max_redirects=5))
+    opener = urllib.request.build_opener(SafeRedirectHandler(max_redirects=5, source=source))
     return opener.open(req, timeout=timeout)
 
 
@@ -429,7 +444,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 logger.debug('Per-request DB connection release failed', exc_info=True)
 
     def log_message(self, format, *args):
-        logger.debug(format % args)
+        logger.debug(re.sub(r'([?&](?:k|auth_token)=)[^&\s"]*', r'\1***', format % args))
 
     def _authorized(self, query_params) -> bool:
         """Constant-time check of the per-session proxy token.
@@ -666,7 +681,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             if not path_param:
                 self.send_error(400, 'Missing path parameter')
                 return None
-            avatar_file = _safe_avatar_path(urllib.parse.unquote(path_param))
+            avatar_file = _safe_avatar_path(path_param)
             if avatar_file:
                 self.serve_local_file(avatar_file)
                 return None
@@ -840,7 +855,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                         self.send_error(404, f"Local audio file not found: {os.path.basename(local_path)}")
                         return None
 
-            is_webpage = target_url and any(domain in target_url for domain in ('soundcloud.com', 'youtube.com', 'youtu.be'))
+            is_webpage = target_url and _host_matches(_host_of(target_url), ('soundcloud.com', 'youtube.com', 'youtu.be'))
 
             # '/' is a real endpoint (audio/engine.py builds direct-stream proxy
             # URLs as http://127.0.0.1:<port>/?url=...), so it stays in
@@ -950,7 +965,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
 
         for attempt in range(max_retries + 1):
             try:
-                resp = _safe_urlopen(req, timeout=12.0)
+                resp = _safe_urlopen(req, timeout=12.0, source=source)
                 # Announce recovery only after a visible problem: emitting
                 # 'connected' on every single stream open spammed the bridge.
                 if had_connection_issue and hasattr(self.server.app_core, 'api') and hasattr(self.server.app_core.api, 'emit_event'):
@@ -1026,13 +1041,14 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                         self.end_headers()
                         return None
                 else:
-                    if attempt < max_retries:
+                    if attempt < max_retries and (e.code >= 500 or e.code in (408, 429)):
                         backoff = 1.5 ** attempt + random.uniform(0.1, 0.5)
                         logger.warning(f'HTTPError {e.code}, retrying in {backoff:.2f}s...')
                         time.sleep(backoff)
                         continue
                     else:
                         self.send_response(e.code)
+                        self._send_cors_headers()
                         self.end_headers()
                         return None
             except (urllib.error.URLError, ConnectionError, socket.timeout, TimeoutError) as e:
@@ -1121,6 +1137,11 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                             logger.info(f'Stream cached successfully on retry to {final_path}')
                         except Exception as pe:
                             logger.warning(f'Could not replace stream file {final_path} (locked): {pe}')
+                            try:
+                                if os.path.exists(temp_path):
+                                    os.remove(temp_path)
+                            except OSError:
+                                logger.debug("temp stream cleanup suppressed", exc_info=True)
                 else:
                     logger.warning(f'Incomplete stream received ({bytes_written} bytes vs expected {expected_len}). Removing temp file.')
                     if os.path.exists(temp_path):
@@ -1203,7 +1224,7 @@ class LocalProxyManager:
     def get_proxy_url(self, source, source_id, original_url=None, track_id=None):
         if not self.port:
             return original_url or ''
-        if original_url and not any(d in original_url for d in ('youtube.com', 'youtu.be', 'soundcloud.com')):
+        if original_url and not _host_matches(_host_of(original_url), ('youtube.com', 'youtu.be', 'soundcloud.com')):
             params = {
                 'url': original_url,
                 'source': source if source else '',

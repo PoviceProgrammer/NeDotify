@@ -450,54 +450,59 @@ class ArtistService(BaseMusicService):
             return None
 
         def _task():
-            yt = self._ytmusic()
-            if yt is None:
-                if error_callback:
-                    error_callback("YouTube Music недоступен")
-                return
-
-            channel_id = self._resolve_channel_id(yt, name)
-            if not channel_id:
-                if error_callback:
-                    error_callback("Исполнитель не найден: " + name)
-                return
-
             try:
-                artist = yt.get_artist(channel_id)
+                yt = self._ytmusic()
+                if yt is None:
+                    if error_callback:
+                        error_callback("YouTube Music недоступен")
+                    return
+
+                channel_id = self._resolve_channel_id(yt, name)
+                if not channel_id:
+                    if error_callback:
+                        error_callback("Исполнитель не найден: " + name)
+                    return
+
+                try:
+                    artist = yt.get_artist(channel_id)
+                except Exception as exc:
+                    logger.warning("get_artist(%s) failed: %s", channel_id, exc, exc_info=True)
+                    if error_callback:
+                        error_callback("Не удалось загрузить профиль: " + type(exc).__name__)
+                    return
+
+                albums_list = self._collect_albums(yt, channel_id, artist, name)
+                tracks_list = self._collect_tracks(yt, channel_id, artist, name, albums_list)
+                bio_ru, bio_original = self._translate_bio((artist.get("description") or "").strip())
+
+                profile = {
+                    "name": artist.get("name") or name,
+                    "channel_id": channel_id,
+                    "avatar_url": self._best_thumbnail(artist),
+                    "bio": bio_ru or bio_original,
+                    "bio_ru": bio_ru,
+                    "bio_original": bio_original,
+                    "bio_en": bio_original,
+                    "subscribers": artist.get("subscribers") or "",
+                    "views": artist.get("views") or "",
+                    "albums": albums_list,
+                    "tracks": tracks_list,
+                    "source": "youtube",
+                }
+                self._cache_put(name.lower(), profile)
+                if profile.get("avatar_url"):
+                    with self._avatars_lock:
+                        self._avatars[name.lower()] = (time.time(), profile["avatar_url"])
+                logger.info(
+                    "Artist profile for %r: %d albums, %d tracks, bio length %d",
+                    profile["name"], len(profile["albums"]), len(profile["tracks"]), len(profile["bio"]),
+                )
+                if callback:
+                    callback(profile)
             except Exception as exc:
-                logger.warning("get_artist(%s) failed: %s", channel_id, exc, exc_info=True)
+                logger.warning("Artist profile task failed for %r: %s", name, exc, exc_info=True)
                 if error_callback:
                     error_callback("Не удалось загрузить профиль: " + type(exc).__name__)
-                return
-
-            albums_list = self._collect_albums(yt, channel_id, artist, name)
-            tracks_list = self._collect_tracks(yt, channel_id, artist, name, albums_list)
-            bio_ru, bio_original = self._translate_bio((artist.get("description") or "").strip())
-
-            profile = {
-                "name": artist.get("name") or name,
-                "channel_id": channel_id,
-                "avatar_url": self._best_thumbnail(artist),
-                "bio": bio_ru or bio_original,
-                "bio_ru": bio_ru,
-                "bio_original": bio_original,
-                "bio_en": bio_original,
-                "subscribers": artist.get("subscribers") or "",
-                "views": artist.get("views") or "",
-                "albums": albums_list,
-                "tracks": tracks_list,
-                "source": "youtube",
-            }
-            self._cache_put(name.lower(), profile)
-            if profile.get("avatar_url"):
-                with self._avatars_lock:
-                    self._avatars[name.lower()] = (time.time(), profile["avatar_url"])
-            logger.info(
-                "Artist profile for %r: %d albums, %d tracks, bio length %d",
-                profile["name"], len(profile["albums"]), len(profile["tracks"]), len(profile["bio"]),
-            )
-            if callback:
-                callback(profile)
 
         submit = getattr(BaseMusicService, "submit", None)
         if callable(submit):

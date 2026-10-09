@@ -8,6 +8,7 @@ import logging
 import threading
 import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from utils.url_safety import is_safe_media_url
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class DownloadManager:
         self._batch_failed = 0
         self._batch_active = False
         self._futures = []
+        self._active_track_ids = set()  # guarded by _futures_lock
         self._futures_lock = threading.Lock()
 
         self._processor_thread = threading.Thread(target=self._process_queue, daemon=True)
@@ -79,13 +81,12 @@ class DownloadManager:
             if self._batch_total > 0:
                 self._batch_total = max(0, self._batch_total - 1)
             if self._batch_total == 0 or self._batch_completed >= self._batch_total:
-                if self._batch_total == 0:
-                    self._batch_active = False
-                    finished_payload = {
-                        'total': 0,
-                        'completed': self._batch_completed,
-                        'failed': self._batch_failed,
-                    }
+                self._batch_active = False
+                finished_payload = {
+                    'total': self._batch_total,
+                    'completed': self._batch_completed,
+                    'failed': self._batch_failed,
+                }
         # Emit outside both _lock and (when called from queue_download) _queue_lock:
         # _emit crosses the pywebview bridge and must not run under our locks.
         if finished_payload is not None:
@@ -131,17 +132,20 @@ class DownloadManager:
         with self._queue_lock:
             self._queue.clear()
         with self._futures_lock:
-            survivors = []
-            for fut in list(self._futures):
-                try:
-                    if fut.cancel():
-                        continue  # never started: drop it from the in-flight list
-                except Exception:
-                    pass
-                survivors.append(fut)
+            snapshot = list(self._futures)
+        # Cancel outside _futures_lock: a cancelled future runs its done-callback
+        # synchronously, and that callback takes the same lock.
+        cancelled = set()
+        for fut in snapshot:
+            try:
+                if fut.cancel():
+                    cancelled.add(fut)  # never started: drop it from the in-flight list
+            except Exception:
+                pass
+        with self._futures_lock:
             # Keep accepted-but-unfinished futures so backpressure and stop()
             # still see the downloads that are really running.
-            self._futures = survivors
+            self._futures = [f for f in self._futures if f not in cancelled]
         with self._lock:
             self._batch_active = False
             self._batch_total = 0
@@ -215,9 +219,16 @@ class DownloadManager:
                 rows = cursor.fetchall()
             for row in rows:
                 if isinstance(row, dict) or hasattr(row, 'keys'):
-                    self.queue_download(row['track_id'], row['source'], row['source_id'], from_db=True)
+                    track_id, source, source_id = row['track_id'], row['source'], row['source_id']
                 else:
-                    self.queue_download(row[0], row[1], row[2], from_db=True)
+                    track_id, source, source_id = row[0], row[1], row[2]
+                with self._queue_lock:
+                    if any(item['track_id'] == track_id for item in self._queue):
+                        continue
+                with self._futures_lock:
+                    if track_id in self._active_track_ids:
+                        continue
+                self.queue_download(track_id, source, source_id, from_db=True)
         except Exception as e:
             logger.error(f'Failed to resume downloads: {e}')
 
@@ -265,6 +276,10 @@ class DownloadManager:
         logger.info(f'Queued download for track {track_id} from {source}:{source_id}')
         return True
 
+    def _release_track_id(self, track_id):
+        with self._futures_lock:
+            self._active_track_ids.discard(track_id)
+
     def _running_futures(self):
         """Prune finished futures and return the ones still in flight."""
         with self._futures_lock:
@@ -303,8 +318,10 @@ class DownloadManager:
                     fut = self._pool.submit(self._download_worker, item)
                     with self._futures_lock:
                         self._futures.append(fut)
+                        self._active_track_ids.add(item['track_id'])
                         # Prune finished futures so the list does not grow unbounded.
                         self._futures = [f for f in self._futures if not f.done()]
+                    fut.add_done_callback(lambda _f, tid=item['track_id']: self._release_track_id(tid))
                 except Exception as e:
                     logger.error(f'Failed to submit download worker: {e}')
                     self._on_batch_task_done(item.get('track_id'), success=False)
@@ -356,6 +373,9 @@ class DownloadManager:
             resolver = TrackResolver(
                 db=getattr(self._core, 'db', None),
                 youtube_service=getattr(self._core, 'youtube', None),
+                # Without settings the resolver cannot build its own
+                # SoundCloud/YouTube fallbacks (no cookies, no client config).
+                settings=getattr(self._core, 'settings', None),
             )
             resolved = resolver.resolve_track(title or query_hint, artist or '')
             if isinstance(resolved, dict):
@@ -478,7 +498,8 @@ class DownloadManager:
             file_path = None
 
             if source == 'youtube':
-
+                if str(source_id or '').startswith('http') and not is_safe_media_url(str(source_id)):
+                    raise Exception('Unsafe media URL rejected')
                 file_path = self._core.youtube.download_audio_sync(source_id, download_dir)
             elif source == 'soundcloud':
                 sid = str(source_id or '')
@@ -488,6 +509,8 @@ class DownloadManager:
                     sc_url = sid
                 else:
                     sc_url = f'https://soundcloud.com/{sid}'
+                if sc_url.startswith('http') and not is_safe_media_url(sc_url):
+                    raise Exception('Unsafe media URL rejected')
                 file_path = self._core.soundcloud.download_audio_sync(sc_url, download_dir)
             elif source == 'yandex':
                 file_path = self._core.yandex.download_audio_sync(source_id, download_dir)
@@ -570,7 +593,7 @@ class DownloadManager:
         self._queue_event.set()
         with self._queue_lock:
             self._queue.clear()
-        self._pool.shutdown(wait=False)
+        self._pool.shutdown(wait=False, cancel_futures=True)
         deadline = time.monotonic() + max(0.0, float(drain_timeout))
         for fut in self._running_futures():
             remaining = deadline - time.monotonic()

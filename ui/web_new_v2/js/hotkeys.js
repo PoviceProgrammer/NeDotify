@@ -15,6 +15,7 @@ export const DEFAULT_KEYBINDS = [
 ];
 
 export const activeKeybinds = {};
+const REPEATABLE_ACTIONS = new Set(['volume_up', 'volume_down']);
 let listeningKeybindId = null;
 
 export function setListeningKeybind(id) {
@@ -118,6 +119,14 @@ export function initHotkeys() {
         });
     }
 
+    // Clicking anywhere except a rebind button cancels rebinding mode.
+    window.addEventListener('pointerdown', (e) => {
+        if (!listeningKeybindId) return;
+        if (e.target instanceof Element && e.target.closest('.keybind-record-btn')) return;
+        listeningKeybindId = null;
+        if (window.renderKeybindsList) window.renderKeybindsList();
+    }, true);
+
     // SINGLE AUTHORITATIVE GLOBAL KEYDOWN LISTENER (Eliminates double toggle on Space)
     window.addEventListener('keydown', (e) => {
         // Rebinding Mode inside Settings UI
@@ -179,6 +188,8 @@ export function initHotkeys() {
                             (key === 'Space' && (pressedCombo === 'Space' || e.code === 'Space' || e.key === ' '));
             if (isMatch) {
                 e.preventDefault();
+                // Held key auto-repeat must not re-fire one-shot actions; volume keeps repeating.
+                if (e.repeat && !REPEATABLE_ACTIONS.has(actionId)) break;
                 executeHotkeysAction(actionId);
                 break;
             }

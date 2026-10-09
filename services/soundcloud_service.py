@@ -290,7 +290,7 @@ class SoundCloudService(BaseMusicService):
                     
                     def yt_cb(tracks):
                         for t in tracks:
-                            t['source'] = 'soundcloud'
+                            t['source'] = 'youtube'
                         if callback:
                             callback(tracks)
                             
@@ -424,7 +424,7 @@ class SoundCloudService(BaseMusicService):
 
     def get_stream_url(self, track_url: str, callback: Callable = None, error_callback: Callable = None, quality: str = "high", **kwargs):
         """Extract direct audio stream URL from a SoundCloud track."""
-        info = self.get_from_cache(track_url)
+        info = self.get_from_cache(f"soundcloud:{track_url}")
         if info:
             if callback:
                 callback(info.get('stream_url'), info)
@@ -485,7 +485,7 @@ class SoundCloudService(BaseMusicService):
                                     'source_id': str(t_data.get('id')),
                                     'stream_url': stream_url
                                 }
-                                self.set_to_cache(track_url, metadata)
+                                self.set_to_cache(f"soundcloud:{track_url}", metadata)
                                 if callback:
                                     callback(stream_url, metadata)
                                 return
@@ -517,7 +517,7 @@ class SoundCloudService(BaseMusicService):
                         search_artist = info.get('uploader', '') if info else ''
                         
                         if not search_title and not search_artist:
-                            cached_info = self.get_from_cache(track_url)
+                            cached_info = self.get_from_cache(f"soundcloud:{track_url}")
                             if cached_info:
                                 search_title = cached_info.get('title', '')
                                 search_artist = cached_info.get('artist', '')
@@ -541,7 +541,7 @@ class SoundCloudService(BaseMusicService):
                                         'source_id': str(info.get('id') or '') if info else '',
                                         'stream_url': yt_url
                                     }
-                                    self.set_to_cache(track_url, final_metadata)
+                                    self.set_to_cache(f"soundcloud:{track_url}", final_metadata)
                                     if callback:
                                         callback(yt_url, final_metadata)
                                         
@@ -570,7 +570,7 @@ class SoundCloudService(BaseMusicService):
                             'source_id': str(info.get('id') or ''),
                             'stream_url': stream_url
                         }
-                        self.set_to_cache(track_url, metadata)
+                        self.set_to_cache(f"soundcloud:{track_url}", metadata)
                         if callback:
                             callback(stream_url, metadata)
                         return
@@ -635,7 +635,7 @@ class SoundCloudService(BaseMusicService):
             query = f'{artist} - {title}'.strip(' -')
             if not query or query == 'Unknown - Unknown':
                 # Try getting cached metadata
-                cached = self.get_from_cache(sc_url) or self.get_from_cache(sc_url_str)
+                cached = self.get_from_cache(f"soundcloud:{sc_url}") or self.get_from_cache(f"soundcloud:{sc_url_str}")
                 if cached:
                     title = cached.get('title', 'Unknown')
                     artist = cached.get('artist', 'Unknown')

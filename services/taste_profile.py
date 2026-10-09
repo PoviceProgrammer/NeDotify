@@ -209,9 +209,9 @@ class UserTasteProfile:
                 artist = self._get_artist(row)
                 if not artist:
                     continue
-                played_at = self._parse_dt(row['played_at'] if hasattr(row, '__getitem__') else getattr(row, 'played_at', None))
+                played_at = self._parse_dt(self._field(row, 'played_at'))
                 recency = self._recency_factor(played_at, now)
-                completed = row['completed'] if hasattr(row, '__getitem__') else getattr(row, 'completed', 0)
+                completed = self._field(row, 'completed', 0)
                 w = self.WEIGHT_COMPLETED_PLAY if completed else self.WEIGHT_PLAY
                 self._artist_scores[artist] += w * recency
 
@@ -242,12 +242,12 @@ class UserTasteProfile:
             self._genre_scores = defaultdict(float)
 
             def _add_genre(row, weight=1.0):
-                genre = row.get('genre') if isinstance(row, dict) else getattr(row, 'genre', None)
+                genre = self._field(row, 'genre')
                 if genre and genre.strip():
                     self._genre_scores[genre.strip()] += weight
 
             for row in history_rows:
-                completed = row['completed'] if hasattr(row, '__getitem__') else getattr(row, 'completed', 0)
+                completed = self._field(row, 'completed', 0)
                 _add_genre(row, self.WEIGHT_COMPLETED_PLAY if completed else self.WEIGHT_PLAY)
 
             for row in self.favorite_tracks:
@@ -413,7 +413,7 @@ class UserTasteProfile:
         artists = []
         for src in (self.favorite_tracks, self.downloaded_tracks, self.playlist_tracks, self.recent_history):
             for trk in src:
-                a = trk.get('artist') if isinstance(trk, dict) else getattr(trk, 'artist', None)
+                a = self._field(trk, 'artist')
                 if not a:
                     continue
                 if a == 'Unknown Artist':
@@ -487,8 +487,18 @@ class UserTasteProfile:
         return None
 
     @staticmethod
-    def _get_artist(row) -> Optional[str]:
-        artist = row.get('artist') if isinstance(row, dict) else getattr(row, 'artist', None)
+    def _field(row, name: str, default=None):
+        """Read a column from a dict or sqlite3.Row (Row has no attribute access)."""
+        if isinstance(row, dict):
+            return row.get(name, default)
+        try:
+            return row[name]
+        except (IndexError, KeyError, TypeError):
+            return default
+
+    @classmethod
+    def _get_artist(cls, row) -> Optional[str]:
+        artist = cls._field(row, 'artist')
         if not artist or artist in ('Unknown Artist', '', None):
             return None
         return artist.strip()

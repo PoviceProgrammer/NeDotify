@@ -236,6 +236,72 @@ def main():
     _t0 = _time.monotonic()
     logging.info("[startup] process started")
 
+    # Single Instance Guard - deliberately the FIRST thing main() does.
+    # It used to run after AppCore() and after the window was created, which
+    # defeats the point: a second launch still opened ~/.nedotify, started the
+    # proxy port, the downloader threads and the yt-dlp update, spawned the
+    # WebView2 runtime and only then bailed out. Everything below can call
+    # sys.exit(0) from inside the guard, so nothing may exist yet at this
+    # point that needs tearing down.
+    import tempfile
+    _INSTANCE_MUTEX = None
+
+    def _acquire_instance_lock():
+        nonlocal _INSTANCE_MUTEX
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import wintypes
+                kernel32 = ctypes.windll.kernel32
+                kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+                kernel32.CreateMutexW.restype = wintypes.HANDLE
+                ERROR_ALREADY_EXISTS = 183
+
+                _INSTANCE_MUTEX = kernel32.CreateMutexW(None, False, "Local\\NeDotify_App_Single_Instance_Mutex")
+                if _INSTANCE_MUTEX and kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+                    logging.info("[startup] Another instance of NeDotify is already running; exiting cleanly.")
+                    sys.exit(0)
+            except Exception as e:
+                logging.debug(f"[startup] Mutex acquisition note: {e}")
+        else:
+            lock_path = os.path.join(tempfile.gettempdir(), 'nedotify_instance.lock')
+            if os.path.exists(lock_path):
+                try:
+                    with open(lock_path, 'r') as f:
+                        old_pid = int(f.read().strip())
+                    if old_pid != os.getpid():
+                        try:
+                            os.kill(old_pid, 0)
+                            logging.info(f"[startup] Another instance is already running (PID {old_pid}); exiting cleanly.")
+                            sys.exit(0)
+                        except OSError:
+                            pass
+                except Exception:
+                    logging.debug("_acquire_instance_lock: suppressed exception", exc_info=True)
+            try:
+                with open(lock_path, 'w') as f:
+                    f.write(str(os.getpid()))
+            except Exception:
+                logging.debug("_acquire_instance_lock: suppressed exception", exc_info=True)
+
+    def _release_instance_lock():
+        nonlocal _INSTANCE_MUTEX
+        if sys.platform == "win32" and _INSTANCE_MUTEX:
+            try:
+                import ctypes
+                ctypes.windll.kernel32.CloseHandle(_INSTANCE_MUTEX)
+                _INSTANCE_MUTEX = None
+            except Exception:
+                logging.debug("_release_instance_lock: suppressed exception", exc_info=True)
+        try:
+            lock_path = os.path.join(tempfile.gettempdir(), 'nedotify_instance.lock')
+            if os.path.exists(lock_path):
+                os.remove(lock_path)
+        except Exception:
+            logging.debug("_release_instance_lock: suppressed exception", exc_info=True)
+
+    _acquire_instance_lock()
+
     # Initialize application core
     app_core = AppCore()
     logging.info(f"[startup] AppCore initialized (+{(_time.monotonic() - _t0) * 1000:.0f}ms)")
@@ -312,66 +378,6 @@ def main():
         background_color='#0f0f14',
         easy_drag=False
     )
-
-    # Single Instance Guard
-    import tempfile
-    _INSTANCE_MUTEX = None
-
-    def _acquire_instance_lock():
-        nonlocal _INSTANCE_MUTEX
-        if sys.platform == "win32":
-            try:
-                import ctypes
-                from ctypes import wintypes
-                kernel32 = ctypes.windll.kernel32
-                kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
-                kernel32.CreateMutexW.restype = wintypes.HANDLE
-                ERROR_ALREADY_EXISTS = 183
-
-                _INSTANCE_MUTEX = kernel32.CreateMutexW(None, False, "Local\\NeDotify_App_Single_Instance_Mutex")
-                if _INSTANCE_MUTEX and kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
-                    logging.info("[startup] Another instance of NeDotify is already running; exiting cleanly.")
-                    sys.exit(0)
-            except Exception as e:
-                logging.debug(f"[startup] Mutex acquisition note: {e}")
-        else:
-            lock_path = os.path.join(tempfile.gettempdir(), 'nedotify_instance.lock')
-            if os.path.exists(lock_path):
-                try:
-                    with open(lock_path, 'r') as f:
-                        old_pid = int(f.read().strip())
-                    if old_pid != os.getpid():
-                        try:
-                            os.kill(old_pid, 0)
-                            logging.info(f"[startup] Another instance is already running (PID {old_pid}); exiting cleanly.")
-                            sys.exit(0)
-                        except OSError:
-                            pass
-                except Exception:
-                    logging.debug("_acquire_instance_lock: suppressed exception", exc_info=True)
-            try:
-                with open(lock_path, 'w') as f:
-                    f.write(str(os.getpid()))
-            except Exception:
-                logging.debug("_acquire_instance_lock: suppressed exception", exc_info=True)
-
-    def _release_instance_lock():
-        nonlocal _INSTANCE_MUTEX
-        if sys.platform == "win32" and _INSTANCE_MUTEX:
-            try:
-                import ctypes
-                ctypes.windll.kernel32.CloseHandle(_INSTANCE_MUTEX)
-                _INSTANCE_MUTEX = None
-            except Exception:
-                logging.debug("_release_instance_lock: suppressed exception", exc_info=True)
-        try:
-            lock_path = os.path.join(tempfile.gettempdir(), 'nedotify_instance.lock')
-            if os.path.exists(lock_path):
-                os.remove(lock_path)
-        except Exception:
-            logging.debug("_release_instance_lock: suppressed exception", exc_info=True)
-
-    _acquire_instance_lock()
 
     # Pass window reference to api
     api.set_window(window)
@@ -496,13 +502,19 @@ def main():
             restart_args = [sys.executable] + (
                 sys.argv[1:] if getattr(sys, 'frozen', False) else sys.argv
             )
+            # Release BEFORE spawning. The single-instance guard now runs at
+            # the very top of main(), so a child that starts while this process
+            # still holds the mutex sees ERROR_ALREADY_EXISTS and exits at once
+            # - the watchdog would then kill the app and start nothing, which
+            # is precisely the hang it exists to escape. NEDOTIFY_RESTART_COUNT
+            # still caps the loop at one respawn.
+            _release_instance_lock()
             subprocess.Popen(
                 restart_args,
                 creationflags=creation_flags,
                 close_fds=True,
                 env=env
             )
-            _release_instance_lock()
             # os._exit() below skips atexit, and the settings writer thread may
             # still be asleep, so flush explicitly BEFORE cleanup() closes the
             # database (cleanup() also flushes, but only after stopping the

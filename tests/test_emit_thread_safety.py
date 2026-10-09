@@ -116,6 +116,20 @@ def test_emit_unserializable_payload_does_not_raise():
     assert not window.calls, "unserializable payload must not reach evaluate_js"
 
 
+@pytest.mark.parametrize("payload", [[], 0, False, ""])
+def test_emit_falsy_payload_is_preserved(payload):
+    """Falsy but real payloads ([], 0, False, "") must not be replaced by {}."""
+    import json
+    import re
+
+    window = _FakeWindow()
+    api = _make_api(window)
+    api._emit("queue_updated", payload)
+
+    m = re.search(r"window\.onPythonEvent\(\"queue_updated\", (.*)\); \}", window.calls[0], re.S)
+    assert json.loads(m.group(1)) == payload
+
+
 def test_emit_heavy_payload_roundtrip():
     """A realistic queue payload (Cyrillic, nested, long) must serialize."""
     import json

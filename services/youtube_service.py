@@ -77,6 +77,32 @@ def _yt_gating_error(exc):
     return exc
 
 
+_YT_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+_YT_HOSTS = ("youtube.com", "www.youtube.com", "music.youtube.com", "youtu.be")
+
+
+def _is_allowed_youtube_target(target) -> bool:
+    """Only canonical video ids or YouTube-host URLs may reach yt-dlp."""
+    text = str(target or "").strip()
+    if _YT_VIDEO_ID_RE.fullmatch(text):
+        return True
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(text)
+    except ValueError:
+        return False
+    return parsed.scheme in ("http", "https") and (parsed.hostname or "") in _YT_HOSTS
+
+
+def _yt_cache_key(video_url) -> str:
+    """Stream-cache key namespace.
+
+    BaseMusicService keeps one shared cache for every service, so an unprefixed
+    YouTube URL collides with the same string looked up by SoundCloud/Yandex.
+    """
+    return f"youtube:{video_url}"
+
+
 def _is_storyboards_only(info):
     """True when YouTube returned formats but none is playable (gated)."""
     if isinstance(info, dict) and info.get("_type") == "playlist":
@@ -200,7 +226,7 @@ class YouTubeService(BaseMusicService):
             try:
                 sid = trk.get("source_id")
                 surl = trk.get("source_url") or sid
-                if surl and not self.get_from_cache(surl):
+                if surl and not self.get_from_cache(_yt_cache_key(surl)):
                     self.get_stream_url(surl, quality="high")
             except Exception as e:
                 logger.debug(f"Prefetch skipped for {trk.get('source_id')}: {e}", exc_info=True)
@@ -680,7 +706,12 @@ class YouTubeService(BaseMusicService):
                 error_callback("yt-dlp не установлен")
             return None
 
-        info = self.get_from_cache(video_url)
+        if not _is_allowed_youtube_target(video_url):
+            if error_callback:
+                error_callback("Недопустимый адрес YouTube")
+            return None
+
+        info = self.get_from_cache(_yt_cache_key(video_url))
         if info:
             if callback:
                 callback(info.get("stream_url"), info)
@@ -788,10 +819,14 @@ class YouTubeService(BaseMusicService):
                             "bitrate": info.get("abr", 0),
                         }
 
-                        self.set_to_cache(video_url, metadata)
+                        self.set_to_cache(_yt_cache_key(video_url), metadata)
 
                         if callback:
                             callback(stream_url, metadata)
+                        return None
+                    else:
+                        if error_callback:
+                            error_callback("Не удалось извлечь аудио поток")
                         return None
 
                 except Exception as e:
@@ -871,6 +906,8 @@ class YouTubeService(BaseMusicService):
         ts = int(time.time())
         out_template = os.path.join(output_dir, f"yt_{clean_id}_{ts}.%(ext)s")
 
+        if str(source_id).startswith("http") and not _is_allowed_youtube_target(source_id):
+            raise Exception("Недопустимый адрес YouTube")
         url = source_id if str(source_id).startswith("http") or str(source_id).startswith("ytsearch") else f"https://www.youtube.com/watch?v={source_id}"
 
         ydl_opts = self._get_ydl_opts("bestaudio/best", fallback=True)

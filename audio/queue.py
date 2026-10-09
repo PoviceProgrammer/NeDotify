@@ -68,6 +68,7 @@ class PlaybackQueue:
     @shuffle.setter
     def shuffle(self, enabled: bool):
         with self._lock:
+            self._history_stack.clear()
             if enabled and not self._shuffle:
                 # Save original order and shuffle
                 self._original_order = self._tracks.copy()
@@ -120,7 +121,7 @@ class PlaybackQueue:
         with self._lock:
             self._tracks = tracks.copy()
             self._original_order = tracks.copy()
-            self._current_index = min(start_index, len(tracks) - 1) if tracks else -1
+            self._current_index = max(0, min(start_index, len(tracks) - 1)) if tracks else -1
             self._history_stack.clear()
             if self._shuffle:
                 current = self.current_track
@@ -177,6 +178,11 @@ class PlaybackQueue:
                 if self._original_order:
                     target_key = self._track_key(track)
                     self._original_order = [t for t in self._original_order if self._track_key(t) != target_key]
+                self._history_stack = [
+                    i - 1 if i > index else i
+                    for i in self._history_stack
+                    if i != index
+                ]
                 if len(self._tracks) == 0:
                     self._current_index = -1
                 elif index < self._current_index:
@@ -190,7 +196,8 @@ class PlaybackQueue:
             if 0 <= old_index < len(self._tracks) and 0 <= new_index < len(self._tracks):
                 if old_index == new_index:
                     return
-                
+                self._history_stack.clear()
+
                 # Handle current_index shifting
                 track = self._tracks.pop(old_index)
                 self._tracks.insert(new_index, track)
@@ -246,12 +253,25 @@ class PlaybackQueue:
             if self.is_empty:
                 return None
 
-            if self._history_stack:
-                self._current_index = self._history_stack.pop()
-            else:
-                self._current_index = max(0, self._current_index - 1)
+            while self._history_stack:
+                idx = self._history_stack.pop()
+                if 0 <= idx < len(self._tracks):
+                    self._current_index = idx
+                    return self.current_track
+            self._current_index = max(0, self._current_index - 1)
 
             return self.current_track
+
+    def toggle_shuffle(self) -> bool:
+        with self._lock:
+            self.shuffle = not self._shuffle
+            return self._shuffle
+
+    def toggle_repeat(self) -> str:
+        with self._lock:
+            modes = ["off", "all", "one"]
+            self._repeat = modes[(modes.index(self._repeat) + 1) % len(modes)]
+            return self._repeat
 
     # Alias kept for external/3rd-party callers: the app itself only uses
     # previous_track() (audio/engine.py:prev_track).

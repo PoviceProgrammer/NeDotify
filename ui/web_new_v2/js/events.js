@@ -1,5 +1,5 @@
 // NeDotify — Python Event Bridge
-import { onTrackChanged, onStateChanged, onPositionChanged, applySettings, togglePlayPause, seekTo, getIsPlaying } from './player.js';
+import { onTrackChanged, onStateChanged, onPositionChanged, applySettings, togglePlayPause, seekTo, getIsPlaying, applyMuteState, getCurrentTrack, stopPlaybackForQueueEnd } from './player.js';
 import { onSearchResults } from './search.js';
 import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome } from './home.js';
 import { loadLibrary, loadDownloaded, loadPlaylists } from './library.js';
@@ -359,6 +359,32 @@ export function initEvents() {
             case 'theme_changed':
                 window.dispatchEvent(new CustomEvent('nedotify:theme_changed', { detail: data }));
                 break;
+
+            case 'mute_changed':
+                applyMuteState(!!data?.muted);
+                break;
+
+            case 'queue_ended':
+                // Backend reached the end of the queue: release the audio and the
+                // UI state instead of leaving a stale "playing" look on a stream
+                // that is still running (pressing "next" on the last track).
+                stopPlaybackForQueueEnd();
+                onStateChanged('stopped');
+                document.dispatchEvent(new CustomEvent('nedotify:queue_ended', { detail: data }));
+                break;
+
+            case 'track_updated': {
+                // Metadata-only refresh of the currently playing track (title/artist/cover).
+                // Does not touch playback: onTrackChanged would restart the stream.
+                const cur = getCurrentTrack();
+                const curKey = cur ? (cur.id ?? cur.source_id) : undefined;
+                if (data && curKey != null && String(curKey) === String(data.id ?? data.source_id)) {
+                    Object.assign(cur, data, { stream_url: cur.stream_url, file_path: cur.file_path });
+                    document.dispatchEvent(new CustomEvent('nedotify:track_changed', { detail: cur }));
+                }
+                document.dispatchEvent(new CustomEvent('nedotify:track_updated', { detail: data }));
+                break;
+            }
 
             case 'session_autoplay':
                 // Backend restored a session with autoplay enabled. Wait for the

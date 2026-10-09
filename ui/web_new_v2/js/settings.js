@@ -1,5 +1,5 @@
 // NeDotify — Settings Module
-import { renderIcons, escapeHtml, compressBackgroundImage, showToast } from './utils.js';
+import { renderIcons, escapeHtml, compressBackgroundImage, showToast, openModalFocusTrap, closeModalFocusTrap } from './utils.js';
 import { initParticles, stopParticles, setParticlesFps } from './particles.js';
 import { setVisualizerFps, setVisualizerEnabled } from './visualizer.js';
 import { initOnboarding } from './onboarding.js';
@@ -215,9 +215,6 @@ export function initSettings() {
                 } else {
                     showToast('Ошибка очистки кэша', 'error');
                 }
-            } else if (window.pywebview?.api?.clear_storage) {
-                await window.pywebview.api.clear_storage('all');
-                window.pywebview.api.get_storage_info();
             }
         });
     }
@@ -231,10 +228,16 @@ export function initSettings() {
             const val = parseInt(e.target.value);
             saveSetting('cache_quota_gb', val, 'storage');
             if (window.pywebview?.api?.set_cache_quota) {
-                const res = await window.pywebview.api.set_cache_quota(val);
-                if (res && res.success) {
-                    showToast(val === 0 ? 'Лимит кэша отключен' : `Лимит кэша установлен на ${val} ГБ`, 'info');
-                    if (res.details) onStorageInfo(res.details);
+                try {
+                    const res = await window.pywebview.api.set_cache_quota(val);
+                    if (res && res.success) {
+                        showToast(val === 0 ? 'Лимит кэша отключён' : `Лимит кэша установлен на ${val} ГБ`, 'info');
+                        if (res.details) onStorageInfo(res.details);
+                    } else {
+                        showToast(`Ошибка установки лимита кэша: ${(res && res.error) || 'неизвестная ошибка'}`, 'error');
+                    }
+                } catch (err) {
+                    showToast('Ошибка установки лимита кэша', 'error');
                 }
             }
         });
@@ -336,6 +339,7 @@ export function initSettings() {
     const inputYandexToken = document.getElementById('input-yandex-token');
     if (inputYandexToken) {
         inputYandexToken.addEventListener('change', (e) => {
+            if (!e.target.value) return;
             saveSetting('yandex_token', e.target.value, 'auth');
         });
     }
@@ -539,7 +543,7 @@ function renderThemePresets() {
                 <div class="theme-dot" style="background:${t.colors[1]}"></div>
                 <div class="theme-dot" style="background:${t.colors[2]}"></div>
             </div>
-            <span class="theme-card-name">${t.name}</span>
+            <span class="theme-card-name">${escapeHtml(t.name)}</span>
         `;
         card.addEventListener('click', () => {
             container.querySelectorAll('.theme-card').forEach(c => {
@@ -583,7 +587,7 @@ function renderFontCards(activeCat = 'system') {
         card.dataset.font = f.family;
         card.innerHTML = `
             <div class="font-preview-letters" style="font-family:${f.family}">Aa</div>
-            <span class="font-card-name">${f.name}</span>
+            <span class="font-card-name">${escapeHtml(f.name)}</span>
         `;
         card.addEventListener('click', () => {
             container.querySelectorAll('.font-card').forEach(c => c.classList.remove('active'));
@@ -871,8 +875,9 @@ export function applySettingsFromBackend(settings) {
 
     if (settings.auth) {
         const inputYandexToken = document.getElementById('input-yandex-token');
-        if (inputYandexToken && settings.auth.yandex_token !== undefined) {
-            inputYandexToken.value = settings.auth.yandex_token;
+        if (inputYandexToken) {
+            inputYandexToken.value = '';
+            inputYandexToken.placeholder = settings.auth.has_yandex_token ? 'Токен сохранён (введите новый, чтобы заменить)' : 'Введите yandex_token...';
         }
         const selectBrowserCookies = document.getElementById('select-browser-cookies');
         if (selectBrowserCookies && settings.auth.browser_cookies !== undefined) {
@@ -902,9 +907,8 @@ export function applySettingsFromBackend(settings) {
         if (inputOauthClientSecret) {
             inputOauthClientSecret.disabled = true;
             inputOauthClientSecret.title = 'В разработке';
-            if (settings.auth.oauth_client_secret !== undefined) {
-                inputOauthClientSecret.value = settings.auth.oauth_client_secret;
-            }
+            inputOauthClientSecret.value = '';
+            inputOauthClientSecret.placeholder = settings.auth.has_oauth_client_secret ? 'Секрет сохранён (введите новый, чтобы заменить)' : 'Client Secret...';
         }
         
         const btnYtmusicOauth = document.getElementById('btn-ytmusic-oauth');
@@ -1116,7 +1120,7 @@ function renderKeybindsList() {
 
         row.innerHTML = `
             <div>
-                <div class="setting-label">${kb.label}</div>
+                <div class="setting-label">${escapeHtml(kb.label)}</div>
             </div>
             <button class="filter-btn keybind-record-btn ${isListening ? 'active' : ''}" style="min-width: 140px; font-size: 13px;">
                 ${isListening ? 'Нажмите клавишу...' : currentKeyDisplay}
@@ -2976,6 +2980,40 @@ export function setupWorkshopPanel() {
     }
 }
 
+function showDeleteDuplicateModal() {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('modal-delete-duplicate');
+        const btnConfirm = document.getElementById('modal-ddup-confirm');
+        const btnCancel = document.getElementById('modal-ddup-cancel');
+        if (!modal || !btnConfirm || !btnCancel) { resolve(window.confirm('Удалить дубликат из медиатеки и с диска?')); return; }
+
+        modal.style.display = 'flex';
+        if (window.lucide) setTimeout(() => window.lucide.createIcons(), 10);
+        openModalFocusTrap(modal, { initialFocus: '#modal-ddup-cancel' });
+
+        const close = (result) => {
+            closeModalFocusTrap(modal);
+            modal.style.display = 'none';
+            btnConfirm.removeEventListener('click', onConfirm);
+            btnCancel.removeEventListener('click', onCancel);
+            modal.removeEventListener('click', onOverlay);
+            document.removeEventListener('keydown', onKeydown, true);
+            resolve(result);
+        };
+
+        const onConfirm = () => close(true);
+        const onCancel = () => close(false);
+        const onOverlay = (e) => { if (e.target === modal) close(false); };
+        // Escape cancels, like the other confirm modals in the app.
+        const onKeydown = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(false); } };
+
+        btnConfirm.addEventListener('click', onConfirm);
+        btnCancel.addEventListener('click', onCancel);
+        modal.addEventListener('click', onOverlay);
+        document.addEventListener('keydown', onKeydown, true);
+    });
+}
+
 function renderDuplicateGroups(groups, container) {
     if (!container) return;
     if (!groups || groups.length === 0) {
@@ -2996,7 +3034,7 @@ function renderDuplicateGroups(groups, container) {
                         <div style="font-weight:600; color:#fff;">${escapeHtml(track.title || 'Unknown')}</div>
                         <div style="color:var(--text-sec); font-size:11px;">${escapeHtml(track.artist || 'Unknown')} • ${(track.file_size_bytes / (1024*1024)).toFixed(2)} MB</div>
                     </div>
-                    <button class="btn-sm text-xs btn-delete-dup" data-id="${track.id}" style="padding:4px 8px; border-radius:6px; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.3); cursor:pointer;">Удалить</button>
+                    <button class="btn-sm text-xs btn-delete-dup" data-id="${escapeHtml(String(track.id))}" style="padding:4px 8px; border-radius:6px; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.3); cursor:pointer;">Удалить</button>
                 </div>
             `;
         });
@@ -3009,9 +3047,19 @@ function renderDuplicateGroups(groups, container) {
         groupEl.querySelectorAll('.btn-delete-dup').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const trackId = parseInt(e.target.dataset.id);
-                if (trackId && window.pywebview?.api?.delete_duplicate_track) {
-                    await window.pywebview.api.delete_duplicate_track(trackId, true);
-                    e.target.closest('div').remove();
+                if (!trackId || !window.pywebview?.api?.delete_duplicate_track) return;
+                const confirmed = await showDeleteDuplicateModal();
+                if (!confirmed) return;
+                try {
+                    const res = await window.pywebview.api.delete_duplicate_track(trackId, true);
+                    if (res && res.success === true) {
+                        e.target.closest('div').remove();
+                        showToast('Дубликат удалён', 'success');
+                    } else {
+                        showToast(`Не удалось удалить дубликат: ${(res && res.error) || 'неизвестная ошибка'}`, 'error');
+                    }
+                } catch (err) {
+                    showToast('Ошибка при удалении дубликата', 'error');
                 }
             });
         });

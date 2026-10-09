@@ -696,25 +696,53 @@ class DatabaseManager:
     def log_listening_history(self, track_id: int, duration_listened: float = 0, completed: bool = False) -> int:
         with self._write_lock:
             with self.conn:
-                cursor = self.conn.cursor()
-                if duration_listened <= 0:
-                    cursor.execute("SELECT duration FROM tracks WHERE id = ?", (track_id,))
-                    t_row = cursor.fetchone()
-                    if t_row and t_row[0] and float(t_row[0]) > 0:
-                        duration_listened = float(t_row[0])
-                    else:
-                        # Unknown length: record an honest 0 instead of a fabricated
-                        # three-minute listen that skewed total-time statistics.
-                        duration_listened = 0.0
-                cursor.execute(
-                    "INSERT INTO history (track_id, duration_listened, completed) VALUES (?, ?, ?)",
-                    (track_id, duration_listened, 1 if completed else 0),
+                return self._log_listening_locked(
+                    self.conn.cursor(), track_id, duration_listened, completed
                 )
-                cursor.execute(
-                    "UPDATE tracks SET play_count = play_count + 1, last_played = CURRENT_TIMESTAMP WHERE id = ?",
-                    (track_id,),
-                )
-                return cursor.lastrowid
+
+    def _log_listening_locked(self, cursor, track_id: int, duration_listened: float = 0, completed: bool = False) -> int:
+        """Body of log_listening_history for an already-open transaction.
+
+        The caller owns ``_write_lock`` and the ``with self.conn:`` block.
+        """
+        if duration_listened <= 0:
+            cursor.execute("SELECT duration FROM tracks WHERE id = ?", (track_id,))
+            t_row = cursor.fetchone()
+            if t_row and t_row[0] and float(t_row[0]) > 0:
+                duration_listened = float(t_row[0])
+            else:
+                # Unknown length: record an honest 0 instead of a fabricated
+                # three-minute listen that skewed total-time statistics.
+                duration_listened = 0.0
+        cursor.execute(
+            "INSERT INTO history (track_id, duration_listened, completed) VALUES (?, ?, ?)",
+            (track_id, duration_listened, 1 if completed else 0),
+        )
+        cursor.execute(
+            "UPDATE tracks SET play_count = play_count + 1, last_played = CURRENT_TIMESTAMP WHERE id = ?",
+            (track_id,),
+        )
+        return cursor.lastrowid
+
+    def record_listening_once(self, track_id: int, dedup_key: str) -> bool:
+        """DEPRECATED and unused - do not reintroduce.
+
+        It claimed ``listen_dedup:<dedup_key>`` as a row in `settings` to make
+        the history write idempotent. With the key being the *track* id that
+        made every track count as played exactly once for the lifetime of the
+        library (play_count, history and the Wrapped statistics froze after the
+        first play), and it grew `settings` by one row per track played, all of
+        them scanned by get_all_settings() at startup.
+
+        Playback deduplication belongs to the caller and stays process-local:
+        AppApi.maybe_log_history() keeps _history_logged_key under
+        _window_op_lock and resets it when the track changes or playback stops.
+        """
+        raise NotImplementedError(
+            "record_listening_once was removed: persistent per-track dedup "
+            "broke play counting. Use AppApi.maybe_log_history() / "
+            "log_listening_history()."
+        )
 
     def update_track_play(self, track_id: int) -> None:
         with self._write_lock:
@@ -724,6 +752,23 @@ class DatabaseManager:
                     "UPDATE tracks SET play_count = play_count + 1, last_played = CURRENT_TIMESTAMP WHERE id = ?",
                     (track_id,),
                 )
+
+    @staticmethod
+    def _like_pattern(query: str) -> str:
+        """Build a LIKE pattern whose wildcards are literal.
+
+        Without this the user owns the wildcards: "AC_DC" matched every
+        "AC/DC" row and "100%" matched the whole library. The backslash is the
+        escape character, so every query using this pattern must declare
+        ``ESCAPE '\\'``.
+        """
+        escaped = (
+            str(query if query is not None else "")
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        return f"%{escaped}%"
 
     def search_tracks(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
@@ -751,11 +796,13 @@ class DatabaseManager:
                         return [dict(row) for row in rows]
             except Exception:
                 pass  # malformed query / FTS unavailable at query time → LIKE fallback
-        like_query = f"%{query}%"
+        like_query = self._like_pattern(query)
         cursor.execute(
             """
             SELECT * FROM tracks 
-            WHERE title LIKE ? OR artist LIKE ? OR album LIKE ?
+            WHERE title LIKE ? ESCAPE '\\'
+               OR artist LIKE ? ESCAPE '\\'
+               OR album LIKE ? ESCAPE '\\'
             ORDER BY play_count DESC
             LIMIT ?
         """,
@@ -765,12 +812,12 @@ class DatabaseManager:
 
     def search_artists(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
-        like_query = f"%{query}%"
+        like_query = self._like_pattern(query)
         cursor.execute(
             """
             SELECT artist, COUNT(*) as track_count, SUM(play_count) as total_plays, SUM(play_count) as play_count, SUM(play_count) as plays
             FROM tracks
-            WHERE artist LIKE ?
+            WHERE artist LIKE ? ESCAPE '\\'
             GROUP BY artist
             ORDER BY total_plays DESC
             LIMIT ?
@@ -781,12 +828,13 @@ class DatabaseManager:
 
     def search_albums(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
-        like_query = f"%{query}%"
+        like_query = self._like_pattern(query)
         cursor.execute(
             """
             SELECT album as title, artist, cover_path, cover_url, COUNT(id) as track_count, MAX(year) as year, 'local' as source, 'album' as type
             FROM tracks
-            WHERE (album LIKE ? OR artist LIKE ?) AND album IS NOT NULL AND album != '' AND album != 'Unknown Album'
+            WHERE (album LIKE ? ESCAPE '\\' OR artist LIKE ? ESCAPE '\\')
+              AND album IS NOT NULL AND album != '' AND album != 'Unknown Album'
             GROUP BY LOWER(album), LOWER(artist)
             ORDER BY track_count DESC
             LIMIT ?
@@ -803,11 +851,11 @@ class DatabaseManager:
 
     def search_playlists(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         cursor = self.conn.cursor()
-        pattern = f"%{query.strip()}%"
+        pattern = self._like_pattern(query.strip())
         try:
-            cursor.execute("SELECT id, name, description, created_at, cover_url FROM playlists WHERE name LIKE ? ORDER BY name ASC LIMIT ?", (pattern, limit))
+            cursor.execute("SELECT id, name, description, created_at, cover_url FROM playlists WHERE name LIKE ? ESCAPE '\\' ORDER BY name ASC LIMIT ?", (pattern, limit))
         except Exception:
-            cursor.execute("SELECT id, name, description, created_at, cover_path as cover_url FROM playlists WHERE name LIKE ? ORDER BY name ASC LIMIT ?", (pattern, limit))
+            cursor.execute("SELECT id, name, description, created_at, cover_path as cover_url FROM playlists WHERE name LIKE ? ESCAPE '\\' ORDER BY name ASC LIMIT ?", (pattern, limit))
         rows = cursor.fetchall()
         return [
             {
@@ -1187,6 +1235,19 @@ class DatabaseManager:
         }
 
     def create_playlist(self, name: str, description: str = "") -> int:
+        """Return the id of the playlist called `name`, creating it if needed."""
+        playlist_id, _created = self.create_playlist_ex(name, description)
+        return playlist_id
+
+    def create_playlist_ex(self, name: str, description: str = "") -> tuple:
+        """create_playlist, but also reporting whether the row is new.
+
+        Returns ``(playlist_id, created)``. ``created`` is False when an
+        existing playlist of that name was reused. Callers that undo their own
+        partial work (playlist import) must roll back only a playlist they
+        created themselves - deleting a playlist the user already had would
+        take their tracks with it (ON DELETE CASCADE).
+        """
         with self._write_lock:
             with self.conn:
                 cursor = self.conn.cursor()
@@ -1198,10 +1259,10 @@ class DatabaseManager:
                 cursor.execute("SELECT id FROM playlists WHERE LOWER(name) = LOWER(?) LIMIT 1", (clean_name,))
                 row = cursor.fetchone()
                 if row:
-                    return row["id"]
+                    return row["id"], False
 
                 cursor.execute("INSERT INTO playlists (name, description) VALUES (?, ?)", (clean_name, description))
-                return cursor.lastrowid
+                return cursor.lastrowid, True
 
     def _cleanup_duplicate_empty_system_playlists(self, cursor=None) -> int:
         """Drop duplicate EMPTY system playlists ('Локальные'/'Локальные треки').
@@ -1364,13 +1425,21 @@ class DatabaseManager:
         """Persist many settings inside a single transaction.
 
         `items` is a sequence of (key, value, category) tuples; returns the
-        number of rows written. SettingsManager's write-behind batching uses
-        this so a burst of set() calls costs one COMMIT instead of one each.
+        number of rows written, and 0 on any failure (serialization included -
+        it used to run outside the try, so an unserializable value raised
+        straight out of the caller's flush). SettingsManager's write-behind
+        batching uses this so a burst of set() calls costs one COMMIT instead
+        of one each, and it keys its "were they written?" decision off the
+        returned count.
         """
-        rows = [
-            (key, self._serialize_setting(value), category)
-            for key, value, category in items
-        ]
+        try:
+            rows = [
+                (key, self._serialize_setting(value), category)
+                for key, value, category in items
+            ]
+        except Exception as e:
+            logger.error(f"set_settings_batch failed: {e}")
+            return 0
         if not rows:
             return 0
         with self._write_lock:
@@ -1634,15 +1703,32 @@ class DatabaseManager:
                 self.conn.execute(unique_index)
 
     def download_queue_add(self, track_id, source, source_id) -> bool:
-        """Insert a queue row. Returns False when the track already has a row (dedup)."""
+        """Ensure the track has a queue row. Returns True when one is now queued.
+
+        Verified against the unique index ux_download_queue_track: the row that
+        already exists is neither deleted nor reset by this call - a failed or
+        cancelled attempt used to leave the track permanently unqueueable,
+        because the INSERT raised IntegrityError and the caller took it as
+        "already queued" and moved on. The upsert re-arms exactly those two
+        terminal states and leaves every other status (pending / downloading /
+        completed) untouched, so a double click still cannot start a second
+        download of the same track. No new column: status and added_at are all
+        it needs.
+        """
         with self._write_lock:
             try:
                 with self.conn:
-                    self.conn.execute(
-                        'INSERT INTO download_queue (track_id, source, source_id) VALUES (?, ?, ?)',
+                    cursor = self.conn.cursor()
+                    cursor.execute(
+                        'INSERT INTO download_queue (track_id, source, source_id) VALUES (?, ?, ?) '
+                        "ON CONFLICT(track_id) DO UPDATE SET status = 'pending', added_at = CURRENT_TIMESTAMP "
+                        "WHERE download_queue.status IN ('failed', 'cancelled')",
                         (track_id, source, source_id),
                     )
-                return True
+                    # rowcount is 0 when the conflict was not re-armed (the
+                    # DO UPDATE ... WHERE did not match), i.e. an existing
+                    # non-terminal row was kept as-is.
+                    return cursor.rowcount > 0
             except Exception as e:
                 logger.debug(f'Download queue insert skipped for track {track_id}: {e}')
                 return False
@@ -1715,8 +1801,10 @@ class DatabaseManager:
             return
         try:
             existing.close()
-        except Exception:
-            pass
+        except Exception as e:
+            # A handle owned by this thread should always close cleanly; if it
+            # does not, the connection leaks and the error must be visible.
+            logger.warning("close_thread_connection: failed to close connection: %s", e)
         try:
             self._local.connection = None
         except Exception:
@@ -1724,13 +1812,40 @@ class DatabaseManager:
         with self._conns_lock:
             self._all_conns.discard(existing)
 
+    def _checkpoint_wal(self) -> None:
+        """Fold this connection's WAL back into the main database file.
+
+        Closing a WAL connection does NOT checkpoint it: the last writer's
+        frames stay in the -wal file, which is then discarded along with the
+        connection handle. On a database file that was already checkpointed by
+        SQLite's own cleanup this is a no-op; where it was not, the recent
+        writes are lost without a word. TRUNCATE also resets the -wal file so
+        the next writer starts from an empty log.
+
+        Runs on the calling thread's own connection (the thread-local model is
+        unchanged) and never raises: ":memory:" databases have no WAL, where
+        the pragma reports success without doing anything.
+        """
+        try:
+            self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except sqlite3.Error as e:
+            logger.warning("WAL checkpoint failed: %s", e)
+
     def close(self) -> None:
-        """Close all connections tracked by this database manager instance."""
+        """Close all connections tracked by this database manager instance.
+
+        A connection created on another thread cannot be used (let alone
+        closed) from here - sqlite3 raises ProgrammingError - so those handles
+        survive until their own thread ends. That used to be swallowed with a
+        bare ``except: pass``, hiding both the failure and the WAL writes the
+        checkpoint was supposed to preserve; the failure is now logged.
+        """
+        self._checkpoint_wal()
         self.close_thread_connection()
         with self._conns_lock:
             for conn in list(self._all_conns):
                 try:
                     conn.close()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("Failed to close a database connection: %s", e)
             self._all_conns.clear()

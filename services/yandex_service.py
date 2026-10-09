@@ -4,6 +4,7 @@ Search and stream audio from Yandex Music.
 """
 
 from typing import Callable, Optional
+import re
 import threading
 import logging
 import time
@@ -90,7 +91,7 @@ class YandexService(BaseMusicService):
         with self._client_lock:
             self._client = None
         with self._cache_lock:
-            keys_to_remove = [k for k in self._stream_cache if k.isdigit() or k.startswith("ya_")]
+            keys_to_remove = [k for k in self._stream_cache if k.startswith("yandex:")]
             for k in keys_to_remove:
                 self._stream_cache.pop(k, None)
             search_keys_to_remove = [k for k in self._search_cache if k.startswith("ya_")]
@@ -174,9 +175,9 @@ class YandexService(BaseMusicService):
                     error_callback('Не удалось извлечь ID трека из URL')
                 return
 
-        raw_id = raw_id.split(":")[0].strip()
+        raw_id = re.sub(r'[^a-zA-Z0-9_-]', '_', raw_id.split(":")[0].strip())
 
-        info = self.get_from_cache(raw_id)
+        info = self.get_from_cache(f"yandex:{raw_id}")
         if info:
             if callback:
                 callback(info.get("stream_url"), info)
@@ -228,7 +229,7 @@ class YandexService(BaseMusicService):
                     "bitrate": best_info.bitrate_in_kbps
                 }
 
-                self.set_to_cache(raw_id, metadata)
+                self.set_to_cache(f"yandex:{raw_id}", metadata)
                 if callback:
                     callback(stream_url, metadata)
             except Exception as e:

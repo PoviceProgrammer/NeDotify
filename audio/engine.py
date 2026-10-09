@@ -9,6 +9,7 @@ import time
 import logging
 from typing import Optional, Callable
 from audio.queue import PlaybackQueue
+from utils.url_safety import is_safe_media_url
 
 logger = logging.getLogger(__name__)
 
@@ -69,27 +70,25 @@ class AudioEngine:
         return track
 
     def toggle_shuffle(self) -> bool:
-        self.queue.shuffle = not self.queue.shuffle
-        return self.queue.shuffle
+        return self.queue.toggle_shuffle()
 
     def toggle_repeat(self) -> str:
-        modes = ["off", "all", "one"]
-        current_idx = modes.index(self.queue.repeat)
-        self.queue.repeat = modes[(current_idx + 1) % len(modes)]
-        return self.queue.repeat
+        return self.queue.toggle_repeat()
 
     def _notify_track_changed(self):
-        if self._on_track_changed and self.queue.current_track:
-            track = self.queue.current_track.copy()
+        current = self.queue.current_track
+        if self._on_track_changed and current:
+            track = current.copy()
             if not track.get("stream_url"):
                 import urllib.parse as urllib_parse
                 fp = track.get("file_path")
                 if not fp and track.get("source") == "local":
                     fp = track.get("url")
+                fp = str(fp) if fp else fp
                 if fp and (fp.startswith("http://") or fp.startswith("https://")):
                     # Remote stream URL: serve through proxy (SSRF-guarded), never expose raw URL
                     if self.proxy and getattr(self.proxy, "port", None):
-                        src = track.get("source") or "youtube"
+                        src = urllib_parse.quote(str(track.get("source") or "youtube"), safe="")
                         src_id = urllib_parse.quote(str(track.get("source_id") or ""))
                         title = urllib_parse.quote(str(track.get("title") or ""))
                         artist = urllib_parse.quote(str(track.get("artist") or ""))
@@ -99,7 +98,7 @@ class AudioEngine:
                                          f"&source_id={src_id}&title={title}&artist={artist}"
                                          f"{self.proxy.auth_query()}")
                         else:
-                            t_id = track.get("id") or 0
+                            t_id = urllib_parse.quote(str(track.get("id") or 0), safe="")
                             proxy_url = (f"http://127.0.0.1:{self.proxy.port}/api/stream?track_id={t_id}&source={src}"
                                          f"&source_id={src_id}&title={title}&artist={artist}"
                                          f"{self.proxy.auth_query()}")
@@ -174,6 +173,8 @@ class AudioEngine:
             # killed the whole cascade before the fallbacks could run. A row id is
             # not a video id either, so only a real string qualifies here.
             direct_id = source_id if isinstance(source_id, str) else ""
+            if direct_id.startswith("http") and not is_safe_media_url(direct_id):
+                direct_id = ""
             if len(direct_id) > 3 and " " not in direct_id:
                 event = threading.Event()
 
@@ -181,9 +182,12 @@ class AudioEngine:
                     nonlocal url
                     try:
                         url = args[0] if args else None
-                        if len(args) > 1 and args[1] and track.get("id"):
+                        if len(args) > 1 and isinstance(args[1], dict) and args[1] and track.get("id"):
                             info = args[1]
-                            dur = info.get("duration", 0)
+                            try:
+                                dur = float(info.get("duration") or 0)
+                            except (TypeError, ValueError):
+                                dur = 0
                             if dur > 0 and track.get("duration", 0) <= 0:
                                 try:
                                     self.app_core.db.update_track(track["id"], duration=dur)
@@ -411,9 +415,12 @@ class AudioEngine:
                 nonlocal url
                 try:
                     url = args[0] if args else None
-                    if len(args) > 1 and args[1] and track.get("id"):
+                    if len(args) > 1 and isinstance(args[1], dict) and args[1] and track.get("id"):
                         info = args[1]
-                        dur = int(info.get("duration", 0) / 1000) if info.get("duration") else 0
+                        try:
+                            dur = int(float(info.get("duration") or 0) / 1000)
+                        except (TypeError, ValueError):
+                            dur = 0
                         if dur > 0 and track.get("duration", 0) <= 0:
                             try:
                                 self.app_core.db.update_track(track["id"], duration=dur)
@@ -430,7 +437,11 @@ class AudioEngine:
                     event.set()
 
             try:
-                self.app_core.soundcloud.get_stream_url(sc_target, cb, err_cb)
+                if sc_target.startswith("http") and not is_safe_media_url(sc_target):
+                    logger.warning("Rejected unsafe SoundCloud URL in resolve")
+                    event.set()
+                else:
+                    self.app_core.soundcloud.get_stream_url(sc_target, cb, err_cb)
             except Exception:
                 event.set()
             event.wait(timeout=15)

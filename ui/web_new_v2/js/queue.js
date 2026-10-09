@@ -4,6 +4,7 @@ import { getCurrentTrack, playTrack, incrementQueueVersion } from './player.js';
 let isQueueVisible = false;
 let draggedItemIndex = null;
 let currentQueue = [];
+let queueLoadGen = 0;
 
 export function getQueueTracks() { return currentQueue; }
 function syncQueueToWindow() { window.currentQueue = currentQueue; }
@@ -73,9 +74,11 @@ export function initQueue() {
 }
 
 async function loadQueue() {
+    const gen = ++queueLoadGen;
     await window.awaitBridge();
     if (!window.pywebview?.api?.get_queue) return;
     const q = await window.pywebview.api.get_queue();
+    if (gen !== queueLoadGen || !q) return;
     currentQueue = q.tracks || [];
     syncQueueToWindow();
     renderQueue(currentQueue, q.current_index);
@@ -192,22 +195,28 @@ function renderQueue(tracks, currentIndex) {
                     showToast('Нельзя удалить текущий трек', 'warning');
                     return;
                 }
-                if (window.pywebview?.api?.remove_from_queue) {
-                    try {
-                        const res = await window.pywebview.api.remove_from_queue(index);
-                        if (res && res.success === false) {
-                            showToast(res.error || 'Не удалось удалить трек', 'error');
+                if (removeBtn.disabled) return;
+                removeBtn.disabled = true;
+                try {
+                    if (window.pywebview?.api?.remove_from_queue) {
+                        try {
+                            const res = await window.pywebview.api.remove_from_queue(index);
+                            if (res && res.success === false) {
+                                showToast(res.error || 'Не удалось удалить трек', 'error');
+                                return;
+                            }
+                        } catch(err) {
+                            showToast('Ошибка удаления из очереди', 'error');
                             return;
                         }
-                    } catch(err) {
-                        showToast('Ошибка удаления из очереди', 'error');
-                        return;
+                    } else {
+                        currentQueue.splice(index, 1);
+                        syncQueueToWindow();
                     }
-                } else {
-                    currentQueue.splice(index, 1);
-                    syncQueueToWindow();
+                    await loadQueue();
+                } finally {
+                    removeBtn.disabled = false;
                 }
-                await loadQueue();
             });
             removeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
         }
@@ -272,8 +281,13 @@ function renderQueue(tracks, currentIndex) {
                 currentQueue.splice(insertIndex, 0, movedItem);
                 
                 if (window.pywebview?.api?.reorder_queue) {
-                    await window.pywebview.api.reorder_queue(draggedItemIndex, insertIndex);
-                    loadQueue();
+                    try {
+                        await window.pywebview.api.reorder_queue(draggedItemIndex, insertIndex);
+                    } catch(err) {
+                        console.error('reorder_queue failed:', err);
+                    } finally {
+                        await loadQueue();
+                    }
                 }
             }
         });

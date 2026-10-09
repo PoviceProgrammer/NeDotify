@@ -95,13 +95,15 @@ class WatchdogService:
         self.observer.start()
 
     def stop(self):
-        self.handler.stop()
-        self.observer.stop()
-        self.observer.join()
+        if self.handler:
+            self.handler.stop()
+        if self.observer:
+            self.observer.stop()
+            self.observer.join()
 
     def _sync_folders(self):
         folders = self._core.db.get_scan_folders()
-        db_paths = set(f for f in folders if f.get('auto_scan'))
+        db_paths = {f['folder_path'] for f in folders if f.get('auto_scan')}
         for path in db_paths:
             if path not in self._watched_paths:
                 if not os.path.isdir(path):

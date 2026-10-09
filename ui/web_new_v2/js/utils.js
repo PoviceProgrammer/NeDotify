@@ -26,6 +26,29 @@ export function escapeHtml(str) {
 
 export const DEFAULT_COVER_DATA_URI = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%2318181b'/%3E%3Cpath d='M40 60V30l25-5v35' stroke='%2371717a' stroke-width='4' fill='none'/%3E%3Ccircle cx='35' cy='60' r='8' fill='%2371717a'/%3E%3Ccircle cx='60' cy='55' r='8' fill='%2371717a'/%3E%3C/svg%3E";
 
+/**
+ * Validate a cover URL for use inside a CSS `url('...')`.
+ *
+ * escapeHtml() cannot make a value safe for the CSS grammar: it leaves `'`
+ * (as `&#039;`, which the browser decodes back before parsing CSS) and the CSS
+ * metacharacters `)`, `;` and `\`. So the scheme is checked first and only an
+ * https:/data: URL is passed through; the caller still escapeHtml()s the result
+ * for the surrounding HTML attribute.
+ *
+ * @returns {string} the URL, or '' when it must not be used.
+ */
+export function safeCssImageUrl(rawUrl) {
+    if (!rawUrl) return '';
+    try {
+        const u = new URL(String(rawUrl));
+        if (u.protocol !== 'https:' && u.protocol !== 'data:') return '';
+        // Strip characters that would end the CSS url() token early.
+        return u.href.replace(/['"()\\;]/g, '');
+    } catch (e) {
+        return '';
+    }
+}
+
 export const FALLBACK_GRADIENTS = [
     'linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)', // Blossom / Rose
     'linear-gradient(135deg, #fb923c 0%, #f43f5e 100%)', // Sunset Amber to Rose
@@ -517,6 +540,16 @@ document.addEventListener('error', (e) => {
         return;
     }
     handleImageError(target, target.dataset.coverUrl, target.dataset.sourceId || '', target.dataset.source || '');
+}, true);
+
+// 'load' also does not bubble, so it needs the same capture-phase delegation.
+// It replaces inline onload/onerror attributes, which `script-src 'self'`
+// (no 'unsafe-inline') silently blocks: #mp-cover ships with display:none and
+// an inline onload that could never run.
+document.addEventListener('load', (e) => {
+    const target = e.target;
+    if (!target || target.tagName !== 'IMG') return;
+    if (target.dataset.showOnLoad !== undefined) target.style.display = 'block';
 }, true);
 
 // YouTube serves a gray "no thumbnail" placeholder WITH HTTP 200 for
@@ -1055,10 +1088,13 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
 
     const coverUrl = getCoverUrl(track);
     const isFav = !!track.is_favorite;
+    // Validated separately: inside url('...') the HTML escaping is not the
+    // grammar that matters.
+    const coverBgUrl = safeCssImageUrl(coverUrl);
 
     menu.innerHTML = `
         <div class="rich-menu-header">
-            ${coverUrl ? `<div class="rich-menu-header-bg" style="background-image: url('${escapeHtml(coverUrl)}')"></div>` : ''}
+            ${coverBgUrl ? `<div class="rich-menu-header-bg" style="background-image: url('${escapeHtml(coverBgUrl)}')"></div>` : ''}
             <img class="rich-menu-cover" src="${escapeHtml(coverUrl || DEFAULT_COVER_DATA_URI)}" onerror="this.onerror=null;this.src='${DEFAULT_COVER_DATA_URI}';">
             <div class="rich-menu-title-col">
                 <div class="rich-menu-title-row">
@@ -1371,7 +1407,9 @@ export function openEditTagsModal(track) {
                     if (res && res.success && res.path) {
                         if (coverPathInput) coverPathInput.value = res.path;
                         const cleanPath = res.path.replace(/\\/g, '/');
-                        if (coverImg) coverImg.src = `file:///${encodeURI(cleanPath.replace(/^\//, ''))}`;
+                        const segs = cleanPath.replace(/^\//, '').split('/');
+                        const encoded = segs.map((s, i) => (i === 0 && /^[a-zA-Z]:$/.test(s)) ? s : encodeURIComponent(s));
+                        if (coverImg) coverImg.src = `file:///${encoded.join('/')}`;
                     }
                 } catch(e) {
                     console.error('Error selecting cover image:', e);

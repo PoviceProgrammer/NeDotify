@@ -5,6 +5,7 @@ Centralized settings with default values, database storage, and convenient gette
 
 from typing import Any, Dict, Optional
 import atexit
+import copy
 import logging
 import platform
 import os
@@ -306,7 +307,12 @@ class SettingsManager:
                     elif key in stored_all:
                         self._cache[category][key] = stored_all[key]
                     else:
-                        self._cache[category][key] = default_value
+                        # deepcopy, not the object itself: DEFAULT_SETTINGS is
+                        # module-global, so a mutable default (scan_folders,
+                        # last_queue, equalizer bands) handed out by reference
+                        # would be mutated in place by whoever holds it - a
+                        # "reset all" would then reset nothing at all.
+                        self._cache[category][key] = copy.deepcopy(default_value)
 
             for full_key, value in stored_all.items():
                 if not '.' in full_key:
@@ -401,8 +407,9 @@ class SettingsManager:
         immediately before tearing the database down.
 
         Returns True when the pending set was empty or was written in full;
-        False means some keys are still pending (the write failed, and the
-        keys were put back for the next flush).
+        False means some keys are still pending (the write failed or wrote
+        fewer keys than it was given, and the keys were put back for the next
+        flush). A partially failed write is never reported as success.
         """
         try:
             self.flush()
@@ -432,21 +439,52 @@ class SettingsManager:
                     for cat, k in pending
                 ]
 
+            written = 0
+            error: Any = None
             try:
-                self._write_batch(payload)
+                written = self._write_batch(payload)
             except Exception as e:
+                error = e
+
+            # A short batch is a failure, not a success. The batch write is
+            # all-or-nothing inside one transaction, so the keys are restored
+            # as a group: re-writing a key that did land is harmless
+            # (INSERT OR REPLACE) and beats dropping the ones that did not.
+            if written < len(payload):
                 with self._lock:
                     self._dirty.update(pending)
-                logger.error(f"Settings flush failed, {len(pending)} keys still pending: {e}")
+                if error is not None:
+                    logger.error(
+                        f"Settings flush failed, {len(pending)} keys still pending: {error}"
+                    )
+                else:
+                    logger.error(
+                        "Settings flush wrote %d of %d keys; %d keys still pending",
+                        written, len(payload), len(pending),
+                    )
 
-    def _write_batch(self, payload) -> None:
-        """Write a batch of (full_key, value, category) rows in one transaction."""
+    def _write_batch(self, payload) -> int:
+        """Write a batch of (full_key, value, category) rows in one transaction.
+
+        Returns the number of keys the database accepted, so flush() can tell a
+        complete write from a partial one. A batch writer that predates the
+        count (older shim, returns None) is assumed to have written everything:
+        treating "unknown" as "failed" would re-queue every key forever.
+        """
         batch_writer = getattr(self.db, "set_settings_batch", None)
         if callable(batch_writer):
-            batch_writer(payload)
-            return
+            result = batch_writer(payload)
+            if isinstance(result, int) and not isinstance(result, bool):
+                return result
+            return len(payload)
+        written = 0
         for full_key, value, category in payload:
-            self.db.set_setting(full_key, value, category)
+            try:
+                self.db.set_setting(full_key, value, category)
+                written += 1
+            except Exception as e:
+                logger.error(f"Settings write failed for {full_key}: {e}")
+        return written
 
     def _wake_writer(self) -> None:
         """Start the single daemon writer thread if needed, then wake it."""
@@ -481,7 +519,10 @@ class SettingsManager:
         """Reset a category to defaults."""
         if category in DEFAULT_SETTINGS:
             for key, value in DEFAULT_SETTINGS[category].items():
-                self.set(category, key, value)
+                # deepcopy for the same reason as _load_all: set() caches the
+                # value, and a shared list would let the cache (and every later
+                # reader) mutate the defaults themselves.
+                self.set(category, key, copy.deepcopy(value))
 
     def reset_all(self):
         """Reset all settings to defaults."""
@@ -498,7 +539,7 @@ class SettingsManager:
 
     @property
     def accent_color(self) -> str:
-        return self.get("theme", "accent_color", "#6366f1")
+        return self.get("theme", "accent_color", "#a855f7")
     @property
     def volume(self) -> int:
         return self.get("audio", "volume", 70)
@@ -516,7 +557,9 @@ class SettingsManager:
 
     @property
     def gapless(self) -> bool:
-        return self.get("audio", "gapless_playback", True)
+        # False, not True: DEFAULT_SETTINGS["audio"]["gapless_playback"] is
+        # False, so a True literal here silently disagreed with a reset.
+        return self.get("audio", "gapless_playback", False)
 
     @property
     def overlay_mode(self) -> str:

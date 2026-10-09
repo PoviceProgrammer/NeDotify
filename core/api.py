@@ -232,6 +232,39 @@ def _as_float(value):
 _POSITIONAL_MB_THRESHOLD = 64.0
 
 
+# Secrets never travel back to JS: the bridge answers with "" and a has_* flag.
+_SECRET_SETTING_KEYS = {"auth": ("yandex_token", "oauth_client_secret")}
+
+
+def _mask_secrets(category: str, data: dict) -> dict:
+    """Replace stored secrets with "" plus has_<key> booleans for the bridge."""
+    secret_keys = _SECRET_SETTING_KEYS.get(category)
+    if not secret_keys or not isinstance(data, dict):
+        return data
+    masked = dict(data)
+    for key in secret_keys:
+        if key in masked:
+            masked[f"has_{key}"] = bool(masked[key])
+            masked[key] = ""
+    return masked
+
+
+# Settings the bridge refuses to write: enabling plugins runs third-party code.
+_BRIDGE_READONLY_SETTINGS = {("general", "plugins_enabled")}
+
+
+def _bridge_write_error(category: str, key: str, value):
+    """Error message when a bridge write must be refused, else None."""
+    if (category, key) in _BRIDGE_READONLY_SETTINGS:
+        return f"{category}.{key} cannot be changed from the UI"
+    return None
+
+
+def _is_empty_secret_write(category: str, key: str, value) -> bool:
+    """A blank secret from the UI (masked read echoed back) must not wipe the stored one."""
+    return key in _SECRET_SETTING_KEYS.get(category, ()) and not value
+
+
 def _normalize_cache_quota(quota_gb=None, cache_size_mb=None, cache_quota_gb=None, **kwargs):
     """Fold the accepted quota spellings into one (gigabytes, megabytes) pair.
 
@@ -837,7 +870,7 @@ class AppApi:
         # _emit before the try below, so the event was silently dropped and the
         # caller saw no error at all.
         try:
-            payload_json = json.dumps(data or {})
+            payload_json = json.dumps(data if data is not None else {})
             js_code = (
                 f"if (window.onPythonEvent) {{ window.onPythonEvent("
                 f"{json.dumps(event_name)}, {payload_json}); }}"
@@ -909,7 +942,8 @@ class AppApi:
         self._enrich_track_lufs(track_copy)
         # A new active track starts a fresh history session: the next real
         # playback start is allowed to log exactly one history entry.
-        self._history_logged_key = None
+        with self._window_op_lock:
+            self._history_logged_key = None
         # Proxy cloud stream URL if the track already has a resolvable stream/file.
         # Tracks whose stream is still being resolved keep an empty stream_url so the
         # frontend can show a loading state instead of hanging on the proxy.
@@ -973,9 +1007,10 @@ class AppApi:
             key = track.get("id") or track.get("source_id")
             if key is None:
                 key = f"{track.get('artist', '')}::{track.get('title', '')}"
-            if not key or getattr(self, "_history_logged_key", None) == key:
-                return
-            self._history_logged_key = key
+            with self._window_op_lock:
+                if not key or getattr(self, "_history_logged_key", None) == key:
+                    return
+                self._history_logged_key = key
             t_id = track.get("id")
             if not t_id:
                 # A track played straight from search has no local row yet, so
@@ -992,6 +1027,12 @@ class AppApi:
                 if t_id:
                     track["id"] = t_id
             if t_id:
+                # The _history_logged_key check above, now under the lock, is the
+                # whole dedup: it covers concurrent report_state() calls and is
+                # reset when the track changes or playback stops. It must stay
+                # process-local -- a persistent claim keyed by track id would
+                # count each track only once for the lifetime of the library and
+                # grow the settings table by a row per play.
                 try:
                     self._core.db.add_to_history(int(t_id))
                 except (ValueError, TypeError):
@@ -1009,7 +1050,8 @@ class AppApi:
         elif state == "stopped":
             # A manual stop ends the playback session: replaying the same track
             # afterwards counts as a new play.
-            self._history_logged_key = None
+            with self._window_op_lock:
+                self._history_logged_key = None
         self._emit("state_changed", {"state": state, "elapsed_ms": elapsed_ms})
         if getattr(self, "_tray", None):
             self._tray.update_state(is_playing=(state == "playing"))
@@ -1460,7 +1502,11 @@ class AppApi:
         try:
             if "." in key:
                 cat, k = key.split(".", 1)
-                return self._core.settings.get(cat, k, default)
+                val = self._core.settings.get(cat, k, default)
+                # Secrets leave the backend only as a has_* flag, never as a value.
+                if k in _SECRET_SETTING_KEYS.get(cat, ()):
+                    return "" if val else default
+                return val
             # Bare keys are ambiguous (they used to silently hit the 'zapret'
             # category); refuse them instead of returning a surprise value.
             logger.warning("get_setting: bare key %r rejected, pass 'category.key'", key)
@@ -1479,10 +1525,20 @@ class AppApi:
                     cat, k = full_key.split(".", 1)
                 else:
                     cat, k = "zapret", full_key
+                err = _bridge_write_error(cat, k, val)
+                if err:
+                    return {"success": False, "error": err}
+                if _is_empty_secret_write(cat, k, val):
+                    return {"success": True}
                 self._core.settings.set(cat, k, val)
                 self._emit("setting_changed", {"category": cat, "key": k, "value": val})
                 return {"success": True}
             else:
+                err = _bridge_write_error(section, key, value)
+                if err:
+                    return {"success": False, "error": err}
+                if _is_empty_secret_write(section, key, value):
+                    return {"success": True}
                 self._core.settings.set(section, key, value)
                 self._emit("setting_changed", {"category": section, "key": key, "value": value})
                 return {"success": True}
@@ -1941,6 +1997,7 @@ class AppApi:
                     self._emit("download_failed", {"track_id": None, "error": str(e)})
                 except Exception:
                     pass
+                self._core.downloader._decrement_batch_total_for_dedup()
                 return False
 
         if not source_id:
@@ -1949,6 +2006,7 @@ class AppApi:
                 self._emit("download_failed", {"track_id": track_id, "error": "missing source_id"})
             except Exception:
                 pass
+            self._core.downloader._decrement_batch_total_for_dedup()
             return False
 
         try:
@@ -1959,9 +2017,11 @@ class AppApi:
                 self._emit("download_failed", {"track_id": track_id, "error": str(e)})
             except Exception:
                 pass
+            self._core.downloader._decrement_batch_total_for_dedup()
             return False
         if not queued:
-            # Duplicate or rejected by the queue manager.
+            # Duplicate or rejected by the queue manager. queue_download has
+            # already shrunk the batch denominator for this case.
             return False
         return True
 
@@ -1973,6 +2033,7 @@ class AppApi:
             return {"success": False, "error": "Некорректная или небезопасная ссылка"}
 
         playlist_id = None
+        created = False
         try:
             importer = getattr(self._core, "playlist_importer", None)
             if importer is None:
@@ -1985,7 +2046,11 @@ class AppApi:
 
             resolved_name = str(resolved.get("name") or "").strip()
             playlist_name = str(name or "").strip() or resolved_name or f"Imported Playlist ({int(time.time())})"
-            playlist_id = self._core.db.create_playlist(playlist_name, f"Imported from {url}")
+            # created is False when an existing playlist of that name was reused,
+            # so the rollback below can never delete a playlist the user already had.
+            playlist_id, created = self._core.db.create_playlist_ex(
+                playlist_name, f"Imported from {url}"
+            )
 
             added_count = 0
             for track in tracks:
@@ -2004,7 +2069,9 @@ class AppApi:
                 "imported_count": added_count,
             }
         except Exception as exc:
-            if playlist_id is not None:
+            # Roll back only a playlist this import created; a pre-existing one
+            # with the same name must never be deleted.
+            if playlist_id is not None and created:
                 try:
                     self._core.db.delete_playlist(playlist_id)
                 except Exception:
@@ -2031,7 +2098,22 @@ class AppApi:
             if not os.path.exists(music_dir):
                 music_dir = os.path.expanduser("~")
 
-            out_file = target_path or os.path.join(music_dir, f"{safe_name}.m3u8")
+            out_file = os.path.join(music_dir, f"{safe_name}.m3u8")
+            if target_path:
+                # Only playlist extensions, and only inside the user's home: the
+                # bridge must not be a way to write arbitrary files on disk.
+                target_abs = os.path.realpath(os.path.expanduser(str(target_path)))
+                home_abs = os.path.realpath(os.path.expanduser("~"))
+                if os.path.splitext(target_abs)[1].lower() not in (".m3u8", ".m3u"):
+                    return {"success": False, "error": "Допустимы только файлы .m3u8 и .m3u"}
+                try:
+                    inside_home = os.path.commonpath([target_abs, home_abs]) == home_abs
+                except ValueError:
+                    # Different drives (Windows): no shared prefix at all.
+                    inside_home = False
+                if not inside_home or not os.path.isdir(os.path.dirname(target_abs)):
+                    return {"success": False, "error": "Путь экспорта должен быть внутри домашнего каталога"}
+                out_file = target_abs
 
             m3u_lines = ["#EXTM3U", f"#PLAYLIST:{pl_name}"]
             exported_count = 0
@@ -2103,7 +2185,7 @@ class AppApi:
         track_id = track_data.get("id")
         if not track_id:
             track_id = self._core.db.add_track(
-                title=track_data.get("title", "Unknown"),
+                title=track_data.get("title") or "Unknown",
                 artist=track_data.get("artist", "Unknown Artist"),
                 source=track_data.get("source", "local"),
                 source_id=track_data.get("source_id"),
@@ -2199,7 +2281,7 @@ class AppApi:
         track_id = track_data.get("id")
         if not track_id:
             track_id = self._core.db.add_track(
-                title=track_data.get("title", "Unknown"),
+                title=track_data.get("title") or "Unknown",
                 artist=track_data.get("artist", "Unknown Artist"),
                 source=track_data.get("source", "local"),
                 source_id=track_data.get("source_id"),
@@ -2332,28 +2414,27 @@ class AppApi:
     def get_settings(self, category: str = None):
         """Get settings dict."""
         if category:
-            return self._core.settings.get_category(category)
-        
-        if hasattr(self._core.settings, 'get_all'):
-            return self._core.settings.get_all()
-            
-        if hasattr(self._core.settings, '_settings'):
-            import copy
-            return copy.deepcopy(self._core.settings._settings)
-            
+            return _mask_secrets(category, self._core.settings.get_category(category))
+
+        # SettingsManager exposes get_category() only - there is no get_all(),
+        # so the whole tree is assembled category by category.
         categories = ['app', 'appearance', 'player', 'lyrics', 'system', 'general', 'audio', 'overlay', 'efficiency', 'optimization', 'hotkeys', 'storage', 'player_appearance', 'personalization', 'interface', 'ui', 'theme', 'equalizer', 'auth', 'services', 'session', 'zapret']
         res = {}
         for c in categories:
             try:
                 cat_data = self._core.settings.get_category(c)
                 if cat_data:
-                    res[c] = cat_data
+                    res[c] = _mask_secrets(c, cat_data)
             except Exception:
                 logger.debug("settings category %s unavailable", c, exc_info=True)
         return res
 
     def save_setting(self, key: str, value, category: str = "app"):
         """Save a setting value."""
+        if _bridge_write_error(category, key, value):
+            return False
+        if _is_empty_secret_write(category, key, value):
+            return True
         self._core.settings.set(category, key, value)
         if key == "autostart" or key == "general.autostart" or (category == "general" and key == "autostart"):
             try:
@@ -2364,10 +2445,10 @@ class AppApi:
         return True
 
     def get_all_settings(self):
-        return self._core.settings.get_all()
+        return self.get_settings()
 
     def get_settings_by_category(self, category: str):
-        return self._core.settings.get_category(category)
+        return _mask_secrets(category, self._core.settings.get_category(category))
 
     def update_setting(self, category: str, key: str, value):
         return self.save_setting(key, value, category)
@@ -3163,10 +3244,25 @@ class AppApi:
     def delete_duplicate_track(self, track_id: int, delete_file: bool = False):
         """Delete duplicate track entry from database and optionally remove local file."""
         try:
+            track = self._core.db.get_track(track_id)
+            file_path = (track or {}).get("file_path")
             res = self._core.audio_fingerprint.delete_duplicate_track(self._core.db, track_id, delete_file=delete_file)
-            if res:
+            if not res:
+                return {"success": False, "error": "Не удалось удалить дубликат"}
+            if delete_file and file_path and os.path.exists(file_path):
+                # The database row is already gone at this point (the service
+                # removes it even when os.remove fails), so the library must be
+                # refreshed either way -- otherwise the UI keeps showing a row the
+                # backend no longer has. The caller still gets an honest failure:
+                # the file is still on disk.
                 self._emit("library_updated", True)
-            return {"success": res}
+                return {
+                    "success": False,
+                    "error": "Запись удалена, но файл остался на диске (возможно, он занят)",
+                    "partial": True,
+                }
+            self._emit("library_updated", True)
+            return {"success": True}
         except Exception as e:
             logger.error(f"Error deleting duplicate track: {e}")
             return {"success": False, "error": str(e)}
@@ -3302,11 +3398,14 @@ class AppApi:
         write a key the reader ignores. See _normalize_cache_quota() for the
         full precedence table.
 
-        A quota of 0 is rejected instead of being handed to
-        CacheManager.purge_stream_cache(quota_bytes=0): the cache manager
-        treats 0 as "unlimited" and skips purging, while any other manager
-        implementation reads it as "delete everything". Refusing keeps a
-        mis-sent 0 from silently wiping the stream cache.
+        A quota of 0 means "no limit": it is stored as cache_quota_gb=0 and
+        never handed to CacheManager.purge_stream_cache(quota_bytes=0), which
+        one manager reads as "skip purging" and another as "delete everything".
+        A negative quota is still rejected.
+
+        A value in (0, 0.5) GB rounds to 0, and silently storing that 0 would
+        turn a finite quota into "no limit". Such a value is therefore raised to
+        the 1 GB minimum instead (documented choice: minimum, not "unlimited").
         """
         try:
             val_gb, size_mb = _normalize_cache_quota(
@@ -3317,16 +3416,33 @@ class AppApi:
             )
             if val_gb is None:
                 return {"success": False, "error": "quota not specified"}
-            if val_gb <= 0:
-                return {"success": False, "error": "quota must be greater than 0 GB"}
-            quota_val = max(0, int(round(val_gb)))
-            size_mb_val = int(round(size_mb))
+            # _normalize_cache_quota() clamps negatives to 0, so the sign has to be
+            # read from the raw arguments: a negative quota is a caller bug, not a
+            # request for "no limit".
+            for raw in (quota_gb, cache_quota_gb, cache_size_mb, *kwargs.values()):
+                num = _as_float(raw)
+                if num is not None and num < 0:
+                    return {"success": False, "error": "quota must not be negative"}
+            # 0 means "no limit": stored as 0 and never handed to purge_stream_cache.
+            # 0 < x < 0.5 rounds to 0 GB, so it is raised to the 1 GB minimum
+            # instead of silently turning into "no limit".
+            if val_gb == 0:
+                quota_val, size_mb_val = 0, 0
+            else:
+                if val_gb < 0.5:
+                    val_gb, size_mb = 1.0, 1024.0
+                quota_val = max(1, int(round(val_gb)))
+                size_mb_val = int(round(size_mb))
             if hasattr(self._core, "settings") and self._core.settings:
                 self._core.settings.set("storage", "cache_quota_gb", quota_val)
                 self._core.settings.set("storage", "cache_size_mb", size_mb_val)
 
             freed = 0
-            if hasattr(self._core, "cache") and self._core.cache:
+            if quota_val == 0:
+                details = {"quota_gb": 0, "used_bytes": 0}
+                if hasattr(self._core, "cache") and self._core.cache:
+                    details = self._core.cache.get_storage_details()
+            elif hasattr(self._core, "cache") and self._core.cache:
                 freed = self._core.cache.purge_stream_cache(quota_bytes=quota_val * 1024 * 1024 * 1024)
                 details = self._core.cache.get_storage_details()
             else:

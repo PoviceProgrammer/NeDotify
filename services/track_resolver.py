@@ -76,6 +76,10 @@ _resolver_pool = _TrackResolverExecutor(max_workers=8, thread_name_prefix="Track
 atexit.register(_resolver_pool.shutdown, wait=False, cancel_futures=True)
 
 
+#: Minimum title similarity (0..1) for a provider's top hit to count as the wanted track.
+TRACK_MATCH_MIN_SCORE = 0.6
+
+
 class TrackResolver:
     """Helper class to resolve track metadata (title, artist) into playable UI track dictionaries."""
 
@@ -88,10 +92,11 @@ class TrackResolver:
     BATCH_TIMEOUT = 10.0
     MAX_CONCURRENCY = 8
 
-    def __init__(self, db=None, soundcloud_service=None, youtube_service=None):
+    def __init__(self, db=None, soundcloud_service=None, youtube_service=None, settings=None):
         self.db = db
         self.sc_service = soundcloud_service
         self.yt_service = youtube_service
+        self.settings = settings
         self.logger = logging.getLogger(self.__class__.__name__)
         self._memo: 'collections.OrderedDict[str, Tuple[float, Dict[str, Any]]]' = collections.OrderedDict()
         self._memo_lock = threading.Lock()
@@ -235,11 +240,21 @@ class TrackResolver:
             logger.warning(f"Local track search error: {e}")
             return None
 
-    def _search_soundcloud(self, query: str) -> Optional[Dict[str, Any]]:
+    @staticmethod
+    def _is_plausible_match(title: str, artist: str, top: Dict[str, Any]) -> bool:
+        """True when the provider's top hit resembles the requested title (and artist, if given)."""
+        from services.lyrics_service import LyricsService
+        if title and LyricsService._title_match_score(title, top.get('title') or '') < TRACK_MATCH_MIN_SCORE:
+            return False
+        if artist and LyricsService._title_match_score(artist, top.get('artist') or '') < TRACK_MATCH_MIN_SCORE:
+            return False
+        return True
+
+    def _search_soundcloud(self, query: str, title: str = '', artist: str = '') -> Optional[Dict[str, Any]]:
         if not self.sc_service:
             try:
                 from services.soundcloud_service import SoundCloudService
-                self.sc_service = SoundCloudService()
+                self.sc_service = SoundCloudService(settings=self.settings)
             except Exception as e:
                 logger.warning(f"Failed to instantiate SoundCloudService: {e}")
                 return None
@@ -261,6 +276,8 @@ class TrackResolver:
 
             if results and isinstance(results, list):
                 top = results[0]
+                if not self._is_plausible_match(title, artist, top):
+                    return None
                 return {
                     'title': top.get('title', 'Unknown Title'),
                     'artist': top.get('artist', 'Unknown Artist'),
@@ -275,11 +292,11 @@ class TrackResolver:
             return None
         return None
 
-    def _search_youtube(self, query: str) -> Optional[Dict[str, Any]]:
+    def _search_youtube(self, query: str, title: str = '', artist: str = '') -> Optional[Dict[str, Any]]:
         if not self.yt_service:
             try:
                 from services.youtube_service import YouTubeService
-                self.yt_service = YouTubeService()
+                self.yt_service = YouTubeService(settings=self.settings)
             except Exception as e:
                 logger.warning(f"Failed to instantiate YouTubeService: {e}")
                 return None
@@ -301,6 +318,8 @@ class TrackResolver:
 
             if results and isinstance(results, list):
                 top = results[0]
+                if not self._is_plausible_match(title, artist, top):
+                    return None
                 return {
                     'title': top.get('title', 'Unknown Title'),
                     'artist': top.get('artist', 'Unknown Artist'),
@@ -335,11 +354,11 @@ class TrackResolver:
         if local_res:
             return local_res
 
-        sc_res = self._search_soundcloud(query)
+        sc_res = self._search_soundcloud(query, title, artist)
         if sc_res:
             return sc_res
 
-        yt_res = self._search_youtube(query)
+        yt_res = self._search_youtube(query, title, artist)
         if yt_res:
             return yt_res
 
@@ -448,12 +467,15 @@ class TrackResolver:
 
 
 def resolve_track(title: str, artist: str = '', db: Any = None, soundcloud_service: Any = None,
-                  youtube_service: Any = None) -> Dict[str, Any]:
-    resolver = TrackResolver(db=db, soundcloud_service=soundcloud_service, youtube_service=youtube_service)
+                  youtube_service: Any = None, settings: Any = None) -> Dict[str, Any]:
+    resolver = TrackResolver(db=db, soundcloud_service=soundcloud_service,
+                             youtube_service=youtube_service, settings=settings)
     return resolver.resolve_track(title, artist)
 
 
 def resolve_tracks(pairs: Iterable[Sequence[str]], timeout: float = None, db: Any = None,
-                   soundcloud_service: Any = None, youtube_service: Any = None) -> List[Dict[str, Any]]:
-    resolver = TrackResolver(db=db, soundcloud_service=soundcloud_service, youtube_service=youtube_service)
+                   soundcloud_service: Any = None, youtube_service: Any = None,
+                   settings: Any = None) -> List[Dict[str, Any]]:
+    resolver = TrackResolver(db=db, soundcloud_service=soundcloud_service,
+                             youtube_service=youtube_service, settings=settings)
     return resolver.resolve_tracks(pairs, timeout=timeout)

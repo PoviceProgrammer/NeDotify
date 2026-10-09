@@ -140,9 +140,12 @@ def test_get_next_track_empty_queue_returns_none(core_ns):
 
 
 def test_get_next_track_ignores_negative_current_index(core_ns):
-    """current_index == -1 with a non-empty queue must not raise or mis-index."""
+    """current_index == -1 with a non-empty queue must not raise or mis-index.
+    set_tracks() clamps a negative start index to 0, so the -1 state the
+    session restore path can produce is set directly here."""
     app, engine = _api_with_engine(core_ns)
-    engine.queue.set_tracks(_tracks(2), -1)
+    engine.queue.set_tracks(_tracks(2), 0)
+    engine.queue._current_index = -1
     assert engine.queue.current_index == -1
     assert app.get_next_track() is None
 
@@ -527,20 +530,35 @@ def test_clear_storage_without_cache_manager_reports_failure(core_ns):
 # --------------------------------------------------------------------------- #
 
 @pytest.mark.parametrize("kwargs", [
-    {"quota_gb": 0},
-    {"cache_quota_gb": 0},
-    {"cache_size_mb": 0},
     {"quota_gb": -5},
+    {"cache_quota_gb": -1},
+    {"cache_size_mb": -2048},
 ])
-def test_set_cache_quota_rejects_non_positive_quota(api, core_ns, settings_stub, kwargs):
-    """Old code passed quota_bytes=0 to purge_stream_cache for these, which in
-    a "0 means delete everything" implementation wipes the stream cache."""
+def test_set_cache_quota_rejects_negative_quota(api, core_ns, settings_stub, kwargs):
+    """A negative quota is a caller bug, not a request for "no limit", so it is
+    rejected before anything is written or purged."""
     core_ns.cache = CacheStub()
     res = api.set_cache_quota(**kwargs)
     assert res["success"] is False
     assert res["error"]
-    assert core_ns.cache.purges == [], "purge must never run with a 0 quota"
+    assert core_ns.cache.purges == [], "purge must never run with a negative quota"
     assert settings_stub.get("storage", "cache_quota_gb") is None
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"quota_gb": 0},
+    {"cache_quota_gb": 0},
+    {"cache_size_mb": 0},
+])
+def test_set_cache_quota_zero_means_no_limit(api, core_ns, settings_stub, kwargs):
+    """0 is "no limit": stored as cache_quota_gb=0 and never handed to
+    purge_stream_cache(quota_bytes=0), which one reader treats as "skip
+    purging" and another as "delete everything"."""
+    core_ns.cache = CacheStub()
+    res = api.set_cache_quota(**kwargs)
+    assert res["success"] is True
+    assert core_ns.cache.purges == [], "purge must never run with a 0 quota"
+    assert settings_stub.get("storage", "cache_quota_gb") == 0
 
 
 def test_set_cache_quota_positive_value_still_purges(api, core_ns, settings_stub):
@@ -582,10 +600,14 @@ def test_normalize_cache_quota_reads_alias_kwargs():
 
 
 def test_set_cache_quota_matches_the_pure_function(api, settings_stub):
+    """quota_gb=500 is the legacy bare-MB key -> 0.488 GB, which rounds to 0 and
+    would silently become "no limit". Such values are raised to the 1 GB floor."""
     api.set_cache_quota(quota_gb=500)
     gb, mb = _normalize_cache_quota(quota_gb=500)
-    assert settings_stub.get("storage", "cache_quota_gb") == int(round(gb))
-    assert settings_stub.get("storage", "cache_size_mb") == int(round(mb))
+    assert int(round(gb)) == 0
+    assert settings_stub.get("storage", "cache_quota_gb") == 1
+    assert settings_stub.get("storage", "cache_size_mb") == 1024
+    assert (gb, mb) != (0.0, 0.0)
 
 
 # --------------------------------------------------------------------------- #

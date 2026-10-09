@@ -270,13 +270,11 @@ class LyricsService:
     def get_lyrics(self, track_name: str, artist_name: str = "", duration_ms: int = 0, file_path: str = None) -> dict:
         if file_path and os.path.exists(file_path):
             try:
-                from utils.tag_parser import parse_audio_file
-                tags = parse_audio_file(file_path)
-                if tags and tags.get("lyrics"):
-                    raw_lyr = str(tags["lyrics"]).strip()
-                    if raw_lyr:
-                        is_synced = bool(re.search(r'\[\d+:\d+', raw_lyr))
-                        return self._make_result(raw_lyr if is_synced else None, raw_lyr)
+                from utils.tag_parser import extract_embedded_lyrics
+                raw_lyr = extract_embedded_lyrics(file_path).strip()
+                if raw_lyr:
+                    is_synced = bool(re.search(r'\[\d+:\d+', raw_lyr))
+                    return self._make_result(raw_lyr if is_synced else None, raw_lyr)
             except Exception as e:
                 logger.debug("Embedded lyrics lookup error for %s: %s", file_path, e)
 

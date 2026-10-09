@@ -11,6 +11,11 @@ from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Confidence reported for duplicate groups: a full-content hash is exact, while a
+# sampled hash (head/middle/tail only) can only suggest a duplicate.
+FULL_HASH_MATCH_CONFIDENCE = 100.0
+SAMPLED_MATCH_CONFIDENCE = 90.0
+
 
 class AudioFingerprintService:
     """Service for computing audio fingerprints and scanning for duplicate audio files."""
@@ -40,11 +45,15 @@ class AudioFingerprintService:
                     f.seek(file_size - sample_bytes)
                     tail = f.read(sample_bytes)
                     md5_hash.update(tail)
+                else:
+                    f.seek(sample_bytes)
+                    md5_hash.update(f.read())
 
             fingerprint_hash = md5_hash.hexdigest()
             return {
                 "hash": fingerprint_hash,
                 "file_size": file_size,
+                "full_hash": file_size <= sample_bytes * 3,
                 "signature": f"{fingerprint_hash}_{file_size}"
             }
         except Exception as e:
@@ -81,6 +90,7 @@ class AudioFingerprintService:
             track_entry = dict(track)
             track_entry["fingerprint"] = fp["hash"]
             track_entry["file_size_bytes"] = fp["file_size"]
+            track_entry["full_hash"] = fp["full_hash"]
             fingerprint_map[sig].append(track_entry)
 
         # Filter only groups with 2 or more tracks
@@ -91,7 +101,10 @@ class AudioFingerprintService:
                 duplicate_groups.append({
                     "group_id": f"dup_{group_idx}",
                     "signature": sig,
-                    "match_confidence": 99.0,
+                    "match_confidence": (
+                        FULL_HASH_MATCH_CONFIDENCE if all(t.get("full_hash") for t in tracks_list)
+                        else SAMPLED_MATCH_CONFIDENCE
+                    ),
                     "count": len(tracks_list),
                     "tracks": tracks_list
                 })
