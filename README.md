@@ -69,7 +69,7 @@
 ## 📦 Установка
 
 Установщик `.exe` ставит ярлыки на рабочий стол и в меню «Пуск».
-Актуальная сборка — **5.0 Beta**, файл `Beta5_Setup.exe` на странице релизов:
+Актуальная сборка — **5.0 Beta**, файл `NeDotify_Setup.exe` на странице релизов:
 
 **[Скачать на GitHub Releases](https://github.com/PoviceProgrammer/NeDotify/releases)**
 
@@ -81,7 +81,7 @@
 iscc installer.iss
 ```
 
-На выходе — `dist\Beta5_Setup.exe`.
+На выходе — `dist\NeDotify_Setup.exe`.
 
 ---
 
@@ -93,6 +93,11 @@ cd NeDotify
 
 python -m venv .venv_win
 .venv_win\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Запуск — `python main.py` из корня репозитория, интерпретатором из `.venv_win`:
+
+```bash
 .venv_win\Scripts\python.exe main.py
 ```
 
