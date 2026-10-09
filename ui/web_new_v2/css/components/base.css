@@ -136,8 +136,13 @@
     --z-modal: 9999;            /* .modal-overlay */
     --z-rich-menu: 99999;       /* .rich-track-menu */
     --z-splash: 99999;          /* #app-splash */
-    --z-toast: 10001;           /* #toast-container */
-    --z-mini-player: 999999;    /* #mini-player-overlay */
+    /* Toast sits ABOVE the mini-player. The mini-player is a full-bleed
+       overlay pinned to the viewport edges with `!important` on its z-index,
+       so at the previous 999999 it covered every toast near the bottom - and
+       #toast-container is `bottom: 100px`, right in that strip. An error the
+       user cannot read is the one failure mode worth spending a layer on. */
+    --z-mini-player: 100000;    /* #mini-player-overlay */
+    --z-toast: 100001;          /* #toast-container */
 }
 
 /* ── Performance Preset: Medium ── */
@@ -2587,12 +2592,19 @@ body.mini-player-active #particles-bg,
 body.mini-player-active #custom-bg-layer,
 body.mini-player-active #custom-bg-dim-layer,
 body.mini-player-active #aura-orbs-container,
-body.mini-player-active #toast-container,
 body.mini-player-active #network-banner,
 body.mini-player-active .lyrics-overlay {
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
+}
+
+/* #toast-container is deliberately NOT in the list above: hiding errors while
+   the mini-player is open is the "failure mode here is silence" problem - the
+   user gets no feedback at all and the track simply never plays. It stays
+   visible and now also sits above --z-mini-player. */
+body.mini-player-active #toast-container {
+    bottom: 16px;
 }
 
 #mini-player-overlay .mp-compact-row {

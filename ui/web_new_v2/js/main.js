@@ -427,6 +427,22 @@ async function init() {
         document.getElementById('btn-maximize')?.addEventListener('click', () => {
             if (window.pywebview?.api?.maximize) window.pywebview.api.maximize();
         });
+        // Snap Layouts (Windows 11): tell the backend where the maximise button
+        // is, so WM_NCHITTEST can answer HTMAXBUTTON over it and Windows shows
+        // the layout flyout on hover. Re-sent on resize because the rect moves.
+        const reportSnapButton = () => {
+            const btn = document.getElementById('btn-maximize');
+            if (!btn || !window.pywebview?.api?.set_snap_button_rect) return;
+            const r = btn.getBoundingClientRect();
+            if (!r.width || !r.height) return;
+            try {
+                window.pywebview.api.set_snap_button_rect(r.left, r.top, r.width, r.height);
+            } catch (e) {}
+        };
+        window.addEventListener('resize', reportSnapButton);
+        reportSnapButton();
+        setTimeout(reportSnapButton, 600);
+        setTimeout(reportSnapButton, 2000);
         document.getElementById('btn-close')?.addEventListener('click', async () => {
             if (window.pywebview?.api) {
                 window.pywebview.api.close_window();

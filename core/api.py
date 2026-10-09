@@ -447,6 +447,19 @@ class AppApi:
             self._window.events.minimized += self._on_minimized
             self._window.events.restored += self._on_restored
 
+        # Windows 11 Snap Layouts: a frameless window has no caption, so Windows
+        # never offers the layout grid on the maximise button. Best-effort - a
+        # failure here must not stop the app from starting.
+        try:
+            from core.snap_layouts import SnapLayouts
+            hwnd = self._get_hwnd()
+            if hwnd:
+                self._snap_layouts = SnapLayouts(hwnd)
+                if self._snap_layouts.install():
+                    logger.info("Snap Layouts enabled")
+        except Exception as e:
+            logger.warning("Snap Layouts unavailable: %s", e)
+
         if getattr(self, "_tray", None):
             self._tray.start()
             
@@ -2391,6 +2404,23 @@ class AppApi:
     def get_favorite_tracks(self):
         """Get list of favorite tracks."""
         return self._core.db.get_favorite_tracks()
+
+    def set_snap_button_rect(self, x, y, width, height):
+        """Report the maximise button's client-relative rect (CSS pixels).
+
+        The frontend measures #btn-maximize and sends the rectangle here; the
+        WM_NCHITTEST handler then answers HTMAXBUTTON over it, which is what
+        makes Windows 11 show the Snap Layout flyout on hover.
+        """
+        snap = getattr(self, "_snap_layouts", None)
+        if snap is None:
+            return {"success": False}
+        try:
+            snap.set_button_rect(x, y, width, height)
+            return {"success": True}
+        except Exception as e:
+            logger.debug("set_snap_button_rect failed: %s", e)
+            return {"success": False}
 
     def save_theme(self, theme: str):
         """Save theme setting."""
