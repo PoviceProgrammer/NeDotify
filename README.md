@@ -1,83 +1,94 @@
 <p align="center">
-  <img src="cover.png" alt="NeDotify Logo" width="280" style="border-radius: 20px;">
+  <img src="cover.png" width="220" alt="NeDotify">
 </p>
 
-# 🎵 NeDotify
+# NeDotify
 
-**NeDotify** — это современный, стильный и легкий аудиоплеер для Windows с поддержкой стриминговых сервисов, встроенным эквалайзером, визуализатором и уникальным режимом мини-плеера.
+Плеер для Windows. Можно слушать свои файлы или стримить с YouTube Music, Spotify, SoundCloud и Яндекс.Музыки. Есть тексты по строкам, эквалайзер, темы и мини-плеер поверх окон.
 
----
+[Скачать установщик](https://github.com/PoviceProgrammer/NeDotify/releases)
 
-## ✨ Основные возможности
-
-- 🎨 **Премиальный интерфейс**: Тёмная тема с элементами Glassmorphism и плавными анимациями.
-- 📱 **Мини-плеер**: Компактный виджет поверх всех окон для удобного управления треками.
-- 🎚️ **Эквалайзер и Визуалайзер**: Тонкая настройка звучания под любой жанр.
-- 📜 **Тексты песен (Lyrics)**: Синхронизированный просмотр текста текущего трека.
-- ⚡ **Легковесность**: Высокая скорость работы и минимальное потребление системных ресурсов.
+Windows 10/11, Python 3.14.
 
 ---
 
-## 📷 Скриншоты интерфейса
+## Скриншоты
 
-### Главный экран
-![Главный экран](screenshots/home.png)
+**Главная** — недавние треки и локальный топ
 
-### Плеер и синхронизированные тексты
-![Плеер и тексты](screenshots/player.png)
+![Главная](screenshots/home.png)
 
-### Настройки тем оформления
-![Настройки тем](screenshots/settings_themes.png)
+**Плеер** — обложка, управление и текст песни. Можно сдвинуть синхронизацию на полсекунды
 
-### Импорт плейлистов
-![Импорт плейлистов](screenshots/import_playlists.png)
+![Плеер](screenshots/player.png)
 
-### Профиль и статистика
-![Профиль и статистика](screenshots/profile.png)
+**Поиск** — треки, плейлисты, альбомы, артисты
 
----
+![Поиск](screenshots/search.png)
 
-## 🌐 Важное примечание по доступности (VPN)
+**Библиотека** — плейлисты, импорт, офлайн-треки
 
-Для бесперебойной работы интеграций со сторонними аудио-сервисами (Spotify, YouTube Music, SoundCloud и др.) может потребоваться активное VPN-соединение.
+![Библиотека](screenshots/library.png)
 
-> 🔒 **Рекомендуемый и проверенный VPN:**  
-> Быстрый и надежный сервис: [TequilaVPN Bot](https://t.me/TequilaVPNbot?start=refugkQUieF)
+**Темы** — готовые пресеты и свои цвета
 
----
+![Темы](screenshots/settings_themes.png)
 
-## 📥 Скачать инсталлер (.exe)
+**Профиль** — сколько послушал, топ треков, история
 
-Готовый установочный файл с автоматическим созданием ярлыков на **Рабочем столе** и в меню **«Пуск»** можно скачать на странице релизов GitHub:
-👉 **[Перейти к загрузке NeDotify_Setup.exe (Releases)](https://github.com/PoviceProgrammer/NeDotify/releases)**
+![Профиль](screenshots/profile.png)
 
 ---
 
-## 🚀 Быстрый запуск
+## Что умеет
 
-### Требования
-- Python 3.10 или новее
-- Windows 10 / 11
-
-### Запуск из исходников
-1. Клонируйте репозиторий:
-   ```bash
-   git clone https://github.com/PoviceProgrammer/NeDotify.git
-   cd NeDotify
-   ```
-
-2. Установите зависимости:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Запустите плеер:
-   ```bash
-   python main.py
-   ```
+- Стриминг с YouTube Music, Spotify, SoundCloud и Яндекс.Музыки
+- Тексты песен по строкам, сдвиг ±0.5 с, перевод
+- Эквалайзер на 10 полос
+- Визуализатор
+- Плейлисты: создать, импортировать, скачать офлайн
+- Темы оформления, можно собрать свою
+- Мини-плеер поверх других окон
+- Горячие клавиши — все можно переназначить
+- Статус в Discord, пока играет трек
 
 ---
 
-## 📄 Лицензия
+## Установка
 
-Проект распространяется в учебных и ознакомительных целях.
+Готовый `.exe` с ярлыками на рабочем столе и в «Пуске»:
+
+**[NeDotify_Setup.exe](https://github.com/PoviceProgrammer/NeDotify/releases)**
+
+Собрать самому: `pyinstaller setup_pyinstaller.spec`, потом `iscc installer.iss`. На выходе `dist\NeDotify_Setup.exe`.
+
+---
+
+## Запуск из исходников
+
+```bash
+git clone https://github.com/PoviceProgrammer/NeDotify.git
+cd NeDotify
+
+python -m venv .venv_win
+.venv_win\Scripts\python.exe -m pip install -r requirements.txt
+.venv_win\Scripts\python.exe main.py
+```
+
+Системный `python` тут не подойдёт — в нём нет pywebview и yt-dlp. Нужен интерпретатор из `.venv_win`.
+
+Тесты: `.venv_win\Scripts\python.exe -m pytest`
+
+---
+
+## VPN
+
+YouTube / Spotify / SoundCloud иногда не открываются без VPN. Своё прокси можно прописать в **Настройки → Хранилище** (`proxy_url`).
+
+Если нужен готовый вариант: [TequilaVPN](https://t.me/TequilaVPNbot?start=refugkQUieF).
+
+---
+
+## Лицензия
+
+Учебный проект, для ознакомления.
