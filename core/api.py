@@ -2289,7 +2289,104 @@ class AppApi:
             )
         status = self._core.db.toggle_favorite(track_id)
         self._emit("favorites_updated", self.get_favorite_tracks())
-        return {"success": True, "is_favorite": status}
+        result = {"success": True, "is_favorite": status}
+        if status:
+            # Only on the way in: un-liking must never delete anything.
+            try:
+                auto = self._auto_save_favorite(track_data, track_id)
+                if auto:
+                    result["auto_download"] = auto
+            except Exception as e:
+                # A failed side-effect must not break the like itself.
+                logger.warning("auto-download on favorite failed: %s", e)
+        return result
+
+    def _auto_save_favorite(self, track_data: dict, track_id):
+        """Cache the stream now, then download it in the background.
+
+        Returns a short status dict for the caller (surfaced as
+        ``auto_download``) or None when the feature is off or nothing to do.
+        """
+        if not getattr(self._core, "settings", None):
+            return None
+        if not self._core.settings.get("storage", "auto_download_favorites", False):
+            return None
+
+        source = track_data.get("source") or "local"
+        # Local files are already on disk: there is nothing to fetch.
+        if source == "local":
+            return None
+
+        source_id = track_data.get("source_id")
+        if not source_id and track_id is not None:
+            try:
+                row = self._core.db.get_track(int(track_id))
+            except (ValueError, TypeError):
+                row = None
+            except Exception:
+                logger.debug("auto-download DB lookup failed", exc_info=True)
+                row = None
+            if row:
+                source_id = row.get("source_id") or source_id
+                source = row.get("source") or source
+        if not source_id:
+            return None
+
+        already = False
+        try:
+            already = bool(self._core.db.get_track(int(track_id)).get("is_downloaded")) if track_id else False
+        except Exception:
+            logger.debug("auto-download is_downloaded check failed", exc_info=True)
+        if already:
+            return None
+
+        # 1) Immediate stream cache so playback starts without a second fetch.
+        cached = False
+        cache = getattr(self._core, "cache", None)
+        url = track_data.get("stream_url") or track_data.get("url") or ""
+        if cache is not None:
+            try:
+                cache.download_audio_stream(source, str(source_id), url)
+                cached = True
+            except Exception:
+                logger.warning("favorite stream cache failed", exc_info=True)
+
+        # 2) Background download to ~/downloads, gated by its own quota.
+        quota_gb = self._core.settings.get("storage", "auto_download_favorites_quota_gb", 20)
+        try:
+            quota_gb = float(quota_gb)
+        except (TypeError, ValueError):
+            quota_gb = 20.0
+        quota_bytes = int(quota_gb * 1024 * 1024 * 1024) if quota_gb > 0 else 0
+
+        used = 0
+        try:
+            dl_dir = os.path.join(os.path.expanduser("~"), ".nedotify", "downloads")
+            if os.path.isdir(dl_dir):
+                for name in os.listdir(dl_dir):
+                    fp = os.path.join(dl_dir, name)
+                    try:
+                        if os.path.isfile(fp):
+                            used += os.path.getsize(fp)
+                    except OSError:
+                        continue
+        except Exception:
+            logger.debug("auto-download size scan failed", exc_info=True)
+
+        if quota_bytes and used >= quota_bytes:
+            return {"cached": cached, "queued": False,
+                    "reason": f"Достигнут лимит автозагрузки ({int(quota_gb)} ГБ)"}
+
+        payload = dict(track_data)
+        payload["id"] = track_id
+        payload["source"] = source
+        payload["source_id"] = str(source_id)
+        # Not a user-initiated batch: no batch counter, no progress modal.
+        # queue_download(track_id, source, source_id) is positional.
+        queued = bool(self._core.downloader.queue_download(track_id, source, str(source_id)))
+        if queued:
+            self._emit("favorites_updated", self.get_favorite_tracks())
+        return {"cached": cached, "queued": queued, "reason": None if queued else "Не удалось поставить в очередь"}
 
     def get_favorite_tracks(self):
         """Get list of favorite tracks."""

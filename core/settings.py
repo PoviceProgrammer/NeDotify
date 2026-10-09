@@ -144,6 +144,11 @@ DEFAULT_SETTINGS = {
         "auto_cache_streams": True,
         "cache_covers": True,
         "scan_folders": [],
+        # Auto-download of liked tracks: cache the stream immediately, then
+        # download it to ~/downloads in the background. Separate from
+        # cache_quota_gb because those files are permanent, not evictable.
+        "auto_download_favorites": False,
+        "auto_download_favorites_quota_gb": 20,
     },
     "player_appearance": {
         "show_spectrum": True,

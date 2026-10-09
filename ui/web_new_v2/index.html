@@ -1794,6 +1794,27 @@
                             </div>
                             <div class="setting-row">
                                 <div>
+                                    <div class="setting-label">Сохранять любимые треки автоматически</div>
+                                    <div class="setting-sublabel">Лайкнутый трек сразу кешируется, затем скачивается на диск для офлайн-прослушивания. Снимание лайка ничего не удаляет</div>
+                                </div>
+                                <button class="toggle-switch" id="toggle-auto-download-favorites" aria-label="Сохранять любимые треки автоматически"><div class="toggle-dot"></div></button>
+                            </div>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Лимит автозагрузки любимых</div>
+                                    <div class="setting-sublabel">Сколько максимум места занимают автоскачанные треки. Отдельно от лимита кэша</div>
+                                </div>
+                                <select id="select-auto-download-quota" class="glass-select" aria-label="Лимит автозагрузки любимых" style="min-width:140px; padding:6px 12px; border-radius:8px;">
+                                    <option value="5">5 ГБ</option>
+                                    <option value="10">10 ГБ</option>
+                                    <option value="20" selected>20 ГБ (Реком.)</option>
+                                    <option value="50">50 ГБ</option>
+                                    <option value="100">100 ГБ</option>
+                                    <option value="0">Без лимита</option>
+                                </select>
+                            </div>
+                            <div class="setting-row">
+                                <div>
                                     <div class="setting-label">Очистить кэш треков и обложек</div>
                                     <div class="setting-sublabel">Удалить все сохраненные во временную память аудиофайлы и обложки</div>
                                 </div>

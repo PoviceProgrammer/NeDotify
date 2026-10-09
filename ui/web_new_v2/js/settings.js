@@ -219,6 +219,17 @@ export function initSettings() {
         });
     }
 
+    const selectAutoDlQuota = document.getElementById('select-auto-download-quota');
+    if (selectAutoDlQuota) {
+        selectAutoDlQuota.value = String(getLocalSetting('nedotify_storage_auto_download_favorites_quota_gb', 20));
+        selectAutoDlQuota.addEventListener('change', async (e) => {
+            const val = parseInt(e.target.value);
+            if (Number.isNaN(val)) return;
+            saveSetting('auto_download_favorites_quota_gb', val, 'storage');
+            showToast(val === 0 ? 'Лимит автозагрузки снят' : `Лимит автозагрузки: ${val} ГБ`, 'info');
+        });
+    }
+
     const selectCacheQuota = document.getElementById('select-cache-quota');
     if (selectCacheQuota) {
         const savedQuota = getLocalSetting('nedotify_storage_cache_quota_gb', 5);
@@ -2376,6 +2387,7 @@ function syncPlayerSettingsUI() {
     syncToggleVisual('toggle-queue-autopilot', savedSetting('player', 'queue_autopilot',
         savedSetting('player', 'flow_enabled', true)));
     syncToggleVisual('toggle-player-prefetch', savedSetting('player', 'player_prefetch', true));
+    syncToggleVisual('toggle-auto-download-favorites', savedSetting('storage', 'auto_download_favorites', false));
     syncToggleVisual('toggle-aura-orbs', savedSetting('player', 'aura_orbs_enabled', true));
 }
 
@@ -2407,6 +2419,8 @@ function setupPlayerSettingsPanel() {
     setupToggle('toggle-next-track-preview', 'next_track_preview', 'player', applyNextTrackPreview);
     setupToggle('toggle-queue-autopilot', 'queue_autopilot', 'player');
     setupToggle('toggle-player-prefetch', 'player_prefetch', 'player');
+    setupToggle('toggle-auto-download-favorites', 'auto_download_favorites', 'storage',
+        (val) => showToast(val ? 'Лайкнутые треки будут сохраняться автоматически' : 'Автосохранение лайков отключено', 'info'));
     setupToggle('toggle-aura-orbs', 'aura_orbs_enabled', 'player', applyAuraOrbs);
 
     // Mini-player position buttons
