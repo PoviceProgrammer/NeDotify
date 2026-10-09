@@ -32,8 +32,12 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checked
-Name: "startmenuicon"; Description: "Добавить ярлык в меню «Пуск»"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checked
+; No "Flags: checked" here: Inno Setup 6 rejects it as an unknown flag and
+; aborts the compile ("Parameter Flags includes an unknown flag", [Tasks]
+; supports only checkablealone/checkedonce/dontinheritcheck/exclusive/restart/
+; unchecked). Tasks are checked by default; only "unchecked" opts out.
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+Name: "startmenuicon"; Description: "Добавить ярлык в меню «Пуск»"; GroupDescription: "{cm:AdditionalIcons}"
 Name: "autostart"; Description: "Запускать NeDotify при запуске Windows"; GroupDescription: "Автозапуск:"; Flags: unchecked
 
 [Files]
