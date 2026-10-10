@@ -73,6 +73,12 @@ _ALLOWED_BINARY_NAMES = frozenset({"winws.exe", "zapret.exe", "winws"})
 _IMAGE_DOS_MAGIC = b"MZ"
 _IMAGE_NT_SIGNATURE = b"PE\0\0"
 _PE_MACHINE_AMD64 = 0x8664
+# A PE whose only content is a header cannot run, and every byte of it is
+# correct — the defect is size, not signature. 4 KiB sits far below every
+# binary in the zapret bundle (the smallest, killall.exe, is 23 KB) and far
+# above the 134-byte header stub that produced the Windows dialog above. Do not
+# raise this toward the real minimum: 32 KiB rejected a genuine killall.exe.
+_PE_MIN_SIZE = 4 * 1024
 
 
 def _read_header(path: str, size: int = 0x400) -> bytes:
@@ -91,20 +97,38 @@ def _read_header(path: str, size: int = 0x400) -> bytes:
 
 
 def is_valid_windows_binary(path: str) -> bool:
-    """True when *path* is a non-empty Windows PE image (MZ header + 'PE\\0\\0').
+    """True when *path* looks like a runnable Windows executable or module.
 
-    The signature test keeps `validate_zapret_binary()` honest about the one
-    failure that produces a system dialog instead of an error code: an empty or
-    truncated `winws.exe`. The machine type is only checked when it can be read
-    (some strip tools leave the optional header short) — a 32-bit image is still
-    a genuine zapret binary, so it is not a launch-blocking defect here.
+    Three gates, each catching a distinct way a broken install reaches the
+    launcher:
+
+    1. Size — a header-only PE has every magic byte in the right place and
+       still cannot run; the floor is 4 KiB, far below the smallest real binary
+       in the bundle (killall.exe at 23 KB). Raising it toward that minimum is
+       how a genuine binary gets rejected.
+    2. MZ header + 'PE\\0\\0' at e_lfanew — proves the file is a PE image at all.
+    3. Machine type — 0x8664 (x64) or a real nonzero stamp. zapret ships x64;
+       an unmapped stamp means the header was fabricated rather than linked.
+
+    The signature tests keep `validate_zapret_binary()` honest about the
+    failure mode that produces a system dialog instead of an error code. The
+    machine type is only checked when it can be read (some strip tools leave
+    the optional header short) — a 32-bit image is still a genuine zapret
+    binary, so it is not a launch-blocking defect here.
     """
     if not path or not os.path.isfile(path):
         return False
     try:
-        if os.path.getsize(path) <= 0:
-            return False
+        size = os.path.getsize(path)
     except OSError:
+        return False
+    if size <= 0:
+        return False
+    # Not a signature check on purpose: an empty PE (header only, no code) has
+    # every magic byte in the right place and still cannot run. 32 KiB is far
+    # below any zapret binary (smallest is killall.exe at 23 KB) and far above
+    # anything a truncated download or a test fixture can produce.
+    if size < _PE_MIN_SIZE:
         return False
     head = _read_header(path)
     if len(head) < 0x40 or head[:2] != _IMAGE_DOS_MAGIC:

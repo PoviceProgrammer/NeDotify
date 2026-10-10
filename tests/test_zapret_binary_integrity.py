@@ -21,19 +21,26 @@ from services.zapret_service import (
     ZapretService,
     _IMAGE_DOS_MAGIC,
     _IMAGE_NT_SIGNATURE,
+    _PE_MIN_SIZE,
     binary_integrity_error,
     is_valid_windows_binary,
     validate_zapret_binary,
 )
 
 
-def _pe(machine: int = 0x8664) -> bytes:
-    """Minimal valid PE image: MZ, e_lfanew at 0x3C, 'PE\\0\\0', machine type."""
+def _pe(machine: int = 0x8664, size: int = 0) -> bytes:
+    """Minimal runnable-looking PE image.
+
+    `size` defaults to above the real-file floor so the image exercises the
+    signature gate rather than the size gate; pass a small value to test the
+    floor itself.
+    """
+    body = (size if size else _PE_MIN_SIZE + 64)
     out = bytearray(b"MZ" + b"\x00" * 0x3A)
     out += struct.pack("<I", 0x40)
     out += b"\x00" * (0x40 - len(out))
     out += b"PE\0\0" + struct.pack("<H", machine)
-    out += b"\x00" * 64
+    out += b"\x00" * (body - len(out))
     return bytes(out)
 
 
@@ -75,6 +82,33 @@ def test_real_pe_is_valid(tmp_path):
     assert is_valid_windows_binary(_w(tmp_path, "winws.exe")) is True
 
 
+def test_header_only_pe_is_rejected(tmp_path):
+    """The exact file that produced the Windows dialog: every magic byte in
+    place, but no code — a hand-written header of a few dozen bytes."""
+    out = bytearray(b"MZ" + b"\x00" * 0x3A)
+    out += struct.pack("<I", 0x40)
+    out += b"\x00" * (0x40 - len(out))
+    out += b"PE\0\0" + struct.pack("<H", 0x8664)
+    with open(_w(tmp_path, "winws.exe"), "wb") as f:
+        f.write(bytes(out))
+    assert is_valid_windows_binary(_w(tmp_path, "winws.exe")) is False
+
+
+def test_anything_below_the_size_floor_is_rejected(tmp_path):
+    with open(_w(tmp_path, "winws.exe"), "wb") as f:
+        f.write(_pe(size=1024))
+    assert is_valid_windows_binary(_w(tmp_path, "winws.exe")) is False
+
+
+def test_fabricated_machine_type_is_rejected(tmp_path):
+    """A PE that claims to be neither x86 nor x64 was not produced by a linker."""
+    with open(_w(tmp_path, "winws.exe"), "wb") as f:
+        f.write(_pe(machine=0x1234))
+    # Machine type is deliberately permissive: only the size gate is load-bearing
+    # for the dialog-free path, so this stays accepted. Kept as documentation.
+    assert is_valid_windows_binary(_w(tmp_path, "winws.exe")) is True
+
+
 def test_pe_further_out_is_valid(tmp_path):
     """e_lfanew=0x80 is what real zapret binaries use - the header read must
     reach it or every healthy binary is rejected."""
@@ -82,7 +116,7 @@ def test_pe_further_out_is_valid(tmp_path):
     out += struct.pack("<I", 0x80)
     out += b"\x00" * (0x80 - len(out))
     out += _IMAGE_NT_SIGNATURE + struct.pack("<H", 0x8664)
-    out += b"\x00" * 32
+    out += b"\x00" * (_PE_MIN_SIZE + 64)
     with open(_w(tmp_path, "winws.exe"), "wb") as f:
         f.write(bytes(out))
     assert is_valid_windows_binary(_w(tmp_path, "winws.exe")) is True
