@@ -65,6 +65,89 @@ _ALLOWED_ARG_RE = re.compile(r'^--[A-Za-z0-9][A-Za-z0-9\-]*(=[A-Za-z0-9,.:_/\-\\
 # Only these executable names may ever be launched, elevated or not.
 _ALLOWED_BINARY_NAMES = frozenset({"winws.exe", "zapret.exe", "winws"})
 
+# A real binary must not be confused with a 0-byte file left behind by a broken
+# download: Windows answers the latter with the system dialog "Невозможно
+# запустить это приложение на вашем ПК. Чтобы найти версию для вашего
+# компьютера, обратитесь к издателю приложения". Both checks are cheap reads of
+# the first 64 bytes, so they run on every launch, elevated or not.
+_IMAGE_DOS_MAGIC = b"MZ"
+_IMAGE_NT_SIGNATURE = b"PE\0\0"
+_PE_MACHINE_AMD64 = 0x8664
+
+
+def _read_header(path: str, size: int = 0x400) -> bytes:
+    """Best-effort read of the first *size* bytes; b'' when unreadable.
+
+    0x400 by design: `e_lfanew` sits at 0x3C and points at the NT header, and
+    real zapret binaries place it at 0x80 — beyond a 64-byte read. A short read
+    makes the signature check fail for every genuine image, so the validation
+    would refuse to launch a perfectly healthy winws.exe.
+    """
+    try:
+        with open(path, "rb") as f:
+            return f.read(size)
+    except OSError:
+        return b""
+
+
+def is_valid_windows_binary(path: str) -> bool:
+    """True when *path* is a non-empty Windows PE image (MZ header + 'PE\\0\\0').
+
+    The signature test keeps `validate_zapret_binary()` honest about the one
+    failure that produces a system dialog instead of an error code: an empty or
+    truncated `winws.exe`. The machine type is only checked when it can be read
+    (some strip tools leave the optional header short) — a 32-bit image is still
+    a genuine zapret binary, so it is not a launch-blocking defect here.
+    """
+    if not path or not os.path.isfile(path):
+        return False
+    try:
+        if os.path.getsize(path) <= 0:
+            return False
+    except OSError:
+        return False
+    head = _read_header(path)
+    if len(head) < 0x40 or head[:2] != _IMAGE_DOS_MAGIC:
+        return False
+    e_lfanew = int.from_bytes(head[0x3C:0x40], "little")
+    # The offset must be past the DOS header and fit in what was read. Real
+    # zapret binaries use 0x80, but linkers place the NT header as far as
+    # 0x400 out, so the bound matches the read size rather than 0x200.
+    if not 0x40 <= e_lfanew <= 0x3F0 or e_lfanew + 6 > len(head):
+        return False
+    if head[e_lfanew:e_lfanew + 4] != _IMAGE_NT_SIGNATURE:
+        return False
+    machine = int.from_bytes(head[e_lfanew + 4:e_lfanew + 6], "little")
+    # 0x0000 shows up in images built without a machine stamp; accept anything
+    # that carries the NT signature rather than rejecting a working binary.
+    return machine in (0, _PE_MACHINE_AMD64) or machine > 0
+
+
+def binary_integrity_error(path: str) -> str:
+    """Why *path* cannot be launched, or '' when it looks like a real binary.
+
+    Returns a user-facing Russian message so the caller can hand it straight to
+    the UI — the user must never be left with a Windows dialog as the only
+    explanation of what went wrong.
+    """
+    if not path or not os.path.isfile(path):
+        return "Файл winws.exe не найден."
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return "Не удалось прочитать файл winws.exe."
+    if size <= 0:
+        return (
+            f"winws.exe повреждён (0 байт). Удалите папку "
+            f"{path.rsplit(os.sep, 1)[0] or path} и повторите включение Zapret."
+        )
+    if not is_valid_windows_binary(path):
+        return (
+            f"winws.exe повреждён (не является исполняемым файлом Windows). "
+            f"Удалите папку {path.rsplit(os.sep, 1)[0] or path} и повторите включение Zapret."
+        )
+    return ""
+
 
 def sanitize_zapret_args(raw_args: str) -> List[str]:
     """Split and validate winws arguments. Raises ValueError on anything unsafe.
@@ -87,7 +170,7 @@ def sanitize_zapret_args(raw_args: str) -> List[str]:
 
 def validate_zapret_binary(path: str, app_dir: Optional[str] = None,
                           extra_roots: Optional[Sequence[str]] = None) -> bool:
-    """True only for an existing local file with an approved winws name.
+    """True only for an existing local winws image with an approved name.
 
     Rejects UNC/network paths and paths without a drive letter. When roots are
     given (``app_dir`` plus ``extra_roots``), the file must live inside one of
@@ -96,6 +179,11 @@ def validate_zapret_binary(path: str, app_dir: Optional[str] = None,
     ~/.nedotify/zapret (downloaded binaries) and the application directory
     itself (repo checkout in dev, sys._MEIPASS in the frozen build), where
     find_binary() also looks for bin/winws.exe.
+
+    The image check is what keeps this honest about the one defect that ends in
+    a Windows dialog instead of an error code: a 0-byte winws.exe left behind by
+    a failed extraction satisfies every path rule above, yet ShellExecuteW
+    answers it with «Невозможно запустить это приложение на вашем ПК».
     """
     if not path:
         return False
@@ -118,7 +206,9 @@ def validate_zapret_binary(path: str, app_dir: Optional[str] = None,
                 continue  # different drive
         else:
             return False
-    return os.path.basename(path).lower() in _ALLOWED_BINARY_NAMES
+    if os.path.basename(path).lower() not in _ALLOWED_BINARY_NAMES:
+        return False
+    return is_valid_windows_binary(path)
 
 
 # Z-4: internet probe hosts — TCP-connect to port 443, first success = online.
@@ -700,10 +790,31 @@ class ZapretService:
             for name in z.namelist():
                 if "x86_64" in name and any(name.endswith(ext) for ext in [".exe", ".dll", ".sys"]):
                     filename = os.path.basename(name)
-                    if filename:
-                        target_path = os.path.join(self.app_dir, filename)
-                        with open(target_path, "wb") as f:
-                            f.write(z.read(name))
+                    if not filename:
+                        continue
+                    try:
+                        size = z.getinfo(name).file_size
+                    except KeyError:
+                        continue
+                    # A 0-byte .exe is worse than no .exe: Windows answers it
+                    # with "Невозможно запустить это приложение на вашем ПК",
+                    # which read like a missing install on the user's side.
+                    if size <= 0:
+                        logger.warning("Skipping empty entry in Zapret archive: %s", name)
+                        continue
+                    target_path = os.path.join(self.app_dir, filename)
+                    # Never let an empty or truncated entry destroy a binary
+                    # that already works on disk.
+                    if os.path.isfile(target_path):
+                        try:
+                            if os.path.getsize(target_path) > 0:
+                                continue
+                        except OSError:
+                            pass
+                    tmp_path = target_path + ".part"
+                    with open(tmp_path, "wb") as f:
+                        f.write(z.read(name))
+                    os.replace(tmp_path, target_path)
 
     def _write_version_info(self, version: str, **extra):
         import json
@@ -923,6 +1034,29 @@ class ZapretService:
                 msg = f"Файл winws.exe не найден. {dl_msg}"
                 logger.warning(msg)
                 return False, msg
+
+        # Validate the image BEFORE any launch attempt. A 0-byte or truncated
+        # winws.exe makes subprocess.Popen raise OSError, which drops straight
+        # into _launch_elevated, and ShellExecuteW on such a file shows the
+        # Windows dialog "Невозможно запустить это приложение на вашем ПК" with
+        # no way for the app to explain what happened. Checking here converts
+        # that dialog into a message the UI can actually show.
+        broken = binary_integrity_error(exe)
+        if broken:
+            # A corrupt binary is recoverable: the bundle is a known URL with a
+            # pinned hash, so one re-download usually fixes it and the user is
+            # not left deleting folders by hand.
+            logger.warning("Zapret binary is unusable (%s); re-downloading", broken)
+            ok, dl_msg = self.download_binaries()
+            exe = self.find_binary(binary_path)
+            broken = binary_integrity_error(exe) if exe else "Файл winws.exe не найден."
+            if not broken:
+                logger.info("Zapret binary re-downloaded and verified")
+            else:
+                logger.error("Refusing to launch Zapret after re-download: %s", broken)
+                if not ok:
+                    broken = f"{broken} Попытка переустановить не удалась: {dl_msg}"
+                return False, broken
 
         if mode == "custom" and (custom_args or "").strip():
             raw_args = custom_args.strip()
