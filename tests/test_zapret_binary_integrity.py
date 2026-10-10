@@ -24,6 +24,7 @@ from services.zapret_service import (
     _PE_MIN_SIZE,
     binary_integrity_error,
     is_valid_windows_binary,
+    sanitize_zapret_args,
     validate_zapret_binary,
 )
 
@@ -303,6 +304,62 @@ def test_extract_never_replaces_a_working_binary_with_an_empty_one(svc):
 
     assert os.path.getsize(target) == good_size
     assert is_valid_windows_binary(target)
+
+
+def test_extract_replaces_a_stub_that_merely_looks_valid(svc):
+    """The 134-byte header stub: non-empty, every magic byte correct, and
+    completely unrunnable. It has to be replaced, not preserved."""
+    target = os.path.join(svc.app_dir, "winws.exe")
+    out = bytearray(b"MZ" + b"\x00" * 0x3A)
+    out += struct.pack("<I", 0x40)
+    out += b"\x00" * (0x40 - len(out))
+    out += b"PE\0\0" + struct.pack("<H", 0x8664)
+    with open(target, "wb") as f:
+        f.write(bytes(out))
+    assert os.path.getsize(target) > 0          # the old "non-empty" guard passed
+    assert not is_valid_windows_binary(target)  # but it cannot run
+
+    real = _pe()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("zapret/x86_64/winws.exe", real)
+    svc._extract_zip(buf.getvalue())
+
+    with open(target, "rb") as f:
+        assert f.read() == real
+    assert is_valid_windows_binary(target)
+
+
+# ---- the bypass must not touch the whole machine ------------------------
+
+def test_every_preset_is_scoped_to_the_app_hosts():
+    from services.zapret_service import PRESET_STRATEGIES, ZAPRET_SCOPED_HOSTS
+
+    hosts = ",".join(ZAPRET_SCOPED_HOSTS)
+    for name, template in PRESET_STRATEGIES.items():
+        args = template.format(hosts=hosts)
+        assert f"--hostlist-domains={hosts}" in args, (
+            f"preset {name!r} would desync every process on the machine"
+        )
+
+
+def test_scoped_hosts_cover_the_providers():
+    """Dropping a provider here silently disables the bypass for it."""
+    from services.zapret_service import ZAPRET_SCOPED_HOSTS
+
+    for required in ("youtube.com", "googlevideo.com", "soundcloud.com",
+                     "music.yandex.ru", "open.spotify.com"):
+        assert required in ZAPRET_SCOPED_HOSTS
+
+
+def test_preset_arguments_pass_the_sanitiser():
+    from services.zapret_service import PRESET_STRATEGIES, ZAPRET_SCOPED_HOSTS
+
+    hosts = ",".join(ZAPRET_SCOPED_HOSTS)
+    for name, template in PRESET_STRATEGIES.items():
+        toks = sanitize_zapret_args(template.format(hosts=hosts))
+        assert toks, f"preset {name!r} produced no arguments"
+        assert any(t.startswith("--hostlist-domains=") for t in toks)
 
 
 def test_extract_writes_real_content_atomically(svc):

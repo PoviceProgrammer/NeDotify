@@ -231,42 +231,60 @@ class AppCore:
         self._recommendations = val
 
     def start_zapret_if_enabled(self):
-        """Start Zapret only if auto_start is enabled in settings. Called AFTER the WebView2
+        """Start Zapret only if the user has it on. Called AFTER the WebView2
         window finished loading: a cold Zapret launch (winws DPI-desync) slows
         down WebView2 HTTPS handshakes and delays bridge injection."""
         try:
-            val = self.settings.get("zapret", "auto_start", False)
-            if isinstance(val, str):
-                auto_start = val.strip().lower() in ("true", "1", "yes", "on")
-            else:
-                auto_start = bool(val)
+            def _flag(name, default=False):
+                val = self.settings.get("zapret", name, default)
+                if isinstance(val, str):
+                    return val.strip().lower() in ("true", "1", "yes", "on")
+                return bool(val)
 
-            if auto_start and getattr(self, "zapret", None):
-                mode = self.settings.get("zapret", "mode", "youtube_discord")
-                custom_args = self.settings.get("zapret", "custom_args", "")
-                bin_path = self.settings.get("zapret", "binary_path", "")
+            # `enabled` is what the UI toggle writes (AppApi.toggle_zapret).
+            # Reading only `auto_start` here was why switching Zapret off in the
+            # UI never stuck: the next launch read a different key and started
+            # the bypass again.
+            if not _flag("enabled"):
+                logger.info("Zapret autostart skipped: disabled in settings")
+                return
+            if not _flag("auto_start"):
+                logger.info("Zapret autostart skipped: auto_start is off")
+                return
 
-                def _start_worker():
-                    # Re-checked on this thread: cleanup() may have started
-                    # between the check below and here.
-                    if self._shutting_down.is_set():
-                        logger.info("Zapret autostart skipped: shutdown in progress")
-                        return
-                    self.zapret.start(mode=mode, custom_args=custom_args, binary_path=bin_path)
+            if not getattr(self, "zapret", None):
+                return
 
-                with self._service_lock:
-                    if self._shutting_down.is_set():
-                        logger.info("Zapret autostart skipped: shutdown in progress")
-                        return
-                    worker = threading.Thread(
-                        target=_start_worker,
-                        name="ZapretAutostart",
-                        daemon=True,
-                    )
-                    # Kept so cleanup() can wait for an in-flight start instead
-                    # of racing it (the thread is short-lived by design).
-                    self._zapret_start_thread = worker
-                worker.start()
+            mode = self.settings.get("zapret", "mode", "youtube_discord")
+            custom_args = self.settings.get("zapret", "custom_args", "")
+            bin_path = self.settings.get("zapret", "binary_path", "")
+
+            def _start_worker():
+                # Re-checked on this thread: cleanup() may have started
+                # between the check below and here.
+                if self._shutting_down.is_set():
+                    logger.info("Zapret autostart skipped: shutdown in progress")
+                    return
+                self.zapret.start(mode=mode, custom_args=custom_args, binary_path=bin_path)
+
+            # NOTE: this block, and the worker.start() below it, sit at the same
+            # indentation as `def _start_worker` - inside the method, outside
+            # the worker body. They were briefly nested one level deeper, which
+            # defined _start_worker but never called it, so autostart silently
+            # did nothing while the settings read fine.
+            with self._service_lock:
+                if self._shutting_down.is_set():
+                    logger.info("Zapret autostart skipped: shutdown in progress")
+                    return
+                worker = threading.Thread(
+                    target=_start_worker,
+                    name="ZapretAutostart",
+                    daemon=True,
+                )
+                # Kept so cleanup() can wait for an in-flight start instead
+                # of racing it (the thread is short-lived by design).
+                self._zapret_start_thread = worker
+            worker.start()
         except Exception as ze:
             logger.error(f"Failed to auto-start Zapret: {ze}")
 

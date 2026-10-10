@@ -50,11 +50,33 @@ def _verify_zip_sha256(zip_bytes: bytes, expected_sha256: str = ZAPRET_ZIP_SHA25
     digest = hashlib.sha256(zip_bytes).hexdigest()
     return hmac.compare_digest(digest, expected_sha256)
 
+# Hosts this app actually talks to. Zapret is a machine-wide WinDivert driver:
+# with a bare `--filter-tcp=80,443` it rewrites packets for every process on
+# the box, so a browser, a game and the OS updater all get DPI-desync they
+# never asked for. Pinning the hostlist keeps the bypass on the services the
+# player streams from. WinDivert has no process filter here (upstream zapret
+# exposes `--pid` only for the WinDivert layer, and `--pidfile` only writes
+# winws's own pid), so host scoping is the precision available.
+#
+# Kept in sync with core/proxy.py::YOUTUBE_HOSTS and the providers in
+# services/. Add a host here when a new provider is added.
+ZAPRET_SCOPED_HOSTS = (
+    "youtube.com", "youtu.be", "googlevideo.com", "ytimg.com",
+    "i.ytimg.com", "www.youtube.com",
+    "soundcloud.com", "api-v2.soundcloud.com", "sndcdn.com",
+    "open.spotify.com", "spotify.com",
+    "music.yandex.ru", "storage.yandex.net",
+    "ws.audioscrobbler.com", "last.fm",
+)
+
 PRESET_STRATEGIES = {
-    "youtube_discord": "--wf-tcp=80,443 --filter-tcp=80,443 --dpi-desync=fake,split2 --dpi-desync-split-pos=1 --dpi-desync-repeats=6 --dpi-desync-fooling=badseq",
-    "standard": "--wf-tcp=80,443 --filter-tcp=80,443 --dpi-desync=fake,split2 --dpi-desync-split-pos=1 --dpi-desync-repeats=4 --dpi-desync-fooling=badseq",
-    "aggressive": "--wf-tcp=80,443 --filter-tcp=80,443 --dpi-desync=disorder2 --dpi-desync-split-pos=1 --dpi-desync-fooling=badseq",
-    "multisplit": "--wf-tcp=80,443 --filter-tcp=80,443 --dpi-desync=fake,multisplit --dpi-desync-split-pos=1,5 --dpi-desync-repeats=6 --dpi-desync-fooling=badseq"
+    # `--hostlist-domains` narrows the desync to the app's own providers. The
+    # old `--filter-tcp=80,443` on its own means "every TCP packet in the
+    # machine", which is what made Zapret affect the whole system.
+    "youtube_discord": "--wf-tcp=80,443 --filter-tcp=80,443 --hostlist-domains={hosts} --dpi-desync=fake,split2 --dpi-desync-split-pos=1 --dpi-desync-repeats=6 --dpi-desync-fooling=badseq",
+    "standard": "--wf-tcp=80,443 --filter-tcp=80,443 --hostlist-domains={hosts} --dpi-desync=fake,split2 --dpi-desync-split-pos=1 --dpi-desync-repeats=4 --dpi-desync-fooling=badseq",
+    "aggressive": "--wf-tcp=80,443 --filter-tcp=80,443 --hostlist-domains={hosts} --dpi-desync=disorder2 --dpi-desync-split-pos=1 --dpi-desync-fooling=badseq",
+    "multisplit": "--wf-tcp=80,443 --filter-tcp=80,443 --hostlist-domains={hosts} --dpi-desync=fake,multisplit --dpi-desync-split-pos=1,5 --dpi-desync-repeats=6 --dpi-desync-fooling=badseq"
 }
 
 # Security: winws arguments reach an ELEVATED process, so every token is validated
@@ -827,14 +849,11 @@ class ZapretService:
                         logger.warning("Skipping empty entry in Zapret archive: %s", name)
                         continue
                     target_path = os.path.join(self.app_dir, filename)
-                    # Never let an empty or truncated entry destroy a binary
-                    # that already works on disk.
-                    if os.path.isfile(target_path):
-                        try:
-                            if os.path.getsize(target_path) > 0:
-                                continue
-                        except OSError:
-                            pass
+                    # Replace anything that is not a runnable image. The old
+                    # check only compared against zero bytes, which let a
+                    # 134-byte PE-shaped stub survive every re-download forever.
+                    if is_valid_windows_binary(target_path):
+                        continue
                     tmp_path = target_path + ".part"
                     with open(tmp_path, "wb") as f:
                         f.write(z.read(name))
@@ -1090,7 +1109,19 @@ class ZapretService:
                 logger.warning("Rejected custom Zapret args: %s", exc)
                 return False, str(exc)
         else:
-            raw_args = PRESET_STRATEGIES.get(mode, PRESET_STRATEGIES["youtube_discord"])
+            template = PRESET_STRATEGIES.get(mode, PRESET_STRATEGIES["youtube_discord"])
+            try:
+                raw_args = template.format(hosts=",".join(ZAPRET_SCOPED_HOSTS))
+            except (KeyError, IndexError):
+                # A hand-edited preset without the placeholder: run it as-is
+                # rather than failing the launch over a formatting detail.
+                logger.warning("Preset %r has no {hosts} placeholder", mode)
+                raw_args = template
+            try:
+                sanitize_zapret_args(raw_args)
+            except ValueError as exc:
+                logger.warning("Rejected preset Zapret args for %r: %s", mode, exc)
+                return False, str(exc)
 
         # Apply a pending update if one was deferred while the bypass was running (Z-8)
         pending = self._get_pending_update()

@@ -490,15 +490,27 @@ def test_accent_color_property_default_matches_the_schema():
 # --- L4: zapret autostart cannot outlive cleanup() ---------------------------
 
 class _ZapretSettings:
+    """Both flags on: autostart requires `enabled` (the UI toggle) AND
+    `auto_start`. Autostart used to read only `auto_start`, so switching Zapret
+    off in the UI never survived a restart."""
+
+    def __init__(self, enabled=True, auto_start=True):
+        self._enabled = enabled
+        self._auto_start = auto_start
+
     def get(self, category, key, default=None):
-        if (category, key) == ("zapret", "auto_start"):
-            return True
+        if category != "zapret":
+            return default
+        if key == "enabled":
+            return self._enabled
+        if key == "auto_start":
+            return self._auto_start
         return default
 
 
-def _zapret_core(order):
+def _zapret_core(order, **settings):
     return types.SimpleNamespace(
-        settings=_ZapretSettings(),
+        settings=_ZapretSettings(**settings),
         zapret=types.SimpleNamespace(
             start=lambda **kw: order.append("zapret.start"),
             stop=lambda: order.append("zapret.stop"),
@@ -515,6 +527,25 @@ def test_autostart_runs_while_the_app_is_live():
     AppCore.start_zapret_if_enabled(core)
     core._zapret_start_thread.join(5)
     assert order == ["zapret.start"]
+
+
+def test_autostart_respects_the_user_switching_zapret_off():
+    """The regression: enabled=false in the UI had no effect on the next launch."""
+    order = []
+    core = _zapret_core(order, enabled=False)
+    AppCore.start_zapret_if_enabled(core)
+    if core._zapret_start_thread is not None:
+        core._zapret_start_thread.join(5)
+    assert order == [], "zapret started although the user turned it off"
+
+
+def test_autostart_respects_auto_start_off():
+    order = []
+    core = _zapret_core(order, enabled=True, auto_start=False)
+    AppCore.start_zapret_if_enabled(core)
+    if core._zapret_start_thread is not None:
+        core._zapret_start_thread.join(5)
+    assert order == []
 
 
 def test_autostart_is_refused_once_shutdown_started():
