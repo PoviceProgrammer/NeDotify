@@ -184,7 +184,7 @@ class SoundCloudService(BaseMusicService):
             ]
             for cid in fallbacks:
                 try:
-                    r = self._session.get(f'https://api-v2.soundcloud.com/search/tracks?q=test&client_id={cid}&limit=1', timeout=4.0)
+                    r = self._session.get(f'https://api-v2.soundcloud.com/search/tracks?q=test&client_id={cid}&limit=1', timeout=10.0)
                     if r.status_code == 200:
                         self._client_id = cid
                         return cid
@@ -200,7 +200,7 @@ class SoundCloudService(BaseMusicService):
                             js = self._session.get(url, timeout=5.0).text
                             matches = re.findall(r'client_id[:=]["\']([a-zA-Z0-9]{32})["\']', js) + re.findall(r'client_id=([a-zA-Z0-9]{32})', js)
                             for m in matches:
-                                test_r = self._session.get(f'https://api-v2.soundcloud.com/search/tracks?q=test&client_id={m}&limit=1', timeout=3.0)
+                                test_r = self._session.get(f'https://api-v2.soundcloud.com/search/tracks?q=test&client_id={m}&limit=1', timeout=8.0)
                                 if test_r.status_code == 200:
                                     self._client_id = m
                                     return self._client_id
@@ -291,7 +291,7 @@ class SoundCloudService(BaseMusicService):
                     try:
                         encoded = urllib_parse.quote(query)
                         url = f"https://api-v2.soundcloud.com/search/tracks?q={encoded}&client_id={cid}&limit={max_results}"
-                        r = self._session.get(url, timeout=3.0)
+                        r = self._session.get(url, timeout=8.0)
                         if r.status_code == 200:
                             data = r.json()
                             tracks = []
@@ -472,7 +472,7 @@ class SoundCloudService(BaseMusicService):
                 return {}
             r = self._session.get(
                 f"https://api-v2.soundcloud.com/tracks/{track_id}?client_id={cid}",
-                timeout=6.0,
+                timeout=10.0,
             )
             if r.status_code != 200:
                 return {}
@@ -595,7 +595,7 @@ class SoundCloudService(BaseMusicService):
 
                 if cid and t_url:
                     try:
-                        r = self._session.get(t_url, timeout=3.5)
+                        r = self._session.get(t_url, timeout=8.0)
                         if r.status_code == 200:
                             t_data = r.json()
                             media = t_data.get('media', {})
@@ -622,7 +622,7 @@ class SoundCloudService(BaseMusicService):
                                     has_drm = True
                                     continue
                                 tc_url = f"{tc['url']}?client_id={cid}"
-                                tc_resp = self._session.get(tc_url, timeout=2.5)
+                                tc_resp = self._session.get(tc_url, timeout=6.0)
                                 if tc_resp.status_code == 200:
                                     s_candidate = tc_resp.json().get('url')
                                     if s_candidate and 'preview' not in s_candidate and '.m3u8' not in s_candidate:
@@ -958,7 +958,7 @@ class SoundCloudService(BaseMusicService):
             return cached
 
         try:
-            r = self._session.get(json_url, timeout=4.0)
+            r = self._session.get(json_url, timeout=10.0)
             if r.status_code == 200:
                 data = r.json()
                 samples = data.get('samples', [])
@@ -981,4 +981,4 @@ class SoundCloudService(BaseMusicService):
         except Exception as e:
             self.logger.warning(f"Failed to fetch waveform JSON from {json_url}: {e}")
 
-        return []
+        return []

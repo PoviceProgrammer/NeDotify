@@ -21,6 +21,31 @@ _MAX_INFLIGHT = 2
 # instead of the generic "returned None or file missing" one.
 _SUPPORTED_SOURCES = frozenset({'youtube', 'soundcloud', 'yandex', 'spotify', 'spotify_album'})
 
+# A downloaded file that is not one of these, is below the floor, or is a
+# leftover .part is not audio. Providers can hand back such a path, and
+# accepting it marks the track as downloaded with nothing to play.
+_AUDIO_DOWNLOAD_EXTS = ('.m4a', '.mp3', '.opus', '.webm', '.aac', '.ogg',
+                        '.mp4', '.flac', '.wav')
+_MIN_AUDIO_BYTES = 4 * 1024
+
+
+def _downloaded_file_defect(path: str) -> str:
+    """Why *path* is not a usable download, or '' when it looks fine."""
+    if not path or not os.path.isfile(path):
+        return 'файл не найден'
+    name = os.path.basename(path)
+    if name.endswith('.part'):
+        return f'незавершённая загрузка ({name})'
+    if os.path.splitext(name)[1].lower() not in _AUDIO_DOWNLOAD_EXTS:
+        return f'скачан не аудиофайл ({name})'
+    try:
+        size = os.path.getsize(path)
+    except OSError as exc:
+        return f'не удаётся прочитать файл: {exc}'
+    if size < _MIN_AUDIO_BYTES:
+        return f'файл повреждён ({size} байт)'
+    return ''
+
 
 class DownloadManager:
     def __init__(self, app_core):
@@ -521,6 +546,20 @@ class DownloadManager:
                 return
 
             if file_path and os.path.exists(file_path):
+                # Integrity gate before the row is marked downloaded. A provider
+                # can return a path to a 0-byte, partial or non-audio file (see
+                # _require_audio_file), and os.path.exists() alone accepted it:
+                # the track then appeared in the library with no audio in it
+                # while is_downloaded=1 and download_complete already fired.
+                bad = _downloaded_file_defect(file_path)
+                if bad:
+                    logger.error(f'Refusing to mark {track_id} downloaded: {bad}')
+                    try:
+                        os.remove(file_path)
+                    except OSError:
+                        logger.debug('could not remove bad download', exc_info=True)
+                    raise Exception(bad)
+
                 logger.info(f'Download complete: {file_path}')
 
                 try:

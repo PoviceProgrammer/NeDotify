@@ -3,6 +3,7 @@ NeDotify - YouTube Service
 Search and stream audio from YouTube/YouTube Music via yt-dlp.
 """
 
+import os
 import time
 
 from typing import Callable, Optional
@@ -110,6 +111,40 @@ def _is_storyboards_only(info):
         info = entries[0] if entries else {}
     fmts = (info or {}).get("formats") or []
     return bool(fmts) and not any(f.get("url") for f in fmts)
+
+
+# A downloaded file that is not one of these, or is suspiciously small, is not
+# audio. yt-dlp leaves such artefacts behind (a 0-byte file when the write is
+# cut short, or `sb0.mhtml` when it hits a consent/gate page) and the code that
+# follows assumed os.path.exists() was proof of a good download.
+_AUDIO_DOWNLOAD_EXTS = (".m4a", ".mp3", ".opus", ".webm", ".aac", ".ogg",
+                        ".mp4", ".flac", ".wav")
+_MIN_AUDIO_BYTES = 4 * 1024
+
+
+def _require_audio_file(path: str) -> str:
+    """Reject a downloaded file that is empty, partial or not audio at all.
+
+    yt-dlp can leave a 0-byte file behind (interrupted write), a `.part`
+    fragment, or a non-media artefact such as `sb0.mhtml` when it lands on a
+    consent/gate page. Without this check those files were accepted, the track
+    was marked is_downloaded=1 and download_complete fired - the user saw the
+    track in the library with no audio in it.
+    """
+    if not path or not os.path.isfile(path):
+        raise Exception("Файл не найден после загрузки")
+
+    name = os.path.basename(path)
+    if name.endswith(".part"):
+        raise Exception(f"Загрузка не завершена (незакрытый .part): {name}")
+    if os.path.splitext(name)[1].lower() not in _AUDIO_DOWNLOAD_EXTS:
+        raise Exception(f"Скачан не аудиофайл ({name}) — доступ к треку ограничен")
+
+    size = os.path.getsize(path)
+    if size < _MIN_AUDIO_BYTES:
+        raise Exception(f"Файл повреждён ({size} байт, минимум {_MIN_AUDIO_BYTES})")
+    return path
+
 
 
 def _has_playable_audio(info) -> bool:
@@ -842,59 +877,6 @@ class YouTubeService(BaseMusicService):
         self._executor.submit(_extract)
         return None
 
-    def download_audio(self, video_url: str, output_path: str, callback: Callable = None, progress_callback: Callable = None, error_callback: Callable = None, quality: str = "high"):
-        """Download audio from YouTube to a local file."""
-        if not HAS_YTDLP:
-            if error_callback:
-                error_callback("yt-dlp не установлен")
-            return None
-
-        def _download():
-            try:
-                quality_map = {
-                    "low": "192",
-                    "medium": "256",
-                    "high": "320",
-                    "lossless": "best",
-                }
-
-                def _progress_hook(d):
-                    if progress_callback and d.get("status") == "downloading":
-                        total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
-                        downloaded = d.get("downloaded_bytes", 0)
-                        if total > 0:
-                            progress_callback(downloaded / total)
-
-                ydl_opts = {
-                    "quiet": True,
-                    "no_warnings": True,
-                    "format": "bestaudio/best",
-                    "outtmpl": output_path,
-                    "postprocessors": [
-                        {
-                            "key": "FFmpegExtractAudio",
-                            "preferredcodec": "mp3",
-                            "preferredquality": quality_map.get(quality, "320"),
-                        }
-                    ],
-                    "progress_hooks": [_progress_hook],
-                }
-
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([video_url])
-
-                if callback:
-                    callback(output_path)
-                return None
-            except Exception as e:
-                self.logger.exception("Ошибка при загрузке аудио с YouTube")
-                if error_callback:
-                    error_callback(f"Произошла ошибка: {type(e).__name__} - {str(e)}")
-                return None
-
-        self._executor.submit(_download)
-        return None
-
     def download_audio_sync(self, source_id: str, output_dir: str) -> str:
         """Download audio synchronously from YouTube via yt-dlp."""
         import os
@@ -915,7 +897,16 @@ class YouTubeService(BaseMusicService):
             "outtmpl": out_template,
             "skip_download": False,
             "quiet": True,
-            "no_warnings": True,
+            # Keep yt-dlp's own warnings off the console but let the logger see
+            # them. With no_warnings alone the "Unable to fetch GVS PO Token"
+            # and "no PO token extracted" messages that explain
+            # "The page needs to be reloaded" never appear anywhere.
+            "no_warnings": False,
+            "logger": self.logger,
+            # A previous partial download of the same id must not be reused:
+            # yt-dlp skips an existing file by default, so a 0-byte or
+            # truncated leftover silently became "the download".
+            "overwrites": True,
         })
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -949,6 +940,22 @@ class YouTubeService(BaseMusicService):
             prefix = f"yt_{clean_id}_{ts}"
             for fname in os.listdir(output_dir):
                 if fname.startswith(prefix) and not fname.endswith('.part'):
-                    return os.path.join(output_dir, fname)
+                    found = os.path.join(output_dir, fname)
+                    _require_audio_file(found)
+                    return found
 
-            raise Exception("Файл не был найден после загрузки с YouTube")
+            raise Exception("Файл не был найден после загрузки с YouTube")
+
+    def download_audio(self, *args, **kwargs):
+        """Deprecated. Kept for API compatibility; see download_audio_sync.
+
+        The old implementation passed its own options (no cookies, no proxy,
+        no clients) and called the callback unconditionally, so a failed
+        download looked like a success. Route everything through
+        download_audio_sync instead.
+        """
+        raise NotImplementedError(
+            "download_audio() is deprecated: use download_audio_sync(), which "
+            "shares _get_ydl_opts() with the streaming path and verifies the "
+            "downloaded file."
+        )

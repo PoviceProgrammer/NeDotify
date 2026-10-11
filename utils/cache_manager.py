@@ -313,16 +313,23 @@ class CacheManager:
                     }
                 ydl_opts['outtmpl'] = out_template
                 ydl_opts['skip_download'] = False
+                # A leftover file from a previous partial download must not be
+                # mistaken for a good one; yt-dlp reuses an existing file by
+                # default and the check below only asked os.path.exists().
+                ydl_opts['overwrites'] = True
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=True)
                     if info:
                         ext = info.get('ext', 'm4a')
                         final_path = os.path.join(self._streams_dir, f"{download_id}.{ext}")
-                        if os.path.exists(final_path):
-                            self.logger.info(f"Successfully cached {source}/{source_id} to {final_path}")
-                            self.db.set_cached_file(source, source_id, final_path)
-                            self.mark_cache_dirty()
+                        # Same integrity gate the downloader uses: a 0-byte or
+                        # non-audio artefact must not become the cached stream.
+                        from services.youtube_service import _require_audio_file
+                        _require_audio_file(final_path)
+                        self.logger.info(f"Successfully cached {source}/{source_id} to {final_path}")
+                        self.db.set_cached_file(source, source_id, final_path)
+                        self.mark_cache_dirty()
             except Exception as e:
                 self.logger.error(f"Failed to cache {source}/{source_id}: {e}")
             finally:

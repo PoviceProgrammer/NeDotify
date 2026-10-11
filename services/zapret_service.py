@@ -63,6 +63,9 @@ def _verify_zip_sha256(zip_bytes: bytes, expected_sha256: str = ZAPRET_ZIP_SHA25
 ZAPRET_SCOPED_HOSTS = (
     "youtube.com", "youtu.be", "googlevideo.com", "ytimg.com",
     "i.ytimg.com", "www.youtube.com",
+    # music.youtube.com is where /youtubei/v1/search actually lands: pinning
+    # only youtube.com left the search endpoint unbypassed and it timed out.
+    "music.youtube.com", "m.youtube.com", "s.youtube.com",
     "soundcloud.com", "api-v2.soundcloud.com", "sndcdn.com",
     "open.spotify.com", "spotify.com",
     "music.yandex.ru", "storage.yandex.net",

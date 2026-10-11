@@ -44,7 +44,9 @@ class _GatedStub:
         os.makedirs(download_dir, exist_ok=True)
         fp = os.path.join(download_dir, "gated_%d.mp3" % n)
         with open(fp, "wb") as f:
-            f.write(b"ID3\x00\x01gated-audio")
+            # Above _MIN_AUDIO_BYTES: the real path rejects a truncated file,
+            # and a 16-byte payload made every "success" assertion fail.
+            f.write(b"ID3\x00\x01gated-audio" + b"\x00" * 8192)
         with self._lock:
             self.finished += 1
         return fp

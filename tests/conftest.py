@@ -37,7 +37,12 @@ class SettingsStub:
 
 
 class ServiceStub:
-    """Fake audio provider: writes a small local file instead of downloading."""
+    """Fake audio provider: writes a local file instead of downloading.
+
+    The payload is deliberately above _MIN_AUDIO_BYTES (4 KiB): the real
+    download path rejects anything smaller as a truncated file, and a stub that
+    wrote a 19-byte file made the integrity gate fire on every test.
+    """
 
     def __init__(self):
         self.calls = []
@@ -52,7 +57,7 @@ class ServiceStub:
         os.makedirs(download_dir, exist_ok=True)
         fp = os.path.join(download_dir, "stub_%d.mp3" % self.n)
         with open(fp, "wb") as f:
-            f.write(b"ID3\x00\x01stub-audio")
+            f.write(b"ID3\x00\x01stub-audio" + b"\x00" * 8192)
         return fp
 
 
