@@ -99,10 +99,15 @@ def test_download_audio_is_deprecated(tmp_path):
 
 
 def test_no_caller_of_download_audio_remains():
-    """The whole repo went through download_audio_sync."""
+    """The whole repo went through download_audio_sync.
+
+    Excludes tests/: this file itself contains the word in the deprecated-call
+    assertion above, and git grep runs against HEAD.
+    """
     import subprocess
     out = subprocess.run(
-        ["git", "grep", "-n", r"\.download_audio(", "HEAD"],
+        ["git", "grep", "-n", r"\.download_audio\(", "HEAD", "--",
+         "*.py", ":!tests/"],
         capture_output=True, text=True,
     )
     assert ".download_audio(" not in (out.stdout or ""), (

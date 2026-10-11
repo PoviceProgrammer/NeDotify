@@ -300,10 +300,32 @@ class CacheManager:
                         yt_svc = YouTubeService(settings=getattr(self, 'settings', None))
                         ydl_opts = yt_svc._get_ydl_opts('bestaudio/best', fallback=True)
                     except Exception:
+                        # NB: no `player_client` pin here. _get_ydl_opts()
+                        # deliberately leaves it unset: pinned modern clients
+                        # need a PO token and filter out every format, which was
+                        # verified to break the exact videos that then worked.
+                        # What this path must NOT lose are the retry and
+                        # timeout knobs, so it mirrors them instead of
+                        # hardening a bare options dict.
+                        logger.warning(
+                            "cache: could not build yt-dlp options via "
+                            "YouTubeService, using the fallback options",
+                            exc_info=True,
+                        )
                         ydl_opts = {
                             'quiet': True,
-                            'no_warnings': True,
+                            'no_warnings': False,
                             'format': 'bestaudio/best',
+                            'noplaylist': True,
+                            'nocheckcertificate': True,
+                            'socket_timeout': 30,
+                            'retries': 10,
+                            'extractor_retries': 3,
+                            'fragment_retries': 10,
+                            'http_chunk_size': 10 * 1024 * 1024,
+                            'concurrent_fragment_downloads': 4,
+                            'buffersize': 1024 * 1024,
+                            'source_address': '0.0.0.0',
                         }
                 else:
                     ydl_opts = {
