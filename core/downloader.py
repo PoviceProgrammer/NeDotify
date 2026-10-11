@@ -473,8 +473,108 @@ class DownloadManager:
         self._on_batch_task_done(track_id, success=False)
         return True
 
+    # Transient provider failures. Everything else (bad URL, DRM, missing
+    # source) is permanent: retrying it just burns the same request again.
+    _RETRYABLE_MARKS = (
+        'page needs to be reloaded', 'unable to download webpage',
+        'unable to download api page', 'unable to download json metadata',
+        'http error 429', 'http error 502', 'http error 503', 'http error 504',
+        'timed out', 'timeout', 'connection', 'temporarily unavailable',
+        'rate limit', 'rate-limited', 'try again later', 'ssl', 'handshake',
+        'unauthorized', 'forbidden',
+    )
+    _RETRY_ATTEMPTS = 3
+    _RETRY_BASE_DELAY = 20.0  # seconds; doubles each attempt: 20s, 40s
+
+    def _is_retryable_error(self, message) -> bool:
+        if not message:
+            return False
+        low = str(message).lower()
+        return any(mark in low for mark in self._RETRYABLE_MARKS)
+
+    def _fetch_from_provider(self, source, source_id, download_dir, track_id):
+        """One attempt at fetching a track from its provider."""
+        if source not in _SUPPORTED_SOURCES:
+            # No provider is wired for this source (e.g. vk). Saying so is more
+            # useful than blaming a provider for not returning a file.
+            raise Exception(f"No download provider for source '{source}'.")
+
+        file_path = None
+
+        if source == 'youtube':
+            if str(source_id or '').startswith('http') and not is_safe_media_url(str(source_id)):
+                raise Exception('Unsafe media URL rejected')
+            file_path = self._core.youtube.download_audio_sync(source_id, download_dir)
+        elif source == 'soundcloud':
+            sid = str(source_id or '')
+            if sid.startswith('http'):
+                sc_url = sid
+            elif sid.isdigit():
+                sc_url = sid
+            else:
+                sc_url = f'https://soundcloud.com/{sid}'
+            if sc_url.startswith('http') and not is_safe_media_url(sc_url):
+                raise Exception('Unsafe media URL rejected')
+            file_path = self._core.soundcloud.download_audio_sync(sc_url, download_dir)
+        elif source == 'yandex':
+            file_path = self._core.yandex.download_audio_sync(source_id, download_dir)
+        elif source in ('spotify', 'spotify_album'):
+            file_path = self._download_spotify_track(source_id, track_id, download_dir)
+
+        # A provider returning no file is not a transient error: it means the
+        # track is unavailable, and waiting would only postpone the same result.
+        if not file_path or not os.path.exists(file_path):
+            raise Exception(f"Провайдер {source or '?'} не вернул файл")
+        return file_path
+
+    def _fetch_with_retry(self, source, source_id, download_dir, track_id, epoch):
+        """Fetch a track, retrying only on transient provider failures.
+
+        A single attempt per track used to mean a temporary glitch - a PO token
+        that had not refreshed, a 429, a read timeout - permanently failed the
+        download: `_resume_pending_downloads` only picks up pending/downloading
+        rows, so the `failed` status was never tried again.
+
+        Retries back off (20s, 40s) and are capped at _RETRY_ATTEMPTS, because
+        hammering the provider is what triggers the rate limit in the first
+        place. Only marks in _RETRYABLE_MARKS are retried: DRM, a bad source or
+        a URL that will never validate fail immediately.
+        """
+        delay = self._RETRY_BASE_DELAY
+        last_error = None
+
+        for attempt in range(1, self._RETRY_ATTEMPTS + 1):
+            if self._abort_cancelled(track_id, epoch, f'retry-{attempt}'):
+                return None
+            try:
+                path = self._fetch_from_provider(source, source_id, download_dir, track_id)
+                if attempt > 1:
+                    logger.info(f'Download for {track_id} succeeded on attempt {attempt}')
+                return path
+            except Exception as exc:
+                last_error = exc
+                if not self._is_retryable_error(exc):
+                    raise
+                if attempt >= self._RETRY_ATTEMPTS:
+                    break
+                logger.warning(
+                    f'Download for {track_id} failed (attempt {attempt}/'
+                    f'{self._RETRY_ATTEMPTS}): {exc}; retrying in {delay:.0f}s'
+                )
+                # Sleep in slices so a cancel_batch() is honoured immediately
+                # instead of after the full delay.
+                slept = 0.0
+                while slept < delay:
+                    if self._abort_cancelled(track_id, epoch, 'retry-wait'):
+                        return None
+                    time.sleep(min(1.0, delay - slept))
+                    slept += 1.0
+                delay *= 2
+
+        raise last_error if last_error else Exception("Download failed")
+
     def _download_worker(self, item):
-        """Actual download execution."""
+        """Actual download execution, with retries for transient failures."""
         track_id = item['track_id']
         source = item['source']
         source_id = item['source_id']
@@ -520,27 +620,7 @@ class DownloadManager:
             return
 
         try:
-            file_path = None
-
-            if source == 'youtube':
-                if str(source_id or '').startswith('http') and not is_safe_media_url(str(source_id)):
-                    raise Exception('Unsafe media URL rejected')
-                file_path = self._core.youtube.download_audio_sync(source_id, download_dir)
-            elif source == 'soundcloud':
-                sid = str(source_id or '')
-                if sid.startswith('http'):
-                    sc_url = sid
-                elif sid.isdigit():
-                    sc_url = sid
-                else:
-                    sc_url = f'https://soundcloud.com/{sid}'
-                if sc_url.startswith('http') and not is_safe_media_url(sc_url):
-                    raise Exception('Unsafe media URL rejected')
-                file_path = self._core.soundcloud.download_audio_sync(sc_url, download_dir)
-            elif source == 'yandex':
-                file_path = self._core.yandex.download_audio_sync(source_id, download_dir)
-            elif source in ('spotify', 'spotify_album'):
-                file_path = self._download_spotify_track(source_id, track_id, download_dir)
+            file_path = self._fetch_with_retry(source, source_id, download_dir, track_id, epoch)
 
             if self._abort_cancelled(track_id, epoch, 'after-provider'):
                 return
