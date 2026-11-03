@@ -39,7 +39,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 CSS_DIR = REPO / "ui" / "web_new_v2" / "css"
-OUT_DIR = REPO / "tools" / "bench" / "results"
+from tools.bench.paths import results_dir  # noqa: E402
+
+OUT_DIR = results_dir()
 
 # Filename of the line-accurate reporting artefact this module emits. It must
 # never be "animation_declarations.json" - that path belongs to the enforced

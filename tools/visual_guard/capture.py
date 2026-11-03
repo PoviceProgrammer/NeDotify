@@ -48,17 +48,50 @@ def _reset_js() -> str:
 
 _SETTLE_JS = """
 (async () => {
+  // A paused entrance animation can leave the whole page transparent.
+  // Finish finite effects; freeze repeating decoration at a fixed phase.
+  for (const animation of document.getAnimations()) {
+    const timing = animation.effect?.getComputedTiming();
+    if (timing && Number.isFinite(timing.endTime)) {
+      try { animation.finish(); } catch (e) {}
+    } else {
+      animation.currentTime = 0;
+      animation.pause();
+    }
+  }
   // fonts first: a fallback font changes every glyph position
   try { await document.fonts.ready; } catch (e) {}
   // then images: a half-decoded cover is a pixel diff
-  const imgs = Array.from(document.images || []);
+  // Lazy images in hidden views never load until those views are opened.
+  // Waiting for every image in the document deadlocks every capture.
+  const imgs = Array.from(document.images || []).filter(i => {
+    const r = i.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 &&
+      r.top < innerHeight && r.left < innerWidth;
+  });
   await Promise.all(imgs.map(i => i.complete
     ? Promise.resolve()
-    : new Promise(r => { i.addEventListener('load', r, {once:true});
-                          i.addEventListener('error', r, {once:true}); })));
+    : new Promise(resolve => {
+        const done = () => {
+          clearTimeout(timer);
+          i.removeEventListener('load', done);
+          i.removeEventListener('error', done);
+          resolve();
+        };
+        const timer = setTimeout(done, 5000);
+        i.addEventListener('load', done, {once:true});
+        i.addEventListener('error', done, {once:true});
+        if (i.complete) done();
+      })));
   // two rAFs so style/layout/paint settle before the shutter
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   await new Promise(r => setTimeout(r, %d));
+  // Viewport/DPR emulation can finish layout after its first resize event.
+  // Refresh the real canvas handlers once at the settled dimensions in both
+  // versions, rather than comparing a stale raster stretched by the browser.
+  window.dispatchEvent(new Event('resize'));
+  document.dispatchEvent(new Event('nedotify:progress_appearance_changed'));
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   return {
     images: imgs.length,
     incomplete: imgs.filter(i => !i.complete).length,
@@ -96,6 +129,8 @@ class Capturer:
             status, err = None, f"{type(e).__name__}: {e}"[:300]
 
         info = self.sess.js(_SETTLE_JS, timeout=60.0, await_promise=True) or {}
+        if info.get('incomplete'):
+            err = err or f"{info['incomplete']} visible images did not settle"
         png = self.sess.screenshot_png()
         elapsed = round((time.monotonic() - t0) * 1000, 1)
 

@@ -92,9 +92,9 @@ def test_restoration_is_automatic(monkeypatch, tmp_path):
     from tests.conftest import home_expander
 
     before = os.path.expanduser("~")
-    monkeypatch.setattr(os.path, "expanduser", home_expander(tmp_path / "home2"))
-    assert os.path.expanduser("~") != before
-    monkeypatch.undo()
+    with monkeypatch.context() as local_patch:
+        local_patch.setattr(os.path, "expanduser", home_expander(tmp_path / "home2"))
+        assert os.path.expanduser("~") != before
     assert os.path.expanduser("~") == before
 
 

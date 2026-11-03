@@ -11,22 +11,28 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: "3.14"
-        cache: 'pip'
+        cache: pip
+        cache-dependency-path: requirements-lock.txt
 
-    - name: Install dependencies
+    - name: Install hash-locked dependencies
+      run: python -m pip install --require-hashes -r requirements-lock.txt
+
+    - name: Static checks
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-dev.txt
+        python tools/check_source_manifest.py --require-tracked
+        python tools/check_shadow_imports.py
+        python tools/check_lock_nesting.py
+        python -m ruff check --select E4,E7,E9 tools/bench/api_stubs.py tools/bench/cdp.py tools/bench/scenarios.py tools/bench/run_bench.py tools/bench/bench_child.py tools/bench/paths.py tools/visual_guard/run_guard.py tools/packaging/native_manifest.py tests/test_bench_tooling.py tests/test_audio_fingerprint_duplicates.py
+        python -m mypy --follow-imports=skip --ignore-missing-imports tools/bench/api_stubs.py
 
-    - name: Run Python tests
-      run: |
-        pytest -m "not network"
+    - name: Run isolated service contract tests with coverage
+      run: python -m pytest -m "not network" --strict-markers --cov=services.audio_fingerprint_service --cov-report=term --cov-fail-under=55 tests/test_audio_fingerprint_duplicates.py
 
-
+    - name: Run full offline Python suite
+      run: python -m pytest -m "not network" --strict-markers

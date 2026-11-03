@@ -85,10 +85,12 @@
        4. Glassmorphism & Blur Tokens
        ---------------------------------------------------------------------- */
     --glass-blur: 8px;
-    --blur-sm: calc(var(--glass-blur) * 0.75);
-    --blur-md: var(--glass-blur);
-    --blur-lg: calc(var(--glass-blur) * 1.5);
-    --blur-xl: calc(var(--glass-blur) * 2);
+    /* Hard ceiling for large Mac-style glass surfaces. */
+    --blur-surface-cap: 16px;
+    --blur-sm: min(calc(var(--glass-blur) * 0.75), var(--blur-surface-cap));
+    --blur-md: min(var(--glass-blur), var(--blur-surface-cap));
+    --blur-lg: min(calc(var(--glass-blur) * 1.5), var(--blur-surface-cap));
+    --blur-xl: min(calc(var(--glass-blur) * 2), var(--blur-surface-cap));
     --player-glow-blur: 40px;
     --player-glow-opacity: 0.55;
     --ambient-blur: 50px;
@@ -97,8 +99,8 @@
     /* ----------------------------------------------------------------------
        5. Typography Scale & Fonts: «Sora + DM Sans»
        ---------------------------------------------------------------------- */
-    --font-display: 'Sora', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    --font-body: 'DM Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --font-display: 'Sora', 'NeDotify Cyrillic', system-ui, -apple-system, sans-serif;
+    --font-body: 'DM Sans', 'NeDotify Cyrillic', 'Segoe UI', system-ui, -apple-system, sans-serif;
     --font-family: var(--font-body);
     --font-mono: 'Consolas', 'Courier New', monospace;
     
@@ -127,6 +129,30 @@
        ---------------------------------------------------------------------- */
     --background: var(--color-bg-base);
     --surface: var(--bg-surface);
+}
+
+/* Performance presets are token states, so each blur token has one owner. */
+:root.perf-medium {
+    --blur-sm: 3px;
+    --blur-md: 6px;
+    --blur-lg: 8px;
+    --blur-xl: 10px;
+    --glass-blur: 6px;
+    --player-glow-blur: 20px;
+    --player-glow-opacity: 0.35;
+    --ambient-blur: 30px;
+}
+
+:root.perf-low,
+:root.battery-saver-active {
+    --glass-blur: 0px !important;
+    --blur-sm: 0px !important;
+    --blur-md: 0px !important;
+    --blur-lg: 0px !important;
+    --blur-xl: 0px !important;
+    --player-glow-blur: 0px !important;
+    --player-glow-opacity: 0 !important;
+    --ambient-blur: 0px !important;
 }
 
 /* --------------------------------------------------------------------------

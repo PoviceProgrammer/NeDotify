@@ -1,4 +1,4 @@
-# Project: AURA Music
+# Project: NeDotify (historical plan)
 
 > **ИСТОРИЧЕСКИЙ ДОКУМЕНТ. НЕ СООТВЕТСТВУЕТ ТЕКУЩЕЙ РЕАЛИЗАЦИИ.**
 >

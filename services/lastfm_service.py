@@ -17,7 +17,8 @@ from services.base_service import BaseMusicService
 logger = logging.getLogger(__name__)
 
 # No API key ships with the application. Keys are resolved at runtime from
-# (1) the LASTFM_API_KEY environment variable, then (2) settings 'auth'/'lastfm_api_key'.
+# (1) the LASTFM_API_KEY environment variable, then (2) services.lastfm_api_key.
+# Older profiles may still contain auth.lastfm_api_key; it remains a fallback.
 # Both accept several comma/semicolon separated keys, which keeps the rotation and
 # _mark_bad_key machinery useful for users who supply more than one.
 API_KEYS: List[str] = []
@@ -102,18 +103,13 @@ class LastFMService(BaseMusicService):
         self._key_lock = threading.Lock()
         self._bad_keys = set()
 
-        for key in self._resolve_api_keys():
-            if key not in API_KEYS:
-                API_KEYS.append(key)
-
-        if not API_KEYS:
+        if not self._resolve_api_keys():
             self.logger.info(
                 'Last.fm API key not configured — set the LASTFM_API_KEY environment '
-                'variable or auth.lastfm_api_key in settings. Last.fm features are disabled.'
+                'variable or services.lastfm_api_key in settings. Last.fm features are disabled.'
             )
 
         self._cache = {}
-        self._cache_lock = threading.Lock()
 
         self._db_path = self._init_sqlite_cache_path()
         self._init_sqlite_cache_db()
@@ -137,17 +133,22 @@ class LastFMService(BaseMusicService):
         try:
             keys.extend(_split_keys(os.getenv('LASTFM_API_KEY')))
         except Exception as e:
-            self.logger.debug(f'Could not read LASTFM_API_KEY from the environment: {e}', exc_info=True)
+            self.logger.debug('Could not read LASTFM_API_KEY from the environment (%s)', type(e).__name__)
         if self.settings is not None:
             try:
-                keys.extend(_split_keys(self.settings.get('auth', 'lastfm_api_key', '')))
+                configured = self.settings.get('services', 'lastfm_api_key', '')
+                keys.extend(_split_keys(configured or self.settings.get('auth', 'lastfm_api_key', '')))
             except Exception as e:
-                self.logger.debug(f'Could not read auth.lastfm_api_key from settings: {e}', exc_info=True)
+                self.logger.debug('Could not read configured Last.fm credentials: %s', type(e).__name__)
         unique: List[str] = []
         for key in keys:
             if key not in unique:
                 unique.append(key)
         return unique
+
+    def is_enabled(self):
+        """Credentials alone never authorize disclosure of listening metadata."""
+        return self.settings is not None and self.settings.get('services', 'lastfm_enabled', False) is True
 
     def _get_session(self) -> requests.Session:
         """Per-thread requests.Session (M-7): Sessions are not thread-safe."""
@@ -156,7 +157,7 @@ class LastFMService(BaseMusicService):
             session = requests.Session()
             session.headers.update({'User-Agent': 'NeDotify/1.0 (RecommendationEngine)'})
             self._session_local.session = session
-        return session
+        return self.configure_session(session)
 
     @property
     def _session(self) -> requests.Session:
@@ -183,7 +184,8 @@ class LastFMService(BaseMusicService):
             os.makedirs(base_dir, exist_ok=True)
             return os.path.join(base_dir, 'lastfm_cache.db')
         except Exception as e:
-            self.logger.warning(f'Cannot create Last.fm cache dir {base_dir} ({e}); using an in-memory cache')
+            self.logger.warning('Cannot create Last.fm cache directory (%s); using an in-memory cache',
+                                type(e).__name__)
             return ':memory:'
 
     def _init_sqlite_cache_db(self):
@@ -199,29 +201,30 @@ class LastFMService(BaseMusicService):
                 ''')
                 conn.commit()
         except Exception as e:
-            self.logger.warning(f'Failed to initialize Last.fm SQLite cache DB: {e}')
+            self.logger.warning('Failed to initialize Last.fm SQLite cache DB (%s)', type(e).__name__)
 
     @property
     def available(self) -> bool:
         """True only when at least one usable (non-blocked) API key is configured."""
         with self._key_lock:
-            return any(k not in self._bad_keys for k in API_KEYS)
+            return any(k not in self._bad_keys for k in self._resolve_api_keys())
 
     def _mark_bad_key(self, api_key: str):
         with self._key_lock:
             if api_key and api_key not in self._bad_keys:
                 self._bad_keys.add(api_key)
-                self.logger.warning(f'Disabling invalid/blocked Last.fm API key: {api_key[:6]}...')
+                self.logger.warning('Disabling an invalid or blocked Last.fm API key')
 
     def _get_next_api_key(self) -> str:
         with self._key_lock:
-            valid_keys = [k for k in API_KEYS if k not in self._bad_keys]
+            keys = self._resolve_api_keys()
+            valid_keys = [k for k in keys if k not in self._bad_keys]
             if valid_keys:
                 key = valid_keys[self._key_index % len(valid_keys)]
                 self._key_index = (self._key_index + 1) % len(valid_keys)
                 return key
-            if API_KEYS:
-                return API_KEYS[0]
+            if keys:
+                return keys[0]
             return ''
 
     def _get_cached(self, cache_key: str) -> Optional[Any]:
@@ -249,7 +252,7 @@ class LastFMService(BaseMusicService):
                         self._cache[cache_key] = {'data': data, 'ts': ts, 'ttl': ttl}
                     return data
         except Exception as e:
-            self.logger.debug(f'SQLite cache lookup error: {e}')
+            self.logger.debug('SQLite cache lookup failed (%s)', type(e).__name__)
         finally:
             if conn:
                 try:
@@ -273,7 +276,7 @@ class LastFMService(BaseMusicService):
             if row:
                 return json.loads(row[0])
         except Exception as e:
-            self.logger.debug(f'Stale SQLite cache lookup failed for {cache_key}: {e}', exc_info=True)
+            self.logger.debug('Stale SQLite cache lookup failed (%s)', type(e).__name__)
         finally:
             if conn:
                 try:
@@ -298,7 +301,7 @@ class LastFMService(BaseMusicService):
                 conn.execute('INSERT OR REPLACE INTO lastfm_response_cache (cache_key, json_data, timestamp, ttl) VALUES (?, ?, ?, ?)',
                              (cache_key, json.dumps(data), now, ttl))
         except Exception as e:
-            self.logger.debug(f'SQLite cache store error: {e}')
+            self.logger.debug('SQLite cache store failed (%s)', type(e).__name__)
         finally:
             if conn:
                 try:
@@ -307,6 +310,8 @@ class LastFMService(BaseMusicService):
                     pass
 
     def _api_request(self, method: str, params: dict, ttl: float) -> Optional[dict]:
+        if not self.is_enabled():
+            return None
         cache_key = f'{method}:' + '&'.join(f'{k}={v}' for k, v in sorted(params.items()))
         cached = self._get_cached(cache_key)
         if cached is not None:
@@ -317,7 +322,7 @@ class LastFMService(BaseMusicService):
             self.logger.debug(f'Skipping Last.fm {method}: no usable API key configured')
             return self._get_stale_cache(cache_key)
 
-        attempts = len(API_KEYS)
+        attempts = len(self._resolve_api_keys())
         for _ in range(attempts):
             api_key = self._get_next_api_key()
             if not api_key or api_key in self._bad_keys:
@@ -326,17 +331,24 @@ class LastFMService(BaseMusicService):
             req_params = {'method': method, 'api_key': api_key, 'format': 'json'}
             req_params.update(params)
             self._acquire_token()
+            if not self.is_enabled():
+                return None
             try:
                 resp = self._get_session().get(self.BASE_URL, params=req_params, timeout=5.0)
                 if resp.status_code == 200:
                     data = resp.json()
                     if 'error' in data:
                         err_code = data.get('error')
+                        safe_error_code = (
+                            err_code if type(err_code) is int or
+                            (isinstance(err_code, str) and err_code.isdigit() and len(err_code) <= 6)
+                            else 'unknown'
+                        )
                         if err_code in (10, 26):
-                            self.logger.warning(f'Last.fm API key rejected (code {err_code}): {data.get("message")}')
+                            self.logger.warning('Last.fm API key rejected (code %s)', safe_error_code)
                             self._mark_bad_key(api_key)
                             continue
-                        self.logger.warning(f'Last.fm API error {err_code}: {data.get("message")}. Rotating key.')
+                        self.logger.warning('Last.fm API error code %s; rotating key', safe_error_code)
                         continue
                     self._set_cache(cache_key, data, ttl)
                     return data
@@ -347,10 +359,10 @@ class LastFMService(BaseMusicService):
                 if resp.status_code in (429, 503):
                     self.logger.warning(f'Last.fm HTTP {resp.status_code}. Rate limit backoff & rotating API key.')
                     continue
-                self.logger.warning(f'Last.fm HTTP {resp.status_code}: {resp.text}')
+                self.logger.warning('Last.fm HTTP status %s', resp.status_code)
                 continue
             except Exception as e:
-                self.logger.warning(f'Last.fm request failed: {e}')
+                self.logger.warning('Last.fm request failed (%s)', type(e).__name__)
                 break
 
         stale = self._get_stale_cache(cache_key)
@@ -551,6 +563,19 @@ class LastFMService(BaseMusicService):
             return []
         return _task()
 
+    def country_get_top_tracks(self, country='US', limit=20):
+        countries = {'US': 'United States', 'RU': 'Russian Federation', 'GB': 'United Kingdom',
+                     'DE': 'Germany', 'FR': 'France', 'UA': 'Ukraine', 'KZ': 'Kazakhstan',
+                     'BY': 'Belarus', 'JP': 'Japan', 'KR': 'Korea, Republic of', 'BR': 'Brazil'}
+        name = countries.get(str(country).upper(), str(country))
+        data = self._api_request('geo.gettoptracks', {'country': name, 'limit': limit}, CHART_TTL)
+        tracks = ((data or {}).get('tracks') or {}).get('track') or []
+        if isinstance(tracks, dict):
+            tracks = [tracks]
+        return [{'name': t.get('name') or '', 'artist': (t.get('artist') or {}).get('name') or '',
+                 'duration': t.get('duration') or 0, 'image': ((t.get('image') or [{}])[-1].get('#text') or '')}
+                for t in tracks[:limit] if isinstance(t, dict)]
+
     def user_get_recent_tracks(self, user: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
         def _task():
             data = self._api_request('user.getrecenttracks', {'user': user, 'limit': limit}, CHART_TTL)
@@ -612,3 +637,11 @@ class LastFMService(BaseMusicService):
             self._executor.submit(_task)
             return []
         return _task()
+
+    def clear_response_cache(self):
+        """Erase locally cached provider responses on an explicit privacy reset."""
+        with self._cache_lock:
+            self._cache.clear()
+            if self._db_path != ':memory:':
+                with sqlite3.connect(self._db_path, timeout=2) as connection:
+                    connection.execute('DELETE FROM lastfm_response_cache')

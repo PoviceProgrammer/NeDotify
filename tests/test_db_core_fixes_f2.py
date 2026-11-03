@@ -38,10 +38,17 @@ def _no_fts(db):
     return db
 
 
+def _queue_track(db, track_id):
+    """The queue has a real FK now; tests must not seed orphan queue rows."""
+    db.conn.execute("INSERT INTO tracks(id, title) VALUES (?, ?)", (track_id, f"Queue {track_id}"))
+    db.conn.commit()
+
+
 # --- H1: download_queue_add ---------------------------------------------------
 
 def test_queue_row_survives_a_re_add(tmp_db):
     """Pre-fix the row was neither deleted nor reset; the caller just saw False."""
+    _queue_track(tmp_db, 1)
     assert tmp_db.download_queue_add(1, "youtube", "v1") is True
     tmp_db.download_queue_set_status(1, "completed")
 
@@ -52,6 +59,7 @@ def test_queue_row_survives_a_re_add(tmp_db):
 @pytest.mark.parametrize("terminal", ["failed", "cancelled"])
 def test_terminal_row_is_rearmed(tmp_db, terminal):
     """A failed/cancelled download can be retried: same row, back to pending."""
+    _queue_track(tmp_db, 2)
     tmp_db.download_queue_add(2, "youtube", "v2")
     tmp_db.download_queue_set_status(2, terminal)
 
@@ -67,6 +75,7 @@ def test_terminal_row_is_rearmed(tmp_db, terminal):
 @pytest.mark.parametrize("live", ["pending", "downloading"])
 def test_live_row_is_not_rearmed(tmp_db, live):
     """A double click must not start a second download of the same track."""
+    _queue_track(tmp_db, 3)
     tmp_db.download_queue_add(3, "youtube", "v3")
     tmp_db.download_queue_set_status(3, live)
 
@@ -76,6 +85,7 @@ def test_live_row_is_not_rearmed(tmp_db, live):
 
 def test_rearm_then_claim_is_still_unique(tmp_db):
     """The unique index is still the arbiter: one row per track, no matter what."""
+    _queue_track(tmp_db, 4)
     tmp_db.download_queue_add(4, "youtube", "v4")
     tmp_db.download_queue_set_status(4, "failed")
     tmp_db.download_queue_add(4, "youtube", "v4")
@@ -117,11 +127,7 @@ def test_close_checkpoints_the_wal(tmp_path):
     db.close()
 
     wal = tmp_path / "wal.db-wal"
-    assert wal.exists(), "the -wal file was removed: the checkpoint never ran"
-    assert wal.stat().st_size == 0, (
-        f"-wal still holds {wal.stat().st_size} bytes after close(): "
-        "the WAL was not checkpointed"
-    )
+    assert not wal.exists() or wal.stat().st_size == 0
 
     keep.set()
     thread.join(5)
@@ -133,12 +139,8 @@ def test_close_checkpoints_the_wal(tmp_path):
         reopened.close()
 
 
-def test_close_logs_an_unclosable_connection(tmp_path, caplog):
-    """A foreign-thread handle raises ProgrammingError; it must be visible.
-
-    Reported as ONE summary line: a long-running session can hold hundreds of
-    these, and a warning per connection flooded app.log on every shutdown.
-    """
+def test_close_closes_connections_created_by_other_threads(tmp_path, caplog):
+    """check_same_thread=False lets final teardown release every owned handle."""
     path = str(tmp_path / "foreign.db")
     db = DatabaseManager(path)
     db.set_setting("a.b", 1, "general")
@@ -147,9 +149,8 @@ def test_close_logs_an_unclosable_connection(tmp_path, caplog):
     with caplog.at_level("WARNING"):
         db.close()
     close_logs = [r.message for r in caplog.records if "could not be closed" in r.message]
-    assert close_logs, [r.message for r in caplog.records]
-    assert len(close_logs) == 1, f"expected one summary line, got {len(close_logs)}"
-    assert "1 database connection(s)" in close_logs[0]
+    assert not close_logs, close_logs
+    assert db._all_conns == set()
 
     keep.set()
     thread.join(5)
@@ -433,6 +434,14 @@ def test_batch_writer_without_a_count_is_not_treated_as_a_failure():
 def test_full_write_clears_pending():
     sm = SettingsManager(_StubDb(2))
     sm.set("audio", "volume", 11)
+    sm.set("theme", "icon_pack", "default")
+    assert sm.sync_flush_now() is True
+    assert sm._dirty == set()
+
+
+def test_full_write_includes_compatibility_alias_rows():
+    sm = SettingsManager(_StubDb(3))
+    sm.set("audio", "volume", 11)
     sm.set("theme", "name", "Dark")
     assert sm.sync_flush_now() is True
     assert sm._dirty == set()
@@ -461,7 +470,7 @@ def test_reset_category_copies_the_defaults(tmp_db):
     genres = sm.get("personalization", "favorite_genres")
     genres.append("rock")
     assert DEFAULT_SETTINGS["personalization"]["favorite_genres"] == []
-    assert sm.get("personalization", "favorite_genres") == ["rock"]
+    assert sm.get("personalization", "favorite_genres") == []
     assert DEFAULT_SETTINGS["equalizer"]["bands"] == [0] * 10
 
 
@@ -614,7 +623,9 @@ def test_cleanup_flags_shutdown_before_stopping_zapret(monkeypatch):
     # cleanup() shuts the shared service executor down; keep it alive for the
     # rest of the suite.
     from services.base_service import BaseMusicService
+    from services.lyrics_service import LyricsService
     monkeypatch.setattr(BaseMusicService, "shutdown_executor", lambda: None, raising=False)
+    monkeypatch.setattr(LyricsService, "shutdown_executor", lambda **kwargs: None)
 
     AppCore.cleanup(core)
 

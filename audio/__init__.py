@@ -1,1 +1,1 @@
-# AURA Music - Audio Module
+# NeDotify - Audio Module

@@ -1,6 +1,5 @@
 """
-NeDotify - Fast Spotify Service
-Blazingly fast Spotify search & high-resolution artwork resolution with instant LRU caching.
+NeDotify - Apple/iTunes metadata catalogue (legacy SpotifyService import).
 """
 
 from typing import Callable, Optional
@@ -8,10 +7,10 @@ import threading
 import logging
 import requests
 import urllib.parse
-from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 from services.base_service import BaseMusicService, normalize_proxy_url
 from requests.adapters import HTTPAdapter
+from services.itunes_gateway import ITunesGateway
 
 logger = logging.getLogger(__name__)
 
@@ -24,20 +23,18 @@ _session.headers.update({
 })
 
 
-@lru_cache(maxsize=256)
-def _cached_spotify_search(query: str, limit: int = 20) -> tuple:
+def _cached_spotify_search(query: str, limit: int = 20, is_current=None, session=None) -> tuple:
     encoded_query = urllib.parse.quote(query)
     results = []
     try:
         url = f"https://itunes.apple.com/search?term={encoded_query}&entity=song&limit={limit}"
-        resp = _session.get(url, timeout=3.5)
-        if resp.status_code == 200:
-            data = resp.json()
+        data = ITunesGateway.get(url, session=session or _session, timeout=3.5, is_current=is_current)
+        if data is not None:
             for idx, item in enumerate(data.get("results", [])):
                 artist = item.get("artistName", "Unknown")
                 title = item.get("trackName", "Unknown")
-                album = item.get("collectionName", "Spotify Album")
-                duration = int(item.get("trackTimeMillis", 180000) / 1000)
+                album = item.get("collectionName", "Album")
+                duration = int((item.get("trackTimeMillis") or 0) / 1000)
                 raw_artwork = item.get("artworkUrl100", "")
                 cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
 
@@ -54,18 +51,17 @@ def _cached_spotify_search(query: str, limit: int = 20) -> tuple:
                 ))
     except Exception as e:
         logger.error(f"Error in cached Spotify search: {e}")
+        raise
     return tuple(results)
 
 
-@lru_cache(maxsize=256)
-def _cached_spotify_album_search(query: str, limit: int = 20) -> tuple:
+def _cached_spotify_album_search(query: str, limit: int = 20, is_current=None, session=None) -> tuple:
     encoded_query = urllib.parse.quote(query)
     results = []
     try:
         url = f"https://itunes.apple.com/search?term={encoded_query}&entity=album&limit={limit}"
-        resp = _session.get(url, timeout=3.5)
-        if resp.status_code == 200:
-            data = resp.json()
+        data = ITunesGateway.get(url, session=session or _session, timeout=3.5, is_current=is_current)
+        if data is not None:
             for idx, item in enumerate(data.get("results", [])):
                 artist = item.get("artistName", "Unknown Artist")
                 title = item.get("collectionName", "Unknown Album")
@@ -73,7 +69,9 @@ def _cached_spotify_album_search(query: str, limit: int = 20) -> tuple:
                 track_count = item.get("trackCount", 0)
                 raw_artwork = item.get("artworkUrl100", "")
                 cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
-                collection_id = str(item.get("collectionId", idx))
+                if not item.get("collectionId"):
+                    continue
+                collection_id = str(item["collectionId"])
 
                 results.append((
                     f"spotify_album_{collection_id}",
@@ -88,31 +86,52 @@ def _cached_spotify_album_search(query: str, limit: int = 20) -> tuple:
                 ))
     except Exception as e:
         logger.error(f"Error in cached Spotify album search: {e}")
+        raise
     return tuple(results)
 
 
 class SpotifyService(BaseMusicService):
-    """Blazingly fast Spotify track search and metadata provider."""
+    """Apple catalogue metadata; legacy source IDs remain compatible."""
+    display_name = "Apple Music / iTunes"
 
     def __init__(self, settings=None):
         super().__init__()
         self.settings = settings
         self._executor = ThreadPoolExecutor(max_workers=5)
         self.logger = logging.getLogger(__name__)
-        # `_session` is module-level and shared by every instance, so this has to
-        # ASSIGN rather than only overwrite when set: with the old `if proxy:`
-        # form an instance built with no/unusable proxy left the previous
-        # instance's proxy installed on the shared session, so the stale value
-        # outlived the configuration that set it.
-        proxy = normalize_proxy_url(self.settings.get("auth", "proxy_url", "")) if self.settings else ""
-        _session.proxies = {"http": proxy, "https": proxy} if proxy else {}
+        self._session_local = threading.local()
 
-    def search(self, query: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, limit: int = 20, result_type: str = None):
+    def _get_session(self):
+        session = getattr(self._session_local, 'session', None)
+        if session is None:
+            session = requests.Session()
+            session.headers.update(_session.headers)
+            self._session_local.session = session
+        return self.configure_session(session)
+
+    def search(self, query: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, limit: int = 20, result_type: str = None, is_current=None):
+        key = f'spotify_search:{query}:{result_type}:{limit}'
+        cached = self.get_search_cache(key)
+        if cached is not None:
+            if callback:
+                callback(cached)
+            return None
+        original_callback = callback
+        error_callback = error_callback or (lambda error: original_callback([]) if original_callback else None)
+        leader, callback, error_callback = self._join_request((key, id(is_current) if is_current else None), callback, error_callback)
+        if not leader:
+            return None
         def _search_thread():
             try:
+                if is_current and not is_current():
+                    raise RuntimeError('Запрос устарел')
+                if result_type in ("playlists", "playlist"):
+                    if callback:
+                        callback([])
+                    return []
                 is_album_search = result_type in ("albums", "album")
                 if is_album_search:
-                    raw_tuple = _cached_spotify_album_search(query, limit)
+                    raw_tuple = _cached_spotify_album_search(query, limit, is_current, session=self._get_session())
                     albums = []
                     for item in raw_tuple:
                         albums.append({
@@ -127,11 +146,13 @@ class SpotifyService(BaseMusicService):
                             "source_id": item[7],
                             "type": item[8]
                         })
+                    if albums:
+                        self.set_search_cache(key, albums)
                     if callback:
                         callback(albums)
                     return albums
                 else:
-                    raw_tuple = _cached_spotify_search(query, limit)
+                    raw_tuple = _cached_spotify_search(query, limit, is_current, session=self._get_session())
                     tracks = []
                     for item in raw_tuple:
                         tracks.append({
@@ -146,6 +167,8 @@ class SpotifyService(BaseMusicService):
                             "source_url": item[8],
                             "is_favorite": False
                         })
+                    if tracks:
+                        self.set_search_cache(key, tracks)
                     if callback:
                         callback(tracks)
                     return tracks
@@ -162,10 +185,9 @@ class SpotifyService(BaseMusicService):
         def _fetch():
             try:
                 url = f"https://itunes.apple.com/lookup?id={collection_id}&entity=song&limit={limit}"
-                resp = _session.get(url, timeout=4.0)
+                data = ITunesGateway.get(url, session=self._get_session(), timeout=4.0)
                 tracks = []
-                if resp.status_code == 200:
-                    data = resp.json()
+                if data is not None:
                     results = data.get("results", [])
                     song_items = results[1:] if len(results) > 1 else results
                     for idx, item in enumerate(song_items):
@@ -174,7 +196,7 @@ class SpotifyService(BaseMusicService):
                         artist = item.get("artistName", "Unknown Artist")
                         title = item.get("trackName", "Unknown Title")
                         album = item.get("collectionName", "Album")
-                        duration = int(item.get("trackTimeMillis", 180000) / 1000)
+                        duration = int((item.get("trackTimeMillis") or 0) / 1000)
                         raw_artwork = item.get("artworkUrl100", "")
                         cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
 
@@ -205,10 +227,9 @@ class SpotifyService(BaseMusicService):
             try:
                 # Lookup tracks or fallback
                 url = f"https://itunes.apple.com/lookup?id={playlist_id}&entity=song&limit={limit}"
-                resp = _session.get(url, timeout=4.0)
+                data = ITunesGateway.get(url, session=self._get_session(), timeout=4.0)
                 tracks = []
-                if resp.status_code == 200:
-                    data = resp.json()
+                if data is not None:
                     for item in data.get("results", []):
                         if item.get("wrapperType") == "track":
                             tracks.append({

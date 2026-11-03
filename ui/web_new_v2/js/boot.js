@@ -45,28 +45,48 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
-// Global toast bridge (early, no module dependency): renders every
-// window 'nedotify:toast' event into #toast-container. Without this,
-// the ~50 dispatch sites across js/ are silent.
+// Global toast bridge is owned by notifications.js, loaded before boot.
+
+// Renderer liveness heartbeat. The Python watchdog (main.py) reloads the
+// renderer when this pulse stops while the page is visible - the self-heal
+// for the recurring WebView2 "black window with a live process" failure.
+// Hidden pages throttle timers, so the state is reported and enforcement
+// pauses while hidden.
 (function () {
-    if (window.__nedotifyToastBridgeArmed) return;
-    window.__nedotifyToastBridgeArmed = true;
-    function renderToast(msg, type) {
-        if (!msg) return;
-        var container = document.getElementById('toast-container');
-        if (!container) return;
-        while (container.children.length >= 4) {
-            if (container.firstElementChild) container.firstElementChild.remove();
-            else break;
+    if (window.__nedotifyHeartbeatArmed) return;
+    window.__nedotifyHeartbeatArmed = true;
+    var beat = function () {
+        try {
+            window.pywebview?.api?.frontend_heartbeat?.(
+                document.visibilityState === 'visible' ? 'visible' : 'hidden');
+        } catch (e) { /* bridge not injected yet - the next tick retries */ }
+    };
+    var lastVisibleAt = Date.now();
+    var kickCompositor = function () {
+        try { void document.body.offsetHeight; window.dispatchEvent(new Event('resize')); } catch (e) {}
+    };
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') {
+            var gap = Date.now() - lastVisibleAt;
+            lastVisibleAt = Date.now();
+            // Force a compositor repaint after a long hidden stretch: WebView2
+            // sometimes leaves a stale/white surface after restore.
+            if (gap > 5000) kickCompositor();
+            beat();
+        } else {
+            lastVisibleAt = Date.now();
         }
-        var toast = document.createElement('div');
-        toast.className = 'toast ' + (type || 'info');
-        toast.textContent = msg;
-        container.appendChild(toast);
-        setTimeout(function () { try { toast.remove(); } catch (e) {} }, 4000);
-    }
-    window.addEventListener('nedotify:toast', function (e) {
-        var d = (e && e.detail) || {};
-        renderToast(d.msg || d.message, d.type);
     });
+    // Document Events The bridge event is the reliable restore signal: native
+    // visibilitychange can stay silent while WebView2 has the occlusion
+    // calculation disabled, and every minimize→restore passes through it.
+    document.addEventListener('nedotify:window_visibility_changed', function (e) {
+        if (e && e.detail && e.detail.hidden === false) {
+            lastVisibleAt = Date.now();
+            kickCompositor();
+        }
+    });
+    setInterval(beat, 4000);
+    // First beat may race the bridge injection; retry shortly after load.
+    setTimeout(beat, 2500);
 })();

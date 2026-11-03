@@ -111,7 +111,7 @@ def test_no_legacy_mute_action_id() -> None:
     assert "toggle_mute" in _frontend_keybinds()
 
 
-def _format_key_name() -> callable:
+def _format_key_name(tmp_path: Path) -> callable:
     """Compile the real formatKeyName() out of settings.js with Node."""
     import shutil
     import subprocess
@@ -128,10 +128,10 @@ def _format_key_name() -> callable:
     # The extracted source goes in its own module rather than being inlined as
     # a JS string literal: repr()-escaping a block that contains both quote
     # styles and backslashes into JS source is needlessly fragile.
-    body_path = Path(__file__).with_name("_fmtkey_body.js")
+    body_path = tmp_path / "_fmtkey_body.js"
     body_path.write_text(body + "\nmodule.exports = formatKeyName;\n", encoding="utf-8")
     runner = "console.log(JSON.stringify(process.argv.slice(2).map(c => require('./_fmtkey_body.js')(c))));\n"
-    path = Path(__file__).with_name("_fmtkey_runner.js")
+    path = tmp_path / "_fmtkey_runner.js"
     path.write_text(runner, encoding="utf-8")
     try:
         proc = subprocess.run(
@@ -143,7 +143,7 @@ def _format_key_name() -> callable:
             # mangle every Cyrillic label into a different string.
             encoding="utf-8",
             timeout=60,
-            cwd=str(REPO_ROOT),
+            cwd=str(tmp_path),
         )
     finally:
         path.unlink(missing_ok=True)
@@ -158,7 +158,7 @@ def _format_key_name() -> callable:
     return dict(zip(["Ctrl+ArrowRight", "Ctrl+ArrowLeft", "Ctrl+KeyK", "Space", ""], labels))
 
 
-def test_format_key_name_renders_compound_combos() -> None:
+def test_format_key_name_renders_compound_combos(tmp_path) -> None:
     """A modifier must not defeat translation.
 
     formatKeyName used to look the whole combo string up in a map of bare
@@ -166,7 +166,7 @@ def test_format_key_name_renders_compound_combos() -> None:
     as the literal text "Ctrl+ArrowRight" while plain `ArrowRight` correctly
     rendered as "Стрелка Вправо".
     """
-    labels = _format_key_name()
+    labels = _format_key_name(tmp_path)
     assert labels["Ctrl+ArrowRight"] == "Ctrl + Стрелка Вправо"
     assert labels["Ctrl+ArrowLeft"] == "Ctrl + Стрелка Влево"
     # unmodified combos must keep working exactly as before
@@ -174,8 +174,8 @@ def test_format_key_name_renders_compound_combos() -> None:
     assert labels[""] == "Не назначено"
 
 
-def test_format_key_name_never_leaks_raw_codes() -> None:
-    labels = _format_key_name()
+def test_format_key_name_never_leaks_raw_codes(tmp_path) -> None:
+    labels = _format_key_name(tmp_path)
     leaked = {combo: label for combo, label in labels.items() if "Arrow" in label or "Key" in label}
     assert not leaked, f"raw KeyboardEvent.code leaked into the Settings UI: {leaked}"
 

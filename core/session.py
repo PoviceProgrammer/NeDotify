@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional
+import copy
 
 
 class SessionManager:
@@ -48,8 +49,9 @@ class SessionManager:
     ) -> None:
         """Save current session state."""
         full_queue = list(queue or [])
-        dropped = max(0, len(full_queue) - self.MAX_PERSISTED_QUEUE)
-        persisted_queue = [self._slim_track(t) for t in full_queue[dropped:]]
+        queue_index = max(0, min(int(queue_index), max(0, len(full_queue) - 1)))
+        dropped = min(max(0, len(full_queue) - self.MAX_PERSISTED_QUEUE), queue_index)
+        persisted_queue = [self._slim_track(t) for t in full_queue[dropped:dropped + self.MAX_PERSISTED_QUEUE]]
         if dropped and isinstance(queue_index, int):
             # Keep the index pointing at the same track after the head is cut.
             queue_index = max(0, queue_index - dropped)
@@ -73,7 +75,7 @@ class SessionManager:
             "track_id": self.settings.get("session", "last_track_id"),
             "position": self.settings.get("session", "last_position", 0),
             "volume": self.settings.get("session", "last_volume", 70),
-            "queue": self.settings.get("session", "last_queue", []),
+            "queue": copy.deepcopy(self.settings.get("session", "last_queue", [])),
             "queue_index": self.settings.get("session", "last_queue_index", 0),
             "shuffle": self.settings.get("session", "shuffle", False),
             "repeat": self.settings.get("session", "repeat", "off"),
@@ -82,7 +84,10 @@ class SessionManager:
         for track in session.get("queue", []):
             if not isinstance(track, dict):
                 continue
-            if track.get("source") in ("youtube", "soundcloud", "vk"):
+            # Legacy sessions may still contain a URL to the previous proxy's
+            # port/token. Only this process can issue a valid playback URL.
+            track.pop("stream_url", None)
+            if track.get("source") != "local":
                 track["file_path"] = None
                 track["resolved_at"] = 0
 

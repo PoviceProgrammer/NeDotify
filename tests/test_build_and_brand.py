@@ -149,6 +149,22 @@ def test_installer_output_name_matches_readme():
     assert "OutputBaseFilename=NeDotify_Setup" in text
 
 
+def test_installer_zapret_bundle_is_conditionally_gated():
+    """BUG-001 (installer half): an installer-shipped Zapret bundle lands in
+    {app}\\zapret — the directory zapret_service.find_binary() scans in a
+    frozen build and the elevation gate accepts — but the [Files] entry must
+    stay behind the ISPP FileExists guard so a build without the staged
+    dist\\zapret\\winws.exe still compiles (shipping the binary remains a
+    policy decision; the app falls back to the pinned download)."""
+    if not os.path.exists(ISS):
+        pytest.skip("installer.iss not present")
+    text = open(ISS, encoding="utf-8").read()
+    assert "#define ZapretBundleWinws SourcePath" in text
+    assert "#if FileExists(ZapretBundleWinws)" in text
+    assert "#ifdef ZapretBundleReady" in text
+    assert 'DestDir: "{app}\\zapret"' in text
+
+
 # --- the deleted PyInstaller GUI-installer pipeline stays deleted ------------
 
 DEAD_INSTALLER_SCRIPTS = ("build_installer.py", "installer_gui.py", "uninstaller_gui.py")
@@ -176,7 +192,7 @@ def test_gui_installer_pipeline_is_deleted(name):
         "README.md",
         "CLAUDE.md",
         "AGENTS.md",
-        os.path.join(".claude", "skills", "aura-build", "SKILL.md"),
+        os.path.join(".claude", "skills", "nedotify-build", "SKILL.md"),
     ],
 )
 def test_no_doc_points_at_a_deleted_installer_script(doc):
@@ -267,10 +283,9 @@ def test_no_brand_leak_in_user_visible_strings(rel):
 def test_user_agents_are_neutral():
     """lrclib/Last.fm only need a stable identifier; nothing in the repo
     compares the old value, so a neutral one is safe."""
-    lyrics = _read(os.path.join(PROJECT_ROOT, "services", "lyrics_service.py"))
-    assert lyrics.count("'User-Agent': 'NeDotify/1.0'") == 2, (
-        "both lrclib calls (exact + search) must send the neutral User-Agent"
-    )
+    lyrics = _read(os.path.join(PROJECT_ROOT, "services", "lyrics_lookup.py"))
+    assert "headers=headers or {'User-Agent': 'NeDotify/1.0'}" in lyrics
+    assert 'https://lrclib.net/api/get?' in lyrics and 'https://lrclib.net/api/search?' in lyrics
     lastfm = _read(os.path.join(PROJECT_ROOT, "services", "lastfm_service.py"))
     assert "'User-Agent': 'NeDotify/1.0 (RecommendationEngine)'" in lastfm
 
@@ -307,15 +322,20 @@ def test_persistent_aura_identifiers_are_untouched(rel, needle, why):
     assert needle in _read(path), f"{needle!r} must stay in {rel}: {why}"
 
 
-def test_onboarding_localstorage_key_is_both_read_and_written():
-    """Both the guard and the completion path live in onboarding.js; if only
-    one side keeps the old key, every launch re-runs the wizard."""
+def test_onboarding_legacy_localstorage_key_is_migrated_to_backend():
+    """Legacy completion is consumed, then removed after the canonical save.
+
+    Runtime migration and failed-save behavior are exercised in
+    test_onboarding_ui; rebuilding a second persistent flag would recreate
+    the split source of truth from the audit.
+    """
     path = os.path.join(PROJECT_ROOT, "ui", "web_new_v2", "js", "onboarding.js")
     if not os.path.exists(path):
         pytest.skip("onboarding.js not present")
     text = _read(path)
     assert "localStorage.getItem('aura_onboarding_done')" in text, "read side lost the key"
-    assert "localStorage.setItem('aura_onboarding_done', 'true')" in text, "write side lost the key"
+    assert 'removeItem(key)' in text
+    assert "localStorage.setItem('aura_onboarding_done', 'true')" not in text
 
 
 # --- syntax gate for the edited .js (skipped when node is unavailable) ------

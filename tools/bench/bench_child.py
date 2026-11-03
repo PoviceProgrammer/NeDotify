@@ -30,6 +30,16 @@ RESULTS_PATH = os.environ.get("NEDOTIFY_BENCH_RESULTS")
 DEBUG_PORT = int(os.environ.get("NEDOTIFY_BENCH_PORT", "9222"))
 MODE = os.environ.get("NEDOTIFY_BENCH_MODE", "bench")
 
+# init entry is not readiness: await the event emitted after module init and
+# restored-session acknowledgement. Installed before reload to avoid races.
+READY_HOOK_JS = """
+window.__benchAppReady = false;
+window.addEventListener('nedotify:app_ready', () => {
+    window.__benchAppReady = true;
+    window.__benchAppReadyMs = performance.now();
+}, {once: true});
+"""
+
 
 def _dump(payload: dict) -> None:
     if not RESULTS_PATH:
@@ -104,147 +114,37 @@ class BenchContext:
 
     # -- Last.fm request counting -----------------------------------------
     def measure_feed(self) -> dict:
-        """One home-feed build: wall time + exact count of Last.fm HTTP calls.
-
-        Counting at ``_api_request`` would under-report: with no API key
-        configured it short-circuits at line ~315 and never reaches the socket
-        at line 330, so every count would be zero while the call tree was still
-        being walked. Instead we install a dummy key and swap the per-thread
-        ``requests.Session`` for a fake whose ``get`` records the call and
-        returns an empty-but-valid Last.fm payload.
-
-        The number is therefore the real outbound request count, obtained
-        without a single packet leaving the machine.
-        """
-        from services.lastfm_service import LastFMService
-
-        calls: list[dict] = []
-
-        class _FakeResponse:
-            status_code = 200
-            text = ""
-            headers: dict = {}
-
-            @staticmethod
-            def json():
-                # Valid but empty: exercises the same code path a real
-                # response would without inventing chart/artist data.
-                return {"results": {}}
-
-        class _FakeSession:
-            def get(self, url, params=None, timeout=None, **kw):
-                calls.append({"method": (params or {}).get("method"),
-                              "t": time.monotonic()})
-                return _FakeResponse()
-
-            def close(self):
-                pass
-
-        orig_session = LastFMService._get_session
-        orig_keys = list(getattr(LastFMService, "API_KEYS", []))
-
-        def fake_session(self_svc):
-            return _FakeSession()
-
-        LastFMService._get_session = fake_session
-        LastFMService.API_KEYS = ["bench-dummy-key"]
-        try:
-            import os as _os
-            _os.environ["LASTFM_API_KEY"] = "bench-dummy-key"
-            # force the availability check to pass on a fresh instance
-            orig_available = LastFMService.available.fget if isinstance(
-                getattr(LastFMService, "available", None), property) else None
-
-            def force_available(self_svc):
-                return True
-
-            if orig_available is not None:
-                LastFMService.available = property(force_available)
-        except Exception:
-            traceback.print_exc()
-
-        try:
-            t0 = time.monotonic()
-            self.js_async(
-                """(async () => {
-                     window.showPage('home');
-                     await new Promise(r => setTimeout(r, 50));
-                     const a = window.pywebview.api;
-                     a.get_popular_tracks('US');
-                     a.get_feed(20);
-                     a.get_home_releases(10);
-                     a.get_home_mixes(10);
-                     return true;
-                   })()""", timeout=30.0)
-            # Wait for the async feed results to arrive. The bridge reports
-            # feed completion through window.onPythonEvent names; the recorder
-            # installed at startup collects them into window.__bench.
-            deadline = time.monotonic() + 25.0
-            feed_events = ("authentic_home_ready", "feed_ready", "popular_results",
-                           "releases_ready", "mixes_ready")
-            settle_deadline = time.monotonic() + 3.0
-            seen = -1
-            stable_since = None
-            while time.monotonic() < deadline:
-                got = self.js(
-                    "(window.__bench && window.__bench.pythonEvents || [])"
-                    ".filter(e => %s.indexOf(e.name) >= 0).length"
-                    % json.dumps(list(feed_events)))
-                if got != seen:
-                    seen = got
-                    stable_since = time.monotonic()
-                # stop when the event count has stopped growing AND the
-                # provider pools have had time to issue any trailing requests
-                if (stable_since is not None
-                        and time.monotonic() - stable_since > 1.0
-                        and time.monotonic() > settle_deadline):
-                    break
-                time.sleep(0.1)
-            time.sleep(2.0)          # let the provider pools drain
-            elapsed = time.monotonic() - t0
-        finally:
-            LastFMService._get_session = orig_session
-            LastFMService.API_KEYS = orig_keys
-            if orig_available is not None:
-                LastFMService.available = orig_available
-            _os.environ.pop("LASTFM_API_KEY", None)
-
+        """Time the home feed with deterministic, provider-free API fixtures."""
+        t0 = time.monotonic()
+        self.js_async(
+            """(async () => {
+                 window.showPage('home');
+                 await new Promise(r => setTimeout(r, 50));
+                 const a = window.pywebview.api;
+                 a.get_popular_tracks('US');
+                 a.get_feed(20);
+                 a.get_home_releases(10);
+                 a.get_home_mixes(10);
+                 return true;
+               })()""", timeout=30.0)
+        deadline = time.monotonic() + 10.0
+        expected = ["feed_ready", "popular_results", "releases_ready", "mixes_ready"]
+        while time.monotonic() < deadline:
+            count = self.js(
+                "(window.__bench && window.__bench.pythonEvents || [])"
+                ".filter(e => %s.indexOf(e.name) >= 0).length" % json.dumps(expected))
+            if count >= len(expected):
+                break
+            time.sleep(0.05)
+        elapsed = time.monotonic() - t0
         return {
             "wall_ms": round(elapsed * 1000, 1),
-            "lastfm_requests": len(calls),
-            "lastfm_methods": [c["method"] for c in calls],
-            "unique_methods": sorted({str(c["method"]) for c in calls}),
-            "duplicate_methods": len(calls) - len({c["method"] for c in calls}),
-            "note": ("outbound HTTP call count, measured with a dummy key and a "
-                     "fake session so nothing leaves the machine"),
+            "provider_requests": 0,
+            "fixture": "deterministic seeded local bridge payloads",
         }
 
 
-# Injected BEFORE any page script so it can observe the moment the UI becomes
-# interactive. Measuring it from the driver thread is useless: by the time CDP
-# attaches the app has long finished booting, which is why an earlier version
-# reported a nonsensical "app_ready = 2.57 ms".
-READY_HOOK_JS = """
-(function () {
-  if (window.__benchHookInstalled) return;
-  window.__benchHookInstalled = true;
-  window.__benchReadyMs = null;
-  try {
-    document.addEventListener('nedotify:app_ready', function () {
-      if (window.__benchReadyMs === null) window.__benchReadyMs = performance.now();
-    }, true);
-  } catch (e) {}
-  var iv = setInterval(function () {
-    if (window._nedotifyInitialized === true) {
-      if (window.__benchReadyMs === null) window.__benchReadyMs = performance.now();
-      clearInterval(iv);
-    }
-  }, 10);
-})();
-"""
-
-
-def _run_capture(ctx: BenchContext, spec: dict) -> None:
+def _run_capture(ctx: BenchContext, spec: dict) -> dict:
     """Visual-guard capture mode.
 
     localStorage must be in place *before* ``js/main.js`` runs its synchronous
@@ -261,14 +161,16 @@ def _run_capture(ctx: BenchContext, spec: dict) -> None:
     theme = vg_fixtures.THEMES[theme_name]
     out_dir = _P(spec["out_dir"])
 
+    origin_before = ctx.sess.js("performance.timeOrigin")
     ctx.sess.ws.call("Page.addScriptToEvaluateOnNewDocument", {
-        "source": vg_fixtures.localstorage_seed_script(theme)})
+        "source": READY_HOOK_JS + vg_fixtures.localstorage_seed_script(theme)})
     ctx.sess.ws.call("Network.enable")
     ctx.sess.ws.call("Network.setCacheDisabled", {"cacheDisabled": True})
     ctx.sess.ws.call("Page.reload", {"ignoreCache": True})
     print("[bench] reloaded with seeded localStorage", flush=True)
 
-    ctx.sess.wait_for_js("window._nedotifyInitialized === true", timeout=90.0)
+    ctx.sess.wait_for_new_document(origin_before, timeout=90.0)
+    ctx.sess.wait_for_js("window.__benchAppReady === true", timeout=90.0)
     print("[bench] app re-ready after reload", flush=True)
     time.sleep(spec.get("settle_sec", 2.0))
 
@@ -280,8 +182,8 @@ def _run_capture(ctx: BenchContext, spec: dict) -> None:
 
     bad = [r for r in recs if r["driver_error"]]
     ctx_capture = {"captured": len(recs), "driver_errors": bad}
-    _dump({"ok": not bad, "error": None if not bad else f"{len(bad)} screens failed",
-           "data": ctx_capture})
+    return {"ok": not bad, "error": None if not bad else f"{len(bad)} screens failed",
+            "data": ctx_capture}
 
 
 def driver() -> None:
@@ -302,14 +204,15 @@ def driver() -> None:
 
     try:
         print("[bench] waiting for CDP target...", flush=True)
-        ctx.sess = cdp.CDPSession.attach(port=DEBUG_PORT, timeout=90.0,
-                                          url_filter=spec.get("url_filter"))
+        if os.environ.get('NEDOTIFY_BENCH_TRANSPORT') == 'native':
+            ctx.sess = cdp.CDPSession.attach_native(timeout=90.0)
+        else:
+            ctx.sess = cdp.CDPSession.attach(port=DEBUG_PORT, timeout=90.0,
+                                              url_filter=spec.get("url_filter"))
         print("[bench] CDP attached", flush=True)
-        ctx.sess.install_event_recorder()
-
         if MODE == "capture":
-            _run_capture(ctx, spec)
-            result["ok"] = result["error"] is None
+            ctx.sess.install_event_recorder()
+            result.update(_run_capture(ctx, spec))
             return
 
         # "Time to interactive": reload, then time until the *new* document is
@@ -325,8 +228,11 @@ def driver() -> None:
             ctx.sess.ws.call("Page.reload", {"ignoreCache": False})
             ctx.sess.wait_for_new_document(origin_before, timeout=90.0)
             t_new_doc = time.monotonic()
-            ctx.sess.wait_for_js("window._nedotifyInitialized === true",
+            ctx.sess.wait_for_js("window.__benchAppReady === true",
                                  timeout=90.0)
+            # Page.reload replaces the JS context, so instrumentation must be
+            # installed into the committed document used by the scenarios.
+            ctx.sess.install_event_recorder()
             ctx.app_ready_since_reload_ms = (time.monotonic() - t_reload) * 1000.0
             ctx.new_document_committed_ms = (t_new_doc - t_reload) * 1000.0
             ctx.fcp_since_nav_ms = ctx.sess.js(
@@ -342,7 +248,7 @@ def driver() -> None:
         # The renderer signals readiness itself, so this measures the real
         # end-to-end startup rather than the harness noticing late.
         ctx.app_ready_ms = ctx.sess.wait_for_js(
-            "window._nedotifyInitialized === true", timeout=90.0) * 1000.0
+            "window.__benchAppReady === true", timeout=90.0) * 1000.0
         ctx.bridge_ready_ms = ctx.sess.wait_for_js(
             "!!(window.pywebview && window.pywebview.api && "
             "typeof window.pywebview.api.get_settings === 'function')",
@@ -372,10 +278,18 @@ def driver() -> None:
                                                        spec.get("rounds", 3))
         elif name == "feed":
             result["data"] = scenarios.scenario_feed(ctx)
+        elif name == "audio":
+            result["data"] = scenarios.scenario_audio(ctx)
+        elif name == "play":
+            result["data"] = scenarios.scenario_play(ctx)
+        elif name == "download":
+            result["data"] = scenarios.scenario_download(ctx)
         elif name == "combo":
             out = {}
             out["startup"] = scenarios.scenario_startup(ctx)
             out["feed"] = scenarios.scenario_feed(ctx)
+            out["play"] = scenarios.scenario_play(ctx)
+            out["download"] = scenarios.scenario_download(ctx)
             out["scroll"] = [scenarios.scenario_scroll(ctx, sel, label,
                                                        spec.get("rounds", 3))
                              for sel, label in spec.get("targets", [])]
@@ -387,6 +301,8 @@ def driver() -> None:
         else:
             result["error"] = f"unknown scenario {name!r}"
 
+        errors=scenarios.scenario_errors(result["data"])
+        if errors:result["error"]="; ".join(errors)
         result["ok"] = result["error"] is None
         result["perf"] = ctx.perf_metrics()
     except Exception:
@@ -425,6 +341,22 @@ def main() -> None:
         webview.settings["REMOTE_DEBUGGING_PORT"] = DEBUG_PORT
     except Exception:
         traceback.print_exc()
+
+    if MODE in {"bench", "capture"}:
+        # Provider paths are replaced only in this isolated child process.
+        # UI scenarios still call the bridge and observe its normal events.
+        from core.api import AppApi
+        from tools.bench.api_stubs import install_benchmark_api_stubs
+        install_benchmark_api_stubs(AppApi, os.environ.get("NEDOTIFY_BENCH_PROFILE", "."))
+        if MODE == "capture":
+            from tools.visual_guard.fixtures import LYRICS_PAYLOAD
+
+            def capture_lyrics(self, track_name, artist_name, duration_ms=0,
+                               file_path=None, album_name='', request_id=None):
+                return dict(LYRICS_PAYLOAD, track_name=track_name,
+                            artist_name=artist_name, request_id=request_id)
+
+            AppApi.get_lyrics = capture_lyrics
 
     threading.Thread(target=driver, name="BenchDriver", daemon=True).start()
     import main as app_main

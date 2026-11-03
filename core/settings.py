@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 import atexit
 import copy
 import logging
+import math
 import platform
 import os
 import threading
@@ -51,13 +52,19 @@ def get_system_region():
 
 DEFAULT_SETTINGS = {
     "app": {
-        "discord_rpc_enabled": True,
+        "discord_rpc_enabled": False,
+        "discord_show_title": True,
+        "discord_show_artist": True,
+        "discord_show_cover": True,
+        "discord_show_time": True,
+        "discord_show_listen": True,
+        "discord_clear_on_stop": True,
         "autostart": False,
     },
     "general": {
         "language": "ru",
         "region": get_system_region(),
-        "minimize_to_tray": True,
+        "minimize_to_tray": False,
         "start_minimized": False,
         "check_updates": True,
         "show_notifications": True,
@@ -66,9 +73,8 @@ DEFAULT_SETTINGS = {
         "gpu_acceleration": True,
     },
     "audio": {
+        "audio_tools": {},
         "autoplay": False,
-        "queue_autopilot": True,
-        "flow_enabled": True,
         "quality": "high",
         "gapless_playback": False,
         "crossfade_enabled": False,
@@ -108,9 +114,9 @@ DEFAULT_SETTINGS = {
         "fps_visualizer": 60,
         "fps_ui": 60,
         "resource_bg": True,
-        "resource_particles": True,
+        "resource_particles": False,
         "resource_covers": True,
-        "resource_visualizers": True,
+        "resource_visualizers": False,
         "resource_blur": True,
     },
     "hotkeys": {
@@ -139,8 +145,19 @@ DEFAULT_SETTINGS = {
         "like": "KeyK",
         "search": "Slash",
     },
+    "downloads": {
+        "directory": "",
+        "format": "source",
+        "quality": "best",
+        "max_concurrent": 2,
+        "fragment_concurrency": 2,
+        "embed_metadata": True,
+        "embed_cover": True,
+        "auto_update_tools": False,
+    },
     "storage": {
-        "cache_size_mb": 500,
+        "cache_quota_gb": 5,
+        "cache_size_mb": 5120,
         "auto_cache_streams": True,
         "cache_covers": True,
         "scan_folders": [],
@@ -165,8 +182,16 @@ DEFAULT_SETTINGS = {
         "explicit_artists": [],
         "preferred_moods": [],
         "onboarding_completed": False,
+        "artist_aliases": {},
+        "artist_bindings": {},
+        "blocked_artists": [],
+        "disliked_tracks": [],
+        "discovery_ratio": 0.2,
     },
     "theme": {
+        "decorations_enabled": True,
+        "home_dynamic_background": True,
+        "custom_palette_enabled": False,
         "theme": "dark",
         "name": "Dark",
         "mode": "dark",
@@ -187,6 +212,12 @@ DEFAULT_SETTINGS = {
         "custom_accent": "",
     },
     "interface": {
+        "ui_style": "current",
+        "macos_mode": "system",
+        "macos_glass": True,
+        "macos_blur": 38,
+        "macos_font_family": "system",
+        "macos_font_size": 14,
         "border_radius": 12,
         "fullscreen_scale": 1.0,
         "window_scale": 1.0,
@@ -213,8 +244,25 @@ DEFAULT_SETTINGS = {
         "accent_color": "#a855f7",
         "custom_themes": [],
     },
+    "atmosphere": {
+        "enabled": False,
+        "effects": {"rain": True, "thunderstorm": False, "fog": False, "snow": False},
+        "intensity": 0.5,
+        "quality": "auto",
+        "reactive": True,
+        "sensitivity": 1.0,
+        "bass": 1.0,
+        "mid": 1.0,
+        "treble": 1.0,
+        "smoothing": 0.65,
+        "max_reaction": 0.65,
+        "rain": {"speed": 1.0, "size": 1.0, "opacity": 0.5, "depth": 3, "direction": 12, "highlights": True, "reactive": True},
+        "snow": {"speed": 1.0, "size": 1.0, "opacity": 0.55, "depth": 3, "direction": 0, "density": 0.5, "reactive": True},
+        "fog": {"density": 0.35, "speed": 0.5, "opacity": 0.3, "tint": "theme", "depth": 3, "reactive": True},
+        "storm": {"flashes": True, "interval": 15, "brightness": 0.18, "thunder": False, "volume": 0.15},
+    },
     "ui": {
-        "particles_enabled": True,
+        "particles_enabled": False,
         "particles_count": 30,
         "particles_speed": 1.0,
         "particles_size": 2.0,
@@ -222,6 +270,7 @@ DEFAULT_SETTINGS = {
         "cover_visualizer": False,
     },
     "equalizer": {
+        "mode": "flat",
         "preamp": 0.0,
         "bands": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     },
@@ -229,15 +278,26 @@ DEFAULT_SETTINGS = {
         "cookies_file_path": "",
         "browser_cookies": "none",
         "yandex_token": "",
+        "yandex_refresh_token": "",
+        "yandex_token_expires_at": 0,
+        "yandex_token_valid": False,
         "proxy_url": "",
         "oauth_client_id": "",
         "oauth_client_secret": "",
         "oauth_completed": False,
+        "lastfm_username": "",
+        "vk_token": "",
+        "spotify_token": "",
+        "spotify_refresh_token": "",
     },
+    "lyrics": {"enabled": True, "mode": "auto", "animations": "standard"},
     "services": {
         "youtube_enabled": True,
         "soundcloud_enabled": True,
         "vk_enabled": True,
+        "lastfm_enabled": False,
+        "lastfm_api_key": "",
+        "lastfm_api_secret": "",
     },
     "session": {
         "last_track_id": None,
@@ -273,6 +333,68 @@ DEFAULT_SETTINGS = {
 }
 
 
+# First entry is authoritative when a legacy profile contains conflicting rows.
+# Keep compatibility names at the storage boundary so every backend consumer
+# (and older profiles) sees the same preference, without another frontend save.
+_SETTING_ALIASES = (
+    (("general", "autostart"), ("app", "autostart")),
+    (("audio", "crossfade_duration_sec"), ("audio", "crossfade_duration")),
+    (("atmosphere", "enabled"), ("ui", "particles_enabled"), ("optimization", "resource_particles")),
+    (("ui", "cover_visualizer"), ("optimization", "resource_visualizers")),
+    (("theme", "theme_mode"), ("theme", "mode")),
+    *((("theme", key), ("interface", key)) for key in (
+        "theme", "name", "accent_color", "transparency_enabled",
+        "transparency_level", "glass_blur", "glass_color_intensity",
+        "custom_themes", "font_family",
+    )),
+)
+_SETTING_ALIAS_LOOKUP = {name: group for group in _SETTING_ALIASES for name in group}
+
+
+def validate_atmosphere_setting(key, value, previous=None):
+    """Validate UI writes; keep unknown persisted extension fields intact."""
+    defaults = DEFAULT_SETTINGS['atmosphere']
+    if key not in defaults:
+        raise ValueError('Unknown atmosphere preference')
+    default = defaults[key]
+    if isinstance(default, dict):
+        if not isinstance(value, dict):
+            raise ValueError('Invalid atmosphere effect')
+        old = previous if isinstance(previous, dict) else {}
+        if any(name not in default and (name not in old or value[name] != old[name]) for name in value):
+            raise ValueError('Unknown atmosphere effect field')
+        result = copy.deepcopy(default)
+        result.update(copy.deepcopy(old))
+        for name, child in value.items():
+            if name not in default:
+                continue
+            sample = default[name]
+            if isinstance(sample, bool):
+                if not isinstance(child, bool):
+                    raise ValueError('Invalid atmosphere switch')
+            elif name == 'tint':
+                import re
+                if child != 'theme' and (not isinstance(child, str) or not re.fullmatch(r'#[\da-fA-F]{6}', child)):
+                    raise ValueError('Invalid fog tint')
+            else:
+                bounds = (-45, 45) if name == 'direction' else (1, 4) if name == 'depth' else (8, 120) if name == 'interval' else (.1 if key == 'fog' else .2, 3) if name in ('speed', 'size') else (0, 1)
+                if isinstance(child, bool) or not isinstance(child, (int, float)) or not math.isfinite(child) or not bounds[0] <= child <= bounds[1]:
+                    raise ValueError('Invalid atmosphere level')
+            result[name] = child
+        return result
+    if isinstance(default, bool):
+        if not isinstance(value, bool):
+            raise ValueError('Invalid atmosphere switch')
+    elif key == 'quality':
+        if value not in ('auto', 'high', 'balanced', 'low'):
+            raise ValueError('Invalid atmosphere quality')
+    else:
+        maximum = 3 if key in ('sensitivity', 'bass', 'mid', 'treble') else 1
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= maximum:
+            raise ValueError('Invalid atmosphere level')
+    return copy.deepcopy(value)
+
+
 class SettingsManager:
     """Manages application settings with defaults, persistence, and signals."""
 
@@ -289,11 +411,15 @@ class SettingsManager:
         # call themselves for the dotted-key overload.
         self._lock = threading.RLock()
         self._dirty = set()
+        self.revision = 0
         # Serialises database writes so two flushes can never interleave.
         self._flush_lock = threading.Lock()
         self._writer_wake = threading.Event()
+        self._writer_stop = threading.Event()
         self._writer_thread: Optional[threading.Thread] = None
         self._load_all()
+        if self._dirty:
+            self._wake_writer()
         # Session state (the playback queue) is persisted through this class on
         # shutdown, so a dropped flush would lose user data.
         atexit.register(self.flush)
@@ -302,15 +428,24 @@ class SettingsManager:
         """Load settings from database, populating missing values from default schema."""
         stored_all = getattr(self.db, 'get_all_settings', lambda: {})()
 
+        def _maybe_decrypt(val):
+            if isinstance(val, str) and val.startswith('dpapi:'):
+                try:
+                    from core.dpapi import dpapi_decrypt
+                    return dpapi_decrypt(val)
+                except Exception:
+                    return val
+            return val
+
         with self._lock:
             for category, defaults in DEFAULT_SETTINGS.items():
                 self._cache[category] = {}
                 for key, default_value in defaults.items():
                     full_key = f"{category}.{key}"
                     if full_key in stored_all:
-                        self._cache[category][key] = stored_all[full_key]
+                        self._cache[category][key] = _maybe_decrypt(stored_all[full_key])
                     elif key in stored_all:
-                        self._cache[category][key] = stored_all[key]
+                        self._cache[category][key] = _maybe_decrypt(stored_all[key])
                     else:
                         # deepcopy, not the object itself: DEFAULT_SETTINGS is
                         # module-global, so a mutable default (scan_folders,
@@ -319,13 +454,65 @@ class SettingsManager:
                         # "reset all" would then reset nothing at all.
                         self._cache[category][key] = copy.deepcopy(default_value)
 
+            # Preserve unknown categories/keys written by newer builds (forward compat).
             for full_key, value in stored_all.items():
-                if not '.' in full_key:
+                if '.' not in full_key:
                     continue
                 cat, k = full_key.split('.', 1)
                 if cat not in self._cache:
                     self._cache[cat] = {}
-                self._cache[cat][k] = value
+                self._cache[cat][k] = _maybe_decrypt(value)
+
+            # Presence in persisted rows matters: a schema default such as
+            # "system" is truthy and used to suppress the font migration.
+            for group in _SETTING_ALIASES:
+                chosen = next(((cat, key) for cat, key in group
+                               if f"{cat}.{key}" in stored_all or key in stored_all), None)
+                if chosen is None:
+                    continue
+                value = self._cache[chosen[0]][chosen[1]]
+                for cat, key in group:
+                    if self._cache.setdefault(cat, {}).get(key) != value:
+                        self._cache[cat][key] = copy.deepcopy(value)
+                        self._dirty.add((cat, key))
+
+            # Upgrade only legacy profiles that have no atmosphere schema yet.
+            # Retain all legacy and extension rows: migration never clears a
+            # user's settings or turns effects on merely because old defaults
+            # used to be enabled.
+            if not any(str(key).startswith('atmosphere.') for key in stored_all):
+                old_enabled = stored_all.get('ui.particles_enabled', stored_all.get('particles_enabled',
+                    stored_all.get('optimization.resource_particles')))
+                if old_enabled is not None:
+                    enabled = old_enabled.lower() == 'true' if isinstance(old_enabled, str) else bool(old_enabled)
+                    old_resource = stored_all.get('optimization.resource_particles')
+                    if old_resource is False or (isinstance(old_resource, str) and old_resource.lower() == 'false'):
+                        enabled = False
+                    atmosphere = self._cache['atmosphere']
+                    atmosphere['enabled'] = enabled
+                    self._cache['ui']['particles_enabled'] = enabled
+                    self._cache['optimization']['resource_particles'] = enabled
+                    self._dirty.update({('ui', 'particles_enabled'), ('optimization', 'resource_particles')})
+                    shape = stored_all.get('ui.particles_shape', stored_all.get('particles_shape', 'dot'))
+                    atmosphere['effects']['snow'] = shape == 'snow'
+                    atmosphere['effects']['rain'] = shape != 'snow'
+                    for key, target, divisor, bounds in (
+                        ('particles_count', 'intensity', 80, (0.1, 1)),
+                        ('particles_size', 'size', 2, (0.4, 2.5)),
+                        ('particles_speed', 'speed', 2, (0.3, 2)),
+                    ):
+                        raw = stored_all.get('ui.' + key, stored_all.get(key))
+                        try:
+                            value = max(bounds[0], min(bounds[1], float(raw) / divisor))
+                        except (TypeError, ValueError):
+                            continue
+                        if target == 'intensity':
+                            atmosphere[target] = value
+                        else:
+                            atmosphere['rain'][target] = value
+                            atmosphere['snow'][target] = value
+                    for key in atmosphere:
+                        self._dirty.add(('atmosphere', key))
 
     def _is_known_category(self, category: str) -> bool:
         """True when `category` names a real settings category."""
@@ -333,6 +520,11 @@ class SettingsManager:
             return True
         with self._lock:
             return category in self._cache
+
+    def categories(self):
+        """Snapshot schema and persisted extension categories for projection."""
+        with self._lock:
+            return tuple(self._cache)
 
     def get(self, category: str, key: Optional[Any] = None, default: Optional[Any] = None) -> Any:
         """Get a setting value.
@@ -356,16 +548,7 @@ class SettingsManager:
                 val = self._cache[category][key]
             elif category in DEFAULT_SETTINGS and key in DEFAULT_SETTINGS[category]:
                 val = DEFAULT_SETTINGS[category][key]
-            elif key == "queue_autopilot":
-                if category in self._cache and "flow_enabled" in self._cache[category]:
-                    val = self._cache[category]["flow_enabled"]
-                elif category in DEFAULT_SETTINGS and "flow_enabled" in DEFAULT_SETTINGS[category]:
-                    val = DEFAULT_SETTINGS[category]["flow_enabled"]
-            elif key == "flow_enabled":
-                if category in self._cache and "queue_autopilot" in self._cache[category]:
-                    val = self._cache[category]["queue_autopilot"]
-                elif category in DEFAULT_SETTINGS and "queue_autopilot" in DEFAULT_SETTINGS[category]:
-                    val = DEFAULT_SETTINGS[category]["queue_autopilot"]
+
             elif key == "crossfade_duration_sec":
                 if category in self._cache and "crossfade_duration" in self._cache[category]:
                     val = self._cache[category]["crossfade_duration"]
@@ -377,12 +560,9 @@ class SettingsManager:
                 elif category in DEFAULT_SETTINGS and "crossfade_duration_sec" in DEFAULT_SETTINGS[category]:
                     val = DEFAULT_SETTINGS[category]["crossfade_duration_sec"]
 
-        if isinstance(val, str):
-            if val.lower() == "true":
-                return True
-            elif val.lower() == "false":
-                return False
-        return val
+        if isinstance(DEFAULT_SETTINGS.get(category, {}).get(key), bool) and isinstance(val, str) and val.lower() in ('true', 'false'):
+            return val.lower() == 'true'
+        return copy.deepcopy(val)
 
     def set(self, category: str, key: Any = None, value: Any = None) -> None:
         """Set a setting value and schedule it for persistence.
@@ -397,10 +577,10 @@ class SettingsManager:
             return self.set(cat, k, val)
 
         with self._lock:
-            if category not in self._cache:
-                self._cache[category] = {}
-            self._cache[category][key] = value
-            self._dirty.add((category, key))
+            for cat, name in _SETTING_ALIAS_LOOKUP.get((category, key), ((category, key),)):
+                self._cache.setdefault(cat, {})[name] = copy.deepcopy(value)
+                self._dirty.add((cat, name))
+            self.revision += 1
         self._wake_writer()
 
     def sync_flush_now(self) -> bool:
@@ -494,6 +674,8 @@ class SettingsManager:
     def _wake_writer(self) -> None:
         """Start the single daemon writer thread if needed, then wake it."""
         with self._lock:
+            if self._writer_stop.is_set():
+                return
             if self._writer_thread is None or not self._writer_thread.is_alive():
                 self._writer_thread = threading.Thread(
                     target=self._writer_loop,
@@ -504,21 +686,42 @@ class SettingsManager:
         self._writer_wake.set()
 
     def _writer_loop(self) -> None:
-        while True:
+        while not self._writer_stop.is_set():
             self._writer_wake.wait()
             self._writer_wake.clear()
+            if self._writer_stop.is_set():
+                return
             # Coalesce the burst that follows the first dirty key into a single
             # transaction, and cap the write rate at one batch per interval.
-            time.sleep(self.FLUSH_INTERVAL_SECONDS)
-            try:
-                self.flush()
-            except Exception as e:
-                logger.error(f"Settings writer thread error: {e}")
+            if self._writer_stop.wait(self.FLUSH_INTERVAL_SECONDS):
+                return
+            for attempt in range(5):
+                try:
+                    self.flush()
+                except Exception as e:
+                    logger.error(f"Settings writer thread error: {e}")
+                with self._lock:
+                    pending = bool(self._dirty)
+                if not pending:
+                    break
+                if self._writer_stop.wait(min(8.0, self.FLUSH_INTERVAL_SECONDS * (2 ** attempt))):
+                    return
+
+    def close(self):
+        self._writer_stop.set()
+        self._writer_wake.set()
+        thread = self._writer_thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=2.0)
+        saved = self.sync_flush_now()
+        if saved:
+            atexit.unregister(self.flush)
+        return saved
 
     def get_category(self, category: str) -> Dict[str, Any]:
         """Get all settings in a category."""
         with self._lock:
-            return self._cache.get(category, DEFAULT_SETTINGS.get(category, {})).copy()
+            return copy.deepcopy(self._cache.get(category, DEFAULT_SETTINGS.get(category, {})))
 
     def reset_category(self, category: str) -> None:
         """Reset a category to defaults."""

@@ -1,6 +1,7 @@
-// NeDotify - Lyrics Module (Kinetic Karaoke Engine)
-import { getCurrentTrack, seekTo } from './player.js';
+// NeDotify - Lyrics Module (Synchronized Lyrics Engine)
+import { getCurrentTrack, getLyricsPlaybackClock, seekTo } from './player.js';
 import { renderIcons } from './utils.js';
+import { normalizedTimedLines, WordPainter } from './lyrics-word-engine.js';
 
 let parsedLyrics = [];
 let currentLineIndex = -1;
@@ -15,9 +16,157 @@ let lastPosMs = 0;
 
 // Freshness guard — stale get_lyrics responses must not overwrite a newer track
 let lyricsLoadGeneration = 0;
+let activeLyricsRequestId = null;
+let lastLyricsRevision = 0;
+let requestedLyricsDurationMs = 0;
+let pendingLyricsRequest = null;
+let deferredLyricsRequest = null;
+const lyricsMemoryCache = new Map();
+const LYRICS_MEMORY_CACHE_LIMIT = 40;
+const LYRICS_PENDING_MAX_AGE_MS = 15000;
+let lyricsInitialized = false;
+let wordPainter = null;
+let wordRows = [];
+let wordFrameId = null;
+function lyricsPreferences() {
+    const settings = window.settings?.lyrics || {};
+    return {mode: ['auto', 'word', 'line'].includes(settings.mode) ? settings.mode : 'auto',
+        animations: ['standard', 'reduced', 'off'].includes(settings.animations) ? settings.animations : 'standard'};
+}
 
-export function toggleTranslation() {
-    isTranslationEnabled = !isTranslationEnabled;
+function clearWordLyrics() {
+    if (wordFrameId !== null) cancelAnimationFrame(wordFrameId);
+    wordFrameId = null;
+    wordPainter = null;
+    wordRows = [];
+}
+
+function lyricsAreVisible() {
+    if (document.hidden) return false;
+    return getContainers().some(container => container.getClientRects().length > 0);
+}
+
+function paintWordLyrics(positionMs, force = false) {
+    if (!wordPainter) return;
+    wordPainter.paint(wordRows, positionMs + currentOffsetMs, lyricsPreferences().animations, force);
+}
+
+function syncWordLyrics() {
+    if (!wordPainter) return;
+    const clock = getLyricsPlaybackClock();
+    if (clock.trackKey !== lastLoadedTrackKey) return;
+    updateLyricsPosition(clock.positionMs);
+    if (wordFrameId !== null || clock.paused || clock.buffering || clock.seeking || !lyricsAreVisible()) return;
+    wordFrameId = requestAnimationFrame(() => {
+        wordFrameId = null;
+        syncWordLyrics();
+    });
+}
+
+function appendTimedWords(parent, line) {
+    return line.words.map(word => {
+        const span = document.createElement('span');
+        span.className = 'lyric-word';
+        span.textContent = word.text;
+        span.dataset.wordState = 'upcoming';
+        span.addEventListener('click', event => {
+            event.stopPropagation();
+            const position = Math.max(0, word.startMs - currentOffsetMs);
+            seekTo(position);
+            lastManualScrollAt = 0;
+            currentLineIndex = -1;
+            updateLyricsPosition(position);
+            syncWordLyrics();
+        });
+        parent.appendChild(span);
+        return span;
+    });
+}
+
+// Duration unit contract (BUG-L2-005). The backend persists SECONDS:
+// core/database.py stores tracks.duration as REAL seconds and every provider
+// converts before persisting (spotify trackTimeMillis/1000, soundcloud
+// /1000, youtube "mm:ss"). player.js ships this exact normalizer for the same
+// value; lyrics.js used an ad-hoc `> 10000` threshold instead, which
+// disagreed with the player for anything above 2.8 h stored in seconds
+// (podcasts/long mixes became "10 s") and would disagree for the 10-50 s
+// band the other way. One shared rule: a value above 50000 cannot be seconds
+// (13.9 h), so it passes through as milliseconds; anything else is seconds.
+function normalizeDurationMs(dur) {
+    const d = Number(dur);
+    if (!d || isNaN(d) || d <= 0) return 0;
+    return d > 50000 ? Math.round(d) : Math.round(d * 1000);
+}
+
+function lyricsTrackKey(track) {
+    // Stream URLs expire and can arrive after track_changed. Only local paths
+    // affect embedded lyrics; resolving a CDN URL must keep the same lookup.
+    const path = track?.file_path || '';
+    return track ? JSON.stringify([track.source || 'local', track.source_id || track.id || '',
+        track.title || '', track.artist || '', track.album || '', /^https?:\/\//i.test(path) ? '' : path]) : '';
+}
+
+function rememberLyrics(data) {
+    if (!lastLoadedTrackKey || data?.phase === 'partial' || (!data?.plainLyrics && !data?.syncedLyrics)) return;
+    lyricsMemoryCache.delete(lastLoadedTrackKey);
+    lyricsMemoryCache.set(lastLoadedTrackKey, {data: {...data}, durationMs: requestedLyricsDurationMs});
+    while (lyricsMemoryCache.size > LYRICS_MEMORY_CACHE_LIMIT) {
+        lyricsMemoryCache.delete(lyricsMemoryCache.keys().next().value);
+    }
+}
+
+// Build the line-text -> translation map the renderers consume.
+//
+// Every display surface (synced sheet, plain sheet, player page panel and the
+// PiP widget via the lyrics:line-changed event) looks translations up by the
+// ORIGINAL line text, so the backend's full translated text has to be aligned
+// line-by-line here. The bridge answers {'success': True, 'text': <str>,
+// 'error': None} (core/api.py get_lyrics_translation) -- the envelope itself
+// was once assigned as the map, which keyed every lookup by 'success'/'text'/
+// 'error' and left all three surfaces permanently without subtitles
+// (BUG-L2-001). Both response shapes funnel through this one builder.
+function buildTranslationMap(res, cleanText) {
+    let translated;
+    if (typeof res === 'string') {
+        translated = res;
+    } else {
+        if (!res || res.success === false || res.error) throw new Error('Translation unavailable');
+        translated = String(res.text ?? '');
+    }
+    if (!translated.trim() || translated.trim() === cleanText.trim()) throw new Error('Translation unavailable');
+    // Backend returns full translated text: align line-by-line with parsedLyrics
+    const transLines = translated.split(/\r?\n/).map(s => s.trim());
+    const origLines = cleanText.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const map = {};
+    // Prefer parsedLyrics order (synced), fallback to raw order
+    const keys = parsedLyrics.length > 0 ? parsedLyrics.map(l => l.text) : origLines;
+    keys.forEach((k, i) => {
+        const trans = (k && transLines[i] && transLines[i] !== k)
+            ? transLines[i]
+            : (k && origLines[i] && transLines[i] && transLines[i] !== origLines[i] ? transLines[i] : null);
+        if (trans) {
+            if (!map[k]) map[k] = trans;
+            if (origLines[i] && !map[origLines[i]]) map[origLines[i]] = trans;
+            Object.defineProperty(map, i, { value: trans, enumerable: false, writable: true, configurable: true });
+            Object.defineProperty(map, `${i}:${k}`, { value: trans, enumerable: false, writable: true, configurable: true });
+            if (origLines[i]) Object.defineProperty(map, `${i}:${origLines[i]}`, { value: trans, enumerable: false, writable: true, configurable: true });
+        }
+    });
+    // If line counts mismatch, fall back to index alignment with origLines
+    if (Object.keys(map).length === 0) {
+        origLines.forEach((k, i) => {
+            if (k && transLines[i] && transLines[i] !== k) {
+                if (!map[k]) map[k] = transLines[i];
+                Object.defineProperty(map, i, { value: transLines[i], enumerable: false, writable: true, configurable: true });
+                Object.defineProperty(map, `${i}:${k}`, { value: transLines[i], enumerable: false, writable: true, configurable: true });
+            }
+        });
+    }
+    return map;
+}
+
+export function toggleTranslation(forceState = null) {
+    isTranslationEnabled = typeof forceState === 'boolean' ? forceState : !isTranslationEnabled;
     const btns = [
         document.getElementById('btn-toggle-lyrics-translation'),
         document.getElementById('btn-toggle-lyrics-translation-page')
@@ -32,36 +181,30 @@ export function toggleTranslation() {
 
     if (isTranslationEnabled && Object.keys(currentTranslationMap).length === 0 && currentRawLyricsText) {
         if (window.pywebview?.api?.get_lyrics_translation) {
+            // BUG-L2-007: a long translation occupies the bridge for seconds —
+            // disable the buttons so repeated clicks cannot stack duplicate
+            // requests; re-enabled by every completion path below.
+            btns.forEach(b => { b.disabled = true; });
+            const enableButtons = () => btns.forEach(b => { b.disabled = false; });
             window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Переводим текст песни...', type: 'info' } }));
             // Strip LRC timestamps: backend translates plain lines, not "[00:12.34]" tags
             const cleanText = String(currentRawLyricsText).replace(/\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/g, '').replace(/^\s*\n/gm, '\n').trim();
+            const translationTrackKey = lastLoadedTrackKey;
             window.pywebview.api.get_lyrics_translation(cleanText, 'ru').then(res => {
-                if (typeof res === 'string') {
-                    // Backend returns full translated text: align line-by-line with parsedLyrics
-                    const transLines = res.split(/\r?\n/).map(s => s.trim());
-                    const origLines = cleanText.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-                    const map = {};
-                    // Prefer parsedLyrics order (synced), fallback to raw order
-                    const keys = parsedLyrics.length > 0 ? parsedLyrics.map(l => l.text) : origLines;
-                    keys.forEach((k, i) => {
-                        if (k && transLines[i] && transLines[i] !== k) map[k] = transLines[i];
-                        else if (k && origLines[i] && transLines[i]) map[origLines[i]] = transLines[i];
-                    });
-                    // If line counts mismatch, fall back to index alignment with origLines
-                    if (Object.keys(map).length === 0) {
-                        origLines.forEach((k, i) => { if (k && transLines[i]) map[k] = transLines[i]; });
-                    }
-                    currentTranslationMap = map;
-                } else {
-                    currentTranslationMap = res || {};
-                }
-                renderLyrics(lastLyricsData);
+                enableButtons();
+                if (translationTrackKey !== lastLoadedTrackKey || cleanPlainLyrics(currentRawLyricsText).join('\n') !== cleanPlainLyrics(cleanText).join('\n')) return;
+                currentTranslationMap = buildTranslationMap(res, cleanText);
+                renderLyrics(lastLyricsData, true);
             }).catch(err => {
+                enableButtons();
                 console.error("Translation failed:", err);
+                if (translationTrackKey !== lastLoadedTrackKey) return;
+                toggleTranslation(false);
+                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Перевод недоступен. Попробуйте ещё раз.', type: 'error' } }));
             });
         }
     } else {
-        renderLyrics(lastLyricsData);
+        renderLyrics(lastLyricsData, true);
     }
 }
 
@@ -156,7 +299,23 @@ export function adjustLyricsOffset(deltaMs) {
     updateLyricsPosition(lastPosMs);
 }
 
+function resumeDeferredLyrics() {
+    const pending = deferredLyricsRequest;
+    if (!pending) return;
+    const track = getCurrentTrack();
+    if (!track || lyricsTrackKey(track) !== pending.trackKey) {
+        deferredLyricsRequest = null;
+        return;
+    }
+    const clock = getLyricsPlaybackClock();
+    if ((track.stream_url || track.file_path) && !clock.paused && !clock.buffering && clock.positionMs > 0) {
+        loadCurrentTrackLyrics(pending.durationMs);
+    }
+}
+
 export function initLyrics() {
+    if (lyricsInitialized) return;
+    lyricsInitialized = true;
     const btn = document.getElementById('pp-btn-lyrics');
     const closeBtn = document.getElementById('btn-close-lyrics') || document.getElementById('lyrics-close');
     const overlay = document.getElementById('lyrics-overlay');
@@ -175,21 +334,17 @@ export function initLyrics() {
     if (btn) {
         btn.addEventListener('click', () => {
             if (overlay) {
-                isOverlayVisible = true;
-                overlay.classList.add('active');
-                loadCurrentTrackLyrics();
+                if (overlay.classList.contains('active')) {
+                    isOverlayVisible = false;
+                    overlay.classList.remove('active');
+                } else {
+                    isOverlayVisible = true;
+                    overlay.classList.add('active');
+                    loadCurrentTrackLyrics();
+                }
             }
         });
     }
-
-    const pbPipBtn = document.getElementById('pb-btn-pip-lyrics');
-    if (pbPipBtn) {
-        pbPipBtn.addEventListener('click', () => {
-            toggleMiniLyrics();
-        });
-    }
-
-    initMiniLyricsWidget();
 
     // Focal-point geometry is derived from the measured viewport, so both the
     // resize path and the webfont swap have to re-anchor the sheet.
@@ -269,6 +424,7 @@ export function initLyrics() {
 
     // Listen to track/position events dispatched by events.js via custom events
     document.addEventListener('nedotify:track_changed', () => {
+        clearWordLyrics();
         loadCurrentTrackLyrics();
     });
 
@@ -277,12 +433,27 @@ export function initLyrics() {
     // Standardized to milliseconds for pixel-perfect kinetic lyrics synchronization.
     document.addEventListener('nedotify:position_changed', (e) => {
         const posMs = e.detail?.posMs !== undefined ? e.detail.posMs : (typeof e.detail?.pos === 'number' ? e.detail.pos : 0);
+        resumeDeferredLyrics();
         updateLyricsPosition(posMs);
+        syncWordLyrics();
+        const durationMs = Number(e.detail?.durationMs ?? e.detail?.duration);
+        if (!requestedLyricsDurationMs && durationMs > 0 && lastLoadedTrackKey) {
+            loadCurrentTrackLyrics(durationMs);
+        }
     });
 
     document.addEventListener('nedotify:lyrics_ready', (e) => {
+        if (e.detail?.request_id !== activeLyricsRequestId) return;
         renderLyrics(e.detail);
     });
+    document.addEventListener('nedotify:lyrics_clock_changed', syncWordLyrics);
+    document.addEventListener('nedotify:lyrics_clock_changed', resumeDeferredLyrics);
+    document.addEventListener('visibilitychange', syncWordLyrics);
+    window.addEventListener('nedotify:lyrics_settings_changed', () => {
+        renderLyrics(lastLyricsData, true);
+    });
+    window.addEventListener('nedotify:appearance_changed', syncWordLyrics);
+    window.addEventListener('nedotify:page_changed', syncWordLyrics);
 }
 
 // ==========================================================================
@@ -582,9 +753,9 @@ function bindKineticInput(st) {
         st.pointerId = e.pointerId;
         st.dragStartY = e.clientY;
         st.dragStartManual = st.manual;
+        st.moved = false;
         dragMoved = false;
         markManualInput();
-        try { vp.setPointerCapture(e.pointerId); } catch (_) { /* not capturable */ }
     });
 
     vp.addEventListener('pointermove', (e) => {
@@ -595,6 +766,9 @@ function bindKineticInput(st) {
         if (!dragMoved) {
             dragMoved = true;
             st.moved = true;
+            // Capturing on pointerdown retargets the later click to the
+            // viewport, swallowing ordinary clicks on a word or lyric line.
+            try { vp.setPointerCapture(e.pointerId); } catch (_) { /* not capturable */ }
             vp.classList.add('is-dragging');
         }
         markManualInput();
@@ -619,6 +793,7 @@ function bindKineticInput(st) {
 
     vp.addEventListener('pointerup', endDrag);
     vp.addEventListener('pointercancel', endDrag);
+    vp.addEventListener('pointerleave', event => { if (!dragMoved) endDrag(event); });
     vp.addEventListener('lostpointercapture', endDrag);
 
     // A scrub must not also register as a line click (which would seek). The
@@ -730,7 +905,8 @@ function resetLyricsScroll() {
     });
 }
 
-export function loadCurrentTrackLyrics() {
+export function loadCurrentTrackLyrics(durationOverrideMs = 0, forceNetwork = false) {
+    deferredLyricsRequest = null;
     const track = getCurrentTrack();
     const containers = getContainers();
     
@@ -741,35 +917,70 @@ export function loadCurrentTrackLyrics() {
     }
 
     if (!track) {
+        clearWordLyrics();
+        parsedLyrics = [];
+        currentLineIndex = -1;
+        activeLyricsRequestId = null;
+        pendingLyricsRequest = null;
+        lastLoadedTrackKey = '';
+        lastLyricsData = null;
+        requestedLyricsDurationMs = 0;
+        lyricsLoadGeneration++;
         containers.forEach(c => c.innerHTML = '<div class="empty-state">Трек не выбран</div>');
         return;
     }
 
-    const trackKey = track ? String(track.source_id || track.id || (track.title + ' ' + (track.artist || '')) || '') : '';
+    const trackKey = lyricsTrackKey(track);
+    const metadataDurationMs = normalizeDurationMs(track.duration);
+    const durMs = durationOverrideMs || metadataDurationMs || (trackKey === lastLoadedTrackKey ? requestedLyricsDurationMs : 0);
+
+    // Reopening the overlay while a lookup is running must share that request,
+    // including its id and streamed plain -> synced upgrades.
+    if (pendingLyricsRequest?.trackKey === trackKey &&
+        pendingLyricsRequest.durationMs === durMs &&
+        Date.now() - pendingLyricsRequest.startedAt < LYRICS_PENDING_MAX_AGE_MS) return;
 
     // If lyrics are already loaded in memory for this exact track, render immediately without flashing
-    if (trackKey && trackKey === lastLoadedTrackKey && lastLyricsData && (lastLyricsData.syncedLyrics || lastLyricsData.plainLyrics)) {
-        renderLyrics(lastLyricsData);
+    if (trackKey && trackKey === lastLoadedTrackKey && lastLyricsData &&
+        lastLyricsData.phase !== 'partial' &&
+        (!durMs || requestedLyricsDurationMs === durMs) &&
+        (lastLyricsData.syncedLyrics || lastLyricsData.plainLyrics)) {
+        renderLyrics(lastLyricsData, true);
         return;
     }
 
-    lastLoadedTrackKey = trackKey;
-    resetLyricsScroll();
+    const cached = lyricsMemoryCache.get(trackKey);
+    const cachedData = cached && (!durMs || cached.durationMs === durMs) ? cached.data : null;
 
-    containers.forEach(c => c.innerHTML = '<div class="empty-state"><div class="spinner"></div>Ищем текст...</div>');
-    parsedLyrics = [];
-    currentLineIndex = -1;
-    currentTranslationMap = {};
-    currentRawLyricsText = "";
-    currentOffsetMs = 0;
+    const preserve = Boolean(durationOverrideMs && trackKey === lastLoadedTrackKey && lastLyricsData && (lastLyricsData.plainLyrics || lastLyricsData.syncedLyrics));
+    lastLoadedTrackKey = trackKey;
+    if (!preserve) lastLyricsData = null;
+    if (!preserve) resetLyricsScroll();
+
+    if (!preserve) {
+        containers.forEach(c => c.innerHTML = '<div class="empty-state"><div class="spinner"></div>Ищем текст...</div>');
+        parsedLyrics = [];
+        currentLineIndex = -1;
+        currentTranslationMap = {};
+        currentRawLyricsText = '';
+        currentOffsetMs = 0;
+    }
 
     // Bump generation — only the freshest request may render
     const loadGen = ++lyricsLoadGeneration;
+    activeLyricsRequestId = `lyrics-${Date.now()}-${loadGen}`;
+    lastLyricsRevision = 0;
+    pendingLyricsRequest = null;
+    requestedLyricsDurationMs = cachedData ? cached.durationMs : durMs;
 
-    if (trackKey) {
+    if (trackKey && !preserve) {
         try {
-            const saved = localStorage.getItem(`nedotify_lyrics_offset_${trackKey}`);
-            if (saved !== null) {
+            const offsetKey = String(track.source_id || track.id || track.title || '');
+            const legacyKey = `${track.source || 'local'}:${track.source_id || track.id || ''}:${track.title || ''}:${track.artist || ''}:${track.album || ''}`;
+            const saved = localStorage.getItem(`nedotify_lyrics_offset_${offsetKey}`) ??
+                localStorage.getItem(`nedotify_lyrics_offset_${legacyKey}`) ??
+                window.settings?.lyrics?.[`lyrics_offset_${offsetKey}`];
+            if (saved !== null && saved !== undefined) {
                 currentOffsetMs = parseInt(saved, 10) || 0;
             }
         } catch(e) {
@@ -777,10 +988,42 @@ export function loadCurrentTrackLyrics() {
         }
     }
     updateOffsetBadges();
+
+    // Successful revisits render synchronously. Failures are never retained, so
+    // the retry button and recovery after a provider outage still perform I/O.
+    if (cachedData) {
+        renderLyrics(cachedData);
+        return;
+    }
     
-    if (window.pywebview?.api) {
-        const durMs = track.duration ? (track.duration > 10000 ? track.duration : Math.round(track.duration * 1000)) : 0;
-        const p = window.pywebview.api.get_lyrics(track.title, track.artist, durMs, track.file_path);
+    // Provider lyric cascades share the network with initial stream resolution.
+    // Cached text above and local sidecars stay immediate; an autoplay lookup
+    // starts only after this track has decoded audio and its clock has advanced.
+    const localFile = track.file_path && !/^https?:/i.test(track.file_path);
+    const clock = getLyricsPlaybackClock();
+    const audioReady = Boolean(track.stream_url || track.file_path) &&
+        !clock.paused && !clock.buffering && clock.positionMs > 0;
+    if (!forceNetwork && track.autoplay === true && track.source !== 'local' &&
+        !localFile && !audioReady) {
+        deferredLyricsRequest = {trackKey, durationMs: durMs};
+        containers.forEach(c => {
+            c.innerHTML = '<div class="empty-state"><span>Текст появится после начала воспроизведения</span><button type="button" class="home-pill">Найти сейчас</button></div>';
+            c.querySelector('button')?.addEventListener('click', () => loadCurrentTrackLyrics(0, true));
+        });
+        return;
+    }
+
+    if (window.pywebview?.api?.get_lyrics) {
+        pendingLyricsRequest = {trackKey, durationMs: durMs, id: activeLyricsRequestId, startedAt: Date.now()};
+        let p;
+        try {
+            p = window.pywebview.api.get_lyrics(track.title, track.artist, durMs, track.file_path, track.album || '', activeLyricsRequestId, track.source || '', track.source_id || '');
+        } catch (err) {
+            pendingLyricsRequest = null;
+            console.error("get_lyrics error:", err);
+            renderLyrics(null);
+            return;
+        }
         
         if (p && typeof p.then === 'function') {
             p.then(res => {
@@ -797,7 +1040,11 @@ export function loadCurrentTrackLyrics() {
                 console.error("get_lyrics error:", err);
                 renderLyrics(null);
             });
+        } else if (p?.status !== 'loading') {
+            renderLyrics(p || null);
         }
+    } else {
+        renderLyrics(null);
     }
 }
 
@@ -807,12 +1054,22 @@ function cleanPlainLyrics(plainText) {
         .map(l => l.replace(/^\[.*?\]\s*/g, '').trim())
         .map(l => l.replace(/^\d*\s*Contributors/i, '').trim())
         .map(l => l.replace(/\d*\s*Embed$/i, '').trim())
+        .filter(l => !/^(?:作词|作曲|编曲|词|曲)\s*[:：]/.test(l))
         .filter(l => l.length > 0 && !l.startsWith('[ti:') && !l.startsWith('[ar:') && !l.startsWith('[al:') && !l.startsWith('[by:') && !l.startsWith('[la:'));
 }
 
-export function renderLyrics(data) {
+export function renderLyrics(data, force = false) {
+    if (data?.request_id) {
+        if (data.request_id !== activeLyricsRequestId || Number(data.revision || 0) <= lastLyricsRevision) return;
+        lastLyricsRevision = Number(data.revision || 0);
+    }
+    if (!data || !data.request_id || data.phase === 'final') pendingLyricsRequest = null;
     const containers = getContainers();
+    if (typeof lyricsPreferences === 'function') containers.forEach(container => {
+        if (container.dataset) container.dataset.lyricsAnimations = lyricsPreferences().animations;
+    });
     if (!data) {
+        if (typeof clearWordLyrics === 'function') clearWordLyrics();
         lastLyricsData = null;
         // The sheet's children are about to be replaced, so the cached line
         // nodes and the measured geometry both go stale. Without this reset a
@@ -825,45 +1082,74 @@ export function renderLyrics(data) {
     const normalizedData = {
         syncedLyrics: data.syncedLyrics || data.synced_lyrics || (data.synced ? data.lyrics : null) || (typeof data === 'string' ? data : null),
         plainLyrics: data.plainLyrics || data.plain_lyrics || data.lyrics || (typeof data === 'string' ? data : null),
-        instrumental: !!data.instrumental
+        instrumental: !!data.instrumental,
+        status: data.status, source: data.source, match_type: data.match_type, phase: data.phase,
+        syncType: data.syncType, lines: Array.isArray(data.lines) ? data.lines : null,
+        originalFormat: data.originalFormat, originalLyrics: data.originalLyrics
     };
+    if (!normalizedData.plainLyrics && normalizedData.lines?.length) {
+        normalizedData.plainLyrics = normalizedData.lines.slice(0, 10000).map(line => (Array.isArray(line?.words) ? line.words : []).map(word => String(word?.text || '')).join('')).join('\n');
+    }
 
+    const previousPlain = cleanPlainLyrics(lastLyricsData?.plainLyrics || lastLyricsData?.syncedLyrics || '').join('\n');
+    const nextPlain = cleanPlainLyrics(normalizedData.plainLyrics || normalizedData.syncedLyrics || '').join('\n');
+    const unchanged = lastLyricsData && lastLyricsData.syncedLyrics === normalizedData.syncedLyrics && lastLyricsData.plainLyrics === normalizedData.plainLyrics && lastLyricsData.status === normalizedData.status && lastLyricsData.match_type === normalizedData.match_type && lastLyricsData.syncType === normalizedData.syncType && JSON.stringify(lastLyricsData.lines) === JSON.stringify(normalizedData.lines);
+    if (previousPlain !== nextPlain) currentTranslationMap = {};
     lastLyricsData = normalizedData;
+    rememberLyrics(normalizedData);
+    if (unchanged && !force) return;
+    if (typeof clearWordLyrics === 'function') clearWordLyrics();
     resetLyricsScroll();
     updateOffsetBadges();
 
     if (!normalizedData.syncedLyrics && !normalizedData.plainLyrics) {
-        containers.forEach(c => c.innerHTML = '<div class="empty-state">Текст песни не найден</div>');
+        parsedLyrics = [];
+        setOffsetControlsEnabled(false);
+        const message = normalizedData.instrumental ? 'Инструментальная версия — без текста' : (normalizedData.status === 'unavailable' ? 'Не удалось загрузить текст: источники временно недоступны' : 'Текст песни не найден');
+        containers.forEach(c => {
+            c.innerHTML = `<div class="empty-state">${message}${normalizedData.instrumental ? '' : '<button class="btn btn-secondary">Повторить</button>'}</div>`;
+            c.querySelector('button')?.addEventListener('click', () => loadCurrentTrackLyrics(0, true));
+        });
         return;
     }
 
     currentRawLyricsText = normalizedData.syncedLyrics || normalizedData.plainLyrics || "";
+    if (previousPlain !== nextPlain && isTranslationEnabled) toggleTranslation(true);
 
-    if (normalizedData.syncedLyrics) {
-        parsedLyrics = parseLrc(normalizedData.syncedLyrics);
+    if (normalizedData.syncedLyrics || normalizedData.lines?.length) {
+        const normalized = normalizedData.lines ? normalizedTimedLines(normalizedData) : [];
+        parsedLyrics = normalized.length ? normalized : parseLrc(normalizedData.syncedLyrics);
+        const wordSync = normalized.length && ['word', 'syllable'].includes(normalizedData.syncType) && lyricsPreferences().mode !== 'line';
+        if (wordSync) wordPainter = new WordPainter(parsedLyrics);
         if (parsedLyrics.length > 0) {
             containers.forEach(c => {
                 c.innerHTML = '';
+                const renderedWords = [];
+                if (wordSync) wordRows.push(renderedWords);
                 parsedLyrics.forEach((line, i) => {
                     const el = document.createElement('div');
                     el.className = 'lyric-line';
                     
                     const origSpan = document.createElement('div');
                     origSpan.className = 'lyric-orig-text';
-                    origSpan.textContent = line.text;
+                    if (wordSync) renderedWords[i] = appendTimedWords(origSpan, line);
+                    else origSpan.textContent = line.text;
                     el.appendChild(origSpan);
 
-                    if (isTranslationEnabled && currentTranslationMap[line.text]) {
+                    const trans = currentTranslationMap[i] || currentTranslationMap[`${i}:${line.text}`] || currentTranslationMap[line.text];
+                    if (isTranslationEnabled && trans) {
                         const subEl = document.createElement('div');
                         subEl.className = 'lyric-translation';
-                        subEl.textContent = currentTranslationMap[line.text];
+                        subEl.textContent = trans;
                         el.appendChild(subEl);
                     }
 
                     el.dataset.index = String(i);
                     el.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        seekTo(line.timeMs);
+                        const position = Math.max(0, line.timeMs - currentOffsetMs);
+                        seekTo(position);
+                        updateLyricsPosition(position);
                         // Seek and re-centre in one step. Waiting for the next
                         // position tick to re-centre left the sheet parked on
                         // the old line for a frame or two after the click.
@@ -881,6 +1167,8 @@ export function renderLyrics(data) {
             });
             // Update position immediately to highlight matching line
             updateLyricsPosition(lastPosMs);
+            if (typeof paintWordLyrics === 'function') paintWordLyrics(lastPosMs, true);
+            if (typeof syncWordLyrics === 'function') syncWordLyrics();
             setOffsetControlsEnabled(true);
             return;
         }
@@ -898,18 +1186,20 @@ export function renderLyrics(data) {
         
         const warnEl = document.createElement('div');
         warnEl.className = 'lyric-notice';
-        warnEl.innerHTML = '<i data-lucide="info" style="width:14px;height:14px"></i><span>Текст не синхронизирован с треком</span>';
+        const message = normalizedData.match_type === 'base' ? 'Текст оригинальной версии — без таймкодов' : 'Текст не синхронизирован с треком';
+        warnEl.innerHTML = `<i data-lucide="info" style="width:14px;height:14px"></i><span>${message}</span>`;
         c.appendChild(warnEl);
         renderIcons(warnEl);
 
-        lines.forEach(line => {
+        lines.forEach((line, idx) => {
             const el = document.createElement('div');
             el.className = 'lyric-line lyric-plain';
             el.textContent = line;
-            if (isTranslationEnabled && currentTranslationMap[line]) {
+            const trans = currentTranslationMap[idx] || currentTranslationMap[`${idx}:${line}`] || currentTranslationMap[line];
+            if (isTranslationEnabled && trans) {
                 const subEl = document.createElement('div');
                 subEl.className = 'lyric-translation';
-                subEl.textContent = currentTranslationMap[line];
+                subEl.textContent = trans;
                 el.appendChild(subEl);
             }
             c.appendChild(el);
@@ -929,7 +1219,9 @@ export function parseLrc(lrcText) {
     if (!lrcText || typeof lrcText !== 'string') return [];
     const lines = lrcText.split(/\r?\n/);
     const result = [];
-    const timeReg = /\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g;
+    const timeReg = /\[(\d{1,3}):(\d{2})(?:[.:](\d+))?\]/g;
+    const offsetTag = [...lrcText.matchAll(/\[offset:\s*([+-]?\d+)\s*\]/gi)].at(-1);
+    const embeddedOffsetMs = offsetTag ? Number(offsetTag[1]) : 0;
     
     lines.forEach(line => {
         const trimmed = line.trim();
@@ -945,7 +1237,7 @@ export function parseLrc(lrcText) {
                 const sec = parseInt(match[2], 10);
                 const msStr = match[3] || '0';
                 const ms = parseInt(msStr.padEnd(3, '0').substring(0, 3), 10);
-                const timeMs = (min * 60 * 1000) + (sec * 1000) + ms;
+                const timeMs = (min * 60 * 1000) + (sec * 1000) + ms - embeddedOffsetMs;
                 result.push({ timeMs, text: text || '♪' });
             });
         }
@@ -972,6 +1264,7 @@ export function updateLyricsPosition(posMs) {
         if (parsedLyrics.length === 0) return;
 
         const effectivePos = lastPosMs + currentOffsetMs;
+        if (typeof paintWordLyrics === 'function') paintWordLyrics(lastPosMs);
 
         // Binary search: a long song has hundreds of lines and the linear scan
         // ran on every tick.
@@ -998,15 +1291,6 @@ export function updateLyricsPosition(posMs) {
             });
             currentLineIndex = newIndex;
 
-            // Dispatch event for Floating Mini-Karaoke Widget
-            window.dispatchEvent(new CustomEvent('lyrics:line-changed', {
-                detail: {
-                    index: newIndex,
-                    currentLine: parsedLyrics[newIndex]?.text || '',
-                    nextLine: parsedLyrics[newIndex + 1]?.text || '',
-                    translation: currentTranslationMap[parsedLyrics[newIndex]?.text] || ''
-                }
-            }));
         } else {
             // Steady path. Stays free of layout work in the common case, with one
             // exception: a sheet whose viewport had zero height while the panel
@@ -1030,132 +1314,3 @@ export function updateLyricsPosition(posMs) {
         console.error("Lyrics updateLyricsPosition Error:", e);
     }
 }
-
-// ==========================================================================
-// FEATURE 1: Floating Mini-Karaoke Widget Implementation
-// ==========================================================================
-
-let isPipWidgetActive = false;
-
-/**
- * Инициализация логики перетаскивания и привязки событий мини-виджета караоке.
- */
-export function initMiniLyricsWidget() {
-    const widget = document.getElementById('mini-lyrics-widget');
-    const closeBtn = document.getElementById('pip-lyrics-close');
-    const header = widget?.querySelector('.pip-lyrics-header');
-    if (!widget || !header) return;
-
-    // Закрытие виджета
-    closeBtn?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleMiniLyrics(false);
-    });
-
-    // ── Drag & Drop с контролем границ окна (Boundary Guard) ──
-    let isDragging = false;
-    let startMouseX = 0, startMouseY = 0;
-    let startWidgetX = 0, startWidgetY = 0;
-
-    header.addEventListener('mousedown', (e) => {
-        if (e.target.closest('#pip-lyrics-close')) return;
-        isDragging = true;
-        widget.classList.add('dragging');
-
-        const rect = widget.getBoundingClientRect();
-        startMouseX = e.clientX;
-        startMouseY = e.clientY;
-        startWidgetX = rect.left;
-        startWidgetY = rect.top;
-
-        // Фиксация в абсолютных координатах от левого верхнего угла
-        widget.style.right = 'auto';
-        widget.style.bottom = 'auto';
-        widget.style.left = `${startWidgetX}px`;
-        widget.style.top = `${startWidgetY}px`;
-
-        const onMouseMove = (moveEvt) => {
-            if (!isDragging) return;
-            const deltaX = moveEvt.clientX - startMouseX;
-            const deltaY = moveEvt.clientY - startMouseY;
-
-            let nextX = startWidgetX + deltaX;
-            let nextY = startWidgetY + deltaY;
-
-            // Защита от вылета за пределы экрана и наложения на плеер-бар
-            const minX = 12;
-            const maxX = window.innerWidth - widget.offsetWidth - 12;
-            const minY = 36; // Ниже оконного Title Bar
-            const maxY = window.innerHeight - widget.offsetHeight - (84 + 16); // Выше нижнего плеера
-
-            nextX = Math.max(minX, Math.min(nextX, maxX));
-            nextY = Math.max(minY, Math.min(nextY, maxY));
-
-            widget.style.left = `${nextX}px`;
-            widget.style.top = `${nextY}px`;
-        };
-
-        const onMouseUp = () => {
-            isDragging = false;
-            widget.classList.remove('dragging');
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', onMouseUp);
-
-            // Сохранение предпочтительного положения
-            try {
-                localStorage.setItem('nedotify_pip_lyrics_pos', JSON.stringify({
-                    x: widget.style.left,
-                    y: widget.style.top
-                }));
-            } catch (err) {}
-        };
-
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', onMouseUp);
-    });
-
-    // Восстановление последней сохраненной позиции
-    try {
-        const savedPos = JSON.parse(localStorage.getItem('nedotify_pip_lyrics_pos') || '{}');
-        if (savedPos.x && savedPos.y) {
-            widget.style.right = 'auto';
-            widget.style.bottom = 'auto';
-            widget.style.left = savedPos.x;
-            widget.style.top = savedPos.y;
-        }
-    } catch (e) {}
-
-    // Слушатель синхронизации строк (диспатчится из updateLyricsPosition)
-    window.addEventListener('lyrics:line-changed', (e) => {
-        const { currentLine, nextLine, translation } = e.detail || {};
-        const curEl = document.getElementById('pip-lyric-current');
-        const nextEl = document.getElementById('pip-lyric-next');
-        const transEl = document.getElementById('pip-lyric-translation');
-
-        if (curEl) curEl.textContent = currentLine || '♪ ♪ ♪';
-        if (nextEl) nextEl.textContent = nextLine || '';
-
-        if (transEl) {
-            if (translation) {
-                transEl.textContent = translation;
-                transEl.style.display = 'block';
-            } else {
-                transEl.style.display = 'none';
-            }
-        }
-    });
-}
-
-/**
- * Переключатель видимости плавающего караоке
- */
-export function toggleMiniLyrics(forceState) {
-    const widget = document.getElementById('mini-lyrics-widget');
-    if (!widget) return;
-    isPipWidgetActive = forceState !== undefined ? forceState : widget.classList.contains('hidden');
-    widget.classList.toggle('hidden', !isPipWidgetActive);
-}
-
-// Экспорт в глобальный неймспейс NeDotify
-window.NeDotify = window.NeDotify || {};
-window.NeDotify.toggleMiniLyrics = toggleMiniLyrics;

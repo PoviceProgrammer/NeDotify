@@ -1,98 +1,67 @@
-"""Regression tests for the YouTube -> SoundCloud fallback cascade budget.
+"""Exercise the real YouTube-to-SoundCloud fallback budget deterministically."""
 
-When SoundCloud is unreachable (no VPN, DPI block) every candidate in the
-fallback list cost a full socket_timeout. The chain had no ceiling, so
-`on_error` never reached the UI and the track sat in a permanent loading state.
-"""
-import time
+import threading
+from types import SimpleNamespace
 
-import pytest
-
-from core.app import _SC_FALLBACK_BUDGET_S
+from core.app import AppCore, _SC_FALLBACK_BUDGET_S
 
 
 def test_fallback_budget_is_bounded():
-    """Budget must fit inside the frontend's stall window (a few seconds)."""
-    assert _SC_FALLBACK_BUDGET_S > 0
-    assert _SC_FALLBACK_BUDGET_S <= 30.0
+    assert 0 < _SC_FALLBACK_BUDGET_S <= 30.0
 
 
-class _FakeSoundCloud:
-    """Never calls back - the pathological 'host unreachable' case."""
+def test_real_fallback_guard_stops_late_search_callback(monkeypatch):
+    import core.app as app_module
 
-    def __init__(self):
-        self.search_calls = 0
-        self.stream_calls = 0
+    clock = SimpleNamespace(value=0.0)
+    monkeypatch.setattr(app_module, "time", SimpleNamespace(monotonic=lambda: clock.value))
 
-    def search(self, query, max_results=20, callback=None, error_callback=None):
-        self.search_calls += 1
-        # Simulate a silent provider: no callback, no error_callback.
+    timers = []
+    class FakeTimer:
+        def __init__(self, interval, callback):
+            self.interval, self.callback, self.cancelled = interval, callback, False
+            timers.append(self)
+        def start(self):
+            pass
+        def cancel(self):
+            self.cancelled = True
 
-    def get_stream_url(self, url, callback=None, error_callback=None, quality="high"):
-        self.stream_calls += 1
+    monkeypatch.setattr(app_module.threading, "Timer", FakeTimer)
 
+    searched = threading.Event()
+    closed = threading.Event()
+    late_search_callback = {}
+    class YouTube:
+        def get_stream_url(self, url, callback=None, error_callback=None, quality="high"):
+            error_callback("YouTube unavailable")
 
-def _make_core(monkeypatch, sc):
-    core = type("Core", (), {})()
-    core._sc_fallback_budget = _SC_FALLBACK_BUDGET_S
-    return core
+    class SoundCloud:
+        def search(self, query, max_results=20, callback=None, error_callback=None):
+            late_search_callback.update(callback=callback, error_callback=error_callback)
+            searched.set()
 
-
-def test_silent_provider_does_not_recurse_forever(monkeypatch):
-    """A SoundCloud that never calls back must not spin the candidate chain."""
-    core = type("Core", (), {})()
-
-    class FakeApp:
-        def __init__(self):
-            self.soundcloud = _FakeSoundCloud()
-
-        def _on_err_impl(self, candidates, on_error, source_id):
-            started = time.monotonic()
-            idx = 0
-            calls = 0
-            while idx < len(candidates):
-                if time.monotonic() - started > core._sc_fallback_budget:
-                    break
-                calls += 1
-                # Provider stays silent; a real budget would be checked between
-                # the provider's callbacks, which never arrive.
-                idx += 1
-            return calls
-
-    core._sc_fallback_budget = 0.05
-    app = FakeApp()
-    # With a 50ms budget the loop must not walk the whole candidate list.
-    calls = app._on_err_impl(["a", "b", "c", "d", "e", "f"], None, "x")
-    assert calls >= 0
-    assert app.soundcloud.search_calls == 0
-
-
-def test_budget_constant_is_used_by_module():
-    import core.app as appmod
-    src_calls = appmod._SC_FALLBACK_BUDGET_S
-    assert isinstance(src_calls, float)
-    assert src_calls > 1.0, "budget must allow at least a couple of fast attempts"
-
-
-def test_cascade_reports_error_to_ui(monkeypatch):
-    """Exhausted cascade must invoke on_error so the UI can stop loading."""
+    core = AppCore.__new__(AppCore)
+    core._service_lock = threading.RLock()
+    core._shutting_down = threading.Event()
+    core._resolution_timers = set()
+    core._resolve_threads = set()
+    core.settings = None
+    core.youtube = YouTube()
+    core.soundcloud = SoundCloud()
+    core.db = SimpleNamespace(close_thread_connection=closed.set)
     errors = []
-    fake = _FakeSoundCloud()
 
-    core = type("Core", (), {})()
-    core.soundcloud = fake
+    core.re_resolve_stream_url_async(
+        "youtube", "video-id", on_error=errors.append,
+        track={"title": "Song", "artist": "Artist"},
+    )
+    assert searched.wait(3), "real resolver did not enter the SoundCloud fallback"
+    assert closed.wait(3), "resolver worker did not finish after scheduling the callback"
 
-    candidates = ["q1", "q2", "q3"]
-    started = time.monotonic()
-    idx = 0
-    finished = False
+    clock.value = _SC_FALLBACK_BUDGET_S + 1
+    late_search_callback["error_callback"]("late provider response")
 
-    # Mirror the shipped guard structure: budget check first, then advance.
-    while not finished:
-        if idx >= len(candidates) or (time.monotonic() - started) > _SC_FALLBACK_BUDGET_S:
-            errors.append("exhausted")
-            finished = True
-            break
-        idx += 1
-
-    assert errors == ["exhausted"]
+    assert len(late_search_callback) == 2
+    assert errors == ["YouTube unavailable"]
+    assert timers and timers[0].cancelled
+    assert not core._resolution_timers

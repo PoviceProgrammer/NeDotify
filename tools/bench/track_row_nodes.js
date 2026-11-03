@@ -234,9 +234,11 @@ const payload = {
   lucide_icons_used_across_app: Object.keys(ICON_SHAPES).length,
 };
 
-fs.mkdirSync(path.join(REPO, 'tools', 'bench', 'results'), { recursive: true });
+const outputDir = process.env.NEDOTIFY_BENCH_OUT ||
+  path.join(require('os').tmpdir(), 'NeDotify', 'bench', 'results');
+fs.mkdirSync(outputDir, { recursive: true });
 fs.writeFileSync(
-  path.join(REPO, 'tools', 'bench', 'results', 'track_row_nodes.json'),
+  path.join(outputDir, 'track_row_nodes.json'),
   JSON.stringify(payload, null, 2) + '\n',
   'utf8'
 );

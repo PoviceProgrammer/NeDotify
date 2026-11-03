@@ -1,4 +1,4 @@
-# AURA Music — coding standards (disclosed reference)
+# NeDotify — coding standards (disclosed reference)
 
 Consulted on demand. `AGENTS.md` holds what every task needs; this file holds the
 per-subsystem contracts behind it.
@@ -18,8 +18,10 @@ Two channels, no third.
   unserialisable payload is logged and dropped rather than raised — that guard is
   the only reason a bad payload is visible at all. Do not hoist the `json.dumps`
   out of the try.
-- **JS → Python** is `window.pywebview.api.<method>(...)`, against the `AppApi`
-  instance handed to `create_window(js_api=...)`. There are ~200 such call sites
+- **JS → Python** is `window.pywebview.api.<method>(...)`, through the explicit
+  `BridgeApi` facade handed to `create_window(js_api=...)`. Public capabilities
+  are listed in `core/bridge.py::PUBLIC_METHODS`; internal/lifecycle hooks and
+  nested Python object traversal are rejected before dispatch. There are ~200 call sites
   in `ui/web_new_v2/js/`, so a thrown bridge call is a dead button, not an
   exception: wrap it, then fall back to a UI state that still renders.
 - **There is no `EventSource`, no `text/event-stream` route and no WebSocket
@@ -92,9 +94,8 @@ is inline at the point a name is constructed.
 forbidden-character filter in the same commit.** Windows filenames reject
 `< > : " / \ | ? *`, and nothing downstream will filter them for you.
 
-> Not every provider holds this line. `services/yandex_service.py` still builds
-> `ya_<raw_id>_<ts>.mp3` from an unsanitised id — the convention is documented,
-> not enforced. See the audit note in `docs/AUDIT.md`.
+`services/yandex_service.py` uses the same safe character set for
+`ya_<safe_id>_<ts>.mp3`.
 
 ## Profile layout — `~/.nedotify/`
 
@@ -106,11 +107,10 @@ forbidden-character filter in the same commit.** Windows filenames reject
 | Covers / temp | `~/.nedotify/covers/`, `~/.nedotify/temp/` — `utils/cache_manager.py` |
 | Logs | `~/.nedotify/logs/app.log` (rotating 2 MB × 3) — `main.py` |
 
-`tests/conftest.py: redirect_home` redirects `~` into `tmp_path`. It is
-**opt-in, not autouse** (`@pytest.fixture`, no `autouse=True`), so nothing catches
-a leak into the real profile. Any new test or code path that touches the profile
-takes the fixture; `tests/test_conftest_home_isolation.py` guards the fixture
-itself.
+`tests/conftest.py` redirects profile environment variables before collection;
+its autouse `redirect_home` fixture gives each test a separate temporary home.
+`tests/test_conftest_home_isolation.py` guards both boundaries. Child processes
+must inherit the sandbox or receive an explicit temporary profile.
 
 ## SQLite
 
@@ -135,6 +135,11 @@ do not trust a number written in a doc.
 | Search | `max_workers=6`, `SearchWorker` | `core/api.py` |
 | Downloads | `_MAX_INFLIGHT`, `download_worker` | `core/downloader.py` |
 | Provider fan-out | `_SharedExecutor(max_workers=8)` | `services/base_service.py` |
+| Provider playback (Yandex, Deezer, VK) | `_SharedExecutor(max_workers=4)`, `ProviderPlayback` | `services/base_service.py` |
+
+Use `submit_playback()` for these providers' stream extraction so a full search
+queue cannot delay Play. YouTube and SoundCloud retain their own playback pools.
+The shared playback pool shuts down with `BaseMusicService.shutdown_executor()`.
 
 Enter shared provider work through `BaseMusicService.submit()`. It is
 shutdown-safe and returns `None` once the pool is gone — **that `None` is the
@@ -186,5 +191,5 @@ contradicted.
 | `.venv\Scripts\python.exe` | `.venv_win\Scripts\python.exe` is the only venv | `.venv\` does not exist |
 | Nuitka is a build path | PyInstaller + Inno Setup only | no Nuitka in tree |
 | `build_installer.py`, `installer_gui.py`, `uninstaller_gui.py` | none exist | repo-wide filename search |
-| `ui/web_new/` is the UI | `ui/web_new_v2/` is the default | `main.py: NEDOTIFY_UI_DIR` |
+| `ui/web_new/` is the UI | `ui/web_new_v2/` is the sole UI; version flags and overrides are retired | `main.py`, `setup_pyinstaller.spec` |
 | Playwright / Selenium E2E | opaque-box pytest against real `AppApi` | `tests/` |

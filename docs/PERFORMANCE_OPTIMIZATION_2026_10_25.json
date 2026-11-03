@@ -1,0 +1,368 @@
+{
+  "scope": "Windows desktop; isolated fixture profiles; original UI versus optimization-only snapshot",
+  "library": {
+    "before": {
+      "prep": {
+        "domNodes": 87264,
+        "rows": 2000,
+        "scrollHeight": 112280,
+        "selector": "#lib-right-content"
+      },
+      "scroll": {
+        "label": "full_library",
+        "selector": "#lib-right-content",
+        "rounds": 2,
+        "medianFrameMs": 33.35,
+        "medianDerivedFps": 28.8,
+        "p95FrameMs_worst": 50.1,
+        "worstFrameMs_worst": 66.6,
+        "longFramesOver50ms_total": 29,
+        "rows_rendered": 112280,
+        "runs": [
+          {
+            "clientHeight": 445,
+            "derivedFps": 28.4,
+            "frames": 240,
+            "longFramesOver50ms": 20,
+            "meanFrameMs": 35.21,
+            "medianFrameMs": 33.4,
+            "p95FrameMs": 50.1,
+            "scrollHeight": 112280,
+            "worstFrameMs": 66.6
+          },
+          {
+            "clientHeight": 445,
+            "derivedFps": 29.1,
+            "frames": 240,
+            "longFramesOver50ms": 9,
+            "meanFrameMs": 34.31,
+            "medianFrameMs": 33.3,
+            "p95FrameMs": 50,
+            "scrollHeight": 112280,
+            "worstFrameMs": 66.6
+          }
+        ]
+      },
+      "resources": {
+        "cpu_percent_basis": "100% = one logical CPU; machine-normalized values use logical_cpu_count",
+        "logical_cpu_count": 12,
+        "memory_peak_basis": "max tree RSS sampled; individual Windows process peaks are OS high-water marks",
+        "observed_process_peak_rss_mb": {
+          "18364": 147.12,
+          "14196": 119.71,
+          "7164": 14.16,
+          "9628": 256.76,
+          "16588": 40.96,
+          "10748": 23.18,
+          "21876": 1123.78,
+          "7680": 28.09
+        },
+        "n_samples": 59,
+        "window_sec": 17.1,
+        "python_cpu_pct": {
+          "mean": 14.54,
+          "median": 15.65,
+          "p95": 21.38,
+          "max": 41.67
+        },
+        "webview_cpu_pct": {
+          "mean": 153.23,
+          "median": 134.13,
+          "p95": 253.34,
+          "max": 267.08
+        },
+        "tree_cpu_pct": {
+          "mean": 167.77,
+          "median": 150.7,
+          "p95": 269.51,
+          "max": 282.79
+        },
+        "tree_machine_cpu_pct": {
+          "mean": 13.98,
+          "median": 12.56,
+          "p95": 22.46,
+          "max": 23.57
+        },
+        "python_rss_mb": {
+          "mean": 146.4,
+          "median": 146.46,
+          "p95": 146.48,
+          "max": 146.48
+        },
+        "webview_rss_mb": {
+          "mean": 1496.56,
+          "median": 1539.91,
+          "p95": 1565.34,
+          "max": 1574.07
+        },
+        "worker_cpu_pct": {
+          "mean": 0.0,
+          "median": 0.0,
+          "p95": 0.0,
+          "max": 0.0
+        },
+        "worker_rss_mb": {
+          "mean": 0.0,
+          "median": 0.0,
+          "p95": 0.0,
+          "max": 0.0
+        },
+        "tree_rss_mb": {
+          "mean": 1642.96,
+          "median": 1686.38,
+          "p95": 1711.81,
+          "max": 1720.54
+        },
+        "python_threads_max": 30,
+        "n_children_max": 7
+      }
+    },
+    "after": {
+      "prep": {
+        "domNodes": 5362,
+        "rows": 12,
+        "scrollHeight": 112280,
+        "selector": "#lib-right-content"
+      },
+      "scroll": {
+        "label": "full_library",
+        "selector": "#lib-right-content",
+        "rounds": 2,
+        "medianFrameMs": 16.7,
+        "medianDerivedFps": 60.0,
+        "p95FrameMs_worst": 16.9,
+        "worstFrameMs_worst": 17.1,
+        "longFramesOver50ms_total": 0,
+        "rows_rendered": 112280,
+        "runs": [
+          {
+            "clientHeight": 445,
+            "derivedFps": 60,
+            "frames": 240,
+            "longFramesOver50ms": 0,
+            "meanFrameMs": 16.67,
+            "medianFrameMs": 16.7,
+            "p95FrameMs": 16.9,
+            "scrollHeight": 112280,
+            "worstFrameMs": 17
+          },
+          {
+            "clientHeight": 445,
+            "derivedFps": 60,
+            "frames": 240,
+            "longFramesOver50ms": 0,
+            "meanFrameMs": 16.67,
+            "medianFrameMs": 16.7,
+            "p95FrameMs": 16.9,
+            "scrollHeight": 112280,
+            "worstFrameMs": 17.1
+          }
+        ]
+      },
+      "resources": {
+        "cpu_percent_basis": "100% = one logical CPU; machine-normalized values use logical_cpu_count",
+        "logical_cpu_count": 12,
+        "memory_peak_basis": "max tree RSS sampled; individual Windows process peaks are OS high-water marks",
+        "observed_process_peak_rss_mb": {
+          "6656": 147.83,
+          "7344": 117.47,
+          "16680": 14.16,
+          "11548": 229.76,
+          "20152": 41.07,
+          "9668": 23.17,
+          "4420": 326.02,
+          "10268": 60.57,
+          "9084": 28.06
+        },
+        "n_samples": 29,
+        "window_sec": 8.6,
+        "python_cpu_pct": {
+          "mean": 18.78,
+          "median": 18.85,
+          "p95": 31.4,
+          "max": 39.36
+        },
+        "webview_cpu_pct": {
+          "mean": 153.16,
+          "median": 155.52,
+          "p95": 222.26,
+          "max": 285.62
+        },
+        "tree_cpu_pct": {
+          "mean": 171.95,
+          "median": 172.0,
+          "p95": 242.93,
+          "max": 306.39
+        },
+        "tree_machine_cpu_pct": {
+          "mean": 14.33,
+          "median": 14.33,
+          "p95": 20.24,
+          "max": 25.53
+        },
+        "python_rss_mb": {
+          "mean": 146.49,
+          "median": 146.49,
+          "p95": 146.5,
+          "max": 146.5
+        },
+        "webview_rss_mb": {
+          "mean": 731.74,
+          "median": 750.94,
+          "p95": 763.64,
+          "max": 764.98
+        },
+        "worker_cpu_pct": {
+          "mean": 0.0,
+          "median": 0.0,
+          "p95": 0.0,
+          "max": 0.0
+        },
+        "worker_rss_mb": {
+          "mean": 0.0,
+          "median": 0.0,
+          "p95": 0.0,
+          "max": 0.0
+        },
+        "tree_rss_mb": {
+          "mean": 878.23,
+          "median": 897.43,
+          "p95": 910.13,
+          "max": 911.48
+        },
+        "python_threads_max": 30,
+        "n_children_max": 8
+      }
+    }
+  },
+  "waveform_pixel_equivalence": {
+    "cases": 108,
+    "dpr": [
+      1,
+      2
+    ],
+    "max_channel_delta": 0
+  },
+  "live_library_smoke": [
+    {
+      "theme": "dark",
+      "screen": "library",
+      "viewport": "1280x800",
+      "dpr": 1,
+      "file": "dark__library__1280x800@1x.png",
+      "bytes": 215617,
+      "sha256": "b25a08aa4e986b90bedd3eb3f977b139401039e0a2673657a647ab9a3804d8d6",
+      "capture_ms": 1888.9,
+      "driver_status": {
+        "focusRetained": true,
+        "gap": 4,
+        "rowHeight": 52,
+        "samples": [
+          {
+            "count": 12,
+            "first": 0,
+            "fraction": 0,
+            "last": 11
+          },
+          {
+            "count": 26,
+            "first": 985,
+            "fraction": 0.5,
+            "last": 1010
+          },
+          {
+            "count": 17,
+            "first": 1983,
+            "fraction": 1,
+            "last": 1999
+          },
+          {
+            "count": 12,
+            "first": 0,
+            "fraction": 0,
+            "last": 11
+          }
+        ],
+        "selectionRetained": true,
+        "total": 2000
+      },
+      "driver_error": null,
+      "page_info": {
+        "dpr": 1,
+        "fonts": "loaded",
+        "h": 800,
+        "images": 20,
+        "incomplete": 0,
+        "w": 1280
+      }
+    },
+    {
+      "theme": "dark",
+      "screen": "library",
+      "viewport": "1280x800",
+      "dpr": 2,
+      "file": "dark__library__1280x800@2x.png",
+      "bytes": 536395,
+      "sha256": "0f0c23587a563d034c2f04d56923b0ea6ae17c9b0dbbcfaea5efb72adaecb5cc",
+      "capture_ms": 1991.4,
+      "driver_status": {
+        "focusRetained": true,
+        "gap": 4,
+        "rowHeight": 52,
+        "samples": [
+          {
+            "count": 12,
+            "first": 0,
+            "fraction": 0,
+            "last": 11
+          },
+          {
+            "count": 26,
+            "first": 985,
+            "fraction": 0.5,
+            "last": 1010
+          },
+          {
+            "count": 17,
+            "first": 1983,
+            "fraction": 1,
+            "last": 1999
+          },
+          {
+            "count": 12,
+            "first": 0,
+            "fraction": 0,
+            "last": 11
+          }
+        ],
+        "selectionRetained": true,
+        "total": 2000
+      },
+      "driver_error": null,
+      "page_info": {
+        "dpr": 2,
+        "fonts": "loaded",
+        "h": 800,
+        "images": 20,
+        "incomplete": 0,
+        "w": 1280
+      }
+    }
+  ],
+  "artifacts_directory": "C:\\Users\\E8E5~1\\AppData\\Local\\Temp\\NeDotify\\optimization-20261024",
+  "visual_comparison": {
+    "ok": true,
+    "compared": 24,
+    "passed": 24,
+    "failed": 0,
+    "tolerance_pixel_ratio": 0.00025,
+    "channel_tolerance": 2
+  },
+  "latest_full_suite": {
+    "passed": 1856,
+    "failed": 5,
+    "skipped": 9,
+    "deselected": 1
+  },
+  "targeted_tests_passed": 41
+}

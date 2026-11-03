@@ -1,5 +1,5 @@
 import { togglePlayPause } from './player.js';
-import { isFocusInsideModalTrap } from './utils.js';
+import { isFocusInsideModalTrap, showToast } from './utils.js';
 
 export const DEFAULT_KEYBINDS = [
     { id: 'play_pause', label: 'Воспроизведение / Пауза', defaultKey: 'Space' },
@@ -40,8 +40,8 @@ export function parseKeyEventCombo(e) {
     if (e.metaKey) parts.push('Meta');
 
     let keyName = e.code || e.key;
-    if (keyName === ' ' || e.key === ' ') keyName = 'Space';
-    if (keyName === '/' || e.key === '/') keyName = 'Slash';
+    if (keyName === ' ') keyName = 'Space';
+    if (keyName === '/') keyName = 'Slash';
     
     // Ignore standalone modifier keypresses
     if (['ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight', 'Control', 'Alt', 'Shift', 'Meta'].includes(keyName)) {
@@ -73,7 +73,7 @@ export function initHotkeys() {
         'Ctrl+Right': 'Ctrl+ArrowRight', 'Ctrl+Left': 'Ctrl+ArrowLeft',
         'Ctrl+Up': 'Ctrl+ArrowUp', 'Ctrl+Down': 'Ctrl+ArrowDown',
         'Ctrl+KeyM': 'KeyM', 'Ctrl+KeyK': 'KeyK',
-        'Ctrl+M': 'KeyM', 'Ctrl+L': 'KeyK', 'Ctrl+F': 'Slash',
+        'Ctrl+M': 'KeyM', 'Ctrl+L': 'KeyL', 'Ctrl+F': 'Slash',
         'Ctrl+KeyO': null, 'Ctrl+O': null
     };
     const KNOWN_ACTIONS = new Set(DEFAULT_KEYBINDS.map(kb => kb.id));
@@ -128,17 +128,30 @@ export function initHotkeys() {
     }, true);
 
     // SINGLE AUTHORITATIVE GLOBAL KEYDOWN LISTENER (Eliminates double toggle on Space)
-    window.addEventListener('keydown', (e) => {
+    window.addEventListener('keydown', async (e) => {
         // Rebinding Mode inside Settings UI
         if (listeningKeybindId) {
             e.preventDefault();
             e.stopPropagation();
             const combo = parseKeyEventCombo(e);
+            if (!combo && e.code !== 'Escape') return;
             if (combo && e.code !== 'Escape') {
-                activeKeybinds[listeningKeybindId] = combo;
-                saveKeybindsToStorage(activeKeybinds);
-                if (window.pywebview?.api?.save_setting) {
-                    window.pywebview.api.save_setting(listeningKeybindId, combo, 'hotkeys');
+                const action = listeningKeybindId;
+                const conflict = Object.entries(activeKeybinds).find(([id, key]) => id !== action && key === combo);
+                if (conflict) {
+                    const label = DEFAULT_KEYBINDS.find(item => item.id === conflict[0])?.label || conflict[0];
+                    showToast(`Сочетание уже назначено: ${label}`, 'warning');
+                    return;
+                }
+                listeningKeybindId = null;
+                try {
+                    if (!window.pywebview?.api?.save_setting) throw new Error('Bridge unavailable');
+                    const result = await window.pywebview.api.save_setting(action, combo, 'hotkeys');
+                    if (result === false || result?.success === false) throw new Error('Binding rejected');
+                    activeKeybinds[action] = combo;
+                    saveKeybindsToStorage(activeKeybinds);
+                } catch {
+                    showToast('Не удалось сохранить сочетание клавиш', 'error');
                 }
             }
             listeningKeybindId = null;
@@ -219,18 +232,21 @@ export function executeHotkeysAction(actionId) {
             }
             break;
         case 'toggle_mute':
-        case 'mute':
+        case 'mute': {
             const volBtn = document.getElementById('pb-volume-btn');
             if (volBtn) volBtn.click();
             break;
-        case 'like':
-            const btnLike = document.getElementById('pp-btn-like') || document.getElementById('btn-like');
+        }
+        case 'like': {
+            const btnLike = document.getElementById('pb-btn-like') || document.getElementById('pp-btn-like') || document.getElementById('btn-like');
             if (btnLike) btnLike.click();
             break;
-        case 'toggle_lyrics':
+        }
+        case 'toggle_lyrics': {
             const lyricsBtn = document.getElementById('pp-btn-lyrics');
             if (lyricsBtn) lyricsBtn.click();
             break;
+        }
         case 'toggle_mini':
             if (window.NeDotify?.toggleMiniPlayerMode) {
                 window.NeDotify.toggleMiniPlayerMode();

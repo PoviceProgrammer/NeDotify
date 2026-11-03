@@ -14,11 +14,15 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO))
 JS_DIR = REPO / "ui" / "web_new_v2" / "js"
-OUT = REPO / "tools" / "bench" / "results" / "frontend_hotspots.json"
+from tools.bench.paths import results_dir
+
+OUT = results_dir() / "frontend_hotspots.json"
 
 # Vendored bundles: not first-party code, excluded from the analysis surface.
 VENDORED = {"hls.min.js", "lucide.min.js"}

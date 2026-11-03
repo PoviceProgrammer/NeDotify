@@ -5,6 +5,7 @@ let isQueueVisible = false;
 let draggedItemIndex = null;
 let currentQueue = [];
 let queueLoadGen = 0;
+let queueRevision = null;
 
 export function getQueueTracks() { return currentQueue; }
 function syncQueueToWindow() { window.currentQueue = currentQueue; }
@@ -61,10 +62,12 @@ export function initQueue() {
     document.addEventListener('nedotify:queue_updated', (e) => {
         incrementQueueVersion();
         const q = e.detail || {};
+        queueLoadGen++;
+        queueRevision = q.queue_revision ?? null;
         currentQueue = q.tracks || [];
         syncQueueToWindow();
         if (isQueueVisible) {
-            renderQueue(q.tracks, q.current_index);
+            renderQueue(q.tracks, q.current_index, q.history);
         }
     });
 
@@ -77,11 +80,14 @@ async function loadQueue() {
     const gen = ++queueLoadGen;
     await window.awaitBridge();
     if (!window.pywebview?.api?.get_queue) return;
-    const q = await window.pywebview.api.get_queue();
+    let q;
+    try { q = await window.pywebview.api.get_queue(); }
+    catch { showToast('Не удалось загрузить очередь', 'error'); return; }
     if (gen !== queueLoadGen || !q) return;
     currentQueue = q.tracks || [];
+    queueRevision = q.queue_revision ?? null;
     syncQueueToWindow();
-    renderQueue(currentQueue, q.current_index);
+    renderQueue(currentQueue, q.current_index, q.history);
 }
 
 // "Clear" button in the drawer header: prefers the clear_queue bridge,
@@ -125,8 +131,10 @@ function ensureClearButton(drawer) {
     });
 }
 
-function renderQueue(tracks, currentIndex) {
+function renderQueue(tracks, currentIndex, history = []) {
     const content = document.getElementById('queue-drawer-content');
+    if (!content) return;
+    const renderedRevision = queueRevision;
     if (!tracks || tracks.length === 0) {
         content.innerHTML = '<div class="empty-state">Очередь пуста</div>';
         return;
@@ -140,7 +148,20 @@ function renderQueue(tracks, currentIndex) {
     // dragover/drop handlers, which can only fire after this loop returns.
     const fragment = document.createDocumentFragment();
 
-    tracks.forEach((track, index) => {
+    const rows = [
+        ...history.map(track=>({track,index:track.queue_index,section:'История'})),
+        ...(tracks[currentIndex] ? [{track:tracks[currentIndex],index:currentIndex,section:'Сейчас воспроизводится'}] : []),
+        ...tracks.slice(Math.max(0,currentIndex+1)).map((track,i)=>({track,index:Math.max(0,currentIndex+1)+i,section:'Далее'}))
+    ];
+    let previousSection = null;
+    rows.forEach(({track,index,section}, position) => {
+        if (section !== previousSection) {
+            const heading = document.createElement('h3');
+            heading.className = 'queue-section-title';
+            heading.textContent = section;
+            fragment.appendChild(heading);
+            previousSection = section;
+        }
         const item = document.createElement('div');
         item._trackData = track;
         item.className = 'track-item' + (index === currentIndex ? ' playing' : '');
@@ -151,10 +172,11 @@ function renderQueue(tracks, currentIndex) {
         // We'll style it similarly to library tracks but with a drag handle
         const coverUrl = getCoverUrl(track);
         item.innerHTML = `
+            <span class="track-number">${position + 1}</span>
             <div style="display:flex; align-items:center; color:var(--text-dim); cursor:grab; padding:0 6px; flex-shrink:0;" class="drag-handle" title="Зажмите чтобы перетащить">
                 <i data-lucide="grip-vertical" style="width:14px;height:14px"></i>
             </div>
-            ${coverUrl ? `<img class="track-item-cover" src="${escapeHtml(coverUrl)}" alt="" width="42" height="42" style="width:42px;height:42px;min-width:42px;max-width:42px;border-radius:8px;object-fit:cover;flex-shrink:0;display:block;" onerror="this.onerror=null;this.style.display=\'none\';" loading="lazy">` : `<div class="track-item-cover fallback-note-cover" style="width:42px;height:42px;min-width:42px;max-width:42px;display:flex;align-items:center;justify-content:center;background:#18181f;border-radius:8px;flex-shrink:0;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#555" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`}
+            ${coverUrl ? `<img class="track-item-cover" src="${escapeHtml(coverUrl)}" alt="" width="42" height="42" style="width:42px;height:42px;min-width:42px;max-width:42px;border-radius:8px;object-fit:cover;flex-shrink:0;display:block;" loading="lazy" decoding="async" data-hide-on-error="1" loading="lazy">` : `<div class="track-item-cover fallback-note-cover" style="width:42px;height:42px;min-width:42px;max-width:42px;display:flex;align-items:center;justify-content:center;background:#18181f;border-radius:8px;flex-shrink:0;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#555" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`}
             <div class="track-item-info">
                 <div class="track-item-title" style="${index === currentIndex ? 'color:var(--primary)' : ''}">${escapeHtml(track.title || 'Unknown')}</div>
                 <div class="track-item-artist">${escapeHtml(track.artist || 'Unknown Artist')}</div>
@@ -173,13 +195,19 @@ function renderQueue(tracks, currentIndex) {
         }
 
         // Click to play track instantly
-        item.addEventListener('click', (e) => {
+        item.addEventListener('click', async (e) => {
             if (e.target.closest('.drag-handle')) return;
             if (e.target.closest('.queue-remove-btn')) return;
             e.stopPropagation();
 
             if (window.pywebview?.api?.play_track) {
-                window.pywebview.api.play_track(track, currentQueue, index);
+                try {
+                    // BUG-U3-001: мёртвая ветка play_queue_track удалена — такого метода
+                    // нет ни в PUBLIC_METHODS моста, ни в AppApi; play_track(track)
+                    // сам находит трек по entry_id в живой очереди.
+                    const result = await window.pywebview.api.play_track(track);
+                    if (result === false || result?.success === false) throw new Error('Play rejected');
+                } catch { showToast('Не удалось включить трек из очереди', 'error'); }
             } else if (window.NeDotify?.playTrack) {
                 window.NeDotify.playTrack(track);
             }
@@ -200,8 +228,8 @@ function renderQueue(tracks, currentIndex) {
                 try {
                     if (window.pywebview?.api?.remove_from_queue) {
                         try {
-                            const res = await window.pywebview.api.remove_from_queue(index);
-                            if (res && res.success === false) {
+                            const res = await window.pywebview.api.remove_from_queue(index, track.entry_id ?? null, renderedRevision);
+                            if (res === false || res?.success === false) {
                                 showToast(res.error || 'Не удалось удалить трек', 'error');
                                 return;
                             }
@@ -282,9 +310,11 @@ function renderQueue(tracks, currentIndex) {
                 
                 if (window.pywebview?.api?.reorder_queue) {
                     try {
-                        await window.pywebview.api.reorder_queue(draggedItemIndex, insertIndex);
+                        const result = await window.pywebview.api.reorder_queue(draggedItemIndex, insertIndex, movedItem?.entry_id ?? null, renderedRevision);
+                        if (result === false || result?.success === false) throw new Error('Reorder rejected');
                     } catch(err) {
                         console.error('reorder_queue failed:', err);
+                        showToast('Не удалось изменить порядок очереди', 'error');
                     } finally {
                         await loadQueue();
                     }
@@ -295,8 +325,8 @@ function renderQueue(tracks, currentIndex) {
         fragment.appendChild(item);
     });
 
+    renderIcons(fragment);
     content.appendChild(fragment);
-    renderIcons();
 }
 
 

@@ -13,8 +13,6 @@ burns the same request again.
   - a provider returning no file is permanent, not transient
 """
 
-import time
-
 import pytest
 
 
@@ -29,7 +27,8 @@ def test_permanent_marks_are_not_retried(downloader):
 
 
 def test_transient_failure_is_retried(downloader, monkeypatch):
-    """429 twice, then success: the third attempt must be reached."""
+    """429 retries are rescheduled with backoff, releasing the worker slot."""
+    from core.downloader import _RetryLater
     attempts = {"n": 0}
 
     def _fake_fetch(source, source_id, download_dir, track_id):
@@ -39,8 +38,13 @@ def test_transient_failure_is_retried(downloader, monkeypatch):
         return "ok.mp3"
 
     monkeypatch.setattr(downloader, "_fetch_from_provider", _fake_fetch)
-    monkeypatch.setattr(time, "sleep", lambda *_: None)
-
+    downloader._worker_context.item = {"attempt": 0}
+    with pytest.raises(_RetryLater) as first:
+        downloader._fetch_with_retry("youtube", "v1", "/tmp", 1, 0)
+    assert downloader._RETRY_BASE_DELAY <= first.value.delay <= downloader._RETRY_BASE_DELAY * 1.15
+    with pytest.raises(_RetryLater) as second:
+        downloader._fetch_with_retry("youtube", "v1", "/tmp", 1, 0)
+    assert downloader._RETRY_BASE_DELAY * 2 <= second.value.delay <= downloader._RETRY_BASE_DELAY * 2 * 1.15
     path = downloader._fetch_with_retry("youtube", "v1", "/tmp", 1, 0)
 
     assert path == "ok.mp3"
@@ -48,6 +52,7 @@ def test_transient_failure_is_retried(downloader, monkeypatch):
 
 
 def test_retries_stop_after_the_cap(downloader, monkeypatch):
+    from core.downloader import _RetryLater
     attempts = {"n": 0}
 
     def _always_fail(source, source_id, download_dir, track_id):
@@ -55,8 +60,11 @@ def test_retries_stop_after_the_cap(downloader, monkeypatch):
         raise Exception("The page needs to be reloaded.")
 
     monkeypatch.setattr(downloader, "_fetch_from_provider", _always_fail)
-    monkeypatch.setattr(time, "sleep", lambda *_: None)
-
+    downloader._worker_context.item = {"attempt": 0}
+    with pytest.raises(_RetryLater):
+        downloader._fetch_with_retry("youtube", "v1", "/tmp", 1, 0)
+    with pytest.raises(_RetryLater):
+        downloader._fetch_with_retry("youtube", "v1", "/tmp", 1, 0)
     with pytest.raises(Exception, match="reloaded"):
         downloader._fetch_with_retry("youtube", "v1", "/tmp", 1, 0)
 
@@ -79,17 +87,18 @@ def test_permanent_failure_is_not_retried(downloader, monkeypatch):
 
 
 def test_backoff_grows(downloader):
-    """20s then 40s: the delay must double, not stay fixed."""
+    """2s then 4s: the delay must double, not stay fixed."""
     delay = downloader._RETRY_BASE_DELAY
     seen = [delay]
     for _ in range(2):
         delay *= 2
         seen.append(delay)
-    assert seen == [20.0, 40.0, 80.0]
+    assert seen == [2.0, 4.0, 8.0]
 
 
 def test_cancel_is_honoured_during_the_retry_wait(downloader, monkeypatch):
-    """A cancel_batch() must interrupt the wait, not be noticed after it."""
+    """A cancellation during scheduled backoff prevents another attempt."""
+    from core.downloader import _RetryLater
     attempts = {"n": 0}
 
     def _always_fail(source, source_id, download_dir, track_id):
@@ -98,15 +107,12 @@ def test_cancel_is_honoured_during_the_retry_wait(downloader, monkeypatch):
 
     monkeypatch.setattr(downloader, "_fetch_from_provider", _always_fail)
 
-    def _fake_sleep(seconds):
-        # A cancel_batch() lands mid-wait: epoch 0 becomes stale.
-        downloader._cancel_epoch += 1
-
-    monkeypatch.setattr(time, "sleep", _fake_sleep)
-
-    result = downloader._fetch_with_retry("youtube", "v1", "/tmp", 1, 0)
-
-    assert result is None, "the wait must be abandoned, not run to completion"
+    downloader._worker_context.item = {"attempt": 0}
+    with pytest.raises(_RetryLater):
+        downloader._fetch_with_retry("youtube", "v1", "/tmp", 1, 0)
+    # A cancel_batch() lands during the scheduled wait: epoch 0 becomes stale.
+    downloader._cancel_epoch += 1
+    assert downloader._abort_cancelled(1, 0, "retry-scheduled")
     assert attempts["n"] == 1, "no second attempt may start after a cancel"
 
 

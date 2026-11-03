@@ -1,7 +1,12 @@
+let blurObserverInitialized = false;
+let efficiencyInitialized = false;
+
 export function initBlurObserver() {
     // C-5: heavy backdrop-filter disabled on offscreen glass cards (IntersectionObserver)
     if (!('IntersectionObserver' in window)) return;
     if (document.documentElement.classList.contains('perf-low')) return;
+    if (blurObserverInitialized) return;
+    blurObserverInitialized = true;
 
     const selector = '.card, .glass-panel, .player-glass-card, .settings-modal-card';
 
@@ -12,7 +17,7 @@ export function initBlurObserver() {
     }, { rootMargin: '150px 0px', threshold: 0 });
 
     const observeEl = (el) => {
-        if (el && el.nodeType === 1 && !el._blurObserved) {
+        if (el && el.nodeType === 1 && el.isConnected && !el._blurObserved) {
             el._blurObserved = true;
             io.observe(el);
         }
@@ -28,14 +33,27 @@ export function initBlurObserver() {
         }
     };
 
+    const releaseElement = (root) => {
+        if (!root || root.nodeType !== 1 || root.isConnected) return;
+        const unobserveEl = (el) => {
+            if (el._blurObserved) {
+                io.unobserve(el);
+                delete el._blurObserved;
+            }
+        };
+        unobserveEl(root);
+        if (root.querySelectorAll) root.querySelectorAll(selector).forEach(unobserveEl);
+    };
+
     const scan = () => {
-        const container = document.getElementById('views-container') || document.body;
+        const container = document.getElementById('main-content');
         scanElement(container);
     };
 
     // Process mutations checking addedNodes instead of unconditional querySelectorAll over document.body
     const observer = new MutationObserver((mutationsList) => {
         for (const mutation of mutationsList) {
+            if (mutation.removedNodes) mutation.removedNodes.forEach(releaseElement);
             if (mutation.addedNodes && mutation.addedNodes.length > 0) {
                 for (let i = 0; i < mutation.addedNodes.length; i++) {
                     const node = mutation.addedNodes[i];
@@ -47,7 +65,8 @@ export function initBlurObserver() {
         }
     });
 
-    const targetContainer = document.getElementById('views-container') || document.body;
+    const targetContainer = document.getElementById('main-content');
+    if (!targetContainer) return;
     observer.observe(targetContainer, { childList: true, subtree: true });
 
     scan();
@@ -77,7 +96,7 @@ export function evaluateEfficiencyState() {
     }
     limitState = limitState || 'minimize';
 
-    const isHidden = document.hidden;
+    const isHidden = document.hidden || document.documentElement.classList.contains('window-hidden');
     const isBlurred = !document.hasFocus();
 
     let shouldBeEfficiency = false;
@@ -143,6 +162,11 @@ export function evaluateEfficiencyState() {
 }
 
 export function initEfficiency() {
+    if (efficiencyInitialized) {
+        evaluateEfficiencyState();
+        return;
+    }
+    efficiencyInitialized = true;
     let focusTimer = null;
 
     const debouncedEvaluate = () => {
@@ -155,10 +179,12 @@ export function initEfficiency() {
         clearTimeout(focusTimer);
         evaluateEfficiencyState();
     });
-    document.addEventListener('visibilitychange', () => {
+    const onVisibilityChanged = () => {
         clearTimeout(focusTimer);
         evaluateEfficiencyState();
-    });
+    };
+    document.addEventListener('visibilitychange', onVisibilityChanged);
+    document.addEventListener('nedotify:window_visibility_changed', onVisibilityChanged);
     window.addEventListener('nedotify:efficiency_setting_changed', () => {
         evaluateEfficiencyState();
     });

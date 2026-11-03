@@ -19,7 +19,7 @@ import numpy as np
 from PIL import Image
 
 CHANNEL_TOLERANCE = 2       # per-channel 0..255 slack for raster jitter
-DIFF_PIXEL_RATIO_LIMIT = 0.001
+DIFF_PIXEL_RATIO_LIMIT = 0.00025
 
 
 def load_rgb(path) -> np.ndarray:
@@ -97,6 +97,22 @@ def compare_sets(golden_dir, current_dir, out_dir=None,
 
     goldens = {p.name: p for p in sorted(golden_dir.glob("*.png"))}
     currents = {p.name: p for p in sorted(current_dir.glob("*.png"))}
+
+    if not goldens:
+        return {
+            "ok": False,
+            "reason": "empty_baseline",
+            "error": f"no PNG goldens found in {golden_dir}",
+            "tolerance_pixel_ratio": limit,
+            "channel_tolerance": CHANNEL_TOLERANCE,
+            "compared": 0,
+            "passed": 0,
+            "failed": 0,
+            "missing": [],
+            "unexpected": sorted(currents),
+            "failures": [],
+            "worst": [],
+        }
 
     missing = sorted(set(goldens) - set(currents))
     extra = sorted(set(currents) - set(goldens))

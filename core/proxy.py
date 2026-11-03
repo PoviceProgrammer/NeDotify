@@ -3,6 +3,7 @@ NeDotify - Local HTTP Stream Proxy
 Proxies cloud stream requests to inject authentication headers/cookies and support self-healing stream URL re-resolution.
 """
 import hmac
+import io
 import os
 import re
 import secrets
@@ -12,6 +13,7 @@ import mimetypes
 import http.server
 import socketserver
 import socket
+import select
 import random
 import urllib.request
 import urllib.parse
@@ -19,7 +21,8 @@ import urllib.error
 import threading
 import logging
 
-from core.api import _is_ssrf_safe_url  # mirrors core/api.py:_is_ssrf_safe_url; imported (not copied) — core.api does not import core.proxy, so no import cycle
+from utils.cache_manager import stream_cache_stem, is_valid_cache_file
+from utils.url_safety import safe_public_url as _is_ssrf_safe_url, guarded_open_url
 _is_safe_url = _is_ssrf_safe_url
 
 logger = logging.getLogger(__name__)
@@ -70,8 +73,27 @@ def _host_of(url: str) -> str:
         return ''
 
 
+def _bound_googlevideo_range(req) -> bool:
+    """Keep open browser audio ranges small so Googlevideo does not throttle.
+
+    The upstream's 206 Content-Range is forwarded unchanged; the browser can
+    request the next range. Such a partial response cannot become a full cache.
+    Explicit finite and suffix ranges retain the caller's exact semantics.
+    """
+    if not _host_matches(_host_of(req.full_url), ('googlevideo.com',)):
+        return False
+    match = re.fullmatch(r'bytes=(\d+)-', req.get_header('Range') or '')
+    if not match:
+        return False
+    start = int(match.group(1))
+    req.add_header('Range', f'bytes={start}-{start + 1024 * 1024 - 1}')
+    return True
+
+
 def _host_allows_credentials(url: str, source: str) -> bool:
     """True when `url`'s host is owned by `source`, so its credentials may be sent."""
+    if urllib.parse.urlparse(url).scheme != 'https':
+        return False
     suffixes = CREDENTIAL_HOSTS.get(source or '')
     if not suffixes:
         return False
@@ -79,6 +101,19 @@ def _host_allows_credentials(url: str, source: str) -> bool:
     if not host:
         return False
     return any(host == sfx or host.endswith('.' + sfx) for sfx in suffixes)
+
+
+def _invalidate_provider_stream_cache(app_core, source, source_id):
+    """Invalidate the resolver provider's own stream entry before self-heal."""
+    provider_name = {'youtube': 'youtube', 'spotify': 'youtube', 'soundcloud': 'soundcloud'}.get(source)
+    provider = getattr(app_core, provider_name, None) if provider_name else None
+    invalidator = getattr(provider, 'invalidate_stream_url', None)
+    if callable(invalidator):
+        try:
+            invalidator(source_id)
+        except Exception:
+            logger.debug('Provider stream cache invalidation failed for %s:%s', source, source_id,
+                         exc_info=True)
 
 
 def _is_loopback_origin(origin: str) -> bool:
@@ -125,9 +160,8 @@ def _cover_roots() -> list:
 
     Every cover_path written by the app lands in ~/.nedotify/covers (file
     scanner, tag editor); avatars live next door and are harmless images too.
-    Older DB rows (and the dev scanner) may also reference the bundled UI
-    covers folders (ui/web_new*/covers), so those are served as well when the
-    bundle actually ships one - still strictly image extensions, still
+    Older DB rows may also reference the active UI's bundled covers folder,
+    so it is served when the bundle ships one - still strictly image extensions, still
     realpath-contained. Roots that do not exist are dropped: they can never
     match a file and only cost a realpath() per request in the cover hot path.
     """
@@ -141,7 +175,7 @@ def _cover_roots() -> list:
         base = getattr(sys, '_MEIPASS', None) or os.path.dirname(
             os.path.dirname(os.path.abspath(__file__))
         )
-        for ui_name in ('web_new', 'web_new_v2'):
+        for ui_name in ('web_new_v2',):
             ui_covers = os.path.join(base, 'ui', ui_name, 'covers')
             if os.path.isdir(ui_covers):
                 roots.append(ui_covers)
@@ -174,7 +208,9 @@ def _resolve_inside_roots(raw_path: str, roots, extensions) -> str:
     try:
         if not raw_path:
             return ''
-        candidate = raw_path
+        candidate = urllib.parse.unquote(str(raw_path))
+        if candidate.startswith(('\\\\', '//')) or (candidate.lower().startswith('file:') and not candidate.lower().startswith('file:///')):
+            return ''
         if candidate.startswith('file:///'):
             candidate = candidate[len('file:///'):]
         candidate = os.path.normpath(urllib.parse.unquote(candidate))
@@ -201,8 +237,8 @@ def _referenced_by_library(candidates, db) -> bool:
     if conn is None:
         return False
     queries = (
-        'SELECT id FROM tracks WHERE LOWER(file_path) = LOWER(?) LIMIT 1',
-        'SELECT id FROM tracks WHERE LOWER(cover_path) = LOWER(?) LIMIT 1',
+        'SELECT id FROM tracks WHERE unicode_casefold(file_path) = unicode_casefold(?) LIMIT 1',
+        'SELECT id FROM tracks WHERE unicode_casefold(cover_path) = unicode_casefold(?) LIMIT 1',
     )
     for candidate in candidates:
         if not candidate:
@@ -265,39 +301,6 @@ def _safe_cover_path(raw_path: str) -> str:
     return _resolve_inside_roots(raw_path, _cover_roots(), COVER_EXTENSIONS)
 
 
-# Content-Type -> stream cache file extension. The on-disk cache probe in
-# do_GET() already looks for all of these, so saving under the real container
-# keeps later lookups and MIME handling consistent.
-_RESPONSE_EXTS = {
-    'audio/mp4': '.m4a',
-    'audio/x-m4a': '.m4a',
-    'audio/m4a': '.m4a',
-    'video/mp4': '.m4a',
-    'audio/webm': '.webm',
-    'video/webm': '.webm',
-    'audio/mpeg': '.mp3',
-    'audio/mp3': '.mp3',
-    'audio/ogg': '.ogg',
-    'application/ogg': '.ogg',
-    'audio/opus': '.ogg',
-}
-
-
-def _ext_for_response(resp) -> str:
-    """Pick a cache extension from the upstream response's Content-Type."""
-    try:
-        ct = ''
-        if hasattr(resp, 'headers') and resp.headers is not None:
-            ct = resp.headers.get('Content-Type') or ''
-        elif hasattr(resp, 'info'):
-            info = resp.info()
-            ct = (info.get('Content-Type') if info else '') or ''
-        base = ct.split(';', 1)[0].strip().lower()
-        return _RESPONSE_EXTS.get(base, '.m4a')
-    except Exception:
-        return '.m4a'
-
-
 def _parse_byte_range(range_header, file_size):
     """Parse a single-range `Range: bytes=...` header per RFC 7233.
 
@@ -327,6 +330,8 @@ def _parse_byte_range(range_header, file_size):
         return ('full', 0, max(size - 1, 0))
     first, _, last = spec.partition('-')
     first, last = first.strip(), last.strip()
+    if (first and not first.isascii()) or (last and not last.isascii()) or (first and not first.isdigit()) or (last and not last.isdigit()):
+        return ('full', 0, max(size - 1, 0))
     try:
         if not first:
             # Suffix form: the final N bytes of the entity.
@@ -343,7 +348,11 @@ def _parse_byte_range(range_header, file_size):
         end = int(last) if last else size - 1
     except (TypeError, ValueError):
         return ('full', 0, max(size - 1, 0))
-    if start < 0 or end < start or start >= size:
+    if start >= size:
+        return ('invalid', None, None)
+    if end < start:
+        return ('full', 0, max(size - 1, 0))
+    if start < 0 or start >= size:
         return ('invalid', None, None)
     return ('range', start, min(end, size - 1))
 
@@ -372,8 +381,49 @@ class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
 
 def _safe_urlopen(req, timeout=12.0, source=''):
     """Open URL using custom SafeRedirectHandler enforcing strict SSRF checks on every redirect."""
-    opener = urllib.request.build_opener(SafeRedirectHandler(max_redirects=5, source=source))
-    return opener.open(req, timeout=timeout)
+    return guarded_open_url(req, timeout=timeout)
+
+
+class _CachedManifest(io.BytesIO):
+    """A verified VOD body; it still follows normal playlist URL rewriting."""
+    status = 200
+
+    def __init__(self, payload, url):
+        super().__init__(payload['body'])
+        self.url = url
+        self.headers = {'Content-Type': payload['content_type'],
+                        'Content-Length': str(len(payload['body']))}
+
+    def geturl(self):
+        return self.url
+
+    def getheaders(self):
+        return list(self.headers.items())
+
+
+def _rewrite_hls_playlist(text, upstream_url, source, token):
+    """Keep nested playlists, init fragments, keys and segments on the proxy.
+
+    Every resulting request passes the normal authentication, offline and SSRF
+    gates, including redirects. Never forward the local bearer to the CDN.
+    """
+    def local_url(value):
+        absolute = urllib.parse.urljoin(upstream_url, value)
+        if urllib.parse.urlsplit(absolute).scheme not in ('http', 'https'):
+            raise ValueError('HLS resources must use HTTP(S)')
+        return '/?' + urllib.parse.urlencode({
+            'url': absolute, 'source': source or '', 'k': token, 'resource': '1',
+        })
+
+    lines = []
+    for line in text.splitlines():
+        if line.startswith('#'):
+            line = re.sub(r'URI="([^"]+)"',
+                          lambda match: 'URI="' + local_url(match.group(1)) + '"', line)
+        elif line.strip():
+            line = local_url(line.strip())
+        lines.append(line)
+    return '\n'.join(lines) + '\n'
 
 
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -390,18 +440,50 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     def __init__(self, server_address, RequestHandlerClass, app_core, auth_token=''):
         self.app_core = app_core
         self.auth_token = auth_token or ''
-        self._threads_lock = threading.Lock()
+        self._request_slots = threading.BoundedSemaphore(24)
         super().__init__(server_address, RequestHandlerClass)
 
     def process_request(self, request, client_address):
-        t = threading.Thread(target=self.process_request_thread, args=(request, client_address))
-        t.daemon = self.daemon_threads
-        with self._threads_lock:
-            if self._threads is None or not isinstance(self._threads, list):
-                self._threads = []
-            self._threads = [th for th in self._threads if hasattr(th, "is_alive") and th.is_alive()]
-            self._threads.append(t)
-        t.start()
+        if not self._request_slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        request.settimeout(15.0)
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._request_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._request_slots.release()
+
+
+
+def _is_client_connected(handler) -> bool:
+    try:
+        conn = getattr(handler, 'connection', None)
+        if conn is None or getattr(conn, 'fileno', lambda: -1)() == -1:
+            return False
+        r, _, _ = select.select([conn], [], [], 0)
+        if r:
+            data = conn.recv(1, socket.MSG_PEEK)
+            if not data:
+                return False
+        return True
+    except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError, ValueError):
+        return False
+
+
+def _sleep_with_client_check(handler, duration: float) -> bool:
+    end_time = time.time() + duration
+    while time.time() < end_time:
+        if not _is_client_connected(handler):
+            return False
+        time.sleep(min(0.1, max(0.01, end_time - time.time())))
+    return _is_client_connected(handler)
 
 
 class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
@@ -466,7 +548,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         # Legacy alias some frontend helpers still send.
         if not supplied:
             supplied = (query_params.get('auth_token') or [''])[0]
-        return hmac.compare_digest(str(supplied), str(expected))
+        return hmac.compare_digest(str(supplied).encode('utf-8'), str(expected).encode('utf-8'))
 
     def _authenticate(self, parsed_path, query_params) -> bool:
         """Entry gate shared by GET and HEAD: reject unauthenticated callers."""
@@ -493,66 +575,48 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', origin)
             self.send_header('Vary', 'Origin')
 
+    def end_headers(self):
+        """Attach loopback CORS to success and error responses consistently."""
+        headers = getattr(self, '_headers_buffer', ())
+        has_allow_origin = any(
+            isinstance(header, bytes) and header.lower().startswith(b'access-control-allow-origin:')
+            for header in headers
+        )
+        if not has_allow_origin:
+            self._send_cors_headers()
+        super().end_headers()
+
     def serve_local_file(self, file_path):
         try:
-            file_size = os.path.getsize(file_path)
-        except OSError:
-            # Callers check os.path.isfile() first, but the file can still
-            # vanish in between (scanner, user, cache eviction). Unguarded,
-            # that race answered 500 with a traceback.
+            with open(file_path, 'rb') as audio:
+                size = os.fstat(audio.fileno()).st_size
+                kind, start, end = _parse_byte_range(self.headers.get('Range'), size)
+                if kind == 'invalid':
+                    self._send_range_not_satisfiable(size)
+                    return
+                content_type = mimetypes.guess_type(file_path)[0] or 'audio/mp4'
+                length = end - start + 1 if kind == 'range' else size
+                self.send_response(206 if kind == 'range' else 200)
+                self.send_header('Content-Type', content_type)
+                self.send_header('Accept-Ranges', 'bytes')
+                self.send_header('Content-Length', str(length))
+                if kind == 'range':
+                    self.send_header('Content-Range', f'bytes {start}-{end}/{size}')
+                self._send_cors_headers()
+                self.end_headers()
+                audio.seek(start)
+                remaining = length
+                while remaining:
+                    chunk = audio.read(min(128 * 1024, remaining))
+                    if not chunk:
+                        self.close_connection = True
+                        return
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except FileNotFoundError:
             self._safe_send_error(404, 'File not found')
-            return None
-        content_type, _ = mimetypes.guess_type(file_path)
-        if not content_type:
-            content_type = 'audio/mp4'
-        range_kind, start_byte, end_byte = _parse_byte_range(self.headers.get('Range'), file_size)
-        if range_kind == 'invalid':
-            self._send_range_not_satisfiable(file_size)
-            return None
-        if range_kind == 'full':
-            self.send_response(200)
-            self.send_header('Content-Type', content_type)
-            self.send_header('Accept-Ranges', 'bytes')
-            self.send_header('Content-Length', str(file_size))
-            self._send_cors_headers()
-            self.end_headers()
-            try:
-                with open(file_path, 'rb') as f:
-                    import shutil
-                    shutil.copyfileobj(f, self.wfile)
-            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as ce:
-                logger.debug("serve_local_file disconnect: %s", ce)
-            return None
-
-        length = end_byte - start_byte + 1
-        try:
-            self.send_response(206)
-            self.send_header('Content-Type', content_type)
-            self.send_header('Accept-Ranges', 'bytes')
-            self.send_header('Content-Range', f'bytes {start_byte}-{end_byte}/{file_size}')
-            self.send_header('Content-Length', str(length))
-            self._send_cors_headers()
-            self.end_headers()
-            with open(file_path, 'rb') as f:
-                f.seek(start_byte)
-                chunk_size = 8192
-                bytes_sent = 0
-                while bytes_sent < length:
-                    read_size = min(chunk_size, length - bytes_sent)
-                    data = f.read(read_size)
-                    if not data:
-                        break
-                    self.wfile.write(data)
-                    bytes_sent += len(data)
         except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
-            return None
-        except Exception as e:
-            logger.error(f'Error serving Range request: {e}')
-            try:
-                self._safe_send_error(500, 'Range processing error')
-            except Exception:
-                logger.debug("serve_local_file: suppressed exception", exc_info=True)
-        return None
+            self.close_connection = True
 
     def _send_range_not_satisfiable(self, file_size):
         """416 for a Range the RFC calls unsatisfiable, with the required
@@ -571,6 +635,9 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             logger.debug('_send_range_not_satisfiable suppressed', exc_info=True)
 
     def do_OPTIONS(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if not self._authenticate(parsed, urllib.parse.parse_qs(parsed.query)):
+            return
         self.send_response(204)
         self._send_cors_headers()
         self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
@@ -604,9 +671,27 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             return None
 
         # '/' and /api/stream: same local-file gate GET applies.
-        self._send_local_head(self._resolve_stream_local_file(
-            query_params.get('url', [''])[0] or query_params.get('file_path', [''])[0] or ''
-        ))
+        local = query_params.get('url', [''])[0] or query_params.get('file_path', [''])[0] or ''
+        if local.startswith('file:///'):
+            local = urllib.request.url2pathname(local[7:])
+        resolved = self._resolve_stream_local_file(local)
+        if not resolved:
+            db = self.server.app_core.db
+            source = query_params.get('source', [''])[0]
+            source_id = query_params.get('source_id', [''])[0]
+            track_id = query_params.get('track_id', [''])[0]
+            try:
+                row = db.get_track(int(track_id)) if track_id else None
+                cached = db.get_cached_stream(source, source_id, max_age_seconds=2**31-1) if source and source_id else None
+                cached_file_path = (cached or {}).get('cached_file_path') or ''
+                # Legacy-format cache names may belong to a colliding track
+                # (BUG-A1-006); only hashed names are valid for serving.
+                if cached_file_path and not is_valid_cache_file(cached_file_path):
+                    cached_file_path = ''
+                resolved = self._resolve_stream_local_file((row or {}).get('file_path') or cached_file_path)
+            except (ValueError, TypeError):
+                pass
+        self._send_local_head(resolved)
         return None
 
     def _send_local_head(self, file_path):
@@ -750,17 +835,20 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 self.send_error(404, 'Local file not found')
                 return None
 
-            # 1. Check DB stream cache
+            # 1. Check DB stream cache. Rows recorded before the hashed naming
+            # scheme (BUG-A1-006) may name a file that used to be shared by
+            # colliding Cyrillic source_ids; those are ignored and re-resolved.
             cached_stream = self.server.app_core.db.get_cached_stream(source, source_id)
-            if cached_stream and cached_stream.get('cached_file_path') and os.path.exists(cached_stream['cached_file_path']):
-                self.serve_local_file(cached_stream['cached_file_path'])
+            cached_file_path = (cached_stream or {}).get('cached_file_path') or ''
+            if cached_file_path and os.path.exists(cached_file_path) \
+                    and is_valid_cache_file(cached_file_path):
+                self.serve_local_file(cached_file_path)
                 return None
 
-            # 2. Check on-disk cache directly
+            # 2. Check on-disk cache directly (hashed names only: a legacy name
+            # could belong to a different track with the same shaped query).
             streams_dir = self.server.app_core.cache._streams_dir
-            safe_source = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source or 'unknown'))
-            safe_source_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id or ''))
-            cache_name = f"{safe_source}_{safe_source_id}" if safe_source_id else (f"track_{int_track_id}" if int_track_id else f"temp_{int(time.time()*1000)}")
+            cache_name = stream_cache_stem(source, source_id)
 
             for ext in ("m4a", "webm", "mp3", "ogg"):
                 candidate_path = os.path.join(streams_dir, f"{cache_name}.{ext}")
@@ -801,18 +889,14 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     logger.debug("do_GET: suppressed exception", exc_info=True)
                 return None
 
-            # NOTE: the cache file extension is decided from the upstream
-            # Content-Type once the response arrives (see _ext_for_response);
-            # hardcoding .m4a here previously cached webm/opus bytes under an
-            # m4a name and served them with a mismatched MIME type.
-            unique_tag = f"{os.getpid()}_{threading.get_ident()}_{int(time.time() * 1000)}"
-            temp_path = os.path.join(self.server.app_core.cache._temp_dir, f"{cache_name}_{unique_tag}.tmp")
-
+            # NOTE: stream files are written exclusively by CacheManager
+            # (download_audio_stream) under hashed names. The proxy never
+            # caches to disk itself; the old inline writer raced the background
+            # cache and accepted partial 206 bodies.
             range_header = self.headers.get('Range', '')
-            is_cachable_request = (not range_header) or (range_header == 'bytes=0-')
 
             req = urllib.request.Request(target_url)
-            if not is_cachable_request:
+            if range_header:
                 req.add_header('Range', range_header)
         else:
             target_url = query_params.get('url', [None])[0]
@@ -841,21 +925,23 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     if allowed_local:
                         self.serve_local_file(allowed_local)
                         return None
-                    # If file doesn't exist on disk, attempt online resolution if track metadata present
-                    if (source and source_id) or title:
-                        logger.info(f"Local file not found on disk ({local_path[:60]}), resolving online stream for {title or source_id}...")
-                        track_info = {
-                            'source': source if source else 'youtube',
-                            'source_id': source_id,
-                            'title': title,
-                            'artist': artist,
-                        }
-                        target_url = self.server.app_core.engine.resolve_stream_url(track_info)
-                    else:
-                        self.send_error(404, f"Local audio file not found: {os.path.basename(local_path)}")
-                        return None
 
-            is_webpage = target_url and _host_matches(_host_of(target_url), ('soundcloud.com', 'youtube.com', 'youtu.be'))
+            if target_url and is_local_candidate:
+                # If file doesn't exist on disk, attempt online resolution if metadata is present.
+                if (source and source_id) or title:
+                    logger.info(f"Local file not found on disk ({local_path[:60]}), resolving online stream for {title or source_id}...")
+                    track_info = {
+                        'source': source if source else 'youtube',
+                        'source_id': source_id,
+                        'title': title,
+                        'artist': artist,
+                    }
+                    target_url = self.server.app_core.engine.resolve_stream_url(track_info)
+                else:
+                    self.send_error(404, f"Local audio file not found: {os.path.basename(local_path)}")
+                    return None
+
+            is_webpage = not query_params.get('resource') and target_url and _host_matches(_host_of(target_url), ('soundcloud.com', 'youtube.com', 'youtu.be'))
 
             # '/' is a real endpoint (audio/engine.py builds direct-stream proxy
             # URLs as http://127.0.0.1:<port>/?url=...), so it stays in
@@ -914,12 +1000,11 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     self.wfile.write(json.dumps({'error': 'URL blocked: SSRF validation failed'}).encode('utf-8'))
                 except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
                     pass
-                logger.warning(f'SSRF guard blocked proxied URL: {target_url[:120]}')
+                logger.warning('Public DNS/SSRF validation failed for stream host %r', _host_of(target_url))
                 return None
             req = urllib.request.Request(target_url)
             if 'Range' in self.headers:
                 req.add_header('Range', self.headers['Range'])
-            is_cachable_request = False
 
         req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
@@ -964,8 +1049,21 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         had_connection_issue = False
 
         for attempt in range(max_retries + 1):
+            if not _is_client_connected(self):
+                logger.info('Client socket disconnected, aborting upstream proxy stream attempt')
+                return None
             try:
-                resp = _safe_urlopen(req, timeout=12.0, source=source)
+                # Keep open browser audio ranges small so Googlevideo does not
+                # throttle (mutates req's Range header).
+                _bound_googlevideo_range(req)
+                cached_manifest = None
+                if source == 'soundcloud' and not req.has_header('Range'):
+                    provider = getattr(self.server.app_core, 'soundcloud', None)
+                    read_manifest = getattr(provider, 'get_cached_manifest', None)
+                    if callable(read_manifest):
+                        cached_manifest = read_manifest(req.full_url)
+                resp = (_CachedManifest(cached_manifest, req.full_url) if cached_manifest
+                        else _safe_urlopen(req, timeout=12.0, source=source))
                 # Announce recovery only after a visible problem: emitting
                 # 'connected' on every single stream open spammed the bridge.
                 if had_connection_issue and hasattr(self.server.app_core, 'api') and hasattr(self.server.app_core.api, 'emit_event'):
@@ -975,6 +1073,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 if e.code in (401, 403, 404, 410):
                     if e.code in (403, 410) and source and source_id and attempt == 0:
                         logger.info(f'Received HTTP {e.code} for {source}:{source_id}. Invalidating cache and self-healing re-resolution...')
+                        _invalidate_provider_stream_cache(self.server.app_core, source, source_id)
                         try:
                             resolver = getattr(self.server.app_core, 'resolver', None)
                             if resolver is not None:
@@ -1000,7 +1099,13 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                                 new_url = url
                                 resolve_event.set()
 
-                            self.server.app_core.re_resolve_stream_url_async(source, source_id, _on_resolved)
+                            self.server.app_core.re_resolve_stream_url_async(
+                                source, source_id, _on_resolved,
+                                # BUG-A1-010: the playing track's metadata lets
+                                # the cascade verify the replacement recording
+                                # instead of accepting any resolved URL.
+                                track=track,
+                            )
                             resolve_event.wait(timeout=7)
 
                             if new_url and not _is_ssrf_safe_url(new_url):
@@ -1044,7 +1149,9 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                     if attempt < max_retries and (e.code >= 500 or e.code in (408, 429)):
                         backoff = 1.5 ** attempt + random.uniform(0.1, 0.5)
                         logger.warning(f'HTTPError {e.code}, retrying in {backoff:.2f}s...')
-                        time.sleep(backoff)
+                        if not _sleep_with_client_check(self, backoff):
+                            logger.info('Client socket closed during backoff sleep, aborting retry')
+                            return None
                         continue
                     else:
                         self.send_response(e.code)
@@ -1063,7 +1170,9 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                             'max_attempts': max_retries,
                             'next_retry_in_ms': int(backoff * 1000),
                         })
-                    time.sleep(backoff)
+                    if not _sleep_with_client_check(self, backoff):
+                        logger.info('Client socket closed during backoff sleep, aborting retry')
+                        return None
                     continue
                 else:
                     if hasattr(self.server.app_core, 'api') and hasattr(self.server.app_core.api, 'emit_event'):
@@ -1075,6 +1184,34 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 self.send_error(500, 'Internal Server Error')
                 return None
 
+        upstream_headers = (resp.headers if hasattr(resp, 'headers') else resp.info()) or {}
+        content_type = str(upstream_headers.get('Content-Type', '')).lower()
+        if 'mpegurl' in content_type:
+            # A manifest is not an audio file. Rewriting also makes relative
+            # CDN URLs work when HLS.js fetched the manifest from localhost.
+            try:
+                raw = resp.read(2 * 1024 * 1024 + 1)
+                if len(raw) > 2 * 1024 * 1024:
+                    raise ValueError('HLS playlist too large')
+                base_url = resp.geturl() if hasattr(resp, 'geturl') else req.full_url
+                body = _rewrite_hls_playlist(
+                    raw.decode('utf-8-sig'), base_url, source, self.server.auth_token,
+                ).encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/vnd.apple.mpegurl')
+                self.send_header('Content-Length', str(len(body)))
+                self.send_header('Cache-Control', 'no-store')
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(body)
+            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+                pass
+            except (ValueError, UnicodeError):
+                self._safe_send_error(502, 'Invalid upstream HLS playlist')
+            finally:
+                resp.close()
+            return None
+
         status_code = getattr(resp, 'status', getattr(resp, 'code', 200))
         self.send_response(status_code)
 
@@ -1085,7 +1222,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
 
         for header, val in headers_list:
             h_low = header.lower()
-            if h_low not in HOP_BY_HOP and not h_low.startswith('access-control-'):
+            if h_low in ('content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified', 'cache-control', 'content-encoding'):
                 self.send_header(header, val)
 
         self._send_cors_headers()
@@ -1095,77 +1232,23 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
         try:
-            if is_cachable_request and status_code in (200, 206):
-                expected_len = None
-                cl_val = None
-                if hasattr(resp, 'headers') and resp.headers:
-                    cl_val = resp.headers.get('Content-Length')
-                elif hasattr(resp, 'info') and resp.info():
-                    cl_val = resp.info().get('Content-Length')
-                if cl_val:
-                    try:
-                        expected_len = int(cl_val)
-                    except (ValueError, TypeError):
-                        expected_len = None
-
-                final_path = os.path.join(
-                    streams_dir,
-                    f"{cache_name}{_ext_for_response(resp)}",
-                )
-
-                bytes_written = 0
-                with open(temp_path, 'wb') as tmp:
-                    while True:
-                        chunk = resp.read(32768)
-                        if not chunk:
-                            break
-                        bytes_written += len(chunk)
-                        self.wfile.write(chunk)
-                        tmp.write(chunk)
-
-                if bytes_written > 0 and (expected_len is None or bytes_written == expected_len):
-                    try:
-                        os.replace(temp_path, final_path)
-                        self.server.app_core.db.set_cached_file(source, source_id, final_path)
-                        logger.info(f'Stream cached successfully to {final_path}')
-                    except PermissionError:
-                        # File is currently opened by another thread or reader (Windows WinError 32)
-                        time.sleep(0.05)
-                        try:
-                            os.replace(temp_path, final_path)
-                            self.server.app_core.db.set_cached_file(source, source_id, final_path)
-                            logger.info(f'Stream cached successfully on retry to {final_path}')
-                        except Exception as pe:
-                            logger.warning(f'Could not replace stream file {final_path} (locked): {pe}')
-                            try:
-                                if os.path.exists(temp_path):
-                                    os.remove(temp_path)
-                            except OSError:
-                                logger.debug("temp stream cleanup suppressed", exc_info=True)
-                else:
-                    logger.warning(f'Incomplete stream received ({bytes_written} bytes vs expected {expected_len}). Removing temp file.')
-                    if os.path.exists(temp_path):
-                        os.remove(temp_path)
-            else:
-                while True:
-                    chunk = resp.read(32768)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
+            # Pure relay: stream files are written only by CacheManager
+            # (BUG-A1-016 — the old inline writer here was unreachable and is
+            # gone; keeping a second writer would race the background cache).
+            # HTTPResponse.read(n) waits for n bytes (or EOF). On a slow CDN
+            # that withheld the first playable packet until 32 KiB arrived.
+            # read1 forwards the bytes already available from one socket read,
+            # keeping large reads for throughput without adding a fill delay.
+            read_chunk = getattr(resp, 'read1', None) or resp.read
+            while True:
+                chunk = read_chunk(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
         except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as ce:
             logger.debug(f'Stream client disconnected: {ce}')
-            if is_cachable_request and os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except Exception:
-                    logger.debug("_on_resolved: suppressed exception", exc_info=True)
         except Exception as e:
             logger.error(f'Error proxying stream: {e}')
-            if is_cachable_request and os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except Exception:
-                    logger.debug("_on_resolved: suppressed exception", exc_info=True)
         finally:
             if resp is not None and hasattr(resp, "close"):
                 try:

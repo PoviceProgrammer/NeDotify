@@ -19,11 +19,11 @@ class _TTLCache:
     shared across the service's worker pool, so every mutation happens under a
     lock and the OrderedDict is touched in exactly one place per operation."""
 
-    def __init__(self, max_entries=100, ttl_seconds=600):
+    def __init__(self, max_entries=100, ttl_seconds=600, lock=None):
         self._data = collections.OrderedDict()
         self._max = max_entries
         self._ttl = ttl_seconds
-        self._lock = threading.Lock()
+        self._lock = lock if lock is not None else threading.Lock()
 
     def get(self, key):
         with self._lock:
@@ -39,6 +39,10 @@ class _TTLCache:
 
     def set(self, key, value):
         with self._lock:
+            now = time.time()
+            for old_key, (stamp, _) in list(self._data.items()):
+                if now - stamp > self._ttl:
+                    self._data.pop(old_key, None)
             self._data[key] = (time.time(), value)
             self._data.move_to_end(key)
             while len(self._data) > self._max:
@@ -59,7 +63,7 @@ except ImportError:
 import requests
 import re
 import urllib.parse as urllib_parse
-from requests.adapters import HTTPAdapter
+from utils.requests_transport import PublicHTTPAdapter
 
 
 #: Extraction failures that no retry can fix. yt-dlp raises these for
@@ -93,7 +97,7 @@ def _is_drm_transcoding(transcoding: dict) -> bool:
     player cannot decode and which the CDN answers with 403. Reusing the rule
     instead of guessing from the media URL keeps the two extractors in step.
     """
-    protocol = str((transcoding or {}).get('format', {}).get('protocol') or '').lower()
+    protocol = str(((transcoding or {}).get('format') or {}).get('protocol') or '').lower()
     return protocol.startswith(('ctr-', 'cbc-'))
 
 
@@ -130,6 +134,11 @@ class SoundCloudService(BaseMusicService):
         super().__init__()
         self.settings = settings
         self._executor = ThreadPoolExecutor(max_workers=10)
+        # Reserve independent workers for playback so a search fan-out cannot
+        # occupy every provider thread and stall the Play path.
+        self._playback_executor = ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="SoundCloudPlayback"
+        )
         self.logger = logging.getLogger(__name__)
         self._ydl = None
         self._ydl_search = None
@@ -137,20 +146,27 @@ class SoundCloudService(BaseMusicService):
         self._ydl_tls = threading.local()
         self._client_id = None
         self._client_id_lock = threading.Lock()
+        self._client_id_retry_at = 0.0
+        self._client_id_cache = None
+        self._rejected_client_ids = collections.deque(maxlen=16)
         self._related_cache = _TTLCache(max_entries=100, ttl_seconds=600)
         self._waveform_cache = _TTLCache(max_entries=100, ttl_seconds=600)
+        self._track_metadata_cache = _TTLCache(max_entries=200, ttl_seconds=60,
+                                              lock=self._cache_lock)
         # Tracks that cannot be extracted at all (DRM / private / deleted).
         # Reuses the bounded _TTLCache, so a bad track cannot grow the memo and
         # a fixed one comes back after the TTL.
-        self._unavailable_cache = _TTLCache(max_entries=200, ttl_seconds=_UNAVAILABLE_TTL)
+        self._unavailable_cache = self._shared_unavailable
         # Media URLs already probed as servable this session. A cache hit that
         # has not been through the probe yet still has to be checked, so a URL
         # cached before an upload became DRM-protected is not handed to the
         # player; after the first check the replay cost is gone.
-        self._verified_cache = _TTLCache(max_entries=200, ttl_seconds=_UNAVAILABLE_TTL)
+        self._verified_cache = self._shared_verified
         
         self._session = requests.Session()
-        adapter = HTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=2)
+        # The UI search deadline is 8s. Adapter retries multiplied a single
+        # read timeout into 24s before the provider fallback could even start.
+        adapter = PublicHTTPAdapter(pool_connections=20, pool_maxsize=20, max_retries=0)
         self._session.mount('https://', adapter)
         self._session.mount('http://', adapter)
         self._session.headers.update({
@@ -167,53 +183,132 @@ class SoundCloudService(BaseMusicService):
 
     def _get_client_id(self) -> Optional[str]:
         """Fetch active SoundCloud client_id from soundcloud.com scripts."""
+        self.configure_session(self._session)
         if self._client_id:
             return self._client_id
         
         with self._client_id_lock:
             if self._client_id:
                 return self._client_id
-            
-            
-            fallbacks = [
-                'UMY1dzQ68n2QbCuypNe8JOivmV2FO2Ep',
-                'IPx78YJ43STMUuy4PfGaiGEwNaWfQ4zq',
-                'iZ8g4fkSUAYLLflw8bkKmDGEDFGDVFm1',
-                'a3e059563d7fd3372b49b37f00a00bcf',
-                'YUKOSUSEbL28wJ3vN3sVNeX34R1h11a0'
-            ]
-            for cid in fallbacks:
+            # A successful yt-dlp fallback already learned the public app ID.
+            # Reuse its cache rather than downloading the homepage/assets again.
+            # Only use an existing cache reader: never allocate another yt-dlp
+            # instance just to inspect this optional cache.
+            with self._cache_lock:
+                cache = getattr(self, '_client_id_cache', None)
+            if cache is not None:
                 try:
-                    r = self._session.get(f'https://api-v2.soundcloud.com/search/tracks?q=test&client_id={cid}&limit=1', timeout=10.0)
-                    if r.status_code == 200:
-                        self._client_id = cid
-                        return cid
-                except Exception as e:
-                    self.logger.debug(f'SoundCloud fallback client_id {cid[:6]}... rejected: {e}', exc_info=True)
-
+                    cached = cache.load('soundcloud', 'client_id')
+                    if (isinstance(cached, str) and re.fullmatch(r'[A-Za-z0-9]{32}', cached)
+                            and cached not in getattr(self, '_rejected_client_ids', ())):
+                        self._client_id = cached
+                        return cached
+                except Exception:
+                    self.logger.debug('SoundCloud public client cache unavailable')
+            if time.monotonic() < self._client_id_retry_at:
+                return None
+            deadline = time.monotonic() + 6.0
+            def remaining():
+                return max(0.1, min(3.0, deadline - time.monotonic()))
             try:
-                r = self._session.get('https://soundcloud.com', timeout=8.0)
+                r = self._session.get('https://soundcloud.com', timeout=remaining())
                 if r.status_code == 200:
-                    script_urls = re.findall(r'src="(https://[a-zA-Z0-9\.-]+\.sndcdn\.com/assets/[^"]+\.js)"', r.text)
-                    for url in reversed(script_urls[-8:]):
+                    script_urls = re.findall(r'<script[^>]+src="(https://[a-zA-Z0-9\.-]+\.sndcdn\.com/assets/[^"]+\.js)"', r.text)
+                    for url in reversed(script_urls[-4:]):
+                        if time.monotonic() >= deadline:
+                            break
                         try:
-                            js = self._session.get(url, timeout=5.0).text
-                            matches = re.findall(r'client_id[:=]["\']([a-zA-Z0-9]{32})["\']', js) + re.findall(r'client_id=([a-zA-Z0-9]{32})', js)
+                            js = self._session.get(url, timeout=remaining()).text
+                            matches = re.findall(r'client_id\s*[:=]\s*["\']([a-zA-Z0-9]{32})["\']', js)
                             for m in matches:
-                                test_r = self._session.get(f'https://api-v2.soundcloud.com/search/tracks?q=test&client_id={m}&limit=1', timeout=8.0)
-                                if test_r.status_code == 200:
-                                    self._client_id = m
-                                    return self._client_id
+                                if time.monotonic() >= deadline:
+                                    break
+                                if m in getattr(self, '_rejected_client_ids', ()):
+                                    continue
+                                # The real catalog request validates this ID;
+                                # _api_get already refreshes a 401/403 once.
+                                # Riff likewise uses the ID from the official
+                                # asset directly, without a throwaway search.
+                                self._client_id = m
+                                with self._cache_lock:
+                                    cache = getattr(self, '_client_id_cache', None)
+                                if cache is not None:
+                                    try:
+                                        cache.store('soundcloud', 'client_id', m)
+                                    except Exception:
+                                        self.logger.debug('SoundCloud public client cache could not be saved')
+                                return self._client_id
                         except Exception as e:
                             self.logger.debug(f'SoundCloud client_id scrape failed for {url}: {e}', exc_info=True)
             except Exception as e:
                 self.logger.warning(f'Could not scrape SoundCloud client_id: {e}')
+            # A failed warm-up should not immediately repeat the same scrape
+            # on every query. Network/auth setting changes reset this cooldown.
+            self._client_id_retry_at = time.monotonic() + 10.0
         return None
+
+    def _api_get(self, url, timeout=4.0):
+        """Refresh a rejected public client id once instead of caching it forever."""
+        self.configure_session(self._session)
+        response = self._session.get(url, timeout=timeout)
+        if response.status_code == 429:
+            try:
+                retry = min(60, max(1, float(response.headers.get('Retry-After', '5'))))
+            except (ValueError, TypeError):
+                retry = 5
+            raise RuntimeError(f'SoundCloud ограничил запросы; повторите через {retry:g} сек.')
+        if response.status_code not in (401, 403):
+            return response
+        parsed = urllib_parse.urlsplit(url)
+        query = urllib_parse.parse_qs(parsed.query)
+        rejected = (query.get('client_id') or [''])[0]
+        with self._client_id_lock:
+            rejected_ids = getattr(self, '_rejected_client_ids', None)
+            if rejected_ids is None:
+                rejected_ids = self._rejected_client_ids = collections.deque(maxlen=16)
+            if rejected and rejected not in rejected_ids:
+                rejected_ids.append(rejected)
+            if self._client_id == rejected:
+                self._client_id = None
+                self._client_id_retry_at = 0.0
+        cid = self._get_client_id()
+        if not cid:
+            raise RuntimeError('SoundCloud не выдал действующий client_id; повторите позднее')
+        query['client_id'] = [cid]
+        refreshed = urllib_parse.urlunsplit(parsed._replace(query=urllib_parse.urlencode(query, doseq=True)))
+        return self._session.get(refreshed, timeout=timeout)
+
+    def _get_youtube_fallback(self):
+        """Reuse the app provider and its caches/pools across fallback requests."""
+        with self._cache_lock:
+            provider = getattr(self, 'youtube_service', None)
+            if provider is None:
+                from services.youtube_service import YouTubeService
+                provider = self.youtube_service = YouTubeService(self.settings)
+            return provider
 
     def reset_ydl(self):
         self._ydl_tls = threading.local()
+        with self._cache_lock:
+            self._client_id_cache = None
         with self._client_id_lock:
             self._client_id = None
+            self._client_id_retry_at = 0.0
+            self._rejected_client_ids = collections.deque(maxlen=16)
+
+    def _public_json(self, url, timeout=4.0):
+        """Payload-derived URLs use DNS-pinned public-only redirect handling."""
+        from utils.url_safety import guarded_open_url
+        import json
+        host = (urllib_parse.urlsplit(url).hostname or '').lower()
+        if not any(host == suffix or host.endswith('.' + suffix) for suffix in ('soundcloud.com', 'sndcdn.com', 'soundcloud.cloud')):
+            raise ValueError('Недопустимый адрес SoundCloud')
+        with guarded_open_url(url, timeout=timeout) as response:
+            raw = response.read(2 * 1024 * 1024 + 1)
+        if len(raw) > 2 * 1024 * 1024:
+            raise ValueError('Ответ SoundCloud слишком большой')
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
 
     def _get_ydl(self):
         store = getattr(self._ydl_tls, "instances", None)
@@ -225,7 +320,6 @@ class SoundCloudService(BaseMusicService):
                 'quiet': True,
                 'no_warnings': True,
                 'format': 'bestaudio[protocol^=http]/bestaudio/best',
-                'nocheckcertificate': True,
                 'legacy_server_connect': True,
                 'socket_timeout': 10,
                 'retries': 1,
@@ -242,6 +336,8 @@ class SoundCloudService(BaseMusicService):
                 if cookies_file_path and os.path.exists(cookies_file_path):
                     ydl_opts['cookiefile'] = cookies_file_path
             store["main"] = yt_dlp.YoutubeDL(ydl_opts)
+            with self._cache_lock:
+                self._client_id_cache = getattr(store['main'], 'cache', None)
         return store["main"]
 
     def _get_ydl_search(self):
@@ -254,7 +350,6 @@ class SoundCloudService(BaseMusicService):
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': True,
-                'nocheckcertificate': True,
                 'legacy_server_connect': True,
                 'socket_timeout': 10,
                 'retries': 1,
@@ -267,6 +362,8 @@ class SoundCloudService(BaseMusicService):
                 if proxy:
                     ydl_opts['proxy'] = proxy
             store["search"] = yt_dlp.YoutubeDL(ydl_opts)
+            with self._cache_lock:
+                self._client_id_cache = getattr(store['search'], 'cache', None)
         return store["search"]
 
     @property
@@ -275,10 +372,23 @@ class SoundCloudService(BaseMusicService):
 
     def search(self, query: str, max_results: int = 20, callback: Callable = None, error_callback: Callable = None):
         """Search SoundCloud for tracks (Direct API + yt-dlp fallback)."""
+        if self.settings and self.settings.get('services', 'soundcloud_enabled', True) is False:
+            if callback:
+                callback([])
+            return None
+
+        cache_key = f'sc_search:{query}:{max_results}'
+        cached = self.get_search_cache(cache_key)
+        if cached is not None:
+            if callback:
+                callback(cached)
+            return None
+        leader, callback, error_callback = self._join_request(cache_key, callback, error_callback)
+        if not leader:
+            return None
         
         def _search():
             try:
-                cache_key = f"sc_search:{query}"
                 cached = self.get_search_cache(cache_key)
                 if cached is not None:
                     if callback:
@@ -291,20 +401,22 @@ class SoundCloudService(BaseMusicService):
                     try:
                         encoded = urllib_parse.quote(query)
                         url = f"https://api-v2.soundcloud.com/search/tracks?q={encoded}&client_id={cid}&limit={max_results}"
-                        r = self._session.get(url, timeout=8.0)
+                        r = self._api_get(url, timeout=4.0)
                         if r.status_code == 200:
                             data = r.json()
                             tracks = []
                             for item in data.get('collection', []):
                                 if not item or not item.get('id'):
                                     continue
+                                if 'media' in item:
+                                    self._track_metadata_cache.set(str(item['id']), item)
                                 artwork = item.get('artwork_url') or ''
                                 if artwork and 'large.jpg' in artwork:
                                     artwork = artwork.replace('large.jpg', 't500x500.jpg')
                                 
                                 user_info = item.get('user', {})
                                 artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
-                                duration = int(item.get('duration', 0) / 1000)
+                                duration = int((item.get('duration') or 0) / 1000)
                                 waveform_url = item.get('waveform_url') or ''
                                 
                                 track = {
@@ -354,10 +466,13 @@ class SoundCloudService(BaseMusicService):
                     error_callback('Поиск SoundCloud недоступен')
 
             except Exception as e:
+                if self.settings and self.settings.get('services', 'youtube_enabled', True) is False:
+                    if error_callback:
+                        error_callback('SoundCloud недоступен; резервный источник YouTube отключён')
+                    return
                 self.logger.warning(f'SoundCloud search failed: {e}. Performing Youtube fallback...')
                 try:
-                    from services.youtube_service import YouTubeService
-                    yt = YouTubeService(self.settings)
+                    yt = self._get_youtube_fallback()
                     
                     def yt_cb(tracks):
                         for t in tracks:
@@ -373,6 +488,10 @@ class SoundCloudService(BaseMusicService):
 
     def get_playlist_tracks(self, playlist_id, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
         """Fetch SoundCloud playlist/set tracks (v2 REST API with yt-dlp fallback)."""
+        if self.settings and self.settings.get('services', 'soundcloud_enabled', True) is False:
+            if callback:
+                callback([])
+            return None
         def _fetch():
             try:
                 cache_key = f"sc_playlist:{playlist_id}:{limit}"
@@ -383,14 +502,16 @@ class SoundCloudService(BaseMusicService):
                     return
 
                 raw = str(playlist_id).strip()
+                from utils.soundcloud_urls import resolve_playlist_share_url
+                raw = resolve_playlist_share_url(raw)
                 cid = self._get_client_id()
                 if cid:
                     try:
                         if raw.isdigit():
-                            url = f"https://api-v2.soundcloud.com/playlists/{raw}?client_id={cid}"
+                            url = f"https://api-v2.soundcloud.com/playlists/{raw}?client_id={cid}&limit={limit}"
                         else:
-                            url = f"https://api-v2.soundcloud.com/resolve?url={urllib_parse.quote(raw)}&client_id={cid}"
-                        r = self._session.get(url, timeout=5.0)
+                            url = f"https://api-v2.soundcloud.com/resolve?url={urllib_parse.quote(raw)}&client_id={cid}&limit={limit}"
+                        r = self._api_get(url, timeout=4.0)
                         if r.status_code == 200:
                             data = r.json()
                             tracks = []
@@ -402,7 +523,7 @@ class SoundCloudService(BaseMusicService):
                                     artwork = artwork.replace('large.jpg', 't500x500.jpg')
                                 user_info = item.get('user', {})
                                 artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
-                                duration = int(item.get('duration', 0) / 1000)
+                                duration = int((item.get('duration') or 0) / 1000)
                                 track = {
                                     'title': item.get('title', 'Unknown Title'),
                                     'artist': artist,
@@ -461,7 +582,7 @@ class SoundCloudService(BaseMusicService):
         self._executor.submit(_fetch)
 
     def get_track_metadata(self, track_id: str) -> dict:
-        """Fetch a single track's metadata (artwork included) by numeric id.
+        """Fetch a single track's metadata by numeric id or public permalink.
 
         Used to backfill cover_url for rows stored before artwork was persisted
         on playback, so library grids stop showing empty placeholders.
@@ -470,9 +591,18 @@ class SoundCloudService(BaseMusicService):
             cid = self._get_client_id()
             if not cid:
                 return {}
-            r = self._session.get(
-                f"https://api-v2.soundcloud.com/tracks/{track_id}?client_id={cid}",
-                timeout=10.0,
+            target = str(track_id).strip()
+            numeric = re.fullmatch(r'\d+', target) or re.search(r'/tracks/(\d+)(?:[/?]|$)', target)
+            if numeric:
+                sid = numeric.group(1) if numeric.lastindex else numeric.group(0)
+                url = f'https://api-v2.soundcloud.com/tracks/{sid}?client_id={cid}'
+            elif urllib_parse.urlsplit(target).hostname in ('soundcloud.com', 'www.soundcloud.com'):
+                url = f'https://api-v2.soundcloud.com/resolve?url={urllib_parse.quote(target)}&client_id={cid}'
+            else:
+                return {}
+            r = self._api_get(
+                url,
+                timeout=4.0,
             )
             if r.status_code != 200:
                 return {}
@@ -488,9 +618,11 @@ class SoundCloudService(BaseMusicService):
         return {
             "title": data.get("title") or "",
             "artist": (data.get("user") or {}).get("username") or "",
+            "artist_avatar_url": (data.get("user") or {}).get("avatar_url") or "",
             "cover_url": artwork,
             "source_id": str(data.get("id") or track_id),
             "source_url": data.get("permalink_url") or f"https://soundcloud.com/{track_id}",
+            "duration": float(data.get('duration') or 0) / 1000,
         }
 
     def _mark_unavailable(self, track_url, reason: str) -> None:
@@ -508,6 +640,18 @@ class SoundCloudService(BaseMusicService):
         with self._cache_lock:
             self._stream_cache.pop(f'soundcloud:{track_url}', None)
 
+    def invalidate_stream_url(self, track_url):
+        """Forget provider URL variants after the proxy receives an upstream denial."""
+        raw = str(track_url or '').strip()
+        if not raw:
+            return
+        candidates = {raw}
+        match = re.search(r'/tracks/(\d+)', raw) or re.fullmatch(r'(\d+)', raw)
+        if match:
+            track_id = match.group(1)
+            candidates.update((track_id, f'https://api-v2.soundcloud.com/tracks/{track_id}'))
+        self.invalidate_stream_cache_keys(*(f'soundcloud:{candidate}' for candidate in candidates))
+
     def _media_url_is_servable(self, url: str) -> bool:
         """Ask the CDN for the first byte instead of trusting the URL.
 
@@ -521,40 +665,59 @@ class SoundCloudService(BaseMusicService):
         so a flaky network cannot mark a perfectly good track unplayable.
         """
         try:
-            probe = self._session.get(
-                url,
-                timeout=3.0,
-                headers={'Range': 'bytes=0-1'},
-                stream=True,
-            )
-            try:
-                status = probe.status_code
-            finally:
-                probe.close()
+            import urllib.request
+            from utils.url_safety import guarded_open_url
+            path = urllib_parse.urlsplit(url).path
+            manifest = path.endswith('.m3u8') or '/playlist/' in path
+            headers = {} if manifest else {'Range': 'bytes=0-1'}
+            with guarded_open_url(urllib.request.Request(url, headers=headers), timeout=3.0) as probe:
+                status = probe.status
+                # Consume short range replies/manifests so their verified TLS
+                # socket can serve the player's next request. Large or unknown
+                # bodies remain bounded and are closed without downloading.
+                try:
+                    length = int(getattr(probe, 'headers', {}).get('Content-Length', '0'))
+                except (TypeError, ValueError):
+                    length = 0
+                if 0 < length <= 65536:
+                    body = probe.read(length)
+                    content_type = str(getattr(probe, 'headers', {}).get('Content-Type', '')).lower()
+                    if (status == 200 and 'mpegurl' in content_type and body.startswith(b'#EXTM3U')
+                            and b'#EXT-X-ENDLIST' in body):
+                        # The player is about to request this same static VOD
+                        # playlist. Reuse its verified body, not another GET.
+                        # Never cache live playlists, keys or audio segments.
+                        self._shared_manifests.set(url, {'body': body, 'content_type': content_type})
             return status not in _MEDIA_DENIED_STATUSES
         except Exception as e:
+            if getattr(e, 'code', None) in _MEDIA_DENIED_STATUSES or isinstance(e, ValueError):
+                return False
             self.logger.debug(f'SoundCloud media probe failed for {url[:80]}: {e}')
             return True
 
+    def get_cached_manifest(self, url):
+        """A tiny, short-lived VOD playlist already fetched by the media probe."""
+        from utils.stream_urls import stream_url_expired
+        if stream_url_expired(url):
+            return None
+        return self._shared_manifests.get(url)
+
     def get_stream_url(self, track_url: str, callback: Callable = None, error_callback: Callable = None, quality: str = "high", **kwargs):
         """Extract direct audio stream URL from a SoundCloud track."""
+        if self.settings and self.settings.get('services', 'soundcloud_enabled', True) is False:
+            if error_callback:
+                error_callback('Источник SoundCloud отключён в настройках')
+            return None
         cache_key = f"soundcloud:{track_url}"
         info = self.get_from_cache(cache_key)
-        if info:
-            cached_url = info.get('stream_url')
-            # A cached URL is not automatically good: one written before the
-            # upload became DRM-protected is dead, and serving it is what starts
-            # the 403 loop. Probe it once per session, then trust the cache.
-            if cached_url and self._verified_cache.get(cached_url) is None:
-                if self._media_url_is_servable(cached_url):
-                    self._verified_cache.set(cached_url, True)
-                else:
-                    self._mark_unavailable(track_url, 'CDN refused the cached media URL')
-                    info = None
-            if info:
-                if callback:
-                    callback(cached_url, info)
-                return
+        youtube_enabled = not self.settings or self.settings.get('services', 'youtube_enabled', True) is not False
+        if info and info.get('resolved_source') == 'youtube' and not youtube_enabled:
+            info = None
+        cached_url = info.get('stream_url') if info else None
+        if cached_url and self._verified_cache.get(cached_url):
+            if callback:
+                callback(cached_url, info)
+            return
 
         # A track the CDN already refused to serve once is not asked again.
         # The cache lookup above comes first on purpose: when the YouTube
@@ -563,7 +726,7 @@ class SoundCloudService(BaseMusicService):
         # is what stops proxy 403 -> invalidate -> re-resolve from repeating
         # the same permanent failure on every click.
         unavailable = self._unavailable_cache.get(_unavailable_key(track_url))
-        if unavailable:
+        if unavailable and not cached_url:
             self.logger.info(
                 f'SoundCloud {track_url} is unavailable ({unavailable}); not re-resolving'
             )
@@ -571,13 +734,37 @@ class SoundCloudService(BaseMusicService):
                 error_callback(_UNAVAILABLE_MSG)
             return
 
+        leader, callback, error_callback = self._join_request(
+            f'sc-stream:{cache_key}', callback, error_callback)
+        if not leader:
+            return None
+
         def _extract():
             stream_url = None
             try:
+                # A prefetch may have finished between the initial cache miss
+                # and registration of this worker. Also keep the first probe
+                # of an old cache entry inside single-flight, off the caller's
+                # thread: simultaneous Play and prefetch must not each spend
+                # another CDN round trip checking the same URL.
+                cached = self.get_from_cache(cache_key)
+                if cached and cached.get('resolved_source') == 'youtube' and not youtube_enabled:
+                    cached = None
+                cached_url = cached.get('stream_url') if cached else None
+                if cached_url:
+                    if (cached.get('resolved_source') == 'youtube' or self._verified_cache.get(cached_url)
+                            or self._media_url_is_servable(cached_url)):
+                        self._verified_cache.set(cached_url, True)
+                        callback(cached_url, cached)
+                        return
+                    # An expired CDN token is not a permanent track verdict.
+                    with self._cache_lock:
+                        self._stream_cache.pop(cache_key, None)
                 cid = self._get_client_id()
                 track_id = None
                 t_url = None
                 api_meta = {}
+                preview_only = False
 
                 if str(track_url).isdigit():
                     track_id = str(track_url)
@@ -595,10 +782,13 @@ class SoundCloudService(BaseMusicService):
 
                 if cid and t_url:
                     try:
-                        r = self._session.get(t_url, timeout=8.0)
-                        if r.status_code == 200:
-                            t_data = r.json()
-                            media = t_data.get('media', {})
+                        t_data = self._track_metadata_cache.get(track_id) if track_id else None
+                        if t_data is None:
+                            r = self._api_get(t_url, timeout=4.0)
+                            t_data = r.json() if r.status_code == 200 else None
+                        if t_data:
+                            preview_only = t_data.get('policy') == 'SNIP'
+                            media = t_data.get('media') or {}
                             transcodings = media.get('transcodings', [])
                             stream_url = None
 
@@ -608,6 +798,7 @@ class SoundCloudService(BaseMusicService):
                             api_meta = {
                                 'title': t_data.get('title', '') or '',
                                 'uploader': (t_data.get('user') or {}).get('username', '') or '',
+                                'duration': int((t_data.get('duration') or 0) / 1000),
                             }
 
                             # A DRM transcoding resolves to a media URL the CDN
@@ -615,38 +806,32 @@ class SoundCloudService(BaseMusicService):
                             # must never become a cached stream_url: caching one
                             # is what made every later play start with a 403.
                             has_drm = False
-                            sorted_tc = sorted(transcodings, key=lambda x: 0 if x.get('format', {}).get('protocol') == 'progressive' else 1)
+                            sorted_tc = sorted(transcodings, key=lambda x: 0 if (x.get('format') or {}).get('protocol') == 'progressive' else 1)
 
                             for tc in sorted_tc:
                                 if _is_drm_transcoding(tc):
                                     has_drm = True
                                     continue
+                                # These are explicitly 30-second samples, or
+                                # the broken adaptive format yt-dlp also skips.
+                                if (tc.get('snipped') or t_data.get('policy') == 'SNIP'
+                                        or str(tc.get('preset', '')).startswith('abr_')):
+                                    continue
                                 tc_url = f"{tc['url']}?client_id={cid}"
-                                tc_resp = self._session.get(tc_url, timeout=6.0)
-                                if tc_resp.status_code == 200:
-                                    s_candidate = tc_resp.json().get('url')
-                                    if s_candidate and 'preview' not in s_candidate and '.m3u8' not in s_candidate:
+                                tc_data = self._public_json(tc_url, timeout=4.0)
+                                if tc_data:
+                                    s_candidate = tc_data.get('url')
+                                    if s_candidate and 'preview' not in s_candidate:
                                         stream_url = s_candidate
                                         break
 
-                            if stream_url and not self._media_url_is_servable(stream_url):
-                                # The CDN refused the media itself. This is the
-                                # same permanent condition yt-dlp reports as
-                                # "This video is DRM protected", seen one step
-                                # earlier: record it now and let the fallback
-                                # below answer instead of caching a dead URL.
-                                self._mark_unavailable(track_url, 'CDN refused the media URL')
-                                stream_url = None
-
-                            if stream_url and has_drm:
-                                # A track whose transcodings include common
-                                # encryption is not one to serve from this path:
-                                # yt-dlp reaches the same verdict.
-                                self.logger.info(
-                                    f'SoundCloud {track_url} exposes DRM-protected transcodings; ignoring the media URL'
-                                )
-                                self._mark_unavailable(track_url, 'DRM-protected transcodings')
-                                stream_url = None
+                            if stream_url:
+                                if self._media_url_is_servable(stream_url):
+                                    # The first replay used to repeat the very
+                                    # same probe because this result was lost.
+                                    self._verified_cache.set(stream_url, True)
+                                else:
+                                    stream_url = None
 
                             if stream_url:
                                 artwork = t_data.get('artwork_url') or ''
@@ -655,7 +840,7 @@ class SoundCloudService(BaseMusicService):
                                 metadata = {
                                     'title': t_data.get('title', 'Unknown'),
                                     'artist': t_data.get('user', {}).get('username', 'Unknown'),
-                                    'duration': int(t_data.get('duration', 0) / 1000),
+                                    'duration': int((t_data.get('duration') or 0) / 1000),
                                     'cover_url': artwork,
                                     'source_id': str(t_data.get('id')),
                                     'stream_url': stream_url
@@ -664,6 +849,13 @@ class SoundCloudService(BaseMusicService):
                                 if callback:
                                     callback(stream_url, metadata)
                                 return
+                    except (requests.exceptions.Timeout, requests.exceptions.ConnectionError,
+                            TimeoutError, ConnectionError) as api_ex:
+                        # The SDK transport may still work when this session
+                        # times out (observed with TUN routing). Keep that
+                        # same-source fallback before searching another site.
+                        # A transient outage must not mark the song unavailable.
+                        self.logger.warning('SoundCloud API connection failed: %s', type(api_ex).__name__)
                     except Exception as api_ex:
                         self.logger.warning(f"Fast SoundCloud stream extraction failed: {api_ex}")
                 if HAS_YTDLP:
@@ -674,9 +866,10 @@ class SoundCloudService(BaseMusicService):
                         else:
                             url_to_extract = f'https://soundcloud.com/{url_to_extract}'
                         
-                    ydl = self._get_ydl()
                     try:
-                        info = ydl.extract_info(url_to_extract, download=False)
+                        # API already identified a preview-only track. Repeating
+                        # extraction cannot turn that sample into a full song.
+                        info = None if preview_only else self._get_ydl().extract_info(url_to_extract, download=False)
                     except Exception as exc:
                         if not _is_unplayable_error(exc):
                             raise
@@ -689,14 +882,17 @@ class SoundCloudService(BaseMusicService):
                     
                     if info:
                         s_candidate = info.get('url')
-                        if s_candidate and '.m3u8' not in s_candidate and 'playlist' not in s_candidate and 'preview' not in s_candidate:
+                        if (s_candidate and 'preview' not in s_candidate
+                                and not re.search(r'/playlist/0/30/', s_candidate)):
                             stream_url = s_candidate
                             
                     if not stream_url:
-                        
+                        if not youtube_enabled:
+                            if error_callback:
+                                error_callback('SoundCloud недоступен; резервный источник YouTube отключён')
+                            return
                         self.logger.warning('SoundCloud stream is unavailable or preview-only. Falling back to YouTube.')
-                        from services.youtube_service import YouTubeService
-                        yt = YouTubeService(self.settings)
+                        yt = self._get_youtube_fallback()
                         
                         search_title = info.get('title', '') if info else ''
                         search_artist = info.get('uploader', '') if info else ''
@@ -719,7 +915,15 @@ class SoundCloudService(BaseMusicService):
                         
                         def yt_search_cb(tracks):
                             if tracks:
-                                best_match = tracks[0]
+                                from core.playback_recovery import same_recording
+                                wanted = {'title': search_title, 'artist': search_artist,
+                                          'duration': info.get('duration', 0) if info else api_meta.get('duration', 0)}
+                                best_match = next((candidate for candidate in tracks
+                                                   if same_recording(wanted, candidate)), None)
+                                if best_match is None:
+                                    if error_callback:
+                                        error_callback('Резервный источник не содержит подходящей версии трека')
+                                    return
                                 def yt_stream_cb(yt_url, yt_meta):
                                     final_metadata = {
                                         'title': search_title,
@@ -729,6 +933,8 @@ class SoundCloudService(BaseMusicService):
                                         'source_id': str(info.get('id') or '') if info else '',
                                         'stream_url': yt_url
                                     }
+                                    final_metadata['resolved_source'] = 'youtube'
+                                    final_metadata['resolved_source_id'] = best_match.get('source_id')
                                     self.set_to_cache(cache_key, final_metadata)
                                     if callback:
                                         callback(yt_url, final_metadata)
@@ -755,7 +961,7 @@ class SoundCloudService(BaseMusicService):
                             if error_callback:
                                 error_callback(f'Ошибка резервного поиска YouTube: {err}')
                                 
-                        yt.search(query, max_results=1, callback=yt_search_cb, error_callback=yt_search_err)
+                        yt.search(query, max_results=5, callback=yt_search_cb, error_callback=yt_search_err)
                         return
                         
                     if stream_url:
@@ -781,8 +987,8 @@ class SoundCloudService(BaseMusicService):
                     error_callback(f'Произошла ошибка: {type(e).__name__} - {str(e)}')
                     return
                 return
-        self._executor.submit(_extract)
-    def download_audio_sync(self, sc_url: str, output_dir: str) -> str:
+        self._playback_executor.submit(_extract)
+    def download_audio_sync(self, sc_url: str, output_dir: str, download_context=None) -> str:
         """Download audio synchronously, falling back to YouTube if SoundCloud gives preview."""
         import os, time
         if not HAS_YTDLP:
@@ -809,54 +1015,71 @@ class SoundCloudService(BaseMusicService):
         file_name = f'sc_{ts}.mp3'
         output_path = os.path.join(output_dir, file_name)
 
-        ydl_opts = {'quiet': True, 'no_warnings': True, 'format': 'bestaudio/best'}
+        ydl_opts = {
+            'quiet': True, 'no_warnings': True, 'format': 'bestaudio/best',
+            'socket_timeout': 10, 'extractor_retries': 1,
+        }
+        if self.settings:
+            proxy = normalize_proxy_url(self.settings.get('auth', 'proxy_url', ''))
+            if proxy:
+                ydl_opts['proxy'] = proxy
+            cookie_file = self.settings.get('auth', 'cookies_file_path', '')
+            if cookie_file and os.path.isfile(cookie_file):
+                ydl_opts['cookiefile'] = cookie_file
+        if download_context:
+            download_context.checkpoint()
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(sc_url_str, download=False)
         except Exception as e:
             self.logger.debug(f'SoundCloud metadata probe failed for {sc_url_str}: {e}', exc_info=True)
+            if not _is_unplayable_error(e):
+                # A timeout must reach the queue's retry policy. Turning it
+                # into missing metadata made an ordinary disconnect permanent.
+                raise
             info = None
+        if download_context:
+            download_context.checkpoint()
             
         is_preview = False
         if info:
             url_candidate = info.get('url', '')
-            if 'preview' in url_candidate:
+            if 'preview' in url_candidate or re.search(r'/playlist/0/30/', url_candidate):
                 is_preview = True
                 
         if not info or is_preview:
-            from services.youtube_service import YouTubeService
-            yt = YouTubeService(self.settings)
+            yt = self._get_youtube_fallback()
             title = info.get('title', 'Unknown') if info else 'Unknown'
             artist = info.get('uploader', 'Unknown') if info else 'Unknown'
             query = f'{artist} - {title}'.strip(' -')
             if not query or query == 'Unknown - Unknown':
                 # Try getting cached metadata
-                cached = self.get_from_cache(f"soundcloud:{sc_url}") or self.get_from_cache(f"soundcloud:{sc_url_str}")
+                cached = (self.get_from_cache(f"soundcloud:{sc_url}")
+                          or self.get_from_cache(f"soundcloud:{sc_url_str}")
+                          or self.get_track_metadata(sc_url_str))
                 if cached:
                     title = cached.get('title', 'Unknown')
                     artist = cached.get('artist', 'Unknown')
                     query = f'{artist} - {title}'.strip(' -')
+                    info = {'duration': cached.get('duration', 0)}
                 if not query or query == 'Unknown - Unknown':
                     raise Exception('Cannot extract metadata for YouTube fallback')
 
-            yt_dlp_opts = yt._get_ydl_opts('bestaudio/best', fallback=True)
-            yt_dlp_opts.update({
-                'outtmpl': os.path.join(output_dir, f'sc_yt_{ts}.%(ext)s'),
-                'skip_download': False,
-            })
-            with yt_dlp.YoutubeDL(yt_dlp_opts) as yt_ydl:
-                search_res = yt_ydl.extract_info(f'ytsearch1:{query}', download=True)
-                if not search_res or not search_res.get('entries'):
-                    raise Exception('YouTube fallback search failed')
-                entry = search_res['entries'][0]
-                dl_file = yt_ydl.prepare_filename(entry)
-                if os.path.exists(dl_file):
-                    return dl_file
-            return output_path
+            from core.playback_recovery import same_recording
+            wanted = {'title': title, 'artist': artist, 'duration': (info or {}).get('duration', 0)}
+            candidates = yt.search_sync(query, limit=5)
+            if download_context:
+                download_context.checkpoint()
+            match = next((item for item in candidates or [] if item.get('source_id')
+                          and same_recording(wanted, item)), None)
+            if match is None:
+                raise Exception('Резервный источник не содержит подходящей версии трека')
+            return yt.download_audio_sync(match['source_id'], output_dir, download_context=download_context)
                 
         else:
             dl_opts = {
+                **ydl_opts,
                 'quiet': True,
                 'no_warnings': True,
                 'format': 'bestaudio/best',
@@ -873,8 +1096,13 @@ class SoundCloudService(BaseMusicService):
                 'file_access_retries': 3,
                 'socket_timeout': 30,
             }
+            if download_context:
+                dl_opts.update(download_context.ydl_options(output_dir))
             with yt_dlp.YoutubeDL(dl_opts) as sc_ydl:
-                sc_info = sc_ydl.extract_info(sc_url_str, download=True)
+                # The preview check just extracted the complete format list.
+                # Reprocess it with download options instead of repeating the
+                # page/API/manifest requests before transferring any bytes.
+                sc_info = sc_ydl.process_ie_result(info, download=True)
                 if sc_info:
                     sc_file = sc_ydl.prepare_filename(sc_info)
                     if os.path.exists(sc_file):
@@ -883,9 +1111,12 @@ class SoundCloudService(BaseMusicService):
                 return output_path
             # Check directory for sc_ file
             for f in os.listdir(output_dir):
-                if f.startswith('sc_') and not f.endswith('.part'):
+                if f.startswith(download_context.stem if download_context else f'sc_{ts}') and not f.endswith('.part'):
                     return os.path.join(output_dir, f)
-            return output_path
+            # A missing file is a hard failure, not a path (the old silent
+            # `return output_path` made the loader blame a "missing" provider
+            # response instead of the failed extraction).
+            raise Exception('Провайдер soundcloud не создал аудиофайл')
 
     def get_related_tracks_sync(self, track_id_or_urn: str, limit: int = 15) -> list:
         """Fetch related tracks from SoundCloud API v2 with caching and graceful failover."""
@@ -922,7 +1153,7 @@ class SoundCloudService(BaseMusicService):
                         artwork = artwork.replace('large.jpg', 't500x500.jpg')
                     user_info = item.get('user', {})
                     artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
-                    duration = int(item.get('duration', 0) / 1000)
+                    duration = int((item.get('duration') or 0) / 1000)
                     waveform_url = item.get('waveform_url') or ''
                     track = {
                         'title': item.get('title', 'Unknown Title'),
@@ -933,6 +1164,7 @@ class SoundCloudService(BaseMusicService):
                         'source_url': item.get('permalink_url') or f"https://soundcloud.com/{item.get('permalink', item.get('id'))}",
                         'cover_url': artwork,
                         'waveform_url': waveform_url,
+                        'genre': item.get('genre') or '',
                     }
                     tracks.append(track)
 
@@ -958,9 +1190,8 @@ class SoundCloudService(BaseMusicService):
             return cached
 
         try:
-            r = self._session.get(json_url, timeout=10.0)
-            if r.status_code == 200:
-                data = r.json()
+            data = self._public_json(json_url, timeout=4.0)
+            if data:
                 samples = data.get('samples', [])
                 height = float(data.get('height') or max(samples or [1]) or 1)
 
@@ -982,3 +1213,6 @@ class SoundCloudService(BaseMusicService):
             self.logger.warning(f"Failed to fetch waveform JSON from {json_url}: {e}")
 
         return []
+    _shared_unavailable = _TTLCache(max_entries=200, ttl_seconds=_UNAVAILABLE_TTL, lock=BaseMusicService._cache_lock)
+    _shared_verified = _TTLCache(max_entries=200, ttl_seconds=120, lock=BaseMusicService._cache_lock)
+    _shared_manifests = _TTLCache(max_entries=8, ttl_seconds=10, lock=BaseMusicService._cache_lock)

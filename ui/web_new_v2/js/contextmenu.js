@@ -1,3 +1,5 @@
+import { openPlaylistActions } from './library-view.js';
+
 export function initContextMenu() {
     document.addEventListener('contextmenu', (e) => {
         const trackItem = e.target.closest('.track-item, .album-track-item, .queue-item');
@@ -32,11 +34,16 @@ export function initContextMenu() {
                 };
             }
             if (playlist) {
-                if (window.NeDotify?.showPlaylistContextMenu) {
-                    e.preventDefault();
+                e.preventDefault();
+                if (typeof openPlaylistActions === 'function') {
+                    openPlaylistActions(playlist, e);
+                } else if (window.NeDotify?.openPlaylistActions) {
+                    window.NeDotify.openPlaylistActions(playlist, e);
+                } else if (window.openPlaylistActions) {
+                    window.openPlaylistActions(playlist, e);
+                } else if (window.NeDotify?.showPlaylistContextMenu) {
                     window.NeDotify.showPlaylistContextMenu(playlist, e);
                 } else if (window.showPlaylistContextMenu) {
-                    e.preventDefault();
                     window.showPlaylistContextMenu(playlist, e);
                 }
             }

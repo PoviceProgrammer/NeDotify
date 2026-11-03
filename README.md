@@ -1,44 +1,40 @@
-<p align="center">
-  <img src="cover.png" width="190" alt="NeDotify">
-</p>
+<p align="center"><img src="screenshots/banner.png" width="100%" alt="NeDotify — Your music space"></p>
 
 <h1 align="center">NeDotify</h1>
-
+<p align="center"><b>Твоё пространство музыки на Windows 10 / 11</b><br>Локальная библиотека, онлайн-источники, тексты песен и оформление под себя.</p>
 <p align="center">
-  Плеер для Windows. Свои файлы или стриминг с&nbsp;YouTube&nbsp;Music, Spotify,<br>SoundCloud и&nbsp;Яндекс.Музыки.
+  <a href="https://github.com/PoviceProgrammer/NeDotify/releases/latest"><img src="https://img.shields.io/badge/СКАЧАТЬ_ДЛЯ_WINDOWS-8b5cf6?style=for-the-badge&logo=windows&logoColor=white" alt="Скачать"></a>
+  <a href="https://github.com/PoviceProgrammer/NeDotify/releases"><img src="https://img.shields.io/badge/ВСЕ_РЕЛИЗЫ-24292f?style=for-the-badge&logo=github" alt="Релизы"></a>
 </p>
-
+<p align="center"><a href="#-возможности">Возможности</a> · <a href="#-скриншоты">Интерфейс</a> · <a href="#-установка">Установка</a> · <a href="#-запуск-из-исходников">Из исходников</a></p>
 <p align="center">
-  <a href="https://github.com/PoviceProgrammer/NeDotify/releases">
-    <img src="https://img.shields.io/badge/Download-2f6feb?style=for-the-badge&logo=github&logoColor=white" alt="Скачать NeDotify">
-  </a>
+  <img src="https://img.shields.io/github/stars/PoviceProgrammer/NeDotify?style=flat-square" alt="Stars">
+  <img src="https://img.shields.io/github/last-commit/PoviceProgrammer/NeDotify?style=flat-square" alt="Последний коммит">
+  <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?style=flat-square" alt="Windows">
+  <img src="https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square" alt="Python">
 </p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/python-3.14-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.14">
-  <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows 10/11">
-  <img src="https://img.shields.io/badge/version-5.0%20Beta-a855f7?style=flat-square" alt="Версия 5.0 Beta">
-  <img src="https://github.com/PoviceProgrammer/NeDotify/actions/workflows/ci.yml/badge.svg" alt="CI">
-</p>
-
----
 
 ## 📸 Скриншоты
 
+Два оформления одного Windows-приложения. Переключаются в настройках.
+
+<details open><summary><b>Обычный интерфейс</b></summary>
+
 <table>
-  <tr>
-    <td width="50%" align="center"><img src="screenshots/home.png" alt="Главная"><br><sub><b>Главная</b> — недавние треки и локальный топ</sub></td>
-    <td width="50%" align="center"><img src="screenshots/search.png" alt="Поиск"><br><sub><b>Поиск</b> — треки, плейлисты, альбомы, артисты</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="screenshots/player.png" alt="Плеер"><br><sub><b>Плеер</b> — обложка, управление, текст песни со сдвигом ±0.5&nbsp;с</sub></td>
-    <td align="center"><img src="screenshots/library.png" alt="Библиотека"><br><sub><b>Библиотека</b> — плейлисты, импорт, офлайн-треки</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="screenshots/settings_themes.png" alt="Темы"><br><sub><b>Темы</b> — готовые пресеты и свои цвета</sub></td>
-    <td align="center"><img src="screenshots/profile.png" alt="Профиль"><br><sub><b>Профиль</b> — сколько послушал, топ треков, история</sub></td>
-  </tr>
+<tr><td width="50%"><img src="screenshots/standard/home.png" alt="Главная"><br><sub>Главная</sub></td><td width="50%"><img src="screenshots/standard/search.png" alt="Поиск"><br><sub>Поиск</sub></td></tr>
+<tr><td width="50%"><img src="screenshots/standard/library.png" alt="Библиотека"><br><sub>Библиотека</sub></td><td width="50%"><img src="screenshots/standard/player.png" alt="Плеер"><br><sub>Плеер</sub></td></tr>
+<tr><td width="50%"><img src="screenshots/standard/settings.png" alt="Настройки"><br><sub>Настройки</sub></td><td width="50%"><img src="screenshots/standard/profile.png" alt="Профиль"><br><sub>Профиль</sub></td></tr>
 </table>
+</details>
+
+<details><summary><b>macOS-стиль на Windows</b></summary>
+
+<table>
+<tr><td width="50%"><img src="screenshots/macos/home.png" alt="Главная"><br><sub>Главная</sub></td><td width="50%"><img src="screenshots/macos/search.png" alt="Поиск"><br><sub>Поиск</sub></td></tr>
+<tr><td width="50%"><img src="screenshots/macos/library.png" alt="Библиотека"><br><sub>Библиотека</sub></td><td width="50%"><img src="screenshots/macos/player.png" alt="Плеер"><br><sub>Плеер</sub></td></tr>
+<tr><td width="50%"><img src="screenshots/macos/settings.png" alt="Настройки"><br><sub>Настройки</sub></td><td width="50%"><img src="screenshots/macos/profile.png" alt="Профиль"><br><sub>Профиль</sub></td></tr>
+</table>
+</details>
 
 ---
 
@@ -61,8 +57,17 @@
 **Интерфейс**
 
 - 🎨 Темы оформления, можно собрать свою
-- 📀 Плейлисты: создать, импортировать, скачать офлайн
+- 📀 Плейлисты: создать и импортировать; экран плейлиста разделяет описание
+  и список треков
+- ✨ Подборки «Для тебя» и ежедневные миксы строятся по истории и предпочтениям;
+  состав можно открыть или сразу воспроизвести
+- 🖼️ Главная использует обложки из истории прослушивания для фоновой атмосферы
+- 🧭 Пошаговая первоначальная настройка с живым предпросмотром оформления и параметров
+- 🪟 Анимированный переход между обычным окном и мини-плеером
 - 🕹️ Discord Rich Presence — статус об играющем треке
+
+Умные плейлисты удалены из Windows-интерфейса. Обычные плейлисты и их треки
+остаются доступны.
 
 ---
 
@@ -75,9 +80,9 @@
 
 Собрать самому (имя выходного файла задаёт `OutputBaseFilename` в `installer.iss`):
 
-```bash
-.venv_win\Scripts\python.exe -m pip install -r requirements.txt
-.venv_win\Scripts\python.exe -m PyInstaller setup_pyinstaller.spec
+```powershell
+& ".venv_win\Scripts\python.exe" -m pip install -r requirements.txt
+& ".venv_win\Scripts\python.exe" -m PyInstaller setup_pyinstaller.spec
 iscc installer.iss
 ```
 
@@ -87,33 +92,55 @@ iscc installer.iss
 
 ## 🧑‍💻 Запуск из исходников
 
-```bash
+```powershell
 git clone https://github.com/PoviceProgrammer/NeDotify.git
 cd NeDotify
 
 python -m venv .venv_win
-.venv_win\Scripts\python.exe -m pip install -r requirements.txt
+& ".venv_win\Scripts\python.exe" -m pip install -r requirements.txt
 ```
 
 Запуск — `python main.py` из корня репозитория, интерпретатором из `.venv_win`:
 
-```bash
-.venv_win\Scripts\python.exe main.py
+```powershell
+& ".venv_win\Scripts\python.exe" main.py
 ```
 
 > Системный `python` не подойдёт — в нём нет `pywebview` и `yt-dlp`.
 > Нужен именно интерпретатор из `.venv_win`.
 
+Если приложение уже работает, но окно скрыто, откройте NeDotify через значок
+в трее. Крестик полностью закрывает приложение и очищает Discord-статус.
+Обычное сворачивание сохраняет воспроизведение музыки.
+
 ---
 
 ## 🧪 Тесты
 
-```bash
-.venv_win\Scripts\python.exe -m pytest -m "not network"
+```powershell
+& ".venv_win\Scripts\python.exe" -m pytest
+& ".venv_win\Scripts\python.exe" -m pytest tests\test_build_and_brand.py -q
 ```
 
-Флаг `not network` пропускает тесты, которым нужен реальный доступ к площадкам —
-так же, как в CI.
+`pytest.ini` по умолчанию исключает тесты с маркером `network`, которым нужен
+реальный доступ к площадкам. Для их отдельного запуска передайте `-m network`.
+`run_tests.py` использует ту же конфигурацию pytest.
+
+Инструкции для разработки:
+
+- [Тесты — nedotify-test](.claude/skills/nedotify-test/SKILL.md)
+- [Запуск и проверка окна — nedotify-run](.claude/skills/nedotify-run/SKILL.md)
+- [Сборка EXE и установщика — nedotify-build](.claude/skills/nedotify-build/SKILL.md)
+- [Замеры производительности — nedotify-perf](.claude/skills/nedotify-perf/SKILL.md)
+
+Актуальные описания функций и изменений интерфейса собраны в
+[STATUS.md](STATUS.md) и тематических заметках:
+
+- [Рекомендации «Для тебя» и ежедневные миксы](docs/recommendations-for-you-20261102.md)
+- [Первоначальная настройка и анимации](docs/riff-onboarding.md)
+- [Атмосфера главной и Discord Rich Presence](docs/ATMOSPHERE_AND_DISCORD.md)
+- [История функций и проверок библиотеки](docs/FEATURES_2026_10_15.md) — датированный
+  архив; некоторые пункты могли быть удалены позднее.
 
 ---
 
@@ -131,7 +158,35 @@ YouTube, Spotify и SoundCloud иногда недоступны без VPN. С�
 Python 3.14 · pywebview + WebView2 · SQLite (WAL) · yt-dlp · Vanilla JS
 
 Фронтенд без сборщика и бандлера: правьте `ui/web_new_v2/` и перезапускайте.
-Ветка `ui/web_new/` — устаревшая версия интерфейса, её изменения никуда не попадают.
+Единственный интерфейс **desktop-плеера** — `ui/web_new_v2/`; он включён в
+сборку EXE. Выбор других версий удалён.
+
+---
+
+## 📱 Второй продукт: нативное Android-приложение
+
+В этом репозитории лежат **два разных продукта**. Кроме настольного плеера
+под Windows (Python + pywebview, `ui/web_new_v2/`) здесь есть **второй,
+нативный Android-продукт**: Kotlin, Jetpack Compose, Media3, Room — без
+Python и без WebView-обёртки. Он лежит в `android/` и собирается Gradle'ом,
+а не PyInstaller'ом; его `applicationId` — `ru.nedotify.app`.
+
+* правила работы с Android-кодом — [`android/AGENTS.md`](android/AGENTS.md);
+* состояние переноса, что ещё не реализовано и что не проверено на
+  устройстве — [`android/PORTING_STATUS.md`](android/PORTING_STATUS.md);
+* проверки исходников — [`android/review/VALIDATION.md`](android/review/VALIDATION.md).
+
+Проверить Android-исходники без APK можно так (из корня репозитория):
+
+```powershell
+powershell -NoProfile -File android/tools/run-unit-tests.ps1 -Summarize
+```
+
+APK-задачи (`assemble*`, `bundle*`, `package*`) **запрещены**, сборка APK не
+выполнялась; 66 инструментальных тестов только скомпилированы и ни разу не
+выполнялись — устройства и эмулятора не было. Общие с desktop правила
+(`~/.nedotify/`, мост pywebview, горячие клавиши) к Android-коду **не**
+применяются: у него своя библиотека, и она живёт на устройстве.
 
 ---
 

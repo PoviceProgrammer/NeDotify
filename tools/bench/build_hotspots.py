@@ -21,14 +21,16 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-RESULTS = REPO / "tools" / "bench" / "results"
 CSS_DIR = REPO / "ui" / "web_new_v2" / "css"
 
 import sys  # noqa: E402
 
-sys.path.insert(0, str(REPO / "tools" / "bench"))
-import js_census  # noqa: E402
-from css_inventory import IMPORT_ORDER, parse_file  # noqa: E402
+sys.path.insert(0, str(REPO))
+from tools.bench.paths import results_dir  # noqa: E402
+from tools.bench import js_census  # noqa: E402
+from tools.bench.css_inventory import IMPORT_ORDER, parse_file  # noqa: E402
+
+RESULTS = results_dir()
 
 
 # ---------------------------------------------------------------- section 1

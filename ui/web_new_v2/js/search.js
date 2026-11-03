@@ -1,27 +1,54 @@
+import { initSearchDiscovery, setDiscoveryMode } from './search-discovery.js';
 // NeDotify — Search Module Redesign
-import { createTrackElement, renderIcons, filterVisibleTracks, escapeHtml, getCoverFallbackGradient, openModalFocusTrap, closeModalFocusTrap } from './utils.js';
+import { createTrackElement, renderIcons, filterVisibleTracks, escapeHtml, getCoverFallbackGradient, openModalFocusTrap, closeModalFocusTrap, artistAvatarHtml, showToast } from './utils.js';
 import { getCurrentTrack } from './player.js';
-import { 
-    loadArtistProfile, 
-    ArtistPhotoComponent, 
-    ArtistBioComponent, 
-    ArtistAlbumsComponent, 
-    ArtistTracksComponent 
+import {
+    loadArtistProfile, cancelArtistProfileRequests,
+    ArtistPhotoComponent,
+    ArtistBioComponent,
+    ArtistAlbumsComponent,
+    ArtistTracksComponent
 } from './artist_profile.js';
 
 let searchDebounce = null;
 let currentSource = 'all'; // Default source is 'Все площадки'
-let currentType = 'tracks';    // Default filter is 'Треки' as shown in screenshot 1
+let currentType = 'all'; // The discovery page starts with all catalog results.
 let allResults = [];
 let currentSearchQuery = '';   // Track the latest query sent
 let searchBatchRafId = null;
 let lastResultKey = null;
+let searchHeaderResizeObserver = null;
+let searchSuggestionGeneration = 0;
+let suggestionRequestKey = '';
+let correctionContext = null;
+let searchIsOffline = false;
+let activeSearchRequestId = null;
+let searchPending = false;
+let visibleSearchCount = 12;
+let searchRequestGeneration = 0;
 
 let isViewingArtistProfile = false;
 
+function syncSearchHeaderHeight() {
+    const view = document.getElementById('view-search');
+    const header = view?.querySelector('.search-header-container');
+    if (!view || !header) return;
+    const height = Math.ceil(header.getBoundingClientRect().height);
+    if (height > 0) view.style.setProperty('--search-header-height', `${height}px`);
+}
+
+function setSearchLayout(hasQuery) {
+    const view = document.getElementById('view-search');
+    if (!view) return;
+    view.classList.toggle('search-active', Boolean(hasQuery));
+    view.classList.toggle('search-empty', !hasQuery);
+    syncSearchHeaderHeight();
+}
+
 // Platform SVGs map for updating button icon dynamically
 const PLATFORM_SVGS = {
-    all: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#a855f7"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`,
+    deezer: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#A238FF"><path d="M2 14h3v8H2zm5-5h3v13H7zm5-7h3v20h-3zm5 9h3v11h-3z"/></svg>`,
+    all: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`,
     youtube: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="10" fill="#FF0000"/><polygon points="9.5,7.5 16.5,12 9.5,16.5" fill="#FFFFFF"/></svg>`,
     soundcloud: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#FF5500"><path d="M11.56 8.87c-.24 0-.47.02-.7.06A6.17 6.17 0 0 0 5 13.5c0 .17.01.34.03.51A4.24 4.24 0 0 0 1 18.25 4.25 4.25 0 0 0 5.25 22.5h13.5A5.25 5.25 0 0 0 24 17.25a5.24 5.24 0 0 0-4.05-5.11 6.17 6.17 0 0 0-8.39-3.27z"/></svg>`,
     spotify: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#1DB954"><path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.02 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.48-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.3 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.18-1.2-.18-1.38-.72-.18-.6.18-1.2.72-1.38 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>`
@@ -34,13 +61,28 @@ export function initSearch() {
     const platformDropdown = document.getElementById('search-platform-dropdown');
     const activeIconSpan = document.getElementById('search-platform-active-icon');
 
+    const searchHeader = document.querySelector('.search-header-container');
+    if (searchHeader && typeof ResizeObserver !== 'undefined') {
+        searchHeaderResizeObserver?.disconnect();
+        searchHeaderResizeObserver = new ResizeObserver(syncSearchHeaderHeight);
+        searchHeaderResizeObserver.observe(searchHeader);
+    }
+    setSearchLayout(Boolean(input?.value.trim()));
+
+    document.getElementById('search-submit')?.addEventListener('click', () => {
+        if (input?.value.trim()) input.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',bubbles:true}));
+        else input?.focus();
+    });
+
     if (input) {
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 input.blur();
                 const query = e.target.value.trim();
+                if (query === currentSearchQuery && searchPending) return;
                 if (query.length > 0) {
+                    setSearchLayout(true);
                     saveSearchQuery(query);
                     const dropdown = document.getElementById('search-suggestions-dropdown');
                     if (dropdown) dropdown.classList.add('hidden');
@@ -48,7 +90,7 @@ export function initSearch() {
                     showLoading();
                     allResults = [];
                     currentSearchQuery = query;
-                    api('search', query, currentSource, currentType === 'all' ? null : currentType);
+                    runSearchQuery(query);
                 }
             } else if (e.key === 'Escape') {
                 const dropdown = document.getElementById('search-suggestions-dropdown');
@@ -57,9 +99,15 @@ export function initSearch() {
         });
 
         input.addEventListener('input', (e) => {
+            searchPending = false;
+            activeSearchRequestId = null;
+            Promise.resolve(window.pywebview?.api?.cancel_search?.()).catch(() => {});
+            cancelArtistProfileRequests();
             isViewingArtistProfile = false;
             const query = e.target.value.trim();
+            setSearchLayout(Boolean(query));
             clearTimeout(searchDebounce);
+            currentSearchQuery = query;
 
             if (clearBtn) clearBtn.classList.toggle('visible', query.length > 0);
 
@@ -70,8 +118,8 @@ export function initSearch() {
                 searchDebounce = setTimeout(() => {
                     allResults = [];
                     currentSearchQuery = query;
-                    api('search', query, currentSource, currentType === 'all' ? null : currentType);
-                }, 300);
+                    runSearchQuery(query);
+                }, 200);
             } else {
                 currentSearchQuery = '';
                 showPlaceholder();
@@ -81,11 +129,16 @@ export function initSearch() {
 
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
+            Promise.resolve(window.pywebview?.api?.cancel_search?.()).catch(() => {});
+            clearTimeout(searchDebounce);
+            cancelArtistProfileRequests();
+            lastResultKey = null;
             isViewingArtistProfile = false;
             if (input) input.value = '';
             if (clearBtn) clearBtn.classList.remove('visible');
             allResults = [];
             currentSearchQuery = '';
+            setSearchLayout(false);
             showPlaceholder();
         });
     }
@@ -108,6 +161,8 @@ export function initSearch() {
     // Platform Dropdown Selection (YouTube, SoundCloud, Spotify, All)
     function onSelectPlatform(selectedSource, targetBtn) {
         if (!selectedSource || !PLATFORM_SVGS[selectedSource]) return;
+        clearTimeout(searchDebounce);
+        cancelArtistProfileRequests();
 
         // Any explicit source switch is a new search intent -> leave artist profile
         isViewingArtistProfile = false;
@@ -129,10 +184,11 @@ export function initSearch() {
         // Update input placeholder for the selected source
         if (input) {
             const placeholders = {
-                all: 'Поиск...',
+                all: 'Поиск треков, исполнителей, альбомов…',
                 youtube: 'Поиск в YouTube Music...',
                 soundcloud: 'Поиск в SoundCloud...',
-                spotify: 'Поиск в Spotify...'
+                spotify: 'Поиск в Spotify...',
+                deezer: 'Поиск в Deezer...'
             };
             input.placeholder = placeholders[selectedSource] || 'Поиск...';
         }
@@ -144,7 +200,7 @@ export function initSearch() {
             allResults = [];
             currentSearchQuery = query;
             showLoading();
-            api('search', query, currentSource, currentType === 'all' ? null : currentType);
+            runSearchQuery(query);
         }
     }
 
@@ -166,6 +222,10 @@ export function initSearch() {
             document.querySelectorAll('.type-filter-btn[data-type]').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             currentType = btn.dataset.type;
+            syncTypeButtons();
+            cancelArtistProfileRequests();
+            clearTimeout(searchDebounce);
+            setDiscoveryMode('history');
 
             if (isViewingArtistProfile && currentType !== 'artists') {
                 isViewingArtistProfile = false;
@@ -174,7 +234,9 @@ export function initSearch() {
             if (currentType === 'artists') {
                 const query = input?.value.trim() || currentSearchQuery;
                 if (query) {
-                    searchArtistProfile(query);
+                    // S4-001: the tab holds a QUERY, not a confirmed artist
+                    // entity - require the candidate confirmation step.
+                    searchArtistProfile(query, null, { require_candidates: true });
                 } else {
                     const container = document.getElementById('search-results');
                     if (container) {
@@ -187,7 +249,7 @@ export function initSearch() {
                     showLoading();
                     allResults = [];
                     currentSearchQuery = query;
-                    api('search', query, currentSource, currentType === 'all' ? null : currentType);
+                    runSearchQuery(query);
                 } else {
                     showPlaceholder();
                 }
@@ -195,48 +257,85 @@ export function initSearch() {
         });
     });
 
+    initSearchDiscovery(searchArtistProfile);
     setupSmartSearchSuggestions();
     renderIcons();
 }
 
 // Global accessor to navigate to an artist profile
-export function searchArtistProfile(artistName) {
+// S4-001: callers that pass a free-text QUERY (not a confirmed artist entity)
+// must set { require_candidates: true } so the backend offers candidates
+// instead of auto-opening the profile of a channel that merely matches the text.
+const KNOWN_COLLAB_GROUPS = new Set([
+    'tyler, the creator',
+    'earth, wind & fire',
+    'crosby, stills, nash & young',
+    'crosby, stills & nash',
+    'simon & garfunkel',
+    'hall & oates',
+    'daryl hall & john oates',
+    'emerson, lake & palmer',
+    'kool & the gang',
+    'kc & the sunshine band',
+    'blood, sweat & tears',
+    'above & beyond',
+    'florence + the machine',
+    'florence and the machine',
+    'huey lewis & the news',
+    'tom petty and the heartbreakers',
+    'bob marley & the wailers',
+    'joan jett & the blackhearts',
+    'marina and the diamonds'
+]);
+
+export function cleanArtistQuery(name) {
+    if (!name || typeof name !== 'string') return '';
+    let cleaned = name.replace(/\s*-\s*Topic\b/gi, '')
+                      .replace(/\bVEVO\b/gi, '')
+                      .replace(/\bOfficial\b/gi, '')
+                      .replace(/\bRecords\b/gi, '')
+                      .trim();
+
+    // Check if known group that contains punctuation / ampersand
+    if (KNOWN_COLLAB_GROUPS.has(cleaned.toLowerCase())) {
+        return cleaned;
+    }
+
+    // Handle collaboration strings: " feat. ", " ft. ", " featuring ", " & ", " x ", etc.
+    const parts = cleaned.split(/\s*(?:,|&|\+|;|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*/i)
+                         .map(s => s.trim())
+                         .filter(Boolean);
+    if (parts.length > 0) {
+        return parts[0];
+    }
+    return cleaned;
+}
+
+export function searchArtistProfile(artistName, context = null, options = null) {
     if (!artistName || artistName === 'Unknown') return;
 
-    // Dismiss any open modal overlay immediately so search/profile is visible
+    // Dismiss any open modal overlay immediately so artist view is visible
     document.querySelectorAll('.modal-overlay, #album-modal-container, #playlist-modal-container').forEach(m => {
         m.style.display = 'none';
-        // These overlays are hidden behind our back, so their traps have to go
-        // with them - otherwise the next Tab would be dragged into a closed
-        // dialog.
         closeModalFocusTrap(m);
     });
 
-    isViewingArtistProfile = true;
-    const input = document.getElementById('search-input');
-    const clearBtn = document.getElementById('search-clear');
-    if (input) {
-        input.value = artistName;
-        if (clearBtn) clearBtn.classList.add('visible');
-    }
-    
-    // Set active type filter to "Артисты"
-    document.querySelectorAll('.type-filter-btn[data-type]').forEach(b => {
-        b.classList.toggle('active', b.dataset.type === 'artists');
-    });
-    currentType = 'artists';
-    currentSearchQuery = artistName;
-    allResults = [];
+    const cleanName = options?.require_candidates ? String(artistName).trim() : cleanArtistQuery(artistName);
+    if (!cleanName) return;
 
-    // Switch to search page
+    const artistRef = { ...(context ? { context } : {}), ...((options && typeof options === 'object') ? options : {}) };
+    artistRef.rawName = artistName;
+    if (context && typeof context === 'object') artistRef.hintTrack = context;
+
+    // Switch to dedicated artist view (#view-artist), leaving search results and input untouched
     if (window.showPage) {
-        window.showPage('search');
+        window.showPage('artist');
     } else if (window.NeDotify?.showPage) {
-        window.NeDotify.showPage('search');
+        window.NeDotify.showPage('artist');
     }
 
-    showLoadingArtist(artistName);
-    loadArtistProfile(artistName, document.getElementById('search-results'));
+    const artistContainer = document.getElementById('view-artist');
+    loadArtistProfile(cleanName, artistContainer, artistRef);
 }
 
 window.searchArtistProfile = searchArtistProfile;
@@ -252,23 +351,33 @@ function trackDedupKey(t) {
 }
 
 export function onSearchResults(data) {
+    if (!currentSearchQuery || !data) return;
+    if (data.request_id != null && data.request_id !== activeSearchRequestId) return;
+    if (data.query && data.query !== currentSearchQuery) return;
+    if (typeof data.offline === 'boolean') searchIsOffline = data.offline;
     if (data && data.source === '__completion__') {
-        if (data.query && currentSearchQuery && data.query !== currentSearchQuery) {
+        searchPending = false;
+        if (data.query && data.query !== currentSearchQuery) {
             return; // Stale completion — a newer query is already in flight
         }
         const container = document.getElementById('search-results');
         if (container && container.querySelector('.spinner') && allResults.length === 0) {
             container.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
+            renderCorrectionContext(container);
+            renderOfflineSearchNote(container);
         }
+        if (allResults.length === 0 && !isViewingArtistProfile) offerSearchCorrections();
         return;
     }
     // Don't let provider bursts overwrite an active artist profile, but allow explicit type switches
     if (isViewingArtistProfile && data && data.type !== 'artists' && currentType === 'artists') {
         return;
     }
-    if (data.query && currentSearchQuery && data.query !== currentSearchQuery) {
+    if (data.query && data.query !== currentSearchQuery) {
         return; // Stale result — ignore
     }
+    if (currentSource !== 'all' && data.source && data.source !== currentSource && !(data.offline === true && data.source === 'local')) return;
+    if (data.type && currentType !== 'all' && data.type !== currentType) return;
     // The reset key identifies the *request*, so it must use the source the user
     // picked (currentSource), never data.source: with source='all' the backend
     // streams one chunk per provider (local/youtube/soundcloud/spotify) and a
@@ -291,6 +400,27 @@ export function onSearchResults(data) {
                     allResults.push(t);
                 }
             }
+            // BUG-S4-011: with source='all' the merged list must not depend on
+            // which provider answered first. Rank deterministically: exact
+            // title(-artist) match, then title substring, then artist match,
+            // stable by previous order inside each tier. Single-source results
+            // keep provider ranking untouched.
+            if ((currentSource || 'all') === 'all' && currentSearchQuery) {
+                const fold = (s) => String(s || '').toLowerCase().replace(/ё/g, 'е');
+                const query = fold(currentSearchQuery);
+                const rank = (t) => {
+                    const title = fold(t.title), artist = fold(t.artist);
+                    if (!query) return 3;
+                    if (title === query || (artist + ' - ' + title) === query) return 0;
+                    if (title.startsWith(query) || title.includes(query)) return 1;
+                    if (artist.includes(query)) return 2;
+                    return 3;
+                };
+                allResults = allResults
+                    .map((t, i) => [t, i])
+                    .sort((a, b) => (rank(a[0]) - rank(b[0])) || (a[1] - b[1]))
+                    .map(([t]) => t);
+            }
             renderResults(allResults);
             return;
         }
@@ -312,7 +442,41 @@ function renderResults(tracks) {
         return;
     }
 
+    const renderKey = `${lastResultKey}|${currentType}`;
+    const trackList = container.querySelector('.track-list');
+    const isSameRequest = container._renderKey === renderKey;
+    container._renderKey = renderKey;
+
+
+    if (['all', 'tracks'].includes(currentType) && isSameRequest && trackList) {
+        const children = trackList.children;
+        let canAppend = children.length > 0 && children.length <= tracks.length;
+        if (canAppend) {
+            for (let j = 0; j < children.length; j++) {
+                const childTrack = children[j]._trackData;
+                if (!childTrack || trackDedupKey(childTrack) !== trackDedupKey(tracks[j])) {
+                    canAppend = false;
+                    break;
+                }
+            }
+        }
+        if (canAppend) {
+            for (let j = 0; j < children.length; j++) {
+                children[j]._tracksArray = tracks;
+            }
+            renderSearchResultsBatch(container, tracks, false);
+            return;
+        }
+        // Streaming search re-sorted or reordered results (BUG-WIN-006):
+        // Re-render track-list cleanly without blowing away header context/banners
+        renderSearchResultsBatch(container, tracks, true);
+        return;
+    }
+
+
     container.innerHTML = '';
+    renderCorrectionContext(container);
+    renderOfflineSearchNote(container);
 
     // Filter by selected sub-type (all, tracks, playlists, albums, artists)
     let displayTracks = tracks;
@@ -323,20 +487,6 @@ function renderResults(tracks) {
             if (t.type === 'playlist') {
                 const key = String(t.source_id || t.id || idx);
                 if (!playlistMap.has(key)) playlistMap.set(key, t);
-            } else {
-                const key = String(t.source_id || t.id || idx);
-                if (!playlistMap.has(key)) {
-                    playlistMap.set(key, {
-                        id: t.id || `playlist_${idx}`,
-                        title: t.title || 'Плейлист',
-                        author: t.artist || t.author || 'NeDotify',
-                        cover_url: t.cover_url || t.cover_path || '',
-                        source: t.source || 'youtube',
-                        source_id: t.source_id || '',
-                        type: 'playlist',
-                        track_count: t.track_count || 10
-                    });
-                }
             }
         });
         const playlistList = Array.from(playlistMap.values());
@@ -345,92 +495,23 @@ function renderResults(tracks) {
             renderIcons();
             return;
         }
+        container.innerHTML = '<div class="empty-state">Плейлисты не найдены</div>';
+        return;
     }
 
     if (currentType === 'albums') {
-        const albumsMap = new Map();
-        tracks.forEach((t, idx) => {
-            if (t.type === 'album') {
-                const key = `${(t.title || '').toLowerCase()}_${(t.artist || '').toLowerCase()}`;
-                if (!albumsMap.has(key)) {
-                    albumsMap.set(key, t);
-                }
-            } else if (t.album && t.album !== 'Unknown Album' && t.album !== 'Spotify Album') {
-                const key = `${(t.album || '').toLowerCase()}_${(t.artist || '').toLowerCase()}`;
-                if (!albumsMap.has(key)) {
-                    albumsMap.set(key, {
-                        id: `album_${idx}`,
-                        title: t.album,
-                        artist: t.artist || 'Unknown Artist',
-                        year: t.year || '',
-                        cover_url: t.cover_url || t.cover_path || '',
-                        source: t.source || 'youtube',
-                        source_id: t.source_id || '',
-                        type: 'album',
-                        track_count: 1
-                    });
-                } else {
-                    const existing = albumsMap.get(key);
-                    existing.track_count = (existing.track_count || 1) + 1;
-                }
-            } else {
-                const key = `${(t.title || '').toLowerCase()}_${(t.artist || '').toLowerCase()}`;
-                if (!albumsMap.has(key)) {
-                    albumsMap.set(key, {
-                        id: t.id || `album_${idx}`,
-                        title: t.title,
-                        artist: t.artist || 'Unknown Artist',
-                        year: t.year || '',
-                        cover_url: t.cover_url || t.cover_path || '',
-                        source: t.source || 'youtube',
-                        source_id: t.source_id || '',
-                        type: 'album',
-                        track_count: 1
-                    });
-                }
-            }
-        });
-
-        const albumList = Array.from(albumsMap.values());
-        if (albumList.length > 0) {
-            renderAlbumGrid(albumList, container);
-            renderIcons();
-            return;
+        const albums = new Map();
+        for (const item of tracks) {
+            if (item.type !== 'album' || (item.source !== 'local' && !item.source_id)) continue;
+            const key = item.source === 'local' ? `local:${item.artist}:${item.title}` : `${item.source}:${item.source_id}`;
+            if (!albums.has(key)) albums.set(key, item);
         }
-    }
-
-    if (currentType === 'artists') {
-        const uniqueArtists = new Set();
-        tracks.forEach(t => { if (t.artist && t.artist !== 'Unknown Artist') uniqueArtists.add(t.artist); });
-        
-        const artistGrid = document.createElement('div');
-        artistGrid.className = 'artist-cards-grid';
-        artistGrid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; animation: fadeIn 0.3s ease;';
-
-        const artistList = uniqueArtists.size > 0 ? Array.from(uniqueArtists) : [currentSearchQuery];
-        artistList.slice(0, 8).forEach(artistName => {
-            const artistTrack = tracks.find(t => t.artist === artistName) || {};
-            const cover = artistTrack.cover_url || artistTrack.cover_path || '';
-
-            const card = document.createElement('div');
-            card.className = 'feed-card artist-card';
-            card.style.cssText = 'padding: 16px; border-radius: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; cursor: pointer; transition: transform 0.2s, background 0.2s;';
-            card.innerHTML = `
-                <div class="feed-card-cover" style="width: 90px; height: 90px; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, var(--primary), rgba(255,255,255,0.1)); display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 16px rgba(0,0,0,0.3);">
-                    ${cover ? `<img src="${escapeHtml(cover)}" alt="" onerror="this.onerror=null;this.style.display='none'" style="width:100%;height:100%;object-fit:cover;">` : '<i data-lucide="user" style="width:40px;height:40px;color:rgba(255,255,255,0.6)"></i>'}
-                </div>
-                <div style="font-weight: 700; font-size: 14px; color: #ffffff; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(artistName)}</div>
-                <div style="font-size: 11px; color: var(--text-sec);">Исполнитель • Профиль</div>
-                <button class="type-filter-btn active" style="margin-top: 4px; padding: 5px 14px; font-size: 11px; border-radius: 20px;">Открыть профиль</button>
-            `;
-            card.onclick = () => searchArtistProfile(artistName);
-            artistGrid.appendChild(card);
-        });
-
-        container.appendChild(artistGrid);
+        if (albums.size) renderAlbumGrid([...albums.values()], container);
+        else container.innerHTML = '<div class="empty-state">Альбомы не найдены</div>';
         renderIcons();
         return;
     }
+    if (currentType === 'artists') return;
 
     // Suggestion banner for artist profile in 'all' view
     if (currentType === 'all' && currentSearchQuery) {
@@ -444,7 +525,9 @@ function renderResults(tracks) {
             <button class="type-filter-btn active" style="margin: 0; padding: 4px 12px; font-size:11px;">Открыть</button>
         `;
         artistSuggest.querySelector('button').addEventListener('click', () => {
-            searchArtistProfile(currentSearchQuery);
+            // S4-001: the banner invites a profile for a free-text query, so the
+            // click must go through the candidate confirmation, not auto-open.
+            searchArtistProfile(currentSearchQuery, null, { require_candidates: true });
         });
         container.appendChild(artistSuggest);
     }
@@ -452,42 +535,66 @@ function renderResults(tracks) {
     renderSearchResultsBatch(container, displayTracks);
 }
 
-const SEARCH_BATCH_SIZE = 30;
+const SEARCH_BATCH_SIZE = 12;
 
-function renderSearchResultsBatch(container, displayTracks) {
+function renderSearchResultsBatch(container, displayTracks, replace = false) {
     if (searchBatchRafId) {
         cancelAnimationFrame(searchBatchRafId);
         searchBatchRafId = null;
     }
 
-    const list = document.createElement('div');
-    list.className = 'track-list';
-    container.appendChild(list);
-
-    let renderedCount = 0;
-    const currentTrack = getCurrentTrack();
-
-    function renderNextBatch() {
-        const start = renderedCount;
-        const end = Math.min(displayTracks.length, start + SEARCH_BATCH_SIZE);
-        const fragment = document.createDocumentFragment();
-
-        for (let i = start; i < end; i++) {
-            fragment.appendChild(createTrackElement(displayTracks[i], i, displayTracks, currentTrack));
-        }
-
-        list.appendChild(fragment);
-        renderIcons(list);
-        renderedCount = end;
-
-        if (renderedCount < displayTracks.length) {
-            searchBatchRafId = requestAnimationFrame(renderNextBatch);
-        } else {
-            searchBatchRafId = null;
-        }
+    let list = container.querySelector('.track-list');
+    if (!list) {
+        list = document.createElement('div');
+        list.className = 'track-list';
+        container.appendChild(list);
+    }
+    if (replace) {
+        list.innerHTML = '';
     }
 
-    renderNextBatch();
+
+
+    container.querySelector('.search-more-results')?.remove();
+    container.querySelector('.search-artists-shelf')?.remove();
+    list.replaceChildren();
+    const fragment = document.createDocumentFragment();
+    const end = Math.min(displayTracks.length, visibleSearchCount);
+    for (let index = 0; index < end; index++) fragment.appendChild(createTrackElement(displayTracks[index], index, displayTracks, getCurrentTrack()));
+    list.appendChild(fragment);
+    renderIcons(list);
+    if (end < displayTracks.length) {
+        const more = document.createElement('button');
+        more.className = 'home-pill search-more-results';
+        more.textContent = `Показать больше (${displayTracks.length - end})`;
+        more.addEventListener('click',()=>{visibleSearchCount += SEARCH_BATCH_SIZE;renderSearchResultsBatch(container,displayTracks);});
+        container.appendChild(more);
+    }
+    if (currentType === 'all') {
+        const artists = new Map();
+        for (const track of displayTracks) {
+            const people = track.artists?.length ? track.artists : [{name:track.artist}];
+            for (const person of people) {
+                const name = typeof person === 'string' ? person : person.name;
+                if (!name || artists.size >= 8) continue;
+                const key = `${track.source}:${person.id || person.browseId || name.toLowerCase()}`;
+                if (!artists.has(key)) artists.set(key,{name,track});
+            }
+        }
+        if (artists.size) {
+            const shelf = document.createElement('section');
+            shelf.className = 'search-artists-shelf';
+            shelf.innerHTML = '<h2>Исполнители</h2><div class="search-artists-cards"></div>';
+            for (const {name,track} of artists.values()) {
+                const button = document.createElement('button');
+                button.className = 'search-artist-card';
+                button.innerHTML = `${artistAvatarHtml(name)}<strong>${escapeHtml(name)}</strong>`;
+                button.addEventListener('click',()=>searchArtistProfile(name,{source:track.source,source_id:track.source_id}));
+                shelf.lastElementChild.appendChild(button);
+            }
+            container.appendChild(shelf);
+        }
+    }
 }
 
 function renderAlbumGrid(albums, container) {
@@ -514,7 +621,8 @@ function renderAlbumGrid(albums, container) {
         const cover = album.cover_url || album.cover_path || album.cover || '';
         const year = album.year ? `${album.year} г.` : '';
         const trackCountStr = album.track_count ? `${album.track_count} треков` : 'Альбом';
-        const metaStr = [year, trackCountStr].filter(Boolean).join(' • ');
+        const sourceLabel = album.source === 'local' ? 'Из библиотеки' : (album.source === 'youtube' ? 'YouTube Music' : 'iTunes');
+        const metaStr = [year, trackCountStr, sourceLabel].filter(Boolean).join(' • ');
 
         let hash = 0;
         for (let i = 0; i < title.length; i++) hash = ((hash << 5) - hash) + title.charCodeAt(i);
@@ -523,11 +631,11 @@ function renderAlbumGrid(albums, container) {
         const card = document.createElement('div');
         card.className = 'feed-card album-card';
         card.style.cssText = 'padding: 14px; border-radius: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative;';
-        
+
         card.innerHTML = `
             <div class="feed-card-cover album-cover-wrap fallback-gradient" style="width: 100%; aspect-ratio: 1/1; border-radius: 12px; overflow: hidden; background: ${grad}; display: flex; align-items: center; justify-content: center; position: relative; box-shadow: 0 8px 20px rgba(0,0,0,0.35);">
                 <svg class="fallback-note-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40%;height:40%;opacity:0.6;position:relative;z-index:1;"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-                ${cover ? `<img src="${escapeHtml(cover)}" alt="" onerror="this.onerror=null;this.style.display='none'" style="width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;z-index:2;">` : ''}
+                ${cover ? `<img src="${escapeHtml(cover)}" alt="" loading="lazy" decoding="async" data-hide-on-error="1" style="width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;z-index:2;">` : ''}
                 <div class="album-play-overlay" style="position:absolute; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity 0.2s; z-index:3;">
                     <button class="album-play-btn" style="width:44px; height:44px; border-radius:50%; background:var(--primary); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.4); transition:transform 0.2s;">
                         <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
@@ -576,6 +684,34 @@ function renderAlbumGrid(albums, container) {
     container.appendChild(albumGrid);
 }
 
+let albumFetchCleanup = null;
+let albumModalGeneration = 0;
+export async function fetchAlbumDetails(album) {
+    albumFetchCleanup?.();
+    const requestId = `album-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    if (!window.pywebview?.api?.get_album_details) return {status: 'unavailable'};
+    return new Promise(resolve => {
+        let timer;
+        const finish = data => {
+            clearTimeout(timer);
+            document.removeEventListener('nedotify:album_details_ready', receive);
+            if (albumFetchCleanup === cancel) albumFetchCleanup = null;
+            resolve(data);
+        };
+        const cancel = () => finish({status: 'unavailable', cancelled: true});
+        const receive = event => { if (event.detail?.request_id === requestId) finish(event.detail); };
+        albumFetchCleanup = cancel;
+        document.addEventListener('nedotify:album_details_ready', receive);
+        timer = setTimeout(() => finish({status: 'unavailable'}), 10000);
+        try {
+            Promise.resolve(window.pywebview.api.get_album_details(album, requestId))
+                .then(result => { if (result?.status !== 'loading') finish(result || {status: 'unavailable'}); })
+                .catch(() => finish({status: 'unavailable'}));
+        } catch (_) { finish({status: 'unavailable'}); }
+    });
+}
+window.fetchAlbumDetails = fetchAlbumDetails;
+
 export async function playAlbum(album, cardElement = null) {
     if (!album) return;
     const playBtn = cardElement?.querySelector('.album-play-btn');
@@ -584,21 +720,13 @@ export async function playAlbum(album, cardElement = null) {
     }
 
     try {
-        let tracks = [];
-        if (window.pywebview?.api?.get_album_tracks) {
-            tracks = await window.pywebview.api.get_album_tracks(album);
-        }
-
-        if (tracks && tracks.length > 0) {
-            if (window.pywebview?.api?.play_track) {
-                window.pywebview.api.play_track(tracks[0], tracks, 0);
-            }
+        const result = await fetchAlbumDetails(album);
+        if (result.cancelled) return;
+        const tracks = result.status === 'found' ? result.tracks || [] : [];
+        if (tracks.length && window.pywebview?.api?.play_track) {
+            await window.pywebview.api.play_track(tracks[0], tracks, 0);
         } else {
-            // Fallback: search query for album tracks
-            const q = `${album.artist || ''} ${album.title || ''}`.trim();
-            if (q && window.pywebview?.api?.search) {
-                window.pywebview.api.search(q, album.source || 'youtube');
-            }
+            showToast(result.status === 'unavailable' ? 'Не удалось проверить альбом. Попробуйте ещё раз.' : 'Альбом или его треклист не найден', 'info');
         }
     } catch (e) {
         console.error("Error playing album:", e);
@@ -617,10 +745,12 @@ export async function playAlbum(album, cardElement = null) {
 function hideDetailModal(modal) {
     if (!modal) return;
     modal.style.display = 'none';
+    if (modal.id === 'album-detail-modal') { albumModalGeneration++; albumFetchCleanup?.(); }
     closeModalFocusTrap(modal);
 }
 
 export async function openAlbumModal(album) {
+    const generation = ++albumModalGeneration;
     let modal = document.getElementById('album-detail-modal');
     if (!modal) {
         modal = document.createElement('div');
@@ -641,11 +771,11 @@ export async function openAlbumModal(album) {
                 </button>
             </div>
             <div style="padding:20px; display:flex; gap:20px; align-items:center; background:linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%);">
-                <img src="${escapeHtml(album.cover_url || album.cover || album.cover_path || '')}" alt="" onerror="this.onerror=null;this.style.display='none'" style="width:110px; height:110px; border-radius:12px; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+                <img src="${escapeHtml(album.cover_url || album.cover || album.cover_path || '')}" alt="" loading="lazy" decoding="async" data-hide-on-error="1" style="width:110px; height:110px; border-radius:12px; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
                 <div style="display:flex; flex-direction:column; gap:6px; flex:1; overflow:hidden;">
                     <div style="font-size:20px; font-weight:800; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(album.title || 'Альбом')}</div>
                     <div style="font-size:14px; color:var(--text-sec);">${escapeHtml(album.artist || 'Исполнитель')}</div>
-                    <div style="font-size:12px; color:var(--text-sec); opacity:0.8;">${album.year ? album.year + ' г. • ' : ''}${album.track_count ? album.track_count + ' треков' : 'Альбом'}</div>
+                    <div style="font-size:12px; color:var(--text-sec); opacity:0.8;">${album.year ? escapeHtml(String(album.year)) + ' г. • ' : ''}${album.track_count ? escapeHtml(String(album.track_count)) + ' треков' : 'Альбом'}</div>
                     <div style="margin-top:8px; display:flex; gap:10px;">
                         <button id="btn-play-full-album" style="padding:8px 18px; border-radius:24px; border:none; background:var(--primary); color:#fff; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;">
                             <i data-lucide="play" style="width:14px;height:14px;fill:currentColor"></i> Слушать всё
@@ -669,24 +799,24 @@ export async function openAlbumModal(album) {
         hideDetailModal(modal);
     }, { once: true });
 
-    let albumTracks = [];
-    if (window.pywebview?.api?.get_album_tracks) {
-        try {
-            albumTracks = await window.pywebview.api.get_album_tracks(album);
-        } catch (e) {
-            console.error("Error loading album tracks:", e);
-        }
-    }
-
+    const playAll = document.getElementById('btn-play-full-album');
+    if (playAll) playAll.disabled = true;
+    const result = await fetchAlbumDetails(album);
+    if (generation !== albumModalGeneration || result.cancelled || modal.style.display === 'none') return;
     const tracksContainer = document.getElementById('album-modal-tracks');
     if (!tracksContainer) return;
-
-    if (!albumTracks || albumTracks.length === 0) {
-        tracksContainer.innerHTML = '<div class="empty-state" style="padding:30px 0;">Треки этого альбома недоступны</div>';
+    if (result.status !== 'found') {
+        tracksContainer.innerHTML = `<div class="empty-state">${result.status === 'unavailable' ? 'Не удалось проверить альбом: каталог временно недоступен' : 'Альбом не найден в каталоге'}<button class="btn btn-secondary">Повторить</button></div>`;
+        tracksContainer.querySelector('button').addEventListener('click', () => openAlbumModal(album));
         return;
     }
-
-    tracksContainer.innerHTML = '';
+    const albumTracks = result.tracks || [];
+    if (!albumTracks.length) {
+        tracksContainer.innerHTML = '<div class="empty-state">Альбом подтверждён, но его треклист недоступен</div>';
+        return;
+    }
+    if (playAll) playAll.disabled = false;
+    tracksContainer.innerHTML = result.verified ? '' : '<div class="lyric-notice">Из библиотеки — данные из тегов файла</div>';
     albumTracks.forEach((t, idx) => {
         tracksContainer.appendChild(createTrackElement(t, idx, albumTracks, getCurrentTrack()));
     });
@@ -701,6 +831,7 @@ export async function openAlbumModal(album) {
 }
 
 window.openAlbumModal = openAlbumModal;
+window.playAlbum = playAlbum;
 
 export function renderPlaylistGrid(playlists, container) {
     const playlistGrid = document.createElement('div');
@@ -727,7 +858,7 @@ export function renderPlaylistGrid(playlists, container) {
         card.innerHTML = `
             <div class="feed-card-cover playlist-cover-wrap fallback-gradient" style="width: 100%; aspect-ratio: 1/1; border-radius: 12px; overflow: hidden; background: ${grad}; display: flex; align-items: center; justify-content: center; position: relative; box-shadow: 0 8px 20px rgba(0,0,0,0.35);">
                 <svg class="fallback-note-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40%;height:40%;opacity:0.6;position:relative;z-index:1;"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-                ${cover ? `<img src="${escapeHtml(cover)}" alt="" onerror="this.onerror=null;this.style.display='none'" style="width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;z-index:2;">` : ''}
+                ${cover ? `<img src="${escapeHtml(cover)}" alt="" loading="lazy" decoding="async" data-hide-on-error="1" style="width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;z-index:2;">` : ''}
                 <div class="playlist-play-overlay" style="position:absolute; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity 0.2s; z-index:3;">
                     <button class="playlist-play-btn" style="width:44px; height:44px; border-radius:50%; background:var(--primary); color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.4); transition:transform 0.2s;">
                         <i data-lucide="play" style="width:20px;height:20px;fill:currentColor"></i>
@@ -837,11 +968,11 @@ export async function openPlaylistModal(playlist) {
                 </button>
             </div>
             <div style="padding:20px; display:flex; gap:20px; align-items:center; background:linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%);">
-                <img src="${escapeHtml(playlist.cover_url || playlist.cover || playlist.cover_path || '')}" alt="" onerror="this.onerror=null;this.style.display='none'" style="width:110px; height:110px; border-radius:12px; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+                <img src="${escapeHtml(playlist.cover_url || playlist.cover || playlist.cover_path || '')}" alt="" loading="lazy" decoding="async" data-hide-on-error="1" style="width:110px; height:110px; border-radius:12px; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
                 <div style="display:flex; flex-direction:column; gap:6px; flex:1; overflow:hidden;">
                     <div style="font-size:20px; font-weight:800; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(playlist.title || playlist.name || 'Плейлист')}</div>
                     <div style="font-size:14px; color:var(--text-sec);">${escapeHtml(playlist.author || playlist.artist || 'NeDotify')}</div>
-                    <div style="font-size:12px; color:var(--text-sec); opacity:0.8;">${playlist.track_count ? playlist.track_count + ' треков' : 'Плейлист'}</div>
+                    <div style="font-size:12px; color:var(--text-sec); opacity:0.8;">${playlist.track_count ? escapeHtml(String(playlist.track_count)) + ' треков' : 'Плейлист'}</div>
                     <div style="margin-top:8px; display:flex; gap:10px;">
                         <button id="btn-play-full-playlist" style="padding:8px 18px; border-radius:24px; border:none; background:var(--primary); color:#fff; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;">
                             <i data-lucide="play" style="width:14px;height:14px;fill:currentColor"></i> Слушать всё
@@ -946,6 +1077,11 @@ function showLoadingArtist(query) {
 }
 
 function showPlaceholder() {
+    searchPending = false;
+    activeSearchRequestId = null;
+    searchSuggestionGeneration++;
+    suggestionRequestKey = '';
+    setDiscoveryMode('history');
     if (searchBatchRafId) {
         cancelAnimationFrame(searchBatchRafId);
         searchBatchRafId = null;
@@ -955,6 +1091,103 @@ function showPlaceholder() {
         container.innerHTML = '<div class="empty-state"><i data-lucide="search" style="width:40px;height:40px;opacity:0.3"></i><span>Введите запрос для поиска музыки</span></div>';
         renderIcons(container);
     }
+}
+
+function syncTypeButtons() {
+    document.querySelectorAll('.type-filter-btn[data-type]').forEach(button => {
+        const active=button.dataset.type===currentType;
+        button.classList.toggle('active',active);
+        button.setAttribute('aria-pressed',String(active));
+    });
+}
+
+function renderOfflineSearchNote(container) {
+    if (!searchIsOffline || container.querySelector('[data-offline-search]')) return;
+    const note = document.createElement('p');
+    note.className = 'search-query-alternatives';
+    note.dataset.offlineSearch = 'true';
+    note.textContent = 'Офлайн: поиск среди музыки, доступной на этом компьютере.';
+    container.prepend(note);
+}
+
+function renderCorrectionContext(container) {
+    if (!correctionContext || correctionContext.query !== currentSearchQuery) return;
+    if (container.querySelector('[data-original-query]')) return;
+    const banner = document.createElement('div');
+    banner.className = 'search-query-alternatives';
+    banner.dataset.originalQuery = correctionContext.original;
+    const text = document.createElement('p');
+    text.textContent = `Поиск «${correctionContext.query}» вместо «${correctionContext.original}».`;
+    const original = document.createElement('button');
+    original.className = 'home-pill';
+    original.textContent = `Искать исходный запрос «${correctionContext.original}»`;
+    original.onclick = () => startSuggestedSearch(correctionContext.original);
+    banner.append(text, original);
+    container.prepend(banner);
+}
+
+function startSuggestedSearch(query, original = null) {
+    const input = document.getElementById('search-input');
+    if (input) input.value = query;
+    clearTimeout(searchDebounce);
+    allResults = [];
+    lastResultKey = null;
+    currentSearchQuery = query;
+    correctionContext = original ? { original, query } : null;
+    saveSearchQuery(query);
+    showLoading();
+    runSearchQuery(query, true);
+}
+
+async function offerSearchCorrections() {
+    if (currentType === 'artists' || currentType === 'genres') return;
+    const query = currentSearchQuery, source = currentSource, type = currentType;
+    const key = `${query}|${source}|${type}`;
+    if (suggestionRequestKey === key) return;
+    suggestionRequestKey = key;
+    const generation = searchSuggestionGeneration;
+    try {
+        const suggestions = await window.pywebview?.api?.get_search_suggestions?.(query);
+        if (generation !== searchSuggestionGeneration || query !== currentSearchQuery || source !== currentSource || type !== currentType || allResults.length) return;
+        const container = document.getElementById('search-results');
+        if (!container || !Array.isArray(suggestions) || !suggestions.length) return;
+        const alternatives = document.createElement('div');
+        alternatives.className = 'search-query-alternatives';
+        const description = document.createElement('p');
+        description.textContent = 'Ничего не найдено. Попробуйте другую раскладку или исправление опечатки:';
+        alternatives.appendChild(description);
+        for (const suggestion of suggestions.slice(0,3)) {
+            if (typeof suggestion?.query !== 'string' || !suggestion.query.trim() || suggestion.query === query) continue;
+            const button = document.createElement('button');
+            button.className = 'home-pill';
+            button.textContent = `${suggestion.query} (${suggestion.reason === 'layout' ? 'раскладка' : 'опечатка'})`;
+            button.onclick = () => startSuggestedSearch(suggestion.query, correctionContext?.original || query);
+            alternatives.appendChild(button);
+        }
+        if (alternatives.children.length > 1) container.appendChild(alternatives);
+    } catch {}
+}
+
+function runSearchQuery(query, keepCorrection = false) {
+    clearTimeout(searchDebounce);
+    searchSuggestionGeneration++;
+    suggestionRequestKey = '';
+    searchIsOffline = false;
+    if (!keepCorrection) correctionContext = null;
+    if (currentType === 'genres') {currentType='tracks';syncTypeButtons();}
+    if (currentType === 'artists') {searchArtistProfile(query, null, { require_candidates: true });return;}
+    const type=currentType, source=currentSource;
+    visibleSearchCount = 12;
+    searchPending = true;
+    const requestId = activeSearchRequestId = `search-${++searchRequestGeneration}`;
+    Promise.resolve().then(()=>api('search',query,source,type==='all'?null:type,requestId)).catch(()=>{
+        if(requestId!==activeSearchRequestId || query!==currentSearchQuery || type!==currentType || source!==currentSource) return;
+        searchPending = false;
+        const container=document.getElementById('search-results');
+        if(!container) return;
+        container.innerHTML='<div class="search-discovery-empty"><strong>Не удалось выполнить поиск</strong><p>Проверьте подключение или выберите другую площадку.</p><button class="home-pill">Повторить</button></div>';
+        container.querySelector('button').onclick=()=>{showLoading();runSearchQuery(query);};
+    });
 }
 
 function api(method, ...args) {
@@ -969,13 +1202,6 @@ function api(method, ...args) {
 
 const SEARCH_HISTORY_KEY = 'nedotify_search_history';
 const MAX_SEARCH_HISTORY = 8;
-const POPULAR_GENRES = [
-    { label: 'Lo-Fi', query: 'Lo-Fi Chill Beats', icon: '🎧' },
-    { label: 'Rock', query: 'Classic Rock Hits', icon: '🎸' },
-    { label: 'Electronic', query: 'Electronic Dance', icon: '⚡' },
-    { label: 'Podcast', query: 'Подкасты', icon: '🎙️' }
-];
-
 export function getSearchHistory() {
     try {
         const raw = localStorage.getItem(SEARCH_HISTORY_KEY);
@@ -1006,7 +1232,7 @@ export function removeSearchQuery(queryToDelete) {
 }
 
 /**
- * Инициализирует выпадающее меню с чипсами и историей запросов
+ * Инициализирует выпадающее меню с историей запросов
  */
 export function setupSmartSearchSuggestions() {
     const searchHeader = document.querySelector('.search-header-container');
@@ -1025,32 +1251,19 @@ export function setupSmartSearchSuggestions() {
     const renderSuggestions = () => {
         const history = getSearchHistory();
 
-        // 1. Рендерим жанровые чипсы
-        const chipsHtml = POPULAR_GENRES.map(g => `
-            <button class="search-chip" data-query="${escapeHtml(g.query)}">
-                <span>${g.icon}</span>
-                <span>${escapeHtml(g.label)}</span>
-            </button>
-        `).join('');
-
-        // 2. Рендерим элементы истории
         const historyHtml = history.length > 0 ? history.map(item => `
-            <div class="search-history-item" data-query="${escapeHtml(item)}">
-                <div class="search-history-query">
+            <div class="search-history-item">
+                <button type="button" class="search-history-query" data-query="${escapeHtml(item)}">
                     <i data-lucide="history" style="width:14px;height:14px;opacity:0.6;"></i>
                     <span>${escapeHtml(item)}</span>
-                </div>
-                <button class="search-history-delete-btn" data-delete-query="${escapeHtml(item)}" title="Удалить из истории">
+                </button>
+                <button class="search-history-delete-btn" data-delete-query="${escapeHtml(item)}" title="Удалить из истории" aria-label="Удалить запрос: ${escapeHtml(item)}">
                     <i data-lucide="x" style="width:12px;height:12px"></i>
                 </button>
             </div>
-        `).join('') : '<div style="font-size:12px;color:var(--color-text-dim);padding:4px 0;">История поиска пуста</div>';
+        `).join('') : '<div class="search-history-empty"><i data-lucide="search"></i><strong>Здесь будут ваши поиски</strong><span>Найдите трек, альбом или исполнителя</span></div>';
 
         dropdown.innerHTML = `
-            <div class="search-chips-row">
-                <span class="search-chips-label">Быстрые жанры</span>
-                <div class="search-chips-list">${chipsHtml}</div>
-            </div>
             <div class="search-history-section">
                 <div class="search-history-header">
                     <span>Недавние поиски</span>
@@ -1091,20 +1304,42 @@ export function setupSmartSearchSuggestions() {
             return;
         }
 
-        // Клик по чипсу или элементу истории -> запуск поиска
-        const triggerEl = e.target.closest('.search-chip, .search-history-item');
+        // Повторить сохранённый запрос обычным поиском.
+        const triggerEl = e.target.closest('.search-history-query');
         if (triggerEl) {
             const query = triggerEl.dataset.query;
             if (query) {
                 input.value = query;
+                setSearchLayout(true);
                 saveSearchQuery(query);
                 dropdown.classList.add('hidden');
                 isViewingArtistProfile = false;
                 allResults = [];
                 currentSearchQuery = query;
                 showLoading();
-                api('search', query, currentSource, currentType === 'all' ? null : currentType);
+                runSearchQuery(query);
             }
+        }
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' && !dropdown.classList.contains('hidden')) {
+            const first = dropdown.querySelector('.search-history-query');
+            if (first) { e.preventDefault(); first.focus(); }
+        }
+    });
+    dropdown.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            input.focus();
+            dropdown.classList.add('hidden');
+            e.preventDefault();
+        } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            const rows = [...dropdown.querySelectorAll('.search-history-query')];
+            const index = rows.indexOf(document.activeElement);
+            const next = index + (e.key === 'ArrowDown' ? 1 : -1);
+            e.preventDefault();
+            if (next < 0) input.focus();
+            else rows[Math.min(next, rows.length - 1)]?.focus();
         }
     });
 
@@ -1115,8 +1350,3 @@ export function setupSmartSearchSuggestions() {
         }
     });
 }
-
-
-
-
-

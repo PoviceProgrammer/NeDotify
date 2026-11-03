@@ -9,8 +9,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import run_pyprof as R  # noqa: E402
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+from tools.bench import run_pyprof as R  # noqa: E402
 
 TARGETS = [
     "_colorize", "traceback", "dataclasses", "inspect", "re", "logging",

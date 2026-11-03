@@ -14,35 +14,19 @@
    cascade would no longer end with the theme overrides. The individual <link>
    tags are the single source of truth.
 
-   AUTHORITATIVE LOAD ORDER
-   Whatever index.html lists, and only that. It currently reads:
+   LOAD ORDER RECORD
+   index.html is authoritative; it loads fonts.css, tokens.css, the base and
+   player/view styles, themes.css, then the home/search/library/downloads,
+   smart-playlist, feature, settings, onboarding, profile, resize, visual
+   polish, UI-style-picker and macOS pack stylesheets. Several component
+   sheets after themes.css intentionally override earlier rules.
 
-     1. css/fonts.css                   self-hosted @font-face manifest
-     2. css/tokens.css                  design tokens (colour, space, radius)
-     3. css/components/base.css         reset, layout, modals, menus, toasts
-     4. css/components/player-bar.css
-     5. css/components/player-view.css
-     6. css/components/lyrics.css
-     7. css/components/home-view.css
-     8. css/components/track-table.css
-     9. css/themes.css                  theme overrides — MUST stay last
-
-   In short: tokens -> components -> themes. fonts.css sits ahead of all of
-   them because @font-face has to exist before anything asks for the family.
-
-   ON components/visual-polish.css
-   It is listed at the end below to keep the architecture documented, but
-   index.html does NOT link it, so in the shipped app it is currently dead.
-   The @import is kept on purpose: the file is additive override CSS that is
-   designed to be switched on, and removing the line here would erase the only
-   remaining record that the pack exists. Whether it is actually loaded is
-   decided by index.html, not by this file.
-
-   Note for tooling: tools/bench/css_inventory.py treats this file as the
-   entrypoint — it parses styles.css, and hard-codes an IMPORT_ORDER list that
-   mirrors the @import chain below. That order is therefore a good description
-   of intent, but it is *not* what the browser executes — the browser never
-   sees this file.
+   This import list is a tooling inventory used by tools/bench/css_inventory.py;
+   it is not loaded by the app. It mirrors the shared desktop component layers
+   through visual-polish.css. The onboarding, UI-style-picker and MACos_ui
+   sheets are linked directly by index.html and remain outside this inventory.
+   Keep both this import inventory and the index links in sync when adding or
+   reordering shared component styles.
 
    The original monolithic stylesheet that these were split out of is not kept
    in this directory; there is no css/styles.old.css here. Its history lives in
@@ -57,4 +41,13 @@
 @import "components/home-view.css";
 @import "components/track-table.css";
 @import "themes.css";
+@import "components/home-refresh.css";
+@import "components/search-refresh.css";
+@import "components/library-refresh.css";
+@import "components/downloads-view.css";
+
+@import "components/feature-tools.css";
+@import "components/settings-refresh.css";
+@import "components/profile-refresh.css";
+@import "components/window-resize.css";
 @import "components/visual-polish.css";

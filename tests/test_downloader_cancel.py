@@ -46,7 +46,8 @@ class _GatedStub:
         with open(fp, "wb") as f:
             # Above _MIN_AUDIO_BYTES: the real path rejects a truncated file,
             # and a 16-byte payload made every "success" assertion fail.
-            f.write(b"ID3\x00\x01gated-audio" + b"\x00" * 8192)
+            from tests.audio_helpers import wave_bytes
+            f.write(wave_bytes())
         with self._lock:
             self.finished += 1
         return fp
@@ -180,6 +181,31 @@ def test_full_cancel_terminates_batch_progress_exactly_once(downloader, core_ns,
     assert payload is True, "frontend contract: payload stays the literal True"
 
 
+def test_cancel_batch_issues_only_one_queue_bulk_update(downloader, tmp_db, emitted):
+    ids = _add_tracks(tmp_db, 2, prefix="single-cancel-")
+    for track_id, status in zip(ids, ("pending", "downloading")):
+        tmp_db.download_queue_add(track_id, "youtube", f"v{track_id}")
+        tmp_db.download_queue_set_status(track_id, status)
+    columns = {row[1] for row in tmp_db.conn.execute("PRAGMA table_info(download_queue)")}
+    if "resume_on_restart" in columns:
+        tmp_db.conn.execute("UPDATE download_queue SET resume_on_restart=1 WHERE track_id IN (?,?)", ids)
+        tmp_db.conn.commit()
+
+    statements = []
+    tmp_db.conn.set_trace_callback(statements.append)
+    downloader.cancel_batch()
+    tmp_db.conn.set_trace_callback(None)
+
+    updates = [sql for sql in statements if sql.lstrip().upper().startswith("UPDATE DOWNLOAD_QUEUE")]
+    assert len(updates) == 1
+    for track_id in ids:
+        assert tmp_db.download_queue_get_status(track_id) == "cancelled"
+    if "resume_on_restart" in columns:
+        assert tmp_db.conn.execute(
+            "SELECT COUNT(*) FROM download_queue WHERE track_id IN (?,?) AND resume_on_restart=1", ids
+        ).fetchone()[0] == 0
+
+
 def test_stale_task_aborts_without_emitting_download_complete(downloader, tmp_db,
                                                               youtube_stub, emitted,
                                                               redirect_home):
@@ -188,6 +214,7 @@ def test_stale_task_aborts_without_emitting_download_complete(downloader, tmp_db
     Deterministic (no processor thread): the item keeps the epoch it was queued
     with, so it aborts at the very first stage check.
     """
+    tmp_db.add_track(title='Queue', source='youtube', source_id='v1')
     downloader.start_batch(2)
     assert downloader.queue_download(1, "youtube", "v1") is True
     with downloader._queue_lock:
@@ -330,6 +357,7 @@ def test_batch_finished_is_never_emitted_under_a_lock(downloader, tmp_db,
         real_emit(event_name, data)
 
     monkeypatch.setattr(downloader, "_emit", _spy)
+    tmp_db.add_track(title='Queue', source='youtube', source_id='v1')
     downloader.start_batch(1)
     assert downloader.queue_download(1, "youtube", "v1") is True
     if case == "in-memory-dup":
@@ -367,8 +395,11 @@ def test_vk_source_fails_with_source_specific_error(downloader, tmp_db, emitted,
     failed = [d for e, d in emitted if e == "download_failed"]
     assert len(failed) == 1
     assert failed[0]["track_id"] == tid
-    assert "no download provider for source 'vk'" in failed[0]["error"].lower()
-    assert "returned none or file missing" not in failed[0]["error"]
+    assert failed[0]["error"] == failed[0]["message"]
+    assert "подробности сохранены" in failed[0]["error"].lower()
+    stored = next(row for row in downloader.get_downloads() if row['track_id'] == tid)
+    assert "no download provider for source 'vk'" in stored['error'].lower()
+    assert "returned none or file missing" not in stored['error'].lower()
     assert tmp_db.get_track(tid)["is_downloaded"] == 0
     assert tmp_db.get_track(tid)["file_path"] is None
     assert tmp_db.download_queue_get_status(tid) == "failed"

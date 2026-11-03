@@ -44,6 +44,9 @@ class WSClient:
         self._sock: socket.socket | None = None
         self._buf = b""
         self._lock = threading.Lock()
+        # Calls and ping replies may write from different threads. WebSocket
+        # frames must remain contiguous on the shared socket.
+        self._send_lock = threading.Lock()
         self._id = 0
         self._pending: dict[int, dict] = {}
         self._events: list[dict] = []
@@ -112,7 +115,11 @@ class WSClient:
             header += struct.pack("!H", n) if n < (1 << 16) else struct.pack("!Q", n)
         mask = os.urandom(4)
         header += mask
-        self._sock.sendall(bytes(header) + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
+        frame = bytes(header) + bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+        with self._send_lock:
+            if self._sock is None:
+                raise CDPError("not connected")
+            self._sock.sendall(frame)
 
     def _recv_loop(self) -> None:
         try:
@@ -189,7 +196,9 @@ class WSClient:
             "awaitPromise": await_promise,
             "returnByValue": True,
         }, timeout=timeout)
-        details = res.get("exceptionDetails")
+        # Runtime.evaluate wraps RemoteObject and exceptionDetails inside the
+        # top-level result object (CDP's command envelope has its own result).
+        details = res.get("result", {}).get("exceptionDetails") or res.get("exceptionDetails")
         if details:
             raise CDPError(f"JS exception: {json.dumps(details)[:400]}")
         return res.get("result", {}).get("result", {}).get("value")
@@ -198,6 +207,38 @@ class WSClient:
 # --------------------------------------------------------------------------
 # CDP session with the NeDotify-specific conveniences
 # --------------------------------------------------------------------------
+class NativeWebViewClient(WSClient):
+    """Bench-only CDP transport through WebView2 when its TCP port is blocked.
+
+    Called from the benchmark worker, never the WinForms UI thread. Only the
+    asynchronous command submission is marshalled to that thread; waiting there
+    would deadlock WebView2. Command/result semantics match the socket client.
+    """
+
+    def __init__(self, window):
+        self.window = window
+        self.timeout = 40.0
+
+    def call(self, method, params=None, timeout=None):
+        from System import Func, Object
+        control = self.window.native.browser.webview
+        task = control.Invoke(Func[Object](lambda:
+            control.CoreWebView2.CallDevToolsProtocolMethodAsync(
+                method, json.dumps(params or {}))))
+        deadline = time.monotonic() + (timeout or self.timeout)
+        while not task.IsCompleted:
+            if time.monotonic() >= deadline:
+                raise CDPError(f"timeout waiting for native {method}")
+            time.sleep(0.002)
+        try:
+            return {"result": json.loads(str(task.GetAwaiter().GetResult()))}
+        except Exception as exc:
+            raise CDPError(f"native CDP {method} failed: {exc}") from exc
+
+    def close(self):
+        pass  # The application owns the WebView and its lifecycle.
+
+
 class CDPSession:
     def __init__(self, ws: WSClient):
         self.ws = ws
@@ -217,6 +258,20 @@ class CDPSession:
         except CDPError:
             pass
         return s
+
+    @classmethod
+    def attach_native(cls, timeout: float = 60.0):
+        import webview
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            for window in list(webview.windows):
+                if window.events.loaded.is_set() and getattr(window, 'native', None):
+                    session = cls(NativeWebViewClient(window))
+                    for method in ('Runtime.enable', 'Page.enable', 'Performance.enable'):
+                        session.ws.call(method)
+                    return session
+            time.sleep(0.05)
+        raise CDPError('no loaded native WebView2 for benchmark')
 
     def close(self) -> None:
         self.ws.close()
@@ -315,7 +370,12 @@ class CDPSession:
           const origEmit = window.onPythonEvent;
           if (typeof origEmit === 'function') {
             window.onPythonEvent = function(name, payload) {
-              try { window.__bench.pythonEvents.push({ name: String(name), t: performance.now() }); } catch (e) {}
+              try {
+                const event = { name: String(name), t: performance.now() };
+                if (name === 'state_changed' && payload) event.state = String(payload.state || '');
+                if (name === 'download_complete' && payload) event.track_id = payload.track_id;
+                window.__bench.pythonEvents.push(event);
+              } catch (e) {}
               return origEmit.apply(this, arguments);
             };
           }

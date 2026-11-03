@@ -303,31 +303,25 @@ def test_unknown_source_returns_none(source):
     assert engine.resolve_stream_url(track) is None
 
 
-def test_source_id_falls_back_to_the_row_id():
-    """``source_id or id`` - the id fallback is what reaches the resolver."""
+def test_missing_source_id_uses_metadata_cache_key_not_database_row_id():
+    """A local row id is not the provider ID or the resolver identity."""
     resolver = _RecordingResolver()
     engine = _engine(_core(resolver=resolver,
                            youtube=_Youtube(error="no stream")))
 
     engine.resolve_stream_url({"id": 4242, "source": "youtube", "title": "T", "artist": "A"})
 
-    assert resolver.resolved == [("youtube", 4242)]
+    assert resolver.resolved == [("youtube", "A T")]
 
 
-def test_row_id_shadows_the_artist_title_derivation():
-    """Pinned precedence: a present (truthy) ``id`` wins over "artist title".
-
-    audio/engine.py:126 takes ``source_id or id`` FIRST, so the derivation on
-    line 132 can only ever run for a track that has neither - a dict straight
-    from a search result, never a DB row (which always carries its id).
-    """
+def test_database_row_id_does_not_replace_missing_provider_id():
     resolver = _RecordingResolver()
     engine = _engine(_core(resolver=resolver,
                            youtube=_Youtube(error="no stream")))
 
     engine.resolve_stream_url({"id": 1, "source": "youtube", "title": "Song", "artist": "Artist"})
 
-    assert resolver.resolved == [("youtube", 1)]
+    assert resolver.resolved == [("youtube", "Artist Song")]
 
 
 def test_source_id_is_built_from_artist_and_title_when_missing():
@@ -420,7 +414,11 @@ def test_youtube_direct_extraction_builds_the_watch_url():
     assert yt.stream_calls == ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]
 
 
-def test_youtube_source_id_that_is_already_a_url_is_passed_through():
+def test_youtube_source_id_that_is_already_a_url_is_passed_through(monkeypatch):
+    # This unit test covers URL pass-through, not DNS safety. The production
+    # public-address guard has dedicated tests and should not make this test
+    # depend on live DNS or the machine's network policy.
+    monkeypatch.setattr(engine_mod, "is_safe_media_url", lambda _url: True)
     yt = _Youtube(stream="http://yt/stream")
     engine = _engine(_core(youtube=yt))
     direct = "https://youtu.be/dQw4w9WgXcQ"
@@ -442,7 +440,8 @@ def test_youtube_skips_direct_extraction_for_unusable_source_ids(source_id):
 def test_youtube_extraction_failure_falls_through_to_the_cascade():
     log = []
     yt = _Youtube(error="Sign in to confirm you're not a bot", log=log)
-    sc = _SoundCloud(results=[{"source_id": "77", "source_url": "https://soundcloud.com/a/b"}],
+    sc = _SoundCloud(results=[{"source_id": "77", "source_url": "https://soundcloud.com/a/b",
+                               "title": "Song", "artist": "Artist"}],
                      stream="http://sc/stream", log=log)
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
@@ -453,7 +452,8 @@ def test_youtube_extraction_failure_falls_through_to_the_cascade():
 def test_youtube_extraction_that_raises_does_not_break_the_cascade():
     log = []
     yt = _Youtube(raises=True, log=log)
-    sc = _SoundCloud(results=[{"source_id": "77"}], stream="http://sc/stream", log=log)
+    sc = _SoundCloud(results=[{"source_id": "77", "title": "Song", "artist": "Artist"}],
+                     stream="http://sc/stream", log=log)
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
     assert engine.resolve_stream_url(_yt_track()) == "http://sc/stream"
@@ -525,13 +525,6 @@ def test_youtube_duration_is_not_persisted_for_a_track_without_an_id():
     assert db.updated == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG audio/engine.py:406 - the SoundCloud branch divides the provider's "
-           "duration by 1000, but services/soundcloud_service.py:483 already returns "
-           "SECONDS, so int(240/1000) == 0 and the duration is never persisted "
-           "(a 30-minute track would be stored as 1 second)",
-)
 def test_soundcloud_duration_is_persisted_in_seconds():
     db = _Db()
     sc = _SoundCloud(stream="http://sc/stream", meta={"duration": 240})
@@ -544,9 +537,8 @@ def test_soundcloud_duration_is_persisted_in_seconds():
     assert track["duration"] == 240
 
 
-def test_soundcloud_duration_units_are_inconsistent_with_the_youtube_branch():
-    """The two branches of the same function disagree about the units: given the
-    identical metadata payload, one persists it and the other drops it."""
+def test_soundcloud_duration_matches_provider_seconds():
+    """SoundCloud metadata is already measured in seconds, like YouTube."""
     db = _Db()
     sc = _SoundCloud(stream="http://sc/stream", meta={"duration": 240})
     engine = _engine(_core(soundcloud=sc, db=db))
@@ -554,17 +546,17 @@ def test_soundcloud_duration_units_are_inconsistent_with_the_youtube_branch():
     engine.resolve_stream_url({"id": 5, "source": "soundcloud", "source_id": "77",
                                "title": "Song", "artist": "A", "duration": 0})
 
-    assert db.updated == [], (
-        "documents BUG audio/engine.py:406 - /1000 turns the provider's 240s into 0"
-    )
+    assert db.updated == [(5, {"duration": 240})]
 
 
 # --------------------------------------------------------------------------- #
 # YouTube branch: tier 1 - SoundCloud search fallback
 # --------------------------------------------------------------------------- #
 
-def test_soundcloud_fallback_uses_the_first_search_hit():
-    sc = _SoundCloud(results=[{"source_id": "77", "source_url": "https://soundcloud.com/a/b"}],
+def test_soundcloud_fallback_uses_the_first_verifiable_search_hit():
+    """BUG-A1-005: the hit is extracted only after it matches the recording."""
+    sc = _SoundCloud(results=[{"source_id": "77", "source_url": "https://soundcloud.com/a/b",
+                               "title": "Song", "artist": "Artist"}],
                      stream="http://sc/stream")
     engine = _engine(_core(youtube=_Youtube(error="no stream"), soundcloud=sc))
 
@@ -573,26 +565,26 @@ def test_soundcloud_fallback_uses_the_first_search_hit():
 
 
 def test_soundcloud_fallback_falls_back_to_source_id_without_a_url():
-    sc = _SoundCloud(results=[{"source_id": "77"}], stream="http://sc/stream")
+    sc = _SoundCloud(results=[{"source_id": "77", "title": "Song", "artist": "Artist"}], stream="http://sc/stream")
     engine = _engine(_core(youtube=_Youtube(error="no stream"), soundcloud=sc))
 
     assert engine.resolve_stream_url(_yt_track()) == "http://sc/stream"
     assert sc.stream_calls == ["77"]
 
 
-def test_soundcloud_fallback_without_usable_ids_still_calls_the_provider():
-    """Pinned current behaviour: the engine does not filter a hit that carries
-    neither source_url nor source_id, it forwards None to the provider."""
+def test_soundcloud_fallback_rejects_a_hit_without_usable_ids():
+    """BUG-A1-005: a hit that cannot be identified (no ids, foreign title) is
+    never forwarded to the provider - no candidate, no extraction."""
     sc = _SoundCloud(results=[{"title": "no ids here"}], stream="http://sc/stream")
     engine = _engine(_core(youtube=_Youtube(error="no stream"), soundcloud=sc))
 
-    assert engine.resolve_stream_url(_yt_track()) == "http://sc/stream"
-    assert sc.stream_calls == [None]
+    assert engine.resolve_stream_url(_yt_track()) is None
+    assert sc.stream_calls == []
 
 
 def test_soundcloud_fallback_caches_the_resolved_url():
     db = _Db()
-    sc = _SoundCloud(results=[{"source_id": "77"}], stream="http://sc/stream")
+    sc = _SoundCloud(results=[{"source_id": "77", "title": "Song", "artist": "Artist"}], stream="http://sc/stream")
     engine = _engine(_core(youtube=_Youtube(error="no stream"), soundcloud=sc, db=db))
 
     engine.resolve_stream_url(_yt_track())
@@ -612,8 +604,8 @@ def test_soundcloud_fallback_caches_without_a_track_id():
 
 
 def test_soundcloud_fallback_failure_moves_to_the_next_candidate():
-    sc = _SoundCloud(results=[{"source_id": "77"}], error="preview only")
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+    sc = _SoundCloud(results=[{"source_id": "77", "title": "Song", "artist": "Artist"}], error="preview only")
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid", "title": "Song", "artist": "Artist"}],
                   streams={"newvid": "http://yt/tier2"})
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
@@ -627,7 +619,7 @@ def test_soundcloud_fallback_failure_moves_to_the_next_candidate():
 
 def test_soundcloud_stage_is_skipped_when_the_provider_is_missing():
     """No soundcloud service => no SoundCloud search, straight to tier 2."""
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid", "title": "Song", "artist": "Artist"}],
                   streams={"newvid": "http://yt/tier2"})
     engine = _engine(_core(youtube=yt, soundcloud=None))
     engine.app_core.soundcloud = None
@@ -645,7 +637,7 @@ def test_a_missing_soundcloud_provider_does_not_burn_the_stage_timeout():
     2-candidate track) - 2.5s x N of pure dead time on every resolve, for every
     user who has no SoundCloud service configured.
     """
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid", "title": "Song", "artist": "Artist"}],
                   streams={"newvid": "http://yt/tier2"})
     engine = _engine(_core(youtube=yt, soundcloud=None))
     engine.app_core.soundcloud = None
@@ -664,7 +656,7 @@ def test_soundcloud_search_that_raises_is_survived():
         raise RuntimeError("provider exploded")
 
     sc.search = _boom
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid", "title": "Song", "artist": "Artist"}],
                   streams={"newvid": "http://yt/tier2"})
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
@@ -723,13 +715,13 @@ def test_soundcloud_stage_requests_at_most_three_hits():
 # --------------------------------------------------------------------------- #
 
 def test_tier2_search_query_and_extraction_of_the_new_id():
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid", "title": "Song", "artist": "Artist"}],
                   streams={"newvid": "http://yt/tier2"})
     sc = _SoundCloud(error="no stream")
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
     assert engine.resolve_stream_url(_yt_track()) == "http://yt/tier2"
-    assert yt.search_calls == [("Artist Song audio", 1)]
+    assert yt.search_calls == [("Artist Song audio", 5)]
     assert yt.stream_calls == [
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",  # tier 0
         "newvid",                                        # tier 2
@@ -773,7 +765,7 @@ def test_tier2_does_not_cache_the_url_it_finds():
     """Tier 2 is the last resort: its URL is not written to stream_cache
     (only the SoundCloud stage persists), so the next resolve re-runs."""
     db = _Db()
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid", "title": "Song", "artist": "Artist"}],
                   streams={"newvid": "http://yt/tier2"})
     engine = _engine(_core(youtube=yt, soundcloud=_SoundCloud(error="no stream"), db=db))
 
@@ -831,14 +823,14 @@ def test_a_fast_cascade_still_reaches_tier_two(monkeypatch):
     clock = _fake_clock(monkeypatch)
 
     sc = _SoundCloud(error="no stream", clock=clock, cost=4.0)
-    yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
+    yt = _Youtube(error="no stream", results=[{"source_id": "newvid", "title": "Song", "artist": "Artist"}],
                   streams={"newvid": "http://yt/tier2"},
                   clock=clock)
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
     assert engine.resolve_stream_url(_yt_track()) == "http://yt/tier2"
     assert len(sc.search_calls) == 2
-    assert yt.search_calls == [("Artist Song audio", 1)]
+    assert yt.search_calls == [("Artist Song audio", 5)]
 
 
 def test_the_budget_covers_the_stream_extraction_step_too(monkeypatch):
@@ -847,7 +839,7 @@ def test_the_budget_covers_the_stream_extraction_step_too(monkeypatch):
     deadline before every candidate, audio/engine.py:277)."""
     clock = _fake_clock(monkeypatch)
 
-    sc = _SoundCloud(results=[{"source_id": "77"}], clock=clock, cost=5.0)
+    sc = _SoundCloud(results=[{"source_id": "77", "title": "Song", "artist": "Artist"}], clock=clock, cost=5.0)
     yt = _Youtube(error="no stream", results=[{"source_id": "newvid"}],
                   streams={"newvid": "http://yt/tier2"},
                   clock=clock)
@@ -950,7 +942,9 @@ def test_no_oembed_lookup_for_a_real_title(_no_network):
 # SoundCloud / Spotify / Yandex branches
 # --------------------------------------------------------------------------- #
 
-def test_soundcloud_branch_resolves_the_permalink_directly():
+def test_soundcloud_branch_resolves_the_permalink_directly(monkeypatch):
+    # Provider selection is tested here; public/private DNS policy has its own suite.
+    monkeypatch.setattr(engine_mod, "is_safe_media_url", lambda url: url == "https://soundcloud.com/a/b")
     log = []
     sc = _SoundCloud(stream="http://sc/stream", meta={"duration": 240}, log=log)
     yt = _Youtube(error="must not run", log=log)
@@ -963,7 +957,9 @@ def test_soundcloud_branch_resolves_the_permalink_directly():
     assert log == ["sc.get_stream_url"]
 
 
-def test_soundcloud_branch_target_falls_back_through_source_url_and_url():
+def test_soundcloud_branch_target_falls_back_through_source_url_and_url(monkeypatch):
+    # Provider selection is tested here; public/private DNS policy has its own suite.
+    monkeypatch.setattr(engine_mod, "is_safe_media_url", lambda url: url == "https://soundcloud.com/a/b")
     sc = _SoundCloud(stream="http://sc/stream")
     engine = _engine(_core(youtube=_Youtube(error="no stream"), soundcloud=sc))
 
@@ -984,14 +980,15 @@ def test_soundcloud_branch_target_is_built_from_artist_and_title():
 def test_soundcloud_failure_falls_back_to_a_youtube_search():
     log = []
     sc = _SoundCloud(error="track is unavailable", log=log)
-    yt = _Youtube(results=[{"source_id": "newvid"}], stream="http://yt/fallback", log=log)
+    yt = _Youtube(results=[{"source_id": "newvid", "title": "Song", "artist": "Artist"}],
+                  stream="http://yt/fallback", log=log)
     engine = _engine(_core(youtube=yt, soundcloud=sc))
 
     track = {"id": 3, "source": "soundcloud", "source_id": "77",
              "title": "Song", "artist": "Artist"}
     assert engine.resolve_stream_url(track) == "http://yt/fallback"
     assert log == ["sc.get_stream_url", "yt.search", "yt.get_stream_url"]
-    assert yt.search_calls == [("Artist Song", 1)]
+    assert yt.search_calls == [("Artist Song", 5)]
 
 
 def test_soundcloud_failure_without_a_title_skips_the_youtube_fallback():
@@ -1011,17 +1008,59 @@ def test_soundcloud_branch_stream_extraction_that_raises_is_survived():
     assert engine.resolve_stream_url({"id": 3, "source": "soundcloud", "source_id": "77"}) is None
 
 
-def test_spotify_branch_searches_youtube_for_the_first_hit():
+def test_spotify_branch_resolves_a_verified_search_hit():
+    """BUG-A1-001: the Spotify branch searches several candidates and extracts
+    only the one whose metadata matches the track."""
     log = []
-    yt = _Youtube(results=[{"source_id": "newvid"}], stream="http://yt/spotify", log=log)
+    yt = _Youtube(results=[{"source_id": "newvid", "title": "Song", "artist": "Artist"}],
+                  stream="http://yt/spotify", log=log)
     engine = _engine(_core(youtube=yt, soundcloud=_SoundCloud(error="must not run", log=log)))
 
     track = {"id": 8, "source": "spotify", "source_id": "spotify_track:xyz",
              "title": "Song", "artist": "Artist"}
     assert engine.resolve_stream_url(track) == "http://yt/spotify"
-    assert yt.search_calls == [("Artist Song", 1)]
+    assert yt.search_calls == [("Artist Song", 5)]
     assert yt.stream_calls == ["newvid"]
     assert log == ["yt.search", "yt.get_stream_url"]
+
+
+def test_spotify_branch_rejects_an_unverifiable_hit():
+    """Without a convincing match the branch fails instead of playing the
+    provider's top hit (BUG-A1-001)."""
+    yt = _Youtube(results=[{"source_id": "newvid", "title": "Song (Radio Edit)",
+                            "artist": "Artist", "duration": 100}],
+                  stream="http://yt/spotify")
+    engine = _engine(_core(youtube=yt))
+
+    track = {"id": 8, "source": "spotify", "source_id": "spotify_track:xyz",
+             "title": "Song", "artist": "Artist", "duration": 240}
+    assert engine.resolve_stream_url(track) is None
+    assert yt.stream_calls == [], "an unverified candidate is never extracted"
+
+
+def test_spotify_branch_prefers_the_persisted_video_id():
+    """BUG-A1-002: a remembered recording id is addressed directly, without a
+    new search, so a re-resolve returns the same recording."""
+    class _Settings:
+        def __init__(self):
+            self.data = {}
+        def get(self, category, key, default=None):
+            return self.data.get((category, key), default)
+        def set(self, category, key, value):
+            self.data[(category, key)] = value
+
+    from services.recording_selection import remember_video_id
+    settings = _Settings()
+    remember_video_id(settings, 'spotify', 'spotify_track:xyz', 'persisted00')
+    yt = _Youtube(stream="http://yt/persisted")
+    engine = _engine(_core(youtube=yt, soundcloud=_SoundCloud(error="must not run"),
+                           settings=settings))
+
+    track = {"id": 8, "source": "spotify", "source_id": "spotify_track:xyz",
+             "title": "Song", "artist": "Artist"}
+    assert engine.resolve_stream_url(track) == "http://yt/persisted"
+    assert yt.search_calls == [], "the persisted recording must not re-search"
+    assert yt.stream_calls == ["https://www.youtube.com/watch?v=persisted00"]
 
 
 def test_spotify_branch_with_no_hits_returns_none():
@@ -1080,45 +1119,68 @@ def test_yandex_branch_without_a_service_returns_none():
 # AUDIT-F BUG-1: len() on a non-string source_id
 # --------------------------------------------------------------------------- #
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG audio/engine.py:126 - `source_id` falls back to `track['id']`, a DB "
-           "row id, which is not a video id. The cascade therefore has nothing to "
-           "extract and can only reach the track through the SoundCloud/YouTube "
-           "search fallbacks; a row whose source_id is NULL silently never plays. "
-           "(The TypeError this used to raise on len(int) is fixed: direct "
-           "extraction is now skipped for a non-str source_id.)",
-)
 def test_int_source_id_must_resolve_instead_of_raising():
-    engine = _engine(_core(youtube=_Youtube(stream="http://yt/stream")))
+    yt = _Youtube(stream="http://yt/stream", results=[{
+        "source": "youtube", "source_id": "dQw4w9WgXcQ",
+        "source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "title": "Song", "artist": "Artist", "duration": 180,
+    }])
+    engine = _engine(_core(youtube=yt))
 
     assert engine.resolve_stream_url(
         {"id": 12345, "source": "youtube", "title": "Song", "artist": "Artist"}
     ) == "http://yt/stream"
+    assert yt.search_calls == [("Artist Song", 5)]
+    assert yt.stream_calls == ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]
 
 
 def test_int_source_id_does_not_reach_the_youtube_extractor():
     """A row id is not a video id: it must not be turned into a watch?v= URL
     (a real yt-dlp call for a video that cannot exist)."""
-    yt = _Youtube(stream="http://yt/stream")
+    yt = _Youtube(stream="http://yt/stream", results=[{
+        "source": "youtube", "source_id": "dQw4w9WgXcQ",
+        "title": "A Completely Unrelated Recording", "artist": "Another Artist", "duration": 180,
+    }])
     engine = _engine(_core(youtube=yt))
 
     assert engine.resolve_stream_url(
         {"id": 12345, "source": "youtube", "title": "Song", "artist": "Artist"}
     ) is None
     assert yt.stream_calls == []
+    assert yt.search_calls == [("Artist Song", 5)]
 
 
-def test_int_source_id_is_swallowed_by_the_resolver():
-    """Documents the same bug with production wiring (AppCore always installs a
-    StreamResolver, core/app.py:113): no crash, but a silent 'cannot resolve'."""
-    yt = _Youtube(stream="http://yt/stream")
+@pytest.mark.parametrize("candidate,extractor_meta", [
+    ({"source": "youtube", "source_id": "dQw4w9WgXcQ",
+      "title": "Song", "artist": "Artist", "duration": 90}, None),
+    ({"source": "soundcloud", "source_id": "dQw4w9WgXcQ",
+      "title": "Song", "artist": "Artist", "duration": 180}, None),
+    ({"source": "youtube", "source_id": "dQw4w9WgXcQ",
+      "title": "Song", "artist": "Artist", "duration": 180},
+     {"title": "Unrelated", "artist": "Other", "duration": 180}),
+])
+def test_missing_source_id_rejects_unverified_search_or_extraction(candidate, extractor_meta):
+    yt = _Youtube(stream="http://yt/stream", meta=extractor_meta, results=[candidate])
+    engine = _engine(_core(youtube=yt))
+    wanted = {"id": 12345, "source": "youtube", "title": "Song",
+              "artist": "Artist", "duration": 180}
+
+    assert engine.resolve_stream_url(wanted) is None
+    assert yt.stream_calls == ([] if candidate.get("source") != "youtube"
+                               or candidate.get("duration") != 180 else ["dQw4w9WgXcQ"])
+
+
+def test_missing_source_id_resolves_through_metadata_search_with_resolver():
+    yt = _Youtube(stream="http://yt/stream", results=[{
+        "source": "youtube", "source_id": "dQw4w9WgXcQ",
+        "title": "Song", "artist": "Artist", "duration": 180,
+    }])
     engine = _engine(_core(youtube=yt, resolver=StreamResolver(db=None)))
 
     assert engine.resolve_stream_url(
         {"id": 12345, "source": "youtube", "title": "Song", "artist": "Artist"}
-    ) is None
-    assert yt.stream_calls == [], "the cascade died before reaching the provider"
+    ) == "http://yt/stream"
+    assert yt.stream_calls == ["dQw4w9WgXcQ"]
 
 
 def test_soundcloud_branch_ignores_the_row_id_for_its_target():

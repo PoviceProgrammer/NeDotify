@@ -151,6 +151,68 @@
     word-break: break-word;
 }
 
+/* One renderer and palette for both Windows appearances. Source word/syllable
+   intervals drive the fill; line-only lyrics never receive these spans. */
+.lyric-word {
+    --lyric-word-fill: 0%;
+    display: inline-block;
+    max-width: 100%;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    vertical-align: bottom;
+    color: transparent;
+    background: linear-gradient(to right,
+        var(--lyrics-word-active, #fff) 0%,
+        var(--lyrics-word-active, #fff) var(--lyric-word-fill),
+        var(--lyrics-word-upcoming, rgba(255, 255, 255, 0.38)) var(--lyric-word-fill),
+        var(--lyrics-word-upcoming, rgba(255, 255, 255, 0.38)) 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+}
+
+.lyric-line:has(.lyric-word) {
+    text-shadow: none;
+}
+
+[data-theme="light"] #player-lyrics-scroll .lyric-word {
+    --lyrics-word-active: #1b1425;
+    --lyrics-word-upcoming: rgba(27, 20, 37, 0.48);
+}
+
+/* The macOS listening card keeps its dark artwork surface in both modes. */
+html[data-ui-style="macos"] #view-player #player-lyrics-scroll .lyric-word {
+    --lyrics-word-active: #fff;
+    --lyrics-word-upcoming: rgba(255, 255, 255, 0.38);
+}
+
+html[data-ui-style="macos"] #view-player #player-lyrics-scroll .lyric-line:has(.lyric-word) {
+    text-shadow: none;
+}
+
+[data-lyrics-animations="reduced"] .lyric-line,
+[data-lyrics-animations="off"] .lyric-line {
+    filter: none;
+    transform: none;
+    text-shadow: none;
+}
+
+[data-lyrics-animations="reduced"] {
+    transition-duration: 0.15s;
+}
+
+[data-lyrics-animations="off"],
+[data-lyrics-animations="off"] .lyric-line,
+[data-lyrics-animations="off"] .lyric-translation {
+    transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lyric-line { filter: none; transform: none; transition-duration: 0.1s; }
+    .lyrics-track { transition-duration: 0.1s; }
+}
+
 /* ─── 4. Bilingual / Translation Line ─── */
 .lyric-translation {
     font-family: var(--font-body, 'DM Sans', sans-serif);
@@ -242,8 +304,8 @@
     right: 0;
     bottom: 0;
     background: rgba(14, 7, 17, 0.88);
-    backdrop-filter: blur(40px);
-    -webkit-backdrop-filter: blur(40px);
+    backdrop-filter: blur(var(--blur-xl));
+    -webkit-backdrop-filter: blur(var(--blur-xl));
     z-index: 2000;
     display: flex;
     flex-direction: column;

@@ -31,6 +31,8 @@ class Sample:
     tree_cpu_pct: float = 0.0
     python_rss_mb: float = 0.0
     webview_rss_mb: float = 0.0
+    worker_cpu_pct: float = 0.0
+    worker_rss_mb: float = 0.0
     tree_rss_mb: float = 0.0
     python_threads: int = 0
     n_children: int = 0
@@ -47,6 +49,8 @@ class ProcSampler:
     _thread: threading.Thread | None = None
     # pid -> (cumulative cpu seconds, monotonic timestamp of that reading)
     _last: dict = field(default_factory=dict)
+    _peaks: dict = field(default_factory=dict)
+    _sample_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def _tree_pids(self, root: int) -> tuple[int, list[int]]:
         if psutil is None:
@@ -55,7 +59,7 @@ class ProcSampler:
             children = psutil.Process(root).children(recursive=True)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return root, []
-        return root, [c.pid for c in children if _is_webview2(c)]
+        return root, [c.pid for c in children]
 
     def _read(self, pid: int):
         """Cumulative CPU seconds + RSS for one pid, or None if it is gone."""
@@ -63,13 +67,20 @@ class ProcSampler:
             p = psutil.Process(pid)
             with p.oneshot():
                 t = p.cpu_times()
-                rss = p.memory_info().rss / (1024 * 1024)
+                memory = p.memory_info()
+                rss = memory.rss / (1024 * 1024)
+                peak = getattr(memory, 'peak_wset', memory.rss) / (1024 * 1024)
+                self._peaks[pid] = max(self._peaks.get(pid, 0), peak)
                 thr = p.num_threads()
             return (t.user + t.system), rss, thr
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             return None
 
     def _take(self) -> Sample:
+        with self._sample_lock:
+            return self._take_locked()
+
+    def _take_locked(self) -> Sample:
         """One sample: CPU % derived by differencing cumulative CPU seconds.
 
         Deliberately not using ``Process.cpu_percent(interval=None)``: that value
@@ -102,18 +113,31 @@ class ProcSampler:
             if not got:
                 continue
             cpu_seconds, rss, _thr = got
-            s.webview_rss_mb += rss
+            try:
+                webview = _is_webview2(psutil.Process(cpid))
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                webview = False
+            if webview:
+                s.webview_rss_mb += rss
+            else:
+                s.worker_rss_mb += rss
             prev = self._last.get(cpid)
             if prev:
                 d_cpu = cpu_seconds - prev[0]
                 d_wall = s.t - prev[1]
                 if d_wall > 0:
-                    s.webview_cpu_pct += max(0.0, (d_cpu / d_wall) * 100.0)
+                    usage = max(0.0, (d_cpu / d_wall) * 100.0)
+                    if webview:
+                        s.webview_cpu_pct += usage
+                    else:
+                        s.worker_cpu_pct += usage
             self._last[cpid] = (cpu_seconds, s.t)
 
         s.n_children = len(child_pids)
-        s.tree_cpu_pct = s.python_cpu_pct + s.webview_cpu_pct
-        s.tree_rss_mb = s.python_rss_mb + s.webview_rss_mb
+        s.tree_cpu_pct = s.python_cpu_pct + s.webview_cpu_pct + s.worker_cpu_pct
+        s.tree_rss_mb = s.python_rss_mb + s.webview_rss_mb + s.worker_rss_mb
+        alive = {root_pid, *child_pids}
+        self._last = {pid: value for pid, value in self._last.items() if pid in alive}
         return s
 
     def _loop(self) -> None:
@@ -173,13 +197,20 @@ class ProcSampler:
             }
 
         return {
+            'cpu_percent_basis': '100% = one logical CPU; machine-normalized values use logical_cpu_count',
+            'logical_cpu_count': os.cpu_count(),
+            'memory_peak_basis': 'max tree RSS sampled; individual Windows process peaks are OS high-water marks',
+            'observed_process_peak_rss_mb': {str(pid): round(value, 2) for pid, value in self._peaks.items()},
             "n_samples": len(rows),
             "window_sec": round(rows[-1].t - rows[0].t, 1),
             "python_cpu_pct": stat([r.python_cpu_pct for r in rows]),
             "webview_cpu_pct": stat([r.webview_cpu_pct for r in rows]),
             "tree_cpu_pct": stat([r.tree_cpu_pct for r in rows]),
+            'tree_machine_cpu_pct': stat([r.tree_cpu_pct / (os.cpu_count() or 1) for r in rows]),
             "python_rss_mb": stat([r.python_rss_mb for r in rows]),
             "webview_rss_mb": stat([r.webview_rss_mb for r in rows]),
+            "worker_cpu_pct": stat([r.worker_cpu_pct for r in rows]),
+            "worker_rss_mb": stat([r.worker_rss_mb for r in rows]),
             "tree_rss_mb": stat([r.tree_rss_mb for r in rows]),
             "python_threads_max": max(r.python_threads for r in rows),
             "n_children_max": max(r.n_children for r in rows),

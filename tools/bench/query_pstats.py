@@ -10,10 +10,14 @@ from __future__ import annotations
 import argparse
 import json
 import pstats
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RESULTS = Path(__file__).resolve().parent / "results"
+sys.path.insert(0, str(REPO_ROOT))
+from tools.bench.paths import results_dir
+
+RESULTS = results_dir()
 
 
 def rel(path: str) -> str:

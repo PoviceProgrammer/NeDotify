@@ -1,5 +1,7 @@
+import { initLibraryView, loadLibraryOverview, updateLibraryPlaylists, updateLibraryFavoriteCount, updateLibraryHero, decorateLibraryRow, renderLibraryEmpty, renderLibraryFailure, openPlaylistActions } from './library-view.js';
+import { createLibraryVirtualList } from './library-virtual-list.js';
 // NeDotify — Library Module (Favorites, Playlists, Local Files)
-import { createTrackElement, renderIcons, escapeHtml, openModalFocusTrap, closeModalFocusTrap } from './utils.js';
+import { createTrackElement, renderIcons, escapeHtml, openModalFocusTrap, closeModalFocusTrap, showToast } from './utils.js';
 import { getCurrentTrack } from './player.js';
 
 let currentContextTrack = null;
@@ -7,6 +9,19 @@ let currentContextTrack = null;
 let currentActiveTracks = [];
 
 export function initLibrary() {
+    initLibraryView({select:selectSection,overview:showLibraryOverview,create:createPlaylist,tracks:()=>currentActiveTracks,selected:()=>currentSelectedPlaylistData,section:()=>currentActiveSection,row:(track,index,tracks)=>createTrackElement(track,index,tracks,getCurrentTrack()),remove:deleteLibraryPlaylist});
+    document.addEventListener('nedotify:offline_mode_changed', () => {
+        if (document.getElementById('view-library')?.classList.contains('active')) refreshActiveLibraryView();
+    });
+    document.addEventListener('nedotify:track_downloaded', event => {
+        const ids = [event.detail?.track_id, event.detail?.source_id].filter(id => id != null).map(String);
+        if (!ids.length) return;
+        // Completion can arrive while a row has no DOM representation. Keep
+        // the collection data authoritative for the next row factory call.
+        currentActiveTracks.forEach(track => {
+            if ([track.id, track.source_id].some(id => id != null && ids.includes(String(id)))) track.is_downloaded = true;
+        });
+    });
     // Top card click handlers
     const favCard = document.getElementById('lib-card-favorites');
     if (favCard) {
@@ -32,7 +47,10 @@ export function initLibrary() {
                 btnDownloadAll.style.opacity = '0.6';
                 window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: '⏳ Проверка свободного места и запуск скачивания...', type: 'info' } }));
                 try {
-                    const res = await window.pywebview.api.download_all_favorites();
+                    const playlist = currentSelectedPlaylistData;
+                    const res = currentActiveSection === 'playlist' && playlist
+                        ? await window.pywebview.api.download_playlist(playlist.source_id || playlist.id, playlist.source || 'local')
+                        : await window.pywebview.api.download_all_favorites();
                     if (res && res.success) {
                         if (res.count > 0 && batchProgressBox) {
                             batchProgressBox.style.display = 'inline-flex';
@@ -201,7 +219,7 @@ export function initLibrary() {
     const plInput = document.getElementById('lib-input-add-playlist') || document.getElementById('lib-quick-pl-input');
     const handleCreateQuick = async () => {
         const name = plInput ? plInput.value.trim() : '';
-        if (!name) return;
+        if (!name) {createPlaylist();return;}
         if (window.pywebview?.api?.create_playlist) {
             try {
                 await window.pywebview.api.create_playlist(name);
@@ -307,12 +325,18 @@ export function initLibrary() {
 }
 
 export async function loadLibrary() {
-    loadLibrarySummary();
-    loadPlaylists();
+    await Promise.allSettled([loadLibrarySummary(),loadPlaylists(),loadLibraryOverview()]);
 }
 
 export async function loadLibrarySummary() {
-    // Update Favorite count
+    const api = window.pywebview?.api;
+    let summary = null;
+    if (api?.get_library_summary) {
+        try {
+            const data = await api.get_library_summary();
+            if (Number.isFinite(data?.favorite_count) && data.favorite_count >= 0 && Array.isArray(data.favorite_ids) && Number.isFinite(data.downloaded_count) && data.downloaded_count >= 0) summary = data;
+        } catch {} // Older bridges can still render their existing counters.
+    }
     try {
         let localIds = new Set();
         try {
@@ -327,15 +351,16 @@ export async function loadLibrarySummary() {
         } catch (e) {}
 
         let backendFavs = [];
-        if (window.pywebview?.api?.get_favorites) {
-            backendFavs = await window.pywebview.api.get_favorites() || [];
+        if (!summary && api?.get_favorites) {
+            backendFavs = await api.get_favorites() || [];
         }
         if (backendFavs === null || backendFavs === undefined) backendFavs = [];
 
-        const backendIds = new Set(backendFavs.map(bt => String(bt.id || bt.source_id || '')));
+        const backendIds = new Set(summary ? summary.favorite_ids.map(String) : backendFavs.flatMap(bt => [bt.id, bt.source_id].filter(id => id != null).map(String)));
         // M-2/M-3: count = unique backend + local-only IDs (legacy sync may lag)
-        const favCount = backendFavs.length + [...localIds].filter(id => id && !backendIds.has(id)).length;
+        const favCount = (summary ? summary.favorite_count : backendFavs.length) + [...localIds].filter(id => id && !backendIds.has(id)).length;
 
+        updateLibraryFavoriteCount(favCount);
         const favSub = document.getElementById('lib-fav-count');
         if (favSub) {
             favSub.textContent = favCount > 0 ? `${favCount} треков` : 'Нет треков';
@@ -344,21 +369,27 @@ export async function loadLibrarySummary() {
 
     // Update Offline count
     try {
-        if (window.pywebview?.api?.get_downloaded_tracks) {
-            const downloaded = await window.pywebview.api.get_downloaded_tracks() || [];
+        if (summary || api?.get_downloaded_tracks) {
+            const count = summary ? summary.downloaded_count : (await api.get_downloaded_tracks() || []).length;
             const offSub = document.getElementById('lib-offline-count');
             if (offSub) {
-                offSub.textContent = downloaded.length > 0 ? `${downloaded.length} треков` : 'Нет треков';
+                offSub.textContent = count > 0 ? `${count} треков` : 'Нет треков';
             }
         }
     } catch (e) {}
 }
 
-let currentActiveSection = 'favorites';
+let currentActiveSection = 'overview';
 let currentSelectedPlaylistData = null;
 
 // O-11: generation counter — stale async renders must not overwrite newer views
 let libraryGeneration = 0;
+
+function libraryTrackKey(track) {
+    if (track?.source_id != null) return `${track.source || ''}:${track.source_id}`;
+    if (track?.id != null) return `${track.source || ''}:${track.id}`;
+    return `${(track?.title || '').toLowerCase().trim()}___${(track?.artist || '').toLowerCase().trim()}___${track?.duration || ''}`;
+}
 
 export function refreshActiveLibraryView() {
     loadLibrarySummary();
@@ -368,229 +399,129 @@ export function refreshActiveLibraryView() {
         selectSection('offline');
     } else if (currentActiveSection === 'playlist' && currentSelectedPlaylistData) {
         selectSection('playlist', currentSelectedPlaylistData);
-    }
+
+    } else if (currentActiveSection === 'all') {selectSection('all');}
+    else {loadLibraryOverview();}
 }
 window.refreshActiveLibraryView = refreshActiveLibraryView;
 
-// O-9: render library lists in batches (artist_profile.js pattern) instead of all at once
-const LIB_BATCH_SIZE = 50;
 let libraryScrollCleanup = null;
-
-function makeLibraryBatchRenderer(container, tracks) {
-    let rendered = 0;
-    const renderNext = () => {
-        const start = rendered;
-        const end = Math.min(tracks.length, start + LIB_BATCH_SIZE);
-        // Rows go into a fragment and land in one insertion (search.js pattern):
-        // 50 appendChild calls would invalidate layout 50 times per batch. The
-        // scroll loader below reads scrollHeight only AFTER renderNext returns,
-        // so it still observes exactly the same growth per batch.
-        const fragment = document.createDocumentFragment();
-        for (let i = start; i < end; i++) {
-            fragment.appendChild(createTrackElement(tracks[i], i, tracks, getCurrentTrack()));
-        }
-        container.appendChild(fragment);
-        rendered = end;
-        renderIcons();
-        return end;
-    };
-    return { renderNext, getRendered: () => rendered, getTotal: () => tracks.length };
-}
-
-// O-9: load further batches when the scrollable ancestor nears its bottom
-function attachLibraryScrollLoader(container, renderNext, getRendered, getTotal) {
-    let node = container.parentElement;
-    while (node && node !== document.body) {
-        const st = getComputedStyle(node);
-        if (/(auto|scroll)/.test(st.overflowY)) break;
-        node = node.parentElement;
-    }
-    const scrollParent = node || document.scrollingElement;
-    if (!scrollParent) return () => {};
-
-    // Drain batches until content overflows the scrollport (or everything is rendered)
-    let guard = 0;
-    while (getRendered() < getTotal() && scrollParent.clientHeight >= scrollParent.scrollHeight && guard < 20) {
-        renderNext();
-        guard++;
-    }
-
-    const onScroll = () => {
-        const sc = scrollParent.scrollTop + scrollParent.clientHeight;
-        if (sc >= scrollParent.scrollHeight - 200 && getRendered() < getTotal()) {
-            renderNext();
-        }
-    };
-    scrollParent.addEventListener('scroll', onScroll, { passive: true });
-    return () => scrollParent.removeEventListener('scroll', onScroll);
-}
 
 function renderLibraryList(tracksContainer, tracks) {
     if (libraryScrollCleanup) { libraryScrollCleanup(); libraryScrollCleanup = null; }
-    tracksContainer.innerHTML = '';
-    const renderer = makeLibraryBatchRenderer(tracksContainer, tracks);
-    renderer.renderNext();
-    libraryScrollCleanup = attachLibraryScrollLoader(tracksContainer, renderer.renderNext, renderer.getRendered, renderer.getTotal);
+    const renderer = createLibraryVirtualList(tracksContainer, tracks, {
+        createRow: (track, index, all) => decorateLibraryRow(createTrackElement(track, index, all, getCurrentTrack()), track, index),
+        renderIcons,
+    });
+    libraryScrollCleanup = () => renderer.destroy();
+    return renderer;
+}
+
+export function showLibraryOverview() {
+    if (libraryScrollCleanup) { libraryScrollCleanup(); libraryScrollCleanup = null; }
+    libraryGeneration++;
+    document.getElementById('view-library')?.classList.remove('has-open-playlist');
+    currentActiveSection='overview';currentSelectedPlaylistData=null;currentActiveTracks=[];
+    document.getElementById('lib-empty-selection').style.display='block';
+    document.getElementById('lib-active-view').style.display='none';
+    document.querySelectorAll('.lib-playlist-item,.lib-top-card').forEach(item=>item.classList.remove('active'));
+    document.getElementById('lib-mobile-playlists').value='';
+    document.getElementById('lib-all-more')?.remove();
+    loadLibraryOverview();
+
+}
+
+async function deleteLibraryPlaylist(playlist) {
+    if(!await showDeletePlaylistModal(playlist.name))return;
+    try {
+        const result=await window.pywebview.api.delete_playlist(playlist.id);
+        if(result?.success===false)throw new Error(result.error || 'Delete failed');
+        if(String(currentSelectedPlaylistData?.id)===String(playlist.id))showLibraryOverview();
+        await loadPlaylists();
+        window.dispatchEvent(new CustomEvent('nedotify:toast',{detail:{msg:`Плейлист «${playlist.name}» удалён`,type:'info'}}));
+    } catch {window.dispatchEvent(new CustomEvent('nedotify:toast',{detail:{msg:'Не удалось удалить плейлист',type:'error'}}));}
 }
 
 export async function selectSection(type, data = null) {
-    currentActiveSection = type;
-    if (data) currentSelectedPlaylistData = data;
-
-    // O-11: bump generation — any in-flight render from an older selection is discarded
-    const viewGen = ++libraryGeneration;
-
-    const emptyEl = document.getElementById('lib-empty-selection');
-    const activeView = document.getElementById('lib-active-view');
-    const titleEl = document.getElementById('lib-active-title');
-    const subEl = document.getElementById('lib-active-sub');
-    const tracksContainer = document.getElementById('lib-active-tracks');
-
-    if (!activeView || !tracksContainer) return;
-
-    if (emptyEl) emptyEl.style.display = 'none';
-    activeView.style.display = 'block';
-    tracksContainer.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
-
-    const btnDownloadAll = document.getElementById('lib-btn-download-all');
-    if (btnDownloadAll) {
-        btnDownloadAll.style.display = type === 'favorites' ? 'inline-flex' : 'none';
-    }
-
-    // Reset active highlights
-    document.querySelectorAll('.lib-top-card').forEach(c => c.classList.remove('active'));
-    document.querySelectorAll('.lib-playlist-item').forEach(i => i.classList.remove('active'));
-
-    if (type === 'favorites') {
-        const favCard = document.getElementById('lib-card-favorites');
-        if (favCard) favCard.classList.add('active');
-        if (titleEl) titleEl.textContent = 'Любимые треки';
-
-        // M-2: localStorage holds IDs only (full objects live in the backend DB)
-        const localIds = new Set();
-        try {
-            const raw = localStorage.getItem('nedotify_favorites');
-            if (raw) {
-                JSON.parse(raw).forEach(e => {
-                    const id = typeof e === 'string' ? e : String((e && e.id) || (e && e.source_id) || '');
-                    if (id) localIds.add(id);
-                });
-            }
-        } catch (e) {}
-
-        let backendFavs = [];
-        try {
-            if (window.pywebview?.api?.get_favorites) {
-                backendFavs = await window.pywebview.api.get_favorites() || [];
-            }
-        } catch (e) {
-            console.error('get_favorites failed:', e);
-            backendFavs = [];
+    if (libraryScrollCleanup) { libraryScrollCleanup(); libraryScrollCleanup = null; }
+    document.getElementById('view-library')?.classList.toggle('has-open-playlist',type==='playlist');
+    currentActiveSection=type;
+    currentSelectedPlaylistData=type==='playlist'?data:null;
+    currentActiveTracks=[];
+    const viewGen=++libraryGeneration;
+    const container=document.getElementById('lib-active-tracks');
+    const title=document.getElementById('lib-active-title');
+    const sub=document.getElementById('lib-active-sub');
+    if(!container)return;
+    document.getElementById('lib-all-more')?.remove();
+    document.getElementById('lib-empty-selection').style.display='none';
+    document.getElementById('lib-active-view').style.display='block';
+    title.textContent=type==='favorites'?'Любимые треки':type==='offline'?'Офлайн треки':type==='all'?'Вся музыка':data?.name || 'Плейлист';
+    sub.textContent='Загрузка…';
+    container.innerHTML='<div class="empty-state"><div class="spinner"></div><span>Загрузка коллекции…</span></div>';
+    document.getElementById('lib-btn-download-all').style.display=['favorites','playlist'].includes(type)?'inline-flex':'none';
+    document.querySelectorAll('.lib-top-card,.lib-playlist-item').forEach(item=>item.classList.remove('active'));
+    if(type==='favorites')document.getElementById('lib-card-favorites').classList.add('active');
+    else if(type==='offline')document.getElementById('lib-card-offline').classList.add('active');
+    else if(type==='playlist' && data?.id!=null)document.querySelector(`.lib-playlist-item[data-pl-id="${CSS.escape(String(data.id))}"]`)?.classList.add('active');
+    updateLibraryHero(type,data,[]);
+    try {
+        await window.awaitBridge();
+        const method=type==='favorites'?'get_favorites':type==='offline'?'get_downloaded_tracks':type==='playlist'?'get_playlist_tracks':'get_library';
+        const result=await window.pywebview.api[method](...(type==='playlist'?[data.id]:type==='all'?[200,0,true]:[]));
+        if(viewGen!==libraryGeneration)return;
+        if(result?.success===false)throw new Error(result.error || 'Collection failed');
+        const raw=Array.isArray(result)?result:result?.tracks;
+        if(!Array.isArray(raw))throw new Error('Invalid collection response');
+        const seen=new Set();
+        const page=raw;
+        const tracks=page.filter(track=>{if(!track || typeof track!=='object')return false;const key=libraryTrackKey(track);if(seen.has(key))return false;seen.add(key);return true;});
+        let count=tracks.length;
+        if(type==='favorites') {
+            try {const backendIds=new Set(tracks.flatMap(track=>[track.id,track.source_id].filter(id=>id!=null).map(String)));const localIds=JSON.parse(localStorage.getItem('nedotify_favorites') || '[]').map(value=>String(typeof value==='string'?value:value?.id || value?.source_id || '')).filter(Boolean);count+=new Set(localIds.filter(id=>!backendIds.has(id))).size;}catch{}
         }
-
-        // M-10: never leave the spinner hanging — show a message on failure
-        if (backendFavs === null || backendFavs === undefined) backendFavs = [];
-        if (viewGen !== libraryGeneration) return;
-
-        // M-3: O(n) dedup via Set
-        const seen = new Set();
-        const combined = backendFavs.filter(bt => {
-            const bId = String(bt.id || bt.source_id || '');
-            if (!bId || seen.has(bId)) return false;
-            seen.add(bId);
-            return true;
-        });
-        // local-only IDs (not yet synced) still count
-        const totalFavs = combined.length + [...localIds].filter(id => id && !seen.has(id)).length;
-
-        currentActiveTracks = combined;
-        if (subEl) subEl.textContent = `${totalFavs} треков`;
-
-        if (combined.length === 0) {
-            tracksContainer.innerHTML = '<div class="empty-state">Нет любимых треков</div>';
-            return;
+        currentActiveTracks=tracks;
+        const allTotal=type==='all' && result?.total!=null && Number.isFinite(Number(result.total))?Math.max(0,Number(result.total)):null;
+        const allHasMore=type==='all' && (typeof result?.has_more==='boolean'?result.has_more:(allTotal!==null?raw.length<allTotal:raw.length>=200));
+        sub.textContent=type==='all' && allTotal!==null?`${allTotal} треков`:type==='all' && allHasMore?`${count} треков загружено`: `${count} треков`;
+        updateLibraryHero(type,data,tracks);
+        if(!tracks.length){renderLibraryEmpty(container,type==='playlist'?'В этом плейлисте пока нет треков':type==='favorites'?'Добавьте любимые треки':type==='offline'?'Музыка для прослушивания без сети':'Начните свою коллекцию');return;}
+        const renderer=renderLibraryList(container,tracks);
+        if(type==='all' && allHasMore) {
+            let offset=raw.length;
+            const more=document.createElement('button');more.id='lib-all-more';more.className='home-pill';more.textContent='Показать ещё';
+            container.after(more);
+            more.onclick=async()=>{
+                if(more.disabled)return;
+                more.disabled=true;more.textContent='Загрузка…';
+                try {
+                    const response=await window.pywebview.api.get_library(200,offset,true);
+                    if(viewGen!==libraryGeneration)return;
+                    if(response?.success===false)throw new Error(response.error || 'Library page failed');
+                    const rows=Array.isArray(response)?response:response?.tracks;
+                    if(!Array.isArray(rows))throw new Error('Invalid library page response');
+                    for(const track of rows){
+                        if(!track || typeof track!=='object')continue;
+                        const key=libraryTrackKey(track);
+                        if(!seen.has(key)){seen.add(key);tracks.push(track);}
+                    }
+                    offset+=rows.length;
+                    renderer.renderNext();
+                    const total=response?.total!=null && Number.isFinite(Number(response.total))?Math.max(0,Number(response.total)):allTotal;
+                    if(total!==null)sub.textContent=`${total} треков`;
+                    const hasMore=Array.isArray(response)?rows.length>=200:(typeof response?.has_more==='boolean'?response.has_more:(total!==null?offset<total:rows.length>=200));
+                    if(!hasMore || rows.length===0)more.remove();
+                    else more.textContent='Показать ещё';
+                    if(total===null)sub.textContent=hasMore?`${tracks.length} треков загружено`:`${tracks.length} треков`;
+                } catch {
+                    if(viewGen===libraryGeneration)more.textContent='Повторить загрузку';
+                } finally {if(viewGen===libraryGeneration)more.disabled=false;}
+            };
         }
-
-        renderLibraryList(tracksContainer, combined);
-
-    } else if (type === 'offline') {
-        const offCard = document.getElementById('lib-card-offline');
-        if (offCard) offCard.classList.add('active');
-        if (titleEl) titleEl.textContent = 'Оффлайн треки';
-
-        let downloaded = [];
-        try {
-            if (window.pywebview?.api?.get_downloaded_tracks) {
-                downloaded = await window.pywebview.api.get_downloaded_tracks() || [];
-            }
-        } catch (e) {
-            console.error('get_downloaded_tracks failed:', e);
-            downloaded = [];
-        }
-        if (viewGen !== libraryGeneration) return;
-
-        // Deduplicate tracks by id / source_id
-        const seen = new Set();
-        const uniqueDownloaded = [];
-        downloaded.forEach(t => {
-            const key = String(t.id || t.source_id || `${(t.title || '').toLowerCase().trim()}___${(t.artist || '').toLowerCase().trim()}`);
-            if (!seen.has(key)) {
-                seen.add(key);
-                uniqueDownloaded.push(t);
-            }
-        });
-        downloaded = uniqueDownloaded;
-
-        currentActiveTracks = downloaded;
-        if (subEl) subEl.textContent = `${downloaded.length} треков`;
-
-        if (downloaded.length === 0) {
-            tracksContainer.innerHTML = '<div class="empty-state">Нет скачанных треков</div>';
-            return;
-        }
-
-        renderLibraryList(tracksContainer, downloaded);
-
-    } else if (type === 'playlist' && data) {
-        if (titleEl) titleEl.textContent = data.name || 'Плейлист';
-
-        let tracks = [];
-        try {
-            if (window.pywebview?.api?.get_playlist_tracks) {
-                const res = await window.pywebview.api.get_playlist_tracks(data.id);
-                const rawTracks = Array.isArray(res) ? res : (res?.tracks || []);
-                tracks = Array.isArray(rawTracks) ? rawTracks : [];
-            }
-        } catch (e) {
-            console.error('get_playlist_tracks failed:', e);
-            tracks = [];
-        }
-        if (viewGen !== libraryGeneration) return;
-
-        if (!Array.isArray(tracks)) tracks = [];
-
-        // Deduplicate tracks by id / source_id
-        const seen = new Set();
-        const uniqueTracks = [];
-        tracks.forEach(t => {
-            if (!t) return;
-            const key = String(t.id || t.source_id || `${(t.title || '').toLowerCase().trim()}___${(t.artist || '').toLowerCase().trim()}`);
-            if (!seen.has(key)) {
-                seen.add(key);
-                uniqueTracks.push(t);
-            }
-        });
-        tracks = uniqueTracks;
-
-        currentActiveTracks = Array.isArray(tracks) ? tracks : [];
-        if (subEl) subEl.textContent = `${tracks.length} треков`;
-
-        if (tracks.length === 0) {
-            tracksContainer.innerHTML = '<div class="empty-state">В этом плейлисте пока нет треков</div>';
-            return;
-        }
-
-        renderLibraryList(tracksContainer, tracks);
+    } catch(error) {
+        if(viewGen!==libraryGeneration)return;
+        console.warn('Library collection unavailable:',error);
+        sub.textContent='Не удалось загрузить';renderLibraryFailure(container,()=>selectSection(type,data));
     }
 }
 
@@ -615,7 +546,8 @@ export async function loadPlaylists() {
     try {
         const playlists = await window.pywebview.api.get_playlists();
         if (!playlists || playlists.length === 0) {
-            sidebarList.innerHTML = '<div class="empty-state text-sm" style="padding:12px;font-size:12px">Нет плейлистов</div>';
+            updateLibraryPlaylists([]);
+            sidebarList.innerHTML = '<div class="empty-state text-sm" style="padding:12px;font-size:12px">Создайте первый плейлист</div>';
             return;
         }
 
@@ -631,6 +563,7 @@ export async function loadPlaylists() {
             ordered = [...sorted, ...unseen];
         }
         const sortedPlaylists = [...locked, ...ordered];
+        updateLibraryPlaylists(sortedPlaylists);
 
         sidebarList.innerHTML = '';
 
@@ -639,6 +572,9 @@ export async function loadPlaylists() {
             const item = document.createElement('div');
             item.className = 'lib-playlist-item';
             item.setAttribute('data-pl-id', id);
+            item.dataset.playlistName=(pl.name || '').toLocaleLowerCase('ru');
+            item.tabIndex=0;item.setAttribute('role','button');item.setAttribute('aria-label',`Открыть плейлист: ${pl.name}`);
+            item.addEventListener('keydown',event=>{if(event.target===item && (event.key==='Enter'||event.key===' ')){event.preventDefault();item.click();}});
 
             const isLocked = pl.name === 'Скачанное';
             const iconName = isLocked ? 'download' : 'music';
@@ -648,63 +584,17 @@ export async function loadPlaylists() {
                 ${!isLocked ? `<span class="pl-drag-handle" title="Зажми для перемещения"><i data-lucide="grip-vertical" style="width:13px;height:13px;color:var(--primary);flex-shrink:0;cursor:grab;"></i></span>` : '<span style="width:13px;flex-shrink:0;"></span>'}
                 <i data-lucide="${iconName}" style="width:14px;height:14px;color:${iconColor};flex-shrink:0;"></i>
                 <span class="truncate" style="${isLocked ? 'font-weight:600;' : ''}">${escapeHtml(pl.name)}</span>
-                ${!isLocked ? `<button class="btn-del-pl" title="Удалить плейлист" style="margin-left:auto; background:none; border:none; color:var(--text-dim); cursor:pointer; padding:2px; opacity:0; transition:opacity 0.18s;"><i data-lucide="trash-2" style="width:12px;height:12px;"></i></button>` : ''}
+                ${!isLocked ? `<button class="lib-pl-menu icon-btn" aria-label="Действия с плейлистом" title="Действия с плейлистом"><i data-lucide="more-horizontal"></i></button>` : ''}
             `;
 
             item.addEventListener('click', (e) => {
-                if (e.target.closest('.btn-del-pl') || e.target.closest('.pl-drag-handle')) return;
+                if (e.target.closest('.lib-pl-menu') || e.target.closest('.pl-drag-handle')) return;
                 document.querySelectorAll('.lib-playlist-item').forEach(i => i.classList.remove('active'));
                 item.classList.add('active');
-                selectSection('playlist', { id, name: pl.name });
+                selectSection('playlist', { ...pl, id });
             });
 
-            const delBtn = item.querySelector('.btn-del-pl');
-
-            if (delBtn) {
-                item.addEventListener('mouseenter', () => {
-                    delBtn.style.opacity = '1';
-                });
-                item.addEventListener('mouseleave', () => {
-                    delBtn.style.opacity = '0';
-                });
-                delBtn.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    const confirmed = await showDeletePlaylistModal(pl.name);
-                    if (confirmed) {
-                        if (window.pywebview?.api?.delete_playlist) {
-                            // Animate out
-                            item.style.transition = 'transform 0.25s ease, opacity 0.25s ease, max-height 0.3s ease';
-                            item.style.opacity = '0';
-                            item.style.transform = 'translateX(-20px)';
-                            item.style.maxHeight = item.offsetHeight + 'px';
-                            setTimeout(() => {
-                                item.style.maxHeight = '0';
-                                item.style.marginBottom = '0';
-                                item.style.overflow = 'hidden';
-                            }, 50);
-                            setTimeout(async () => {
-                                try {
-                                    const res = await window.pywebview.api.delete_playlist(id);
-                                    if (res && res.success !== false) {
-                                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Плейлист "${pl.name}" удалён`, type: 'info' } }));
-                                        if (currentSelectedPlaylistData?.id === id) {
-                                            selectSection('favorites');
-                                        }
-                                        loadPlaylists();
-                                    } else {
-                                        throw new Error(res?.error || 'Failed to delete playlist');
-                                    }
-                                } catch(err) {
-                                    item.style.opacity = '1';
-                                    item.style.transform = 'none';
-                                    item.style.maxHeight = '';
-                                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Ошибка при удалении плейлиста', type: 'error' } }));
-                                }
-                            }, 320);
-                        }
-                    }
-                });
-            }
+            item.querySelector('.lib-pl-menu')?.addEventListener('click',event=>{event.stopPropagation();openPlaylistActions({...pl,id},event);});
 
             if (!isLocked) {
                 setupPlaylistDrag(item, sidebarList);
@@ -713,25 +603,16 @@ export async function loadPlaylists() {
             sidebarList.appendChild(item);
         });
 
-        renderIcons();
+        // Scoped to the sidebar list: only its items were re-created above.
+        renderIcons(sidebarList);
 
-        // Animate items in
-        const items = sidebarList.querySelectorAll('.lib-playlist-item');
-        items.forEach((el, i) => {
-            el.style.opacity = '0';
-            el.style.transform = 'translateX(-12px)';
-            el.style.transition = 'none';
-            requestAnimationFrame(() => {
-                setTimeout(() => {
-                    el.style.transition = 'opacity 0.22s ease, transform 0.22s ease';
-                    el.style.opacity = '1';
-                    el.style.transform = 'translateX(0)';
-                }, i * 40);
-            });
-        });
+        sidebarList.querySelectorAll('.lib-playlist-item').forEach(item=>item.classList.toggle('active',String(item.dataset.plId)===String(currentSelectedPlaylistData?.id)));
+        const filter=document.getElementById('lib-playlist-filter');if(filter?.value)filter.dispatchEvent(new Event('input',{bubbles:true}));
 
     } catch (e) {
         console.error("Load playlists error:", e);
+        sidebarList.innerHTML='<button class="home-pill">Повторить загрузку плейлистов</button>';
+        sidebarList.querySelector('button').onclick=loadPlaylists;
     }
 }
 
@@ -965,7 +846,7 @@ async function loadPlaylistMenuItems(items, menu) {
                     const plId = pl.id !== undefined ? pl.id : pl.ID;
                     try {
                         const res = await window.pywebview.api.add_to_playlist(plId, currentContextTrack);
-                        if (res && res.success === false) {
+                        if (res === false || res?.success === false) {
                             window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: res.error || 'Не удалось добавить трек', type: 'error' } }));
                         } else {
                             window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Трек добавлен в "${pl.name}"`, type: 'success' } }));
@@ -978,7 +859,7 @@ async function loadPlaylistMenuItems(items, menu) {
                 });
                 items.appendChild(btn);
             });
-            renderIcons();
+            renderIcons(items);
         }
 
         // Create new playlist button
@@ -991,16 +872,16 @@ async function loadPlaylistMenuItems(items, menu) {
         createBtn.innerHTML = '<i data-lucide="plus" style="width:14px;height:14px;color:var(--primary)"></i> Новый плейлист';
         createBtn.addEventListener('click', async () => {
             menu.classList.remove('visible');
-            await createPlaylist();
+            await createPlaylist(currentContextTrack);
         });
         items.appendChild(createBtn);
-        renderIcons();
+        renderIcons(items);
     } catch (e) {
         items.innerHTML = '<div class="context-menu-item" style="color:var(--error)">Ошибка</div>';
     }
 }
 
-export async function createPlaylist() {
+export async function createPlaylist(contextTrack = null) {
     const modal = document.getElementById('modal-create-playlist');
     const input = document.getElementById('modal-cp-input');
     const closeBtn = document.getElementById('modal-cp-close');
@@ -1009,7 +890,9 @@ export async function createPlaylist() {
 
     if (!modal || !input) return;
 
+    let submitting = false;
     input.value = '';
+    if (submitBtn) submitBtn.disabled = false;
     modal.style.display = 'flex';
     // The pre-existing 50ms focus() is kept: it is what makes the caret land
     // after the overlay's own paint, and the trap's focus is additive.
@@ -1029,19 +912,27 @@ export async function createPlaylist() {
     };
 
     const handleSubmit = async () => {
+        if (submitting) return;
         const name = input.value.trim();
-        if (name) {
-            try {
-                const plId = await window.pywebview.api.create_playlist(name);
-                if (plId && currentContextTrack) {
-                    await window.pywebview.api.add_to_playlist(plId, currentContextTrack);
-                }
-            } catch (e) {
-                console.error("Failed to add track to new playlist:", e);
+        if (!name) { input.focus(); return; }
+        submitting = true;
+        if (submitBtn) submitBtn.disabled = true;
+        try {
+            const plId = await window.pywebview.api.create_playlist(name);
+            if (!Number.isInteger(Number(plId)) || Number(plId) <= 0) throw new Error('Creation rejected');
+            if (contextTrack) {
+                const result = await window.pywebview.api.add_to_playlist(plId, contextTrack);
+                if (result === false || result?.success === false) throw new Error('Add failed');
             }
-            loadPlaylists();
+            await loadPlaylists();
+            closeModal();
+        } catch (e) {
+            console.error("Failed to create playlist or add track:", e);
+            showToast('Не удалось создать плейлист или добавить трек', 'error');
+        } finally {
+            submitting = false;
+            if (submitBtn) submitBtn.disabled = false;
         }
-        closeModal();
     };
 
     const handleKeyDown = (e) => {
@@ -1058,10 +949,5 @@ export async function createPlaylist() {
     submitBtn?.addEventListener('click', handleSubmit);
     input?.addEventListener('keydown', handleKeyDown);
 }
-
-document.addEventListener('nedotify:track_downloaded', () => {
-    loadDownloaded();
-});
-
 
 

@@ -52,11 +52,21 @@ def test_surrounding_whitespace_is_stripped_not_rejected():
     assert normalize_proxy_url("  http://127.0.0.1:1080  ") == "http://127.0.0.1:1080"
 
 
-def test_rejection_is_logged_with_the_offending_value(caplog):
-    """A silently ignored proxy would change behaviour with no explanation."""
+def test_rejection_is_logged_without_exposing_the_offending_value(caplog):
+    """Invalid proxy values are diagnosed without copying user data to logs."""
     with caplog.at_level("WARNING", logger="services.base_service"):
-        normalize_proxy_url("AuraQA46638")
-    assert any("AuraQA46638" in r.getMessage() for r in caplog.records)
+        normalize_proxy_url("invalid-proxy-diagnostic-marker")
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("unusable auth.proxy_url" in message for message in messages)
+    assert all("invalid-proxy-diagnostic-marker" not in message for message in messages)
+    assert any("<redacted>" in message for message in messages)
+
+
+def test_repeated_invalid_proxy_does_not_flood_every_provider_request(caplog):
+    with caplog.at_level('WARNING', logger='services.base_service'):
+        for _ in range(1000):
+            assert normalize_proxy_url('invalid-proxy-repeated-marker') == ''
+    assert len([r for r in caplog.records if 'unusable auth.proxy_url' in r.getMessage()]) == 1
 
 
 # ── the providers must not install an unusable proxy ──────────────────────────
@@ -132,30 +142,31 @@ def test_soundcloud_installs_a_valid_proxy(offline_soundcloud):
     }
 
 
-def test_spotify_clears_a_stale_proxy_from_the_shared_session():
-    """`_session` is module-level, so a stale proxy used to outlive its config.
-
-    With the old `if proxy:` form, constructing a second service with no proxy
-    left the first instance's proxy installed on the shared session.
-    """
+def test_spotify_proxy_configuration_is_per_instance():
+    """One user's proxy settings must not leak into another service instance."""
     spotify_module = _real_module("spotify_service")
-    spotify_module._session.proxies = {"http": "http://stale:1", "https": "http://stale:1"}
-    spotify_module.SpotifyService(_Settings(""))
-    assert spotify_module._session.proxies == {}
+    configured = spotify_module.SpotifyService(_Settings("http://127.0.0.1:1080"))
+    direct = spotify_module.SpotifyService(_Settings(""))
+    configured_session = configured._get_session()
+    direct_session = direct._get_session()
+    assert configured_session is not direct_session
+    assert configured_session.proxies == {
+        "http": "http://127.0.0.1:1080",
+        "https": "http://127.0.0.1:1080",
+    }
+    assert direct_session.proxies == {}
 
 
 def test_spotify_does_not_install_an_unusable_proxy():
     spotify_module = _real_module("spotify_service")
-    spotify_module._session.proxies = {}
-    spotify_module.SpotifyService(_Settings("AuraQA46638"))
-    assert spotify_module._session.proxies == {}
+    service = spotify_module.SpotifyService(_Settings("AuraQA46638"))
+    assert service._get_session().proxies == {}
 
 
 def test_spotify_installs_a_valid_proxy():
     spotify_module = _real_module("spotify_service")
-    spotify_module._session.proxies = {}
-    spotify_module.SpotifyService(_Settings("http://127.0.0.1:1080"))
-    assert spotify_module._session.proxies == {
+    service = spotify_module.SpotifyService(_Settings("http://127.0.0.1:1080"))
+    assert service._get_session().proxies == {
         "http": "http://127.0.0.1:1080",
         "https": "http://127.0.0.1:1080",
     }

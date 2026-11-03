@@ -33,7 +33,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_DIR = Path(__file__).resolve().parent
-RESULTS = TOOLS_DIR / "results"
+sys.path.insert(0, str(REPO_ROOT))
+from tools.bench.paths import results_dir  # noqa: E402
+
+RESULTS = results_dir()
 CHILD = TOOLS_DIR / "pyprof_child.py"
 
 

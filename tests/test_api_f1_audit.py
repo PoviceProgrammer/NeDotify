@@ -262,11 +262,13 @@ def test_delete_duplicate_track_succeeds_when_file_gone(api, core_ns, tmp_path):
     gone.write_bytes(b"ID3")
     tid = core_ns.db.add_track(title="T", artist="A", source="local", source_id="s", file_path=str(gone))
     os.remove(gone)
-    core_ns.audio_fingerprint = _FingerprintStub(result=True)
+    from services.audio_fingerprint_service import AudioFingerprintService
+    core_ns.audio_fingerprint = AudioFingerprintService()
 
     res = api.delete_duplicate_track(tid, True)
 
-    assert res["success"] is True
+    assert res["success"] is False
+    assert core_ns.db.get_track(tid) is not None, "unreadable files cannot be verified or merged"
 
 
 # --------------------------------------------------------------------------- #
@@ -281,39 +283,64 @@ class _ImporterStub:
         return {"name": "Existing", "tracks": self._tracks}
 
 
+def _failing_import_tracks():
+    return [
+        {"title": "First", "artist": "Artist", "source": "youtube", "source_id": "atomic-first"},
+        {"title": "Second", "artist": "Artist", "source": "youtube", "source_id": "atomic-fail"},
+    ]
+
+
+def _inject_atomic_import_failure(db):
+    with db.conn:
+        db.conn.execute("""
+            CREATE TRIGGER fail_atomic_api_playlist
+            BEFORE INSERT ON tracks WHEN NEW.source_id='atomic-fail'
+            BEGIN SELECT RAISE(ABORT, 'injected atomic import failure'); END
+        """)
+
+
 
 
 
 def test_import_rollback_keeps_preexisting_playlist(api, core_ns, monkeypatch):
-    core_ns.db.create_playlist("Existing")
+    playlist_id = core_ns.db.create_playlist("Existing")
+    baseline_id = core_ns.db.add_track("Baseline", "Artist", source="youtube", source_id="baseline")
+    core_ns.db.add_tracks_to_playlist(playlist_id, [baseline_id])
     monkeypatch.setattr(
         core_ns, "playlist_importer",
-        _ImporterStub([{"title": "T", "artist": "A", "source": "local", "source_id": "s"}]),
+        _ImporterStub(_failing_import_tracks()),
         raising=False,
     )
-    # Fail halfway: the playlist row exists, but adding the track does not.
-    monkeypatch.setattr(core_ns.db, "add_to_playlist", lambda pid, tid: False)
+    monkeypatch.setattr("core.api._is_ssrf_safe_url", lambda _url: True)
+    _inject_atomic_import_failure(core_ns.db)
 
     res = api.import_external_playlist("https://example.com/list.m3u8", "Existing")
 
     assert res["success"] is False
     names = {p["name"] for p in core_ns.db.get_playlists()}
     assert "Existing" in names, "rollback must not delete a playlist the user already had"
+    members = [row[0] for row in core_ns.db.conn.execute(
+        "SELECT track_id FROM playlist_tracks WHERE playlist_id=?", (playlist_id,)
+    )]
+    assert members == [baseline_id]
+    assert core_ns.db.get_track_by_source_id("youtube", "atomic-first") is None
 
 
 def test_import_rollback_removes_playlist_it_created(api, core_ns, monkeypatch):
     monkeypatch.setattr(
         core_ns, "playlist_importer",
-        _ImporterStub([{"title": "T", "artist": "A", "source": "local", "source_id": "s"}]),
+        _ImporterStub(_failing_import_tracks()),
         raising=False,
     )
-    monkeypatch.setattr(core_ns.db, "add_to_playlist", lambda pid, tid: False)
+    monkeypatch.setattr("core.api._is_ssrf_safe_url", lambda _url: True)
+    _inject_atomic_import_failure(core_ns.db)
 
     res = api.import_external_playlist("https://example.com/list.m3u8", "Brand New")
 
     assert res["success"] is False
     names = {p["name"] for p in core_ns.db.get_playlists()}
     assert "Brand New" not in names
+    assert core_ns.db.get_track_by_source_id("youtube", "atomic-first") is None
 
 
 # --------------------------------------------------------------------------- #

@@ -161,12 +161,18 @@ def sc(monkeypatch):
     monkeypatch.setattr(SoundCloudService, '_get_client_id', lambda self: 'test-client-id')
     monkeypatch.setattr(SoundCloudService, '_get_ydl', lambda self, *a, **k: None)
 
+    SoundCloudService._shared_unavailable._data.clear()
+    SoundCloudService._shared_verified._data.clear()
     svc = SoundCloudService(settings=None)
     svc._executor.shutdown(wait=False, cancel_futures=True)
+    svc._playback_executor.shutdown(wait=False, cancel_futures=True)
     svc._executor = _InlineExecutor()
+    svc._playback_executor = _InlineExecutor()
     svc.ydl = _StubYdl()
     svc._get_ydl = lambda: svc.ydl
     svc._session = _StubSession(_DRM_TRANSCODE)
+    svc._public_json = lambda url, **kw: svc._session.get(url, **kw).json()
+    svc._media_url_is_servable = lambda url: svc._session.get(url).status_code not in (401,403,404,410)
 
     # The service imports YouTubeService inside get_stream_url, so patching the
     # module attribute is enough to keep the fallback off the network.
@@ -197,9 +203,7 @@ def test_drm_stream_url_is_never_offered_or_cached(sc):
 
     assert url is None, "a DRM-protected media URL must not reach the player"
     assert BaseMusicService.get_from_cache("soundcloud:2301904229") is None
-    assert sc._unavailable_cache.get(_unavailable_key("2301904229")), (
-        "the refusal must be remembered, not rediscovered on every play"
-    )
+    assert not sc._unavailable_cache.get(_unavailable_key("2301904229")), "A CDN refusal is not a permanent track verdict"
 
 
 def test_permanent_failure_is_reported_once_and_never_re_resolved(sc, monkeypatch):
@@ -279,7 +283,7 @@ def test_youtube_fallback_still_answers_for_a_drm_track(sc, monkeypatch):
         def search(self, query, max_results=1, callback=None, error_callback=None):
             self.searches.append(query)
             callback([{"source_id": "yt-id", "source_url": "https://www.youtube.com/watch?v=yt-id",
-                       "duration": 181, "title": "baby my type", "artist": "some-artist"}])
+                       "duration": 181, "title": "baby my type (feat. GATASKI)", "artist": "some-artist"}])
 
         def get_stream_url(self, url, callback=None, error_callback=None):
             callback("http://yt/fallback", {"title": "baby my type"})
@@ -289,6 +293,54 @@ def test_youtube_fallback_still_answers_for_a_drm_track(sc, monkeypatch):
     url, _error = _resolve(sc)
 
     assert url == "http://yt/fallback", "the api-v2 payload carries the title the fallback needs"
+
+
+def test_fallback_with_missing_featured_credit_does_not_replace_the_recording(sc, monkeypatch):
+    sc._session = _StubSession(_DRM_ONLY_TRANSCODE)
+    sc.ydl = _StubYdl(error=Exception('This video is DRM protected'))
+
+    class WrongVersion(_StubYouTube):
+        def search(self, query, max_results=1, callback=None, error_callback=None):
+            callback([{'source_id': 'other', 'duration': 181, 'title': 'baby my type', 'artist': 'some-artist'}])
+
+        def get_stream_url(self, *args, **kwargs):
+            pytest.fail('A recording with different featured credits must not be requested')
+
+    monkeypatch.setattr('services.youtube_service.YouTubeService', WrongVersion)
+    url, error = _resolve(sc)
+    assert url is None and error
+
+
+def test_disabled_youtube_fallback_is_not_requested(sc, monkeypatch):
+    from types import SimpleNamespace
+    sc.settings = SimpleNamespace(get=lambda category, key, default=None: False if key == 'youtube_enabled' else default)
+    sc._session = _StubSession(_DRM_ONLY_TRANSCODE)
+    sc.ydl = _StubYdl(error=Exception('This video is DRM protected'))
+    monkeypatch.setattr('services.youtube_service.YouTubeService', lambda *a, **kw: pytest.fail('Disabled fallback was constructed'))
+    url, error = _resolve(sc)
+    assert url is None and error
+
+
+def test_disabled_youtube_search_fallback_is_not_requested(sc, monkeypatch):
+    from types import SimpleNamespace
+    sc.settings = SimpleNamespace(get=lambda category, key, default=None: False if key == 'youtube_enabled' else default)
+    monkeypatch.setattr(sc, '_get_ydl_search', lambda: (_ for _ in ()).throw(ConnectionError('SoundCloud unavailable')))
+    monkeypatch.setattr('services.youtube_service.YouTubeService', lambda *a, **kw: pytest.fail('Disabled search fallback was constructed'))
+    observed = {}
+    sc.search('Song', callback=lambda rows: observed.update(rows=rows), error_callback=lambda error: observed.update(error=error))
+    assert observed.get('error') and 'rows' not in observed
+
+
+def test_cached_youtube_fallback_is_not_reused_after_source_is_disabled(sc):
+    from types import SimpleNamespace
+    BaseMusicService.set_to_cache('soundcloud:2301904229', {
+        'stream_url': 'https://cdn.example/old-youtube.mp3', 'resolved_source': 'youtube'})
+    sc._verified_cache.set('https://cdn.example/old-youtube.mp3', True)
+    sc.settings = SimpleNamespace(get=lambda category, key, default=None: False if key == 'youtube_enabled' else default)
+    sc._session = _StubSession(_DRM_ONLY_TRANSCODE)
+    sc.ydl = _StubYdl(error=Exception('This video is DRM protected'))
+    url, error = _resolve(sc)
+    assert url is None and error
 
 
 # --------------------------------------------------------------------------- #

@@ -335,31 +335,17 @@ def test_play_track_replaces_the_queue_and_notifies():
     assert [e["title"] for e in emitted] == ["t0"]
 
 
-def test_play_queue_with_an_empty_list_wipes_the_queue_without_notifying():
-    """Current behaviour, pinned deliberately: set_tracks([]) clears the queue,
-    yet play_queue() returns None and emits nothing, so the frontend keeps
-    rendering a queue the backend no longer has (see AUDIT-F BUG-4)."""
+def test_play_queue_with_an_empty_list_is_a_noop():
     engine, emitted = _engine()
     engine.play_track(_tracks(2)[0])
+    original_tracks = list(engine.queue.tracks)
+    original_index = engine.queue.current_index
+    emitted.clear()
 
     assert engine.play_queue([]) is None
-    assert engine.queue.count == 0
-    assert len(emitted) == 1, "no track_changed was emitted for the wipe"
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG audio/engine.py:40 - play_queue([]) destroys the playback queue "
-           "while reporting 'nothing happened' (no _on_track_changed), leaving the "
-           "frontend and the backend out of sync",
-)
-def test_play_queue_with_an_empty_list_must_be_a_noop():
-    engine, emitted = _engine()
-    engine.play_track(_tracks(2)[0])
-
-    engine.play_queue([])
-
-    assert engine.queue.count == 1
+    assert engine.queue.tracks == original_tracks
+    assert engine.queue.current_index == original_index
+    assert emitted == []
 
 
 def test_play_queue_notifies_the_current_track():

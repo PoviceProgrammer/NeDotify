@@ -1,6 +1,6 @@
 """
-AURA Music - Audio Fingerprint & Duplicate Detection Service
-Scans local audio tracks, computes acoustic fingerprints (MD5 content hash + file size + audio duration),
+NeDotify - Audio Fingerprint & Duplicate Detection Service
+Scans local audio tracks, computes exact SHA-256 file hashes,
 and identifies duplicate song entries in the library.
 """
 
@@ -18,7 +18,7 @@ SAMPLED_MATCH_CONFIDENCE = 90.0
 
 
 class AudioFingerprintService:
-    """Service for computing audio fingerprints and scanning for duplicate audio files."""
+    """Service for computing exact file hashes and scanning for duplicate audio files."""
 
     def __init__(self):
         pass
@@ -30,30 +30,15 @@ class AudioFingerprintService:
 
         try:
             file_size = os.path.getsize(filepath)
-            md5_hash = hashlib.md5()
-
-            # Read first chunk, middle chunk, and end chunk for fast robust fingerprinting
-            with open(filepath, "rb") as f:
-                head = f.read(sample_bytes)
-                md5_hash.update(head)
-
-                if file_size > sample_bytes * 3:
-                    f.seek(file_size // 2)
-                    mid = f.read(sample_bytes)
-                    md5_hash.update(mid)
-
-                    f.seek(file_size - sample_bytes)
-                    tail = f.read(sample_bytes)
-                    md5_hash.update(tail)
-                else:
-                    f.seek(sample_bytes)
-                    md5_hash.update(f.read())
-
-            fingerprint_hash = md5_hash.hexdigest()
+            digest = hashlib.sha256()
+            with open(filepath, "rb") as stream:
+                while chunk := stream.read(1024 * 1024):
+                    digest.update(chunk)
+            fingerprint_hash = digest.hexdigest()
             return {
                 "hash": fingerprint_hash,
                 "file_size": file_size,
-                "full_hash": file_size <= sample_bytes * 3,
+                "full_hash": True,
                 "signature": f"{fingerprint_hash}_{file_size}"
             }
         except Exception as e:
@@ -68,7 +53,7 @@ class AudioFingerprintService:
         if not db_manager:
             return []
 
-        all_tracks = db_manager.get_all_tracks(source="local")
+        all_tracks = db_manager.get_all_tracks()
         if not all_tracks:
             return []
 
@@ -112,23 +97,80 @@ class AudioFingerprintService:
 
         return duplicate_groups
 
-    def delete_duplicate_track(self, db_manager, track_id: int, delete_file: bool = False) -> bool:
-        """Remove a duplicate track from database and optionally delete the file from disk."""
-        if not db_manager or not track_id:
+    @staticmethod
+    def _same_path(first: str, second: str) -> bool:
+        return os.path.normcase(os.path.realpath(first)) == os.path.normcase(os.path.realpath(second))
+
+    def delete_duplicate_track(
+        self, db_manager, duplicate_id: int, delete_file: bool = False,
+        keeper_id: Optional[int] = None,
+    ) -> bool:
+        """Merge an exact-content duplicate into a keeper, optionally removing its file.
+
+        A row is never deleted on its own: both rows must still exist, have
+        readable files, and have the same full SHA-256 before the database
+        merge is attempted. The keeper's file is preserved even when both rows
+        point to the same path.
+        """
+        if not db_manager:
+            return False
+        if (not isinstance(duplicate_id, int) or isinstance(duplicate_id, bool)
+                or duplicate_id <= 0):
             return False
 
         try:
-            track = db_manager.get_track(track_id)
-            if track and delete_file:
-                file_path = track.get("file_path")
-                if file_path and os.path.exists(file_path):
-                    try:
-                        os.remove(file_path)
-                    except Exception as fe:
-                        logger.warning(f"Could not remove duplicate file {file_path}: {fe}")
+            duplicate = db_manager.get_track(duplicate_id)
+            if not duplicate:
+                return False
+            if keeper_id is None:
+                # Preserve the legacy one-id API safely: resolve a keeper only
+                # from a verified full-content match in the current library.
+                duplicate_path = duplicate.get("file_path")
+                duplicate_fp = self.compute_file_fingerprint(duplicate_path)
+                if not duplicate_fp or not duplicate_fp.get("full_hash"):
+                    return False
+                for candidate in db_manager.get_all_tracks() or []:
+                    candidate_id = candidate.get("id")
+                    if candidate_id == duplicate_id:
+                        continue
+                    candidate_fp = self.compute_file_fingerprint(candidate.get("file_path"))
+                    if (candidate_fp and candidate_fp.get("full_hash")
+                            and candidate_fp.get("hash") == duplicate_fp.get("hash")):
+                        keeper_id = candidate_id
+                        break
+            if (not isinstance(keeper_id, int) or isinstance(keeper_id, bool)
+                    or keeper_id <= 0 or keeper_id == duplicate_id):
+                return False
+            keeper = db_manager.get_track(keeper_id)
+            if not duplicate or not keeper:
+                return False
+            duplicate_path = duplicate.get("file_path")
+            keeper_path = keeper.get("file_path")
+            if not duplicate_path or not keeper_path:
+                return False
+            duplicate_fp = self.compute_file_fingerprint(duplicate_path)
+            keeper_fp = self.compute_file_fingerprint(keeper_path)
+            if (not duplicate_fp or not keeper_fp
+                    or not duplicate_fp.get("full_hash") or not keeper_fp.get("full_hash")
+                    or duplicate_fp.get("hash") != keeper_fp.get("hash")):
+                return False
 
-            db_manager.delete_track(track_id)
+            merge = getattr(db_manager, "merge_duplicate_track", None)
+            if not callable(merge) or not merge(duplicate_id, keeper_id):
+                return False
+
+            if delete_file and not self._same_path(duplicate_path, keeper_path):
+                try:
+                    os.remove(duplicate_path)
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    # The library merge succeeded and the keeper remains safe;
+                    # the API can report this leftover file as a partial result.
+                    logger.warning("Merged duplicate %s but could not remove %s: %s",
+                                   duplicate_id, duplicate_path, exc)
             return True
         except Exception as e:
-            logger.error(f"Failed to delete duplicate track {track_id}: {e}")
+            logger.error("Failed to merge duplicate track %s into %s: %s",
+                         duplicate_id, keeper_id, e)
             return False

@@ -135,16 +135,6 @@ def test_a_db_without_get_all_settings_loads_the_defaults():
 # always answers first. They are reachable for a category that declares neither
 # key - which is exactly how the frontend's legacy keys are served.
 
-def test_queue_autopilot_aliases_flow_enabled_in_an_undeclared_category():
-    sm = _manager({"player.flow_enabled": False})
-
-    assert sm.get("player", "queue_autopilot") is False
-
-
-def test_flow_enabled_aliases_queue_autopilot_in_an_undeclared_category():
-    sm = _manager({"player.queue_autopilot": False})
-
-    assert sm.get("player", "flow_enabled") is False
 
 
 def test_crossfade_duration_sec_aliases_crossfade_duration():
@@ -174,25 +164,6 @@ def test_an_alias_never_reaches_into_another_category():
     assert sm.get("general", "crossfade_duration", "fallback") == "fallback"
 
 
-def test_a_cached_alias_target_beats_the_other_key():
-    sm = _manager()
-    sm.set("player", "flow_enabled", False)
-
-    assert sm.get("player", "queue_autopilot") is False
-    sm.set("player", "flow_enabled", True)
-    assert sm.get("player", "queue_autopilot") is True
-
-
-def test_the_alias_does_not_fire_when_the_key_exists_in_the_defaults():
-    """The real reason the audio pair is never aliased: DEFAULT_SETTINGS
-    declares both keys, so the cache/default branch answers first."""
-    sm = _manager({"audio.flow_enabled": False})
-
-    assert sm.get("audio", "queue_autopilot") is True, (
-        "queue_autopilot is its own default (True); the pair is independent in "
-        "the declared category"
-    )
-    assert sm.get("audio", "flow_enabled") is False
 
 
 # --------------------------------------------------------------------------- #
@@ -258,7 +229,7 @@ def test_real_booleans_survive_the_coercion():
     assert sm.get("audio", "autoplay") is True
 
 
-def test_a_literal_true_string_in_the_auth_category_comes_back_as_a_bool():
+def test_a_literal_true_string_in_the_auth_category_preserves_its_type():
     """Pinned footgun: the coercion is type-blind, so a *string* setting whose
     value happens to be "true" is handed to the caller as a bool.
 
@@ -270,8 +241,8 @@ def test_a_literal_true_string_in_the_auth_category_comes_back_as_a_bool():
     """
     sm = _manager({"auth.yandex_token": "true", "auth.proxy_url": "false"})
 
-    assert sm.get("auth", "yandex_token") is True
-    assert sm.get("auth", "proxy_url") is False
+    assert sm.get("auth", "yandex_token") == 'true'
+    assert sm.get("auth", "proxy_url") == 'false'
     assert sm.get("auth", "cookies_file_path") == "", "other auth keys are strings"
 
 
@@ -384,7 +355,8 @@ def test_reset_category_restores_every_default():
 
     assert sm.get_category("audio") == DEFAULT_SETTINGS["audio"]
     assert sm.get("audio", "volume") == DEFAULT_SETTINGS["audio"]["volume"]
-    assert {cat for cat, _ in sm._dirty} == {"audio"}
+    assert "queue_autopilot" not in DEFAULT_SETTINGS["audio"]
+    assert "flow_enabled" not in DEFAULT_SETTINGS["audio"]
 
 
 def test_reset_category_keeps_keys_that_are_not_in_the_defaults():
@@ -506,33 +478,19 @@ def test_border_radius_raises_on_a_non_numeric_value():
 # properties vs. the keys the app actually writes
 # --------------------------------------------------------------------------- #
 
-def test_the_font_family_property_reads_a_category_nobody_writes():
-    """Pinned drift: ui/web_new_v2/js/settings.js:160 and :584 save font_family
-    into the *theme* category (and :746 reads it back from there), while this
-    property reads interface.font_family.
-
-    DEFAULT_SETTINGS declares font_family in BOTH theme and interface, so both
-    lookups succeed and neither errors - the property just keeps reporting the
-    interface default forever, whatever the user picks.
-    """
+def test_the_font_family_property_reads_the_frontend_preference():
+    """Compatibility categories share the value selected by the font picker."""
     sm = _manager()
     sm.set("theme", "font_family", "Inter")
 
     assert sm.get("theme", "font_family") == "Inter", "the frontend's key"
-    assert sm.font_family == DEFAULT_SETTINGS["interface"]["font_family"], (
-        "the property never sees it"
-    )
+    assert sm.font_family == "Inter"
 
 
-def test_the_theme_mode_property_reads_a_different_key_than_the_frontend():
-    """Same drift: settings.js:1489 saves ``theme_mode`` and :673-676 reads
-    ``settings.theme.theme_mode``, but this property reads ``theme.mode`` -
-    a second, parallel key (DEFAULT_SETTINGS['theme'] has both 'mode' and
-    'theme_mode')."""
+def test_the_theme_mode_property_reads_the_frontend_preference():
+    """Both compatibility names reflect the mode saved by the frontend."""
     sm = _manager()
     sm.set("theme", "theme_mode", "light")
 
     assert sm.get("theme", "theme_mode") == "light", "the frontend's key"
-    assert sm.theme_mode == DEFAULT_SETTINGS["theme"]["mode"], (
-        "the property still reports the untouched 'mode' key"
-    )
+    assert sm.theme_mode == "light"

@@ -42,7 +42,9 @@ def _html() -> str:
 def _sidebar_markup() -> str:
     """The <aside id="sidebar"> ... </aside> block."""
     html = _html()
-    start = html.index('<aside id="sidebar">')
+    opening = re.search(r'<aside\b[^>]*\bid="sidebar"[^>]*>', html)
+    assert opening, "#sidebar aside is missing"
+    start = opening.start()
     end = html.index("</aside>", start) + len("</aside>")
     return html[start:end]
 
@@ -73,7 +75,7 @@ def test_collapsed_rail_actually_narrows_and_hides_labels() -> None:
 def test_every_nav_label_is_wrapped() -> None:
     """Bare text nodes cannot be styled, so nothing would animate."""
     sidebar = _sidebar_markup()
-    items = re.findall(r'<div class="nav-item[^"]*" data-page="([^"]+)"[^>]*>(.*?)</div>', sidebar, re.DOTALL)
+    items = re.findall(r'<button\b[^>]*class="nav-item[^"]*" data-page="([^"]+)"[^>]*>(.*?)</button>', sidebar, re.DOTALL)
     assert len(items) == NAV_ITEM_COUNT, f"expected {NAV_ITEM_COUNT} nav items, found {len(items)}"
     for page, body in items:
         assert '<span class="nav-label">' in body, (
@@ -86,7 +88,7 @@ def test_collapsed_icons_have_tooltips() -> None:
     """Icon-only rows are unidentifiable without them."""
     sidebar = _sidebar_markup()
     for page, _ in re.findall(
-        r'<div class="nav-item[^"]*" data-page="([^"]+)"([^>]*)>', sidebar
+        r'<button\b[^>]*class="nav-item[^"]*" data-page="([^"]+)"([^>]*)>', sidebar
     ):
         assert 'title="' in _, f"nav item {page!r} has no title= tooltip"
 
@@ -347,7 +349,7 @@ def test_collapse_state_is_persisted_and_toggle_is_wired() -> None:
 def test_nav_items_stay_clickable_when_collapsed() -> None:
     """The rail is only useful if the icons still navigate."""
     sidebar = _sidebar_markup()
-    items = re.findall(r'<div class="nav-item[^"]*" data-page="([^"]+)"', sidebar)
+    items = re.findall(r'<button\b[^>]*class="nav-item[^"]*" data-page="([^"]+)"', sidebar)
     assert items == ["home", "search", "library", "player", "settings", "profile"], (
         f"unexpected nav order/content: {items}"
     )

@@ -1,0 +1,16 @@
+{
+  "schema": "nedotify.native-dependencies.v1",
+  "description": "Optional native folders are included in full when present. Any present folder must contain a valid Windows entrypoint; release mode requires at least one entrypoint because the installer must not silently omit the bundled network-bypass feature.",
+  "directories": [
+    {
+      "source": "zapret",
+      "destination": "zapret",
+      "entrypoints": ["winws.exe", "zapret.exe"]
+    },
+    {
+      "source": "bin",
+      "destination": "bin",
+      "entrypoints": ["winws.exe", "zapret.exe"]
+    }
+  ]
+}

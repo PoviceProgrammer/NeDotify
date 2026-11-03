@@ -387,6 +387,18 @@
     color: var(--color-text-muted, rgba(255, 245, 247, 0.65));
 }
 
+/* Padded album cards need their intrinsic height. A fixed section height
+   squeezes the cover and clips the title's line box in the flex carousel. */
+.artist-albums-card {
+    height: auto;
+    flex-shrink: 0;
+}
+
+.artist-albums-carousel .album-cover-wrap {
+    height: auto;
+    flex-shrink: 0;
+}
+
 #album-detail-modal {
     animation: fadeIn 0.25s ease;
 }

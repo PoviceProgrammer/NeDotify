@@ -105,9 +105,7 @@ def test_fabricated_machine_type_is_rejected(tmp_path):
     """A PE that claims to be neither x86 nor x64 was not produced by a linker."""
     with open(_w(tmp_path, "winws.exe"), "wb") as f:
         f.write(_pe(machine=0x1234))
-    # Machine type is deliberately permissive: only the size gate is load-bearing
-    # for the dialog-free path, so this stays accepted. Kept as documentation.
-    assert is_valid_windows_binary(_w(tmp_path, "winws.exe")) is True
+    assert is_valid_windows_binary(_w(tmp_path, "winws.exe")) is False
 
 
 def test_pe_further_out_is_valid(tmp_path):
@@ -186,6 +184,36 @@ def test_zero_byte_with_an_approved_name_is_rejected(tmp_path):
 
 # ---- start() must refuse before any launch ------------------------------
 
+class _FakeProc:
+    """Process handle stand-in for launcher tests: alive forever."""
+
+    def __init__(self, pid=4321):
+        self.pid = pid
+        self.handle = 0
+        self.returncode = None
+
+    def poll(self):
+        return self.returncode
+
+    def wait(self, timeout=None):
+        return None
+
+    def terminate(self):
+        pass
+
+
+def _hermetic_start(svc, monkeypatch, launch_fn):
+    """Common stubbing for start()-path tests: no real scans, no real
+    guard mutex, no job object, no survival window."""
+    import services.zapret_service as m
+    monkeypatch.setattr(m, "_global_zapret_guard_acquire", lambda *a, **k: None)
+    monkeypatch.setattr(m, "_global_zapret_guard_release", lambda handle: None)
+    monkeypatch.setattr(m.ZapretService, "_classify_running_winws", lambda self: (None, None))
+    monkeypatch.setattr(m.ZapretService, "_launch", launch_fn)
+    monkeypatch.setattr(m.ZapretService, "_get_pending_update", lambda self: "")
+    svc._launch_confirm_window = 0.0
+
+
 def test_start_refuses_a_empty_binary_without_launching(svc, monkeypatch):
     import services.zapret_service as m
 
@@ -195,7 +223,7 @@ def test_start_refuses_a_empty_binary_without_launching(svc, monkeypatch):
 
     monkeypatch.setattr(m.ZapretService, "find_binary", lambda self, p=None: broken)
     monkeypatch.setattr(m.ZapretService, "_launch",
-                        lambda self, exe, args: launched.append(exe) or (True, "ok"))
+                        lambda self, exe, args: launched.append(exe) or ("started", _FakeProc(), "ok"))
     monkeypatch.setattr(m.ZapretService, "_launch_elevated",
                         lambda self, exe, args: launched.append(exe) or (True, "ok"))
     monkeypatch.setattr(m.ZapretService, "download_binaries",
@@ -214,12 +242,12 @@ def test_start_launches_a_healthy_binary(svc, monkeypatch):
     with open(good, "wb") as f:
         f.write(_pe())
     launched = []
+    proc = _FakeProc()
 
     monkeypatch.setattr(m.ZapretService, "find_binary", lambda self, p=None: good)
-    monkeypatch.setattr(m.ZapretService, "_launch",
-                        lambda self, exe, args: launched.append(exe) or (True, "Zapret aktiv"))
     monkeypatch.setattr(m.ZapretService, "is_running", lambda self: False)
-    monkeypatch.setattr(m.ZapretService, "_get_pending_update", lambda self: "")
+    _hermetic_start(svc, monkeypatch,
+                    lambda self, exe, args: launched.append(exe) or ("started", proc, "Zapret aktiv"))
 
     ok, msg = svc.start()
     assert ok is True
@@ -236,6 +264,7 @@ def test_start_re_downloads_a_broken_binary_and_recovers(svc, monkeypatch):
     with open(good, "wb") as f:
         f.write(_pe())
     launched = []
+    proc = _FakeProc()
 
     # Second find_binary call (after the re-download) returns the good file.
     calls = []
@@ -246,10 +275,9 @@ def test_start_re_downloads_a_broken_binary_and_recovers(svc, monkeypatch):
 
     monkeypatch.setattr(m.ZapretService, "find_binary", find)
     monkeypatch.setattr(m.ZapretService, "download_binaries", lambda self: (True, "ok"))
-    monkeypatch.setattr(m.ZapretService, "_launch",
-                        lambda self, exe, args: launched.append(exe) or (True, "ok"))
     monkeypatch.setattr(m.ZapretService, "is_running", lambda self: False)
-    monkeypatch.setattr(m.ZapretService, "_get_pending_update", lambda self: "")
+    _hermetic_start(svc, monkeypatch,
+                    lambda self, exe, args: launched.append(exe) or ("started", proc, "ok"))
 
     ok, msg = svc.start()
     assert ok is True
@@ -267,10 +295,9 @@ def test_start_reports_failure_when_the_redownload_also_fails(svc, monkeypatch):
     monkeypatch.setattr(m.ZapretService, "find_binary", lambda self, p=None: broken)
     monkeypatch.setattr(m.ZapretService, "download_binaries",
                         lambda self: (False, "сеть недоступна"))
-    monkeypatch.setattr(m.ZapretService, "_launch",
-                        lambda self, exe, args: launched.append(exe) or (True, "ok"))
     monkeypatch.setattr(m.ZapretService, "is_running", lambda self: False)
-    monkeypatch.setattr(m.ZapretService, "_get_pending_update", lambda self: "")
+    _hermetic_start(svc, monkeypatch,
+                    lambda self, exe, args: launched.append(exe) or ("started", _FakeProc(), "ok"))
 
     ok, msg = svc.start()
     assert ok is False
@@ -284,11 +311,11 @@ def test_extract_skips_empty_entries(svc):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("zapret/x86_64/bin/winws.exe", b"")
-        z.writestr("zapret/x86_64/bin/cygwin1.dll", b"\x00" * 64)
+        z.writestr("zapret/x86_64/bin/cygwin1.dll", _pe())
     svc._extract_zip(buf.getvalue())
 
     assert not os.path.isfile(os.path.join(svc.app_dir, "winws.exe"))
-    assert os.path.getsize(os.path.join(svc.app_dir, "cygwin1.dll")) == 64
+    assert is_valid_windows_binary(os.path.join(svc.app_dir, "cygwin1.dll"))
 
 
 def test_extract_never_replaces_a_working_binary_with_an_empty_one(svc):
@@ -344,12 +371,37 @@ def test_every_preset_is_scoped_to_the_app_hosts():
 
 
 def test_scoped_hosts_cover_the_providers():
-    """Dropping a provider here silently disables the bypass for it."""
+    """Dropping a provider here silently disables the bypass for it (BUG-011).
+
+    The list must mirror the providers actually wired into the code:
+    core/proxy.py::YOUTUBE_HOSTS / ::SOUNDCLOUD_HOSTS (scdn.co is a SoundCloud
+    CDN domain there), services/deezer_service.py (api.deezer.com) +
+    services/playlist_import_service.py (deezer.com / link.deezer.com), and
+    services/vk_service.py (vk.com / www.vk.com / vkvideo.ru)."""
     from services.zapret_service import ZAPRET_SCOPED_HOSTS
 
     for required in ("youtube.com", "googlevideo.com", "soundcloud.com",
-                     "music.yandex.ru", "open.spotify.com"):
+                     "music.yandex.ru", "open.spotify.com", "itunes.apple.com",
+                     # BUG-011: these were missing while the providers were live.
+                     "deezer.com", "api.deezer.com",
+                     "vk.com", "www.vk.com", "vkvideo.ru",
+                     "scdn.co"):
         assert required in ZAPRET_SCOPED_HOSTS
+
+
+def test_scoped_hosts_match_the_provider_code():
+    """Every provider domain hard-coded in services/ or core/proxy.py has a
+    (base-domain or exact) entry in the scoped hostlist — the two cannot
+    drift apart silently again."""
+    import core.proxy as proxy
+    from services.zapret_service import ZAPRET_SCOPED_HOSTS
+
+    # The proxy credential hosts: youtube/soundcloud/yandex families.
+    for suffix in proxy.YOUTUBE_HOSTS + proxy.SOUNDCLOUD_HOSTS:
+        assert suffix in ZAPRET_SCOPED_HOSTS, (
+            f"core/proxy.py credential host {suffix!r} is not scoped for desync")
+    # The playlist-import link hosts are all subdomains of a pinned base.
+    assert "deezer.com" in ZAPRET_SCOPED_HOSTS
 
 
 def test_preset_arguments_pass_the_sanitiser():
@@ -363,7 +415,7 @@ def test_preset_arguments_pass_the_sanitiser():
 
 
 def test_extract_writes_real_content_atomically(svc):
-    payload = b"\x00" * 100
+    payload = _pe()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("zapret/x86_64/bin/winws.exe", payload)

@@ -63,16 +63,16 @@ def test_single_pixel_change_is_caught(tmp_path, base):
     b = _write(tmp_path, "b.png", changed)
     res = vg_diff.compare_png(a, b)
     assert res["diff_pixels"] == 1
-    assert res["ok"] is True          # 1 px of 1,024,000 is far under 0.1%
+    assert res["ok"] is True          # 1 px of 1,024,000 is far under 0.025%
     assert res["bbox_xyxy"] == [600, 400, 601, 401]
 
 
 def test_beyond_pixel_ratio_limit_fails(tmp_path):
-    """Just over 0.1% of pixels changed must fail."""
-    h, w = 200, 200                      # 40 000 px; 0.1% = 40 px
+    """Just over 0.025% of pixels changed must fail."""
+    h, w = 200, 200                      # 40 000 px; 0.025% = 10 px
     base = np.zeros((h, w, 3), dtype=np.uint8)
     changed = base.copy()
-    n = 41                               # one pixel over the limit
+    n = 11                               # one pixel over the limit
     changed.reshape(-1, 3)[:n] = 255
     a = _write(tmp_path, "a.png", base)
     b = _write(tmp_path, "b.png", changed)
@@ -86,7 +86,7 @@ def test_exactly_at_pixel_ratio_limit_passes(tmp_path):
     h, w = 200, 200
     base = np.zeros((h, w, 3), dtype=np.uint8)
     changed = base.copy()
-    n = int(h * w * vg_diff.DIFF_PIXEL_RATIO_LIMIT)   # exactly 40
+    n = int(h * w * vg_diff.DIFF_PIXEL_RATIO_LIMIT)   # exactly 10
     changed.reshape(-1, 3)[:n] = 255
     a = _write(tmp_path, "a.png", base)
     b = _write(tmp_path, "b.png", changed)
@@ -131,3 +131,13 @@ def test_compare_sets_reports_missing_and_unexpected(tmp_path):
     assert res["missing"] == ["vanished.png"]
     assert res["unexpected"] == ["brand_new.png"]
     assert res["ok"] is False
+
+
+def test_compare_sets_fails_closed_when_golden_directory_is_empty(tmp_path):
+    gdir, cdir = tmp_path / "goldens", tmp_path / "current"
+    gdir.mkdir(); cdir.mkdir()
+    _write(cdir, "captured.png", np.zeros((4, 4, 3), dtype=np.uint8))
+    res = vg_diff.compare_sets(gdir, cdir)
+    assert res["ok"] is False
+    assert res["reason"] == "empty_baseline"
+    assert res["unexpected"] == ["captured.png"]

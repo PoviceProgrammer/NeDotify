@@ -1,5 +1,5 @@
 """
-NeDotify / AURA Music - Track Resolution Helper
+NeDotify - Track Resolution Helper
 Resolves metadata (title, artist) to a playable UI track dictionary using:
 1. Local Database search
 2. SoundCloud Service search
@@ -77,7 +77,7 @@ atexit.register(_resolver_pool.shutdown, wait=False, cancel_futures=True)
 
 
 #: Minimum title similarity (0..1) for a provider's top hit to count as the wanted track.
-TRACK_MATCH_MIN_SCORE = 0.6
+TRACK_MATCH_MIN_SCORE = 0.8
 
 
 class TrackResolver:
@@ -92,15 +92,26 @@ class TrackResolver:
     BATCH_TIMEOUT = 10.0
     MAX_CONCURRENCY = 8
 
-    def __init__(self, db=None, soundcloud_service=None, youtube_service=None, settings=None):
+    def __init__(self, db=None, soundcloud_service=None, youtube_service=None, settings=None,
+                 providers=None):
         self.db = db
         self.sc_service = soundcloud_service
         self.yt_service = youtube_service
         self.settings = settings
+        # Provider order/presence. Spotify downloads restrict this to
+        # ('youtube',) so a "plausible" SoundCloud substitute can never be
+        # saved for a catalogue row that promised an Apple/YouTube recording
+        # (BUG-A1-012).
+        self.providers = tuple(
+            p for p in (providers or ('soundcloud', 'youtube'))
+            if p in ('soundcloud', 'youtube')
+        )
         self.logger = logging.getLogger(self.__class__.__name__)
         self._memo: 'collections.OrderedDict[str, Tuple[float, Dict[str, Any]]]' = collections.OrderedDict()
         self._memo_lock = threading.Lock()
         self._db_lock = threading.Lock()
+        self._provider_lock = threading.Lock()
+        self._deadline_local = threading.local()
 
     @classmethod
     def submit(cls, fn: Callable, *args, **kwargs) -> Optional[concurrent.futures.Future]:
@@ -114,9 +125,13 @@ class TrackResolver:
 
     # ─── Resolution memo (shared by the sync and batched paths) ───
 
-    @staticmethod
-    def _memo_key(title: str, artist: str) -> str:
-        return f'{(title or "").strip().lower()}\x00{(artist or "").strip().lower()}'
+    def _source_enabled(self, source):
+        return not self.settings or self.settings.get('services', str(source) + '_enabled', True) is not False
+
+    def _memo_key(self, title: str, artist: str, expected_duration: float = 0) -> str:
+        duration_part = f"\x01{round(float(expected_duration))}" if expected_duration else ''
+        sources = f"\x02{int(self._source_enabled('youtube'))}{int(self._source_enabled('soundcloud'))}"
+        return f'{(title or "").strip().lower()}\x00{(artist or "").strip().lower()}{duration_part}{sources}'
 
     def _memo_get(self, key: str) -> Optional[Dict[str, Any]]:
         with self._memo_lock:
@@ -167,50 +182,29 @@ class TrackResolver:
             return None
 
         try:
+            if not title or not title.strip():
+                return None
+
+            def fetch_candidates():
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path
+                    FROM tracks
+                    WHERE LOWER(title) = LOWER(?)
+                """, (title.strip(),))
+                return cursor.fetchall()
+
             # Protect raw non-thread-local sqlite connections with _db_lock
             if not has_local_conn_prop:
                 with self._db_lock:
-                    cursor = conn.cursor()
-                    query = """
-                        SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path
-                        FROM tracks
-                        WHERE LOWER(title) = LOWER(?) AND (LOWER(artist) = LOWER(?) OR artist = 'Unknown Artist' OR ? = '')
-                        LIMIT 1
-                    """
-                    cursor.execute(query, (title, artist, artist))
-                    row = cursor.fetchone()
-
-                    if not row and title:
-                        query_title = """
-                            SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path
-                            FROM tracks
-                            WHERE LOWER(title) = LOWER(?)
-                            LIMIT 1
-                        """
-                        cursor.execute(query_title, (title,))
-                        row = cursor.fetchone()
+                    rows = fetch_candidates()
             else:
-                cursor = conn.cursor()
-                query = """
-                    SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path
-                    FROM tracks
-                    WHERE LOWER(title) = LOWER(?) AND (LOWER(artist) = LOWER(?) OR artist = 'Unknown Artist' OR ? = '')
-                    LIMIT 1
-                """
-                cursor.execute(query, (title, artist, artist))
-                row = cursor.fetchone()
+                rows = fetch_candidates()
 
-                if not row and title:
-                    query_title = """
-                        SELECT id, title, artist, cover_url, cover_path, source, source_id, source_url, duration, file_path
-                        FROM tracks
-                        WHERE LOWER(title) = LOWER(?)
-                        LIMIT 1
-                    """
-                    cursor.execute(query_title, (title,))
-                    row = cursor.fetchone()
-
-            if row:
+            requested_artist = (artist or '').strip().casefold()
+            known_artist = requested_artist not in ('', 'unknown artist')
+            candidates = []
+            for row in rows:
                 if hasattr(row, 'keys'):
                     r = dict(row)
                 else:
@@ -226,7 +220,24 @@ class TrackResolver:
                         'duration': row[8],
                         'file_path': row[9],
                     }
+                row_artist = (r.get('artist') or '').strip().casefold()
+                if not r.get('file_path') and not self._source_enabled(r.get('source')):
+                    continue
+                legacy_unknown = row_artist == 'unknown artist'
+                # Untagged legacy rows deliberately match on title; a known
+                # different artist must never be accepted by the title fallback.
+                match_artist = artist if known_artist and not legacy_unknown else ''
+                if not self._is_plausible_match(title, match_artist, r):
+                    continue
+                priority = 0
+                if known_artist and not legacy_unknown:
+                    priority = 2 if row_artist == requested_artist else 1
+                candidates.append((priority, r))
+
+            if candidates:
+                _, r = max(candidates, key=lambda candidate: candidate[0])
                 return {
+                    'id': r.get('id'),
                     'title': r.get('title') or title,
                     'artist': r.get('artist') or artist,
                     'cover_url': r.get('cover_url') or r.get('cover_path') or '',
@@ -234,6 +245,7 @@ class TrackResolver:
                     'source_id': str(r.get('source_id') or r.get('id') or ''),
                     'source_url': r.get('source_url') or r.get('file_path') or '',
                     'duration': float(r.get('duration') or 0),
+                    'file_path': r.get('file_path') or '',
                 }
             return None
         except Exception as e:
@@ -241,20 +253,79 @@ class TrackResolver:
             return None
 
     @staticmethod
-    def _is_plausible_match(title: str, artist: str, top: Dict[str, Any]) -> bool:
-        """True when the provider's top hit resembles the requested title (and artist, if given)."""
-        from services.lyrics_service import LyricsService
-        if title and LyricsService._title_match_score(title, top.get('title') or '') < TRACK_MATCH_MIN_SCORE:
+    def _is_plausible_match(title: str, artist: str, top: Dict[str, Any],
+                            expected_duration: float = 0) -> bool:
+        """True when the provider's top hit resembles the requested title (and artist, if given).
+
+        When the wanted duration is known, candidates outside the same
+        max(4s, 2.5%) window `same_recording` uses are rejected (BUG-A1-003):
+        a 0.6 title score otherwise admits "Song Live" / "Song (Radio Edit)".
+        """
+        from services.music_matching import title_metadata, similarity, artist_matches
+        wanted = title_metadata(title)
+        offered = title_metadata(top.get('title'))
+        if not title or not title.strip() or wanted['version'] != offered['version']:
             return False
-        if artist and LyricsService._title_match_score(artist, top.get('artist') or '') < TRACK_MATCH_MIN_SCORE:
+        if similarity(wanted['base_title'], offered['base_title']) < TRACK_MATCH_MIN_SCORE:
+            return False
+        if artist:
+            top_artist = top.get('artist')
+            offered_artists = offered.get('artists') or []
+            artist_ok = False
+            if top_artist and artist_matches(artist, top_artist):
+                artist_ok = True
+            elif offered_artists and artist_matches(artist, offered_artists):
+                artist_ok = True
+            if not artist_ok:
+                return False
+        try:
+            expected = float(expected_duration or 0)
+            actual = float(top.get('duration') or 0)
+        except (TypeError, ValueError):
+            return False
+        if expected > 0 and actual > 0 and abs(expected - actual) > max(4.0, expected * 0.025):
             return False
         return True
 
-    def _search_soundcloud(self, query: str, title: str = '', artist: str = '') -> Optional[Dict[str, Any]]:
+    @staticmethod
+    def _best_candidate(results, title: str, artist: str, expected_duration: float = 0) -> Optional[Dict[str, Any]]:
+        """Best plausible match among the provider's results, or None.
+
+        Providers are asked for several candidates (BUG-S4-015): the correct
+        recording often sits one slot below a remaster/radio-edit that shares
+        the title, so the top hit alone is not enough.
+        """
+        best = None
+        best_key = None
+        for index, top in enumerate(results or []):
+            if not isinstance(top, dict):
+                continue
+            if not TrackResolver._is_plausible_match(title, artist, top, expected_duration):
+                continue
+            try:
+                expected = float(expected_duration or 0)
+                actual = float(top.get('duration') or 0)
+            except (TypeError, ValueError):
+                expected = actual = 0.0
+            delta = abs(expected - actual) if expected > 0 and actual > 0 else 0.0
+            key = (delta, index)
+            if best_key is None or key < best_key:
+                best, best_key = top, key
+        return best
+
+    def _remaining(self):
+        return max(0.0, getattr(self._deadline_local, 'deadline', time.monotonic() + 5) - time.monotonic())
+
+    def _search_soundcloud(self, query: str, title: str = '', artist: str = '',
+                           expected_duration: float = 0) -> Optional[Dict[str, Any]]:
+        if 'soundcloud' not in self.providers or not self._source_enabled('soundcloud'):
+            return None
         if not self.sc_service:
             try:
                 from services.soundcloud_service import SoundCloudService
-                self.sc_service = SoundCloudService(settings=self.settings)
+                with self._provider_lock:
+                    if not self.sc_service:
+                        self.sc_service = SoundCloudService(settings=self.settings)
             except Exception as e:
                 logger.warning(f"Failed to instantiate SoundCloudService: {e}")
                 return None
@@ -271,18 +342,18 @@ class TrackResolver:
             done_event.set()
 
         try:
-            self.sc_service.search(query, max_results=1, callback=cb, error_callback=err_cb)
-            done_event.wait(timeout=5.0)
+            self.sc_service.search(query, max_results=5, callback=cb, error_callback=err_cb)
+            done_event.wait(timeout=min(5.0, self._remaining()))
 
             if results and isinstance(results, list):
-                top = results[0]
-                if not self._is_plausible_match(title, artist, top):
+                top = self._best_candidate([t for t in results if isinstance(t, dict) and self._source_enabled(t.get('source') or 'soundcloud')], title, artist, expected_duration)
+                if not top:
                     return None
                 return {
                     'title': top.get('title', 'Unknown Title'),
                     'artist': top.get('artist', 'Unknown Artist'),
                     'cover_url': top.get('cover_url', ''),
-                    'source': 'soundcloud',
+                    'source': top.get('source') or 'soundcloud',
                     'source_id': str(top.get('source_id', '')),
                     'source_url': top.get('source_url', ''),
                     'duration': float(top.get('duration', 0)),
@@ -292,11 +363,16 @@ class TrackResolver:
             return None
         return None
 
-    def _search_youtube(self, query: str, title: str = '', artist: str = '') -> Optional[Dict[str, Any]]:
+    def _search_youtube(self, query: str, title: str = '', artist: str = '',
+                        expected_duration: float = 0) -> Optional[Dict[str, Any]]:
+        if 'youtube' not in self.providers or not self._source_enabled('youtube'):
+            return None
         if not self.yt_service:
             try:
                 from services.youtube_service import YouTubeService
-                self.yt_service = YouTubeService(settings=self.settings)
+                with self._provider_lock:
+                    if not self.yt_service:
+                        self.yt_service = YouTubeService(settings=self.settings)
             except Exception as e:
                 logger.warning(f"Failed to instantiate YouTubeService: {e}")
                 return None
@@ -313,12 +389,12 @@ class TrackResolver:
             done_event.set()
 
         try:
-            self.yt_service.search(query, max_results=1, callback=cb, error_callback=err_cb)
-            done_event.wait(timeout=5.0)
+            self.yt_service.search(query, max_results=5, callback=cb, error_callback=err_cb)
+            done_event.wait(timeout=min(5.0, self._remaining()))
 
             if results and isinstance(results, list):
-                top = results[0]
-                if not self._is_plausible_match(title, artist, top):
+                top = self._best_candidate(results, title, artist, expected_duration)
+                if not top:
                     return None
                 return {
                     'title': top.get('title', 'Unknown Title'),
@@ -334,17 +410,20 @@ class TrackResolver:
             return None
         return None
 
-    def resolve_track(self, title: str, artist: str = '') -> Dict[str, Any]:
-        memo_key = self._memo_key(title, artist)
+    def resolve_track(self, title: str, artist: str = '', expected_duration: float = 0) -> Dict[str, Any]:
+        if not title or not title.strip():
+            return self._unresolved(title, artist)
+        self._deadline_local.deadline = time.monotonic() + self.BATCH_TIMEOUT
+        memo_key = self._memo_key(title, artist, expected_duration)
         cached = self._memo_get(memo_key)
         if cached is not None:
             return cached
 
-        result = self._resolve_uncached(title, artist)
+        result = self._resolve_uncached(title, artist, expected_duration)
         self._memo_put(memo_key, result)
         return result
 
-    def _resolve_uncached(self, title: str, artist: str = '') -> Dict[str, Any]:
+    def _resolve_uncached(self, title: str, artist: str = '', expected_duration: float = 0) -> Dict[str, Any]:
         if artist:
             query = f"{artist} {title}".strip()
         else:
@@ -354,13 +433,16 @@ class TrackResolver:
         if local_res:
             return local_res
 
-        sc_res = self._search_soundcloud(query, title, artist)
-        if sc_res:
-            return sc_res
-
-        yt_res = self._search_youtube(query, title, artist)
-        if yt_res:
-            return yt_res
+        searches = (('soundcloud', self._search_soundcloud),
+                    ('youtube', self._search_youtube))
+        for name, search in searches:
+            if name not in self.providers or not self._source_enabled(name):
+                continue
+            if self._remaining() <= 0:
+                return self._unresolved(title, artist)
+            found = search(query, title, artist, expected_duration)
+            if found:
+                return found
 
         return self._unresolved(title, artist)
 
@@ -398,8 +480,7 @@ class TrackResolver:
 
             future = _resolver_pool.submit(self.resolve_track, title, artist)
             if future is None:
-                # Shared pool unavailable (shutting down): fall back to inline resolution.
-                res = self.resolve_track(title, artist)
+                res = self._unresolved(title, artist)
                 for idx in indices:
                     results[idx] = res
             else:
@@ -417,6 +498,7 @@ class TrackResolver:
                 key = self._memo_key(title, artist)
 
                 if future in not_done:
+                    future.cancel()
                     logger.debug(f"Batch resolve timed out for '{artist} - {title}'")
                     unresolved = self._unresolved(title, artist)
                     self._memo_put(key, unresolved)
@@ -461,7 +543,7 @@ class TrackResolver:
             logger.debug(f"resolve_track_async dropped for '{artist} - {title}': resolver executor unavailable")
             if callback:
                 try:
-                    callback(self.resolve_track(title, artist))
+                    callback(self._unresolved(title, artist))
                 except Exception as e:
                     logger.warning(f"resolve_track_async fallback callback error: {e}")
 

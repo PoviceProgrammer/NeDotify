@@ -1,11 +1,9 @@
 """Static source-level checks for the ui/web_new_v2 frontend.
 
-The Windows frontend is Vanilla-JS ES modules running inside pywebview/WebView2 and
-has **no runtime test harness** in this repository. Everything below is therefore a
-*static* assertion on the shipped source text (plus a real `node --check` parse when
-a Node binary is available). These tests prove the intended wiring is present in the
-files; they do NOT prove the UI behaves correctly at runtime. Do not mistake a green
-run here for a functional smoke test of the webview.
+Other frontend suites execute selected JavaScript through Node harnesses. This
+file itself uses static assertions on source text (plus a real `node --check`
+parse when Node is available); it proves the intended wiring is present, not
+that the UI behaves correctly in a live WebView.
 
 Covered audit items:
   P0-4  backend `api_error` bridge event must have a real handler in events.js
@@ -57,7 +55,7 @@ def artist_src():
 
 @pytest.mark.parametrize(
     "filename",
-    ["events.js", "main.js", "artist_profile.js", "utils.js", "boot.js"],
+    ["events.js", "main.js", "artist_profile.js", "utils.js", "boot.js", "player.js", "lyrics.js", "settings.js", "settings-panel.js"],
 )
 def test_js_files_parse_as_es_modules(filename):
     """node --check on a .mjs copy: a syntax error breaks the whole webview."""
@@ -79,7 +77,7 @@ def test_js_files_parse_as_es_modules(filename):
 
 
 # --------------------------------------------------------------------------
-# P0-4: the backend pushes `api_error`; the UI must surface it.
+# P0-4: API rejections are surfaced once by their Promise caller; the event is diagnostic only.
 # --------------------------------------------------------------------------
 
 def test_backend_emits_api_error_with_method_and_error():
@@ -87,7 +85,9 @@ def test_backend_emits_api_error_with_method_and_error():
     src = read(CORE_API)
     assert '_emit("api_error"' in src
     assert '"method": method_name' in src
-    assert '"error": f"{type(exc).__name__}: {exc}"' in src
+    assert '"error": details[\'message\']' in src
+    assert "describe_error(exc, method_name)" in src
+    assert '"error": f"{type(exc).__name__}: {exc}"' not in src
 
 
 def test_events_js_handles_api_error(events_src):
@@ -97,15 +97,17 @@ def test_events_js_handles_api_error(events_src):
     )
 
 
-def test_api_error_case_shows_toast_and_logs(events_src):
-    """The case body must surface the failure, not just console.log it."""
+def test_api_error_case_logs_method_and_code_without_duplicate_ui_error(events_src):
+    """The rejected bridge Promise owns UI feedback; event logging must not duplicate it."""
     match = re.search(r"case 'api_error':\s*\{(.*?)\n\s*\}", events_src, re.S)
     assert match, "api_error case body is not block-scoped / not found"
     body = match.group(1)
-    assert "showToast(" in body, "api_error must raise a visible toast"
     assert "console.error(" in body, "api_error must be logged for diagnostics"
     assert ".method" in body, "api_error handler must read data.method"
-    assert ".error" in body, "api_error handler must read data.error"
+    assert ".code" in body, "api_error handler must read the structured error code"
+    assert "showToast(" not in body
+    assert "nedotify:operation_error" not in body
+    assert "data);" not in body, "raw error payloads must not be copied to the WebView console"
 
 
 def test_api_error_is_not_a_silent_default(events_src):
@@ -229,7 +231,6 @@ def test_main_js_registers_both_original_subscribers(main_src):
     "case_label",
     [
         "'state_changed'",
-        "'position_changed'",
         "'authentic_home_error'",
         "'error'",
         "'audio_error'",
@@ -307,10 +308,17 @@ def test_artist_profile_avatar_comes_from_backend(artist_src):
     assert "artistData.avatarUrl || 'https://" not in artist_src
 
 
-def test_backend_get_artists_avatars_exists():
-    src = read(CORE_API)
-    assert "def get_artists_avatars(" in src
-    assert '_emit("artists_avatars_ready"' in src
+def test_backend_get_artists_avatars_emits_provider_completion(api, core_ns, emitted):
+    from types import SimpleNamespace
+
+    core_ns.artists = SimpleNamespace(
+        get_avatars=lambda names, callback: callback({name: "https://img.example/a.jpg" for name in names})
+    )
+    result = api.get_artists_avatars(["Artist"])
+    assert result == {"status": "loading"}
+    assert emitted == [("artists_avatars_ready", {
+        "avatars": {"Artist": "https://img.example/a.jpg"},
+    })]
 
 
 def test_backend_get_artist_profile_exists():

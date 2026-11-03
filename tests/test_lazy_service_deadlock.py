@@ -1,102 +1,127 @@
-"""Regression test: lazy service properties must not self-deadlock.
+"""The production AppCore lock must support nested lazy-property access."""
 
-`recommendations` acquires AppCore._service_lock and then reads
-`self.soundcloud`, which acquires the same lock. With a non-reentrant Lock that
-is an unrecoverable self-deadlock: every later reader of a lazy service (the
-search bridge method among them) blocks forever, so search never dispatches a
-provider and the UI spins on "Поиск..." indefinitely.
-"""
+import os
 import threading
-import time
+from types import SimpleNamespace
 
 from core.app import AppCore
 
 
-def test_service_lock_is_reentrant():
-    assert isinstance(AppCore.__init__.__doc__ or "", (str, type(None)))
-    core = AppCore.__new__(AppCore)
-    core._service_lock = threading.RLock()
-    assert isinstance(core._service_lock, type(threading.RLock()))
+class _Component:
+    def __init__(self, *args, **kwargs):
+        self.args, self.kwargs = args, kwargs
+        self._started = False
+
+    def start(self):
+        self._started = True
+
+    def stop(self, *args, **kwargs):
+        self._started = False
 
 
-def test_nested_lazy_property_access_does_not_deadlock(monkeypatch):
-    core = AppCore.__new__(AppCore)
-    core._service_lock = threading.RLock()
-    core._soundcloud = None
-    core._yandex = None
-    core._recommendations = None
-    core.settings = None
-    core.db = None
-    core.youtube = object()
+def _build_production_core(monkeypatch):
+    import core.app as app_module
 
-    import sys
-    import types
+    db = SimpleNamespace(db_path=os.path.join(os.getcwd(), "stub.db"))
+    engine = SimpleNamespace()
+    monkeypatch.setattr(app_module, "DatabaseManager", lambda: db)
+    monkeypatch.setattr(app_module, "SettingsManager", lambda *_: _Component())
+    monkeypatch.setattr(app_module, "SessionManager", lambda *_: _Component())
+    monkeypatch.setattr(app_module, "CacheManager", lambda *_: _Component())
+    monkeypatch.setattr(app_module, "FileScanner", lambda *_: _Component())
+    monkeypatch.setattr(app_module, "StreamResolver", lambda *_args, **_kwargs: _Component())
+    monkeypatch.setattr(app_module, "AudioEngine", lambda: engine)
+    for name in (
+        "YouTubeService", "VKService", "SpotifyService", "LyricsService", "ArtistService",
+        "LocalProxyManager", "DownloadManager", "PluginManager", "ZapretService",
+        "PlaylistImportService", "WatchdogService", "LufsScannerService",
+        "AudioFingerprintService", "DiscordRPCService",
+    ):
+        monkeypatch.setattr(app_module, name, lambda *args, **kwargs: _Component(*args, **kwargs))
+    core = AppCore()  # lock and lazy-property fields come from the real initializer
+    return core
 
-    sc_mod = types.ModuleType("services.soundcloud_service")
+
+def _install_lazy_service_stubs(monkeypatch, delay=None):
+    import services.soundcloud_service as sc_module
+    import services.recommendation_service as rec_module
 
     class SoundCloudService:
         def __init__(self, settings=None):
+            if delay is not None:
+                delay.wait(2)
             self.settings = settings
-
-    sc_mod.SoundCloudService = SoundCloudService
-
-    rec_mod = types.ModuleType("services.recommendation_service")
 
     class RecommendationService:
-        def __init__(self, **kw):
-            self.kw = kw
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
 
-    rec_mod.RecommendationService = RecommendationService
-
-    monkeypatch.setitem(sys.modules, "services.soundcloud_service", sc_mod)
-    monkeypatch.setitem(sys.modules, "services.recommendation_service", rec_mod)
-
-    # Exercise the exact nesting that deadlocked: recommendations -> soundcloud
-    rec = core.recommendations
-    assert rec is not None
-    assert isinstance(rec.kw["soundcloud_service"], SoundCloudService)
-    # A second reader (what search() does) must still be able to get the service.
-    assert core.soundcloud is not None
+    monkeypatch.setattr(sc_module, "SoundCloudService", SoundCloudService)
+    monkeypatch.setattr(rec_module, "RecommendationService", RecommendationService)
+    return SoundCloudService, RecommendationService
 
 
-def test_concurrent_lazy_access_all_succeed():
-    core = AppCore.__new__(AppCore)
-    core._service_lock = threading.RLock()
-    core._soundcloud = None
-    core._yandex = None
-    core._recommendations = None
-    core.settings = None
-    core.db = None
-    core.youtube = object()
+def _stop_core_cleanup(core):
+    core._cache_cleanup_stop.set()
+    core._cache_cleanup_thread.join(2)
 
-    import sys
-    import types
 
-    sc_mod = types.ModuleType("services.soundcloud_service")
+def test_production_service_lock_is_reentrant(monkeypatch):
+    core = _build_production_core(monkeypatch)
+    soundcloud_cls, _ = _install_lazy_service_stubs(monkeypatch)
+    done = threading.Event()
+    result = {}
 
-    class SoundCloudService:
-        def __init__(self, settings=None):
-            time.sleep(0.01)
-            self.settings = settings
+    def nested_access():
+        with core._service_lock:
+            result["service"] = core.soundcloud
+        done.set()
 
-    sc_mod.SoundCloudService = SoundCloudService
-    sys.modules["services.soundcloud_service"] = sc_mod
+    thread = threading.Thread(target=nested_access, daemon=True)
+    try:
+        thread.start()
+        assert done.wait(2), "the production service lock deadlocked on nested acquisition"
+        assert isinstance(result["service"], soundcloud_cls)
+    finally:
+        _stop_core_cleanup(core)
 
-    got = []
-    errors = []
+
+def test_recommendation_property_uses_real_core_lock_and_dependencies(monkeypatch):
+    core = _build_production_core(monkeypatch)
+    soundcloud_cls, recommendation_cls = _install_lazy_service_stubs(monkeypatch)
+    try:
+        recommendations = core.recommendations
+        assert isinstance(recommendations, recommendation_cls)
+        assert isinstance(recommendations.kwargs["soundcloud_service"], soundcloud_cls)
+        assert recommendations.kwargs["youtube_service"] is core.youtube
+        assert core.soundcloud is recommendations.kwargs["soundcloud_service"]
+    finally:
+        _stop_core_cleanup(core)
+
+
+def test_concurrent_lazy_access_all_succeed(monkeypatch):
+    release = threading.Event()
+    core = _build_production_core(monkeypatch)
+    soundcloud_cls, _ = _install_lazy_service_stubs(monkeypatch, delay=release)
+    got, errors = [], []
 
     def worker():
         try:
             got.append(core.soundcloud)
-        except Exception as e:  # pragma: no cover
-            errors.append(e)
+        except Exception as exc:  # pragma: no cover - failures are collected for useful output
+            errors.append(exc)
 
-    threads = [threading.Thread(target=worker) for _ in range(8)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(timeout=5)
-
-    assert not any(t.is_alive() for t in threads), "lazy property access deadlocked"
-    assert not errors
-    assert len(got) == 8
+    threads = [threading.Thread(target=worker, daemon=True) for _ in range(8)]
+    try:
+        for thread in threads:
+            thread.start()
+        release.set()
+        for thread in threads:
+            thread.join(2)
+        assert not any(thread.is_alive() for thread in threads), "lazy property access deadlocked"
+        assert not errors
+        assert len(got) == 8 and all(isinstance(item, soundcloud_cls) for item in got)
+        assert len({id(item) for item in got}) == 1
+    finally:
+        release.set()
+        _stop_core_cleanup(core)

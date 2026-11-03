@@ -1,3 +1,4 @@
+import './notifications.js';
 // NeDotify — Utilities Module
 
 export const HIDDEN_SOURCES = new Set(['yandex', 'vk', 'vkontakte', 'zeno']);
@@ -78,7 +79,7 @@ export const SVG_NOTE_FALLBACK = `
 </svg>`;
 
 export function formatTime(seconds) {
-    if (!seconds || seconds <= 0) return "0:00";
+    if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s < 10 ? '0' : ''}${s}`;
@@ -145,30 +146,8 @@ function getToastContainer() {
     }
 })();
 
-export function showToast(message, type = 'info') {
-    const container = getToastContainer();
-    if (!container) return;
-    // The toast node itself carries no ARIA: the container is the single live
-    // region, so adding role/aria-live here as well would announce twice.
-    // Cap stacking: never more than 4 visible toasts.
-    while (container.children.length >= 4) {
-        container.firstElementChild?.remove();
-    }
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 4000);
-}
-
-// Global bridge: most modules notify via
-// window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg, type } })).
-if (typeof window !== 'undefined' && !window.__nedotifyToastBridgeArmed) {
-    window.__nedotifyToastBridgeArmed = true;
-    window.addEventListener('nedotify:toast', (e) => {
-        const d = e?.detail || {};
-        showToast(d.msg || d.message || '', d.type || 'info');
-    });
+export function showToast(message, type = 'info', options = {}) {
+    window.NeDotifyToast.show(message,type,options);
 }
 
 // ---------------------------------------------------------------------------
@@ -204,6 +183,14 @@ const MODAL_FOCUSABLE_SELECTOR = [
 
 // modal element -> { previous, onKeyDown }
 const modalTraps = new Map();
+
+function isTopModalTrap(modal) {
+    let top = null;
+    for (const candidate of modalTraps.keys()) {
+        if (hasLayoutBox(candidate)) top = candidate;
+    }
+    return top === modal;
+}
 
 // Layout check rather than `offsetParent`: offsetParent is null for a
 // position:fixed element and for anything inside a display:none subtree, which
@@ -244,6 +231,14 @@ function resolveInitialFocus(modal, initialFocus) {
  */
 export function openModalFocusTrap(modal, options = {}) {
     if (!modal || typeof modal.addEventListener !== 'function') return false;
+    const nativeDialog = modal.tagName === 'DIALOG';
+    // A native modal stays in the browser's top layer until close(). Hiding it
+    // with CSS leaves the rest of the document inert, with no visible way out.
+    if (nativeDialog && modal.open) {
+        modal.hidden = false;
+        modal.classList.remove('hidden');
+        if (modal.style.display === 'none') modal.style.removeProperty('display');
+    }
     // Re-opening an already-trapped modal must not stack traps or leak a
     // document listener; the newest open owns the return-focus target.
     closeModalFocusTrap(modal);
@@ -253,13 +248,54 @@ export function openModalFocusTrap(modal, options = {}) {
         ? options.returnFocusTo
         : (active && active !== document.body ? active : null);
 
+    const triggerClose = () => {
+        // Another listener may already have closed this same dialog for this
+        // click. Never fall through to the div-overlay hiding path for dialog.
+        if (nativeDialog && !modal.open) {
+            closeModalFocusTrap(modal);
+            return;
+        }
+        if (typeof options.onClose === 'function') {
+            options.onClose();
+            return;
+        }
+        const closeBtn = modal.querySelector(
+            '#modal-et-close, #modal-et-cancel, #modal-ip-close, #modal-ip-cancel, #modal-dpl-cancel, [data-modal-close], .glass-modal-close, .modal-close, [data-cancel], [id$="-cancel"], [id$="-close"]'
+        );
+        if (closeBtn && typeof closeBtn.click === 'function') {
+            closeBtn.click();
+            return;
+        }
+        if (nativeDialog) {
+            modal.close();
+        } else {
+            modal.style.display = 'none';
+            modal.classList.add('hidden');
+        }
+        closeModalFocusTrap(modal);
+    };
+
     const onKeyDown = (e) => {
         // Self-heal if the overlay was hidden by a path that did not close the
         // trap (e.g. searchArtistProfile() blanks every .modal-overlay).
         if (!hasLayoutBox(modal)) {
+            if (nativeDialog && modal.open) modal.close();
             closeModalFocusTrap(modal);
             return;
         }
+
+        // Settings can remain open below an editor or a native dialog. Only
+        // the last visible trap may consume keys; a parent capture listener
+        // must not close first or pull Tab focus out of the nested dialog.
+        if (!isTopModalTrap(modal)) return;
+
+        if (e.key === 'Escape' && !e.defaultPrevented) {
+            e.preventDefault();
+            e.stopPropagation();
+            triggerClose();
+            return;
+        }
+
         if (e.key !== 'Tab' || e.ctrlKey || e.altKey || e.metaKey) return;
 
         const stops = getModalFocusables(modal);
@@ -286,10 +322,36 @@ export function openModalFocusTrap(modal, options = {}) {
         }
     };
 
+    let pointerStartedOutside = null;
+    const outside = e => {
+        const rect = modal.getBoundingClientRect();
+        return e.clientX < rect.left || e.clientX >= rect.right || e.clientY < rect.top || e.clientY >= rect.bottom;
+    };
+    const onPointerDown = e => { pointerStartedOutside = e.target === modal && outside(e); };
+    const onNativeClose = () => { if (!modal.open) closeModalFocusTrap(modal); };
+    const onNativeCancel = e => { e.preventDefault();triggerClose(); };
+    const onBackdropClick = (e) => {
+        if (!isTopModalTrap(modal)) return;
+        if (e.target === modal) {
+            // A native dialog is both the card and the retargeted backdrop.
+            // Its padding is inside the card; dragging out of a field is not
+            // an outside click either. Div overlays keep their existing path.
+            if (nativeDialog && (!outside(e) || pointerStartedOutside === false)) return;
+            triggerClose();
+        }
+        pointerStartedOutside = null;
+    };
+
     // Capture phase on document: a modal that calls stopPropagation() on its own
     // keydown cannot starve the trap.
     document.addEventListener('keydown', onKeyDown, true);
-    modalTraps.set(modal, { previous, onKeyDown });
+    modal.addEventListener('click', onBackdropClick);
+    if (nativeDialog) {
+        modal.addEventListener('pointerdown', onPointerDown);
+        modal.addEventListener('close', onNativeClose);
+        modal.addEventListener('cancel', onNativeCancel);
+    }
+    modalTraps.set(modal, { previous, onKeyDown, onBackdropClick, onPointerDown, onNativeClose, onNativeCancel, nativeDialog });
 
     const initial = resolveInitialFocus(modal, options.initialFocus);
     if (initial) {
@@ -309,6 +371,14 @@ export function closeModalFocusTrap(modal, options = {}) {
     if (!trap) return false;
     modalTraps.delete(modal);
     document.removeEventListener('keydown', trap.onKeyDown, true);
+    if (trap.onBackdropClick) {
+        modal.removeEventListener('click', trap.onBackdropClick);
+    }
+    if (trap.nativeDialog) {
+        modal.removeEventListener('pointerdown', trap.onPointerDown);
+        modal.removeEventListener('close', trap.onNativeClose);
+        modal.removeEventListener('cancel', trap.onNativeCancel);
+    }
 
     const target = trap.previous;
     if (!options.skipRestore && target && target.isConnected && typeof target.focus === 'function') {
@@ -468,9 +538,18 @@ export function registerCanvasDprListener(callback) {
     return () => canvasDprListeners.delete(callback);
 }
 
+// Shared cover sampler: no retained image references, no repeated pixel readback.
+let coverSampleCanvas = null;
+const coverSampleResults = new WeakMap();
 export function extractDominantColor(imgEl) {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    const src = imgEl?.currentSrc || imgEl?.src;
+    const cacheable = !!(src && imgEl.complete && imgEl.naturalWidth && !/\.gif(?:[?#]|$)/i.test(src));
+    const previous = cacheable && coverSampleResults.get(imgEl);
+    if (previous && previous.src === src && previous.width === imgEl.naturalWidth && previous.height === imgEl.naturalHeight) {
+        return {...previous.color};
+    }
+    const canvas = coverSampleCanvas || (coverSampleCanvas = document.createElement('canvas'));
+    const ctx = canvas.getContext('2d', {willReadFrequently: true});
     if (!ctx) return null;
 
     // M-11: sample a small downscaled copy instead of full-size getImageData
@@ -493,7 +572,9 @@ export function extractDominantColor(imgEl) {
         r = Math.floor(r / count);
         g = Math.floor(g / count);
         b = Math.floor(b / count);
-        return {r, g, b};
+        const color = {r, g, b};
+        if (cacheable) coverSampleResults.set(imgEl, {src, width: imgEl.naturalWidth, height: imgEl.naturalHeight, color});
+        return color;
     } catch (e) {
         console.warn('Canvas color extraction failed (CORS?):', e);
         return null;
@@ -612,18 +693,10 @@ export function getCoverUrl(track) {
         // writes ui/web_new (v1) covers, which 404 as ./covers/ here and must
         // go through the loopback proxy like any other local file.
         const idxV2 = path.indexOf('web_new_v2/covers/');
-        if (idxV2 !== -1) {
-            return './covers/' + path.substring(idxV2 + 17);
+        if (idxV2 !== -1 && !path.substring(idxV2 + 18).split('/').includes('..')) {
+            return './covers/' + path.substring(idxV2 + 18);
         }
-        if (window.PROXY_PORT) {
-            const tokenQuery = window.PROXY_TOKEN ? `&k=${encodeURIComponent(window.PROXY_TOKEN)}` : '';
-            return `http://127.0.0.1:${window.PROXY_PORT}/api/cover?path=${encodeURIComponent(track.cover_path)}${tokenQuery}`;
-        }
-        // No proxy port yet (cold start): CSP img-src forbids file:// on an
-        // http:// origin, so a file URL would only render a broken-image icon.
-        // Return '' so callers keep their fallbacks; the collage retry (3s)
-        // re-resolves once PROXY_PORT is known.
-        return '';
+        return `./api/cover?path=${encodeURIComponent(track.cover_path)}`;
     }
     let url = track.cover_url || track.og_image || track.artwork_url || '';
     if (url && url.includes('%%')) {
@@ -679,8 +752,10 @@ export function updatePlayingTrackInDOM(currentTrack) {
 export function createTrackElement(track, index, tracksArray, currentTrack) {
     const item = document.createElement('div');
     item._trackData = track;
+    item._trackIndex = index;
     const isCurrentlyPlaying = currentTrack && isSameTrack(track, currentTrack);
     item.className = `track-item${isCurrentlyPlaying ? ' playing' : ''}`;
+    if (selectedTracksMap.has(String(track.source_id || track.id || `track_${index}`))) item.classList.add('selected');
     item.style.animationDelay = `${Math.min(index * 0.03, 0.5)}s`;
     item.dataset.trackSourceId = String(track.source_id || track.id || '');
 
@@ -707,6 +782,7 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
     const grad = gradientColors[Math.abs(hash) % gradientColors.length];
 
     item.innerHTML = `
+        <span class="track-number">${index + 1}</span>
         <div class="track-cover-wrap fallback-gradient" style="background: ${grad}">
             <svg class="fallback-note-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40%;height:40%;opacity:0.6;position:relative;z-index:1;"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
             ${coverSrc ? `<img src="${escapeHtml(coverSrc)}" alt="" onerror="this.onerror=null;this.style.display='none';" loading="lazy">` : ''}
@@ -755,6 +831,12 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
     // Download handler: show spinning animation, trigger download, update state on completion
     const downloadBtn = item.querySelector('.download-btn');
     if (downloadBtn) {
+        const pending = pendingTrackDownloads.get(downloadKey(track));
+        if (pending) {
+            pending.add(track);
+            downloadBtn.classList.add('downloading');
+            downloadBtn.innerHTML = '<i data-lucide="loader-2" class="spin-icon"></i>';
+        }
         downloadBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -762,21 +844,19 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
                 return;
             }
             downloadBtn.classList.add('downloading');
+            pendingTrackDownloads.set(downloadKey(track), new Set([track]));
             downloadBtn.innerHTML = '<i data-lucide="loader-2" class="spin-icon" style="width:14px;height:14px"></i>';
             renderIcons(item);
             showToast(`Скачивание '${track.title || 'трека'}'...`, 'info');
 
-            if (window.NeDotify?.downloadTrack) {
-                window.NeDotify.downloadTrack(track);
-            } else if (window.pywebview?.api?.download_track) {
-                try {
-                    await window.pywebview.api.download_track(track);
-                } catch(err) {
-                    downloadBtn.classList.remove('downloading');
-                    downloadBtn.innerHTML = '<i data-lucide="download" style="width:14px;height:14px"></i>';
-                    renderIcons(item);
-                    showToast('Ошибка скачивания', 'error');
-                }
+            try {
+                const result = window.NeDotify?.downloadTrack
+                    ? await window.NeDotify.downloadTrack(track)
+                    : await window.pywebview.api.download_track(track);
+                if (result?.success === false) throw new Error('Download rejected');
+            } catch(err) {
+                settlePendingDownloads({track_id:track.id,source_id:track.source_id}, false);
+                showToast('Ошибка скачивания', 'error');
             }
         });
     }
@@ -795,9 +875,9 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
                     closeModalFocusTrap(m);
                 });
                 if (window.searchArtistProfile) {
-                    window.searchArtistProfile(artistName);
+                    window.searchArtistProfile(artistName, track);
                 } else if (window.NeDotify?.searchArtistProfile) {
-                    window.NeDotify.searchArtistProfile(artistName);
+                    window.NeDotify.searchArtistProfile(artistName, track);
                 }
             }
         });
@@ -965,6 +1045,21 @@ document.addEventListener('nedotify:track_changed', (e) => {
     }
 });
 
+const pendingTrackDownloads = new Map();
+function downloadKey(track) { return `${track.source || ''}:${track.source_id || track.id}`; }
+function settlePendingDownloads(data, downloaded) {
+    for (const [key, tracks] of pendingTrackDownloads) {
+        if (![...tracks].some(track => [track.id, track.source_id].some(id => id != null &&
+            [data.track_id, data.source_id].some(other => other != null && String(id) === String(other))))) continue;
+        for (const track of tracks) if (downloaded) track.is_downloaded = true;
+        pendingTrackDownloads.delete(key);
+    }
+    document.querySelectorAll('.track-item').forEach(row => {
+        if (matchDownloadTarget(row, data)) clearDownloadSpinner(row, downloaded);
+    });
+    renderIcons();
+}
+
 function matchDownloadTarget(el, data) {
     if (!data) return false;
     // Strict comparison only: String(a) === String(b). No .includes() —
@@ -999,6 +1094,7 @@ function clearDownloadSpinner(el, downloaded) {
 document.addEventListener('nedotify:track_downloaded', (e) => {
     const data = e.detail;
     if (!data) return;
+    settlePendingDownloads(data, true);
     document.querySelectorAll('.track-item').forEach(el => {
         if (matchDownloadTarget(el, data)) {
             clearDownloadSpinner(el, true);
@@ -1010,6 +1106,7 @@ document.addEventListener('nedotify:track_downloaded', (e) => {
 document.addEventListener('nedotify:track_download_failed', (e) => {
     const data = e.detail;
     if (!data) return;
+    settlePendingDownloads(data, false);
     let matched = false;
     document.querySelectorAll('.track-item').forEach(el => {
         if (matchDownloadTarget(el, data)) {
@@ -1017,14 +1114,6 @@ document.addEventListener('nedotify:track_download_failed', (e) => {
             clearDownloadSpinner(el, false);
         }
     });
-    // Fallback: if the failed track has no rendered row, drop all spinners
-    // so no button stays stuck in the loading state.
-    if (!matched) {
-        document.querySelectorAll('.download-btn.downloading').forEach(btn => {
-            btn.classList.remove('downloading');
-            btn.innerHTML = '<i data-lucide="download" style="width:14px;height:14px"></i>';
-        });
-    }
     renderIcons();
 });
 
@@ -1072,6 +1161,21 @@ if (typeof window !== 'undefined') {
     window.NeDotify.closeAllFloatingMenus = closeAllFloatingMenus;
 }
 
+export async function submitRecommendationFeedback(track, kind = 'track') {
+    try {
+        const bridge = window.pywebview.api;
+        const current = await bridge.get_recommendation_feedback(track);
+        const result = await bridge.set_recommendation_feedback(track, kind, !current?.[kind]);
+        if (!result?.success) throw new Error('Feedback rejected');
+        window.dispatchEvent(new CustomEvent('nedotify:recommendation_feedback_changed', {detail:{track,kind}}));
+        showToast(current?.[kind] ? 'Снова будем рекомендовать' : 'Учтём в рекомендациях', 'success');
+        return true;
+    } catch {
+        showToast('Не удалось сохранить предпочтение', 'error');
+        return false;
+    }
+}
+
 export function showTrackContextMenu(track, e, tracksArray, index) {
     if (e) {
         e.preventDefault();
@@ -1101,7 +1205,7 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
                     <span class="rich-menu-title">${escapeHtml(track.title || 'Неизвестный трек')}</span>
                     <i data-lucide="info" class="rich-menu-info-icon" style="width:15px;height:15px"></i>
                 </div>
-                <div class="rich-menu-artist">${escapeHtml(track.artist || 'Неизвестный исполнитель')}</div>
+                <div class="rich-menu-artist clickable-artist" title="Перейти к исполнителю">${escapeHtml(track.artist || 'Неизвестный исполнитель')}</div>
             </div>
         </div>
 
@@ -1117,6 +1221,10 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
             <i data-lucide="radio" style="width:16px;height:16px"></i>
             <span>Волна по треку</span>
         </button>
+        <button class="rich-menu-item" data-action="go_to_artist">
+            <i data-lucide="user" style="width:16px;height:16px"></i>
+            <span>Перейти к исполнителю</span>
+        </button>
 
         <div class="rich-menu-divider"></div>
 
@@ -1126,7 +1234,11 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
         </button>
         <button class="rich-menu-item orange-action" data-action="dislike">
             <i data-lucide="thumbs-down" style="width:16px;height:16px"></i>
-            <span>Убрать из «Не интересно»</span>
+            <span>Не рекомендовать трек</span>
+        </button>
+        <button class="rich-menu-item orange-action" data-action="dislike_artist">
+            <i data-lucide="user-minus" style="width:16px;height:16px"></i>
+            <span>Не рекомендовать исполнителя</span>
         </button>
 
         <div class="rich-menu-divider"></div>
@@ -1144,7 +1256,7 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
         </button>
         <button class="rich-menu-item" data-action="cache">
             <i data-lucide="hard-drive" style="width:16px;height:16px"></i>
-            <span>Кешировать</span>
+            <span>Подготовить воспроизведение</span>
         </button>
 
         <div class="rich-menu-divider"></div>
@@ -1174,7 +1286,8 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
 
     // Calculate position relative to mouse or button
     const menuWidth = 270;
-    const menuHeight = menu.offsetHeight || 420;
+    const maxAvailableHeight = Math.max(100, window.innerHeight - 24);
+    const menuHeight = Math.min(menu.offsetHeight || 420, maxAvailableHeight);
     let clickX = e ? e.clientX : window.innerWidth / 2;
     let clickY = e ? e.clientY : window.innerHeight / 2;
 
@@ -1189,11 +1302,32 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
 
     menu.style.left = `${clickX}px`;
     menu.style.top = `${clickY}px`;
+    Promise.resolve().then(() => window.pywebview?.api?.get_recommendation_feedback(track)).then(feedback => {
+        if (!menu.isConnected) return;
+        const trackLabel = menu.querySelector('[data-action="dislike"] span');
+        const artistLabel = menu.querySelector('[data-action="dislike_artist"] span');
+        if (trackLabel && feedback?.track) trackLabel.textContent = 'Снова рекомендовать трек';
+        if (artistLabel && feedback?.artist) artistLabel.textContent = 'Снова рекомендовать исполнителя';
+    }).catch(() => {});
 
     // Click Actions
     menu.addEventListener('click', (evt) => {
         const itemBtn = evt.target.closest('.rich-menu-item');
         const infoIcon = evt.target.closest('.rich-menu-info-icon');
+        const artistHeaderEl = evt.target.closest('.rich-menu-artist');
+
+        if (artistHeaderEl) {
+            evt.stopPropagation();
+            closeMenu();
+            if (track.artist && track.artist !== 'Unknown') {
+                if (window.searchArtistProfile) {
+                    window.searchArtistProfile(track.artist, track);
+                } else if (window.NeDotify?.searchArtistProfile) {
+                    window.NeDotify.searchArtistProfile(track.artist, track);
+                }
+            }
+            return;
+        }
 
         if (infoIcon) {
             evt.stopPropagation();
@@ -1226,23 +1360,37 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
                     showToast(`📻 Запуск радио по треку '${track.title || ''}'...`, 'info');
                 }
                 break;
-            case 'favorite':
-                track.is_favorite = !track.is_favorite;
-                if (window.pywebview?.api?.toggle_favorite) {
-                    window.pywebview.api.toggle_favorite(track);
+            case 'go_to_artist':
+                closeMenu();
+                if (track.artist && track.artist !== 'Unknown') {
+                    if (window.searchArtistProfile) {
+                        window.searchArtistProfile(track.artist, track);
+                    } else if (window.NeDotify?.searchArtistProfile) {
+                        window.NeDotify.searchArtistProfile(track.artist, track);
+                    }
                 }
-                showToast(track.is_favorite ? 'Добавлено в избранное!' : 'Удалено из избранного', 'info');
+                break;
+            case 'favorite':
+                Promise.resolve().then(() => window.pywebview.api.toggle_favorite(track)).then(res => {
+                    if (!res?.success || typeof res.is_favorite !== 'boolean') throw new Error('Favorite rejected');
+                    track.is_favorite = res.is_favorite;
+                    window.dispatchEvent(new CustomEvent('nedotify:track_favorite_toggled', { detail: { track, is_favorite: track.is_favorite } }));
+                    showToast(track.is_favorite ? 'Добавлено в избранное!' : 'Удалено из избранного', 'success');
+                }).catch(() => showToast('Не удалось сохранить избранное', 'error'));
                 break;
             case 'dislike':
-                showToast(`Функция пока недоступна (Не интересно)`, 'info');
+                submitRecommendationFeedback(track, 'track');
                 break;
-            case 'share':
-                const shareStr = `${track.title || ''} - ${track.artist || ''}`;
-                if (navigator.clipboard) {
-                    navigator.clipboard.writeText(shareStr);
-                }
-                showToast('Ссылка скопирована в буфер!', 'success');
+            case 'dislike_artist':
+                submitRecommendationFeedback(track, 'artist');
                 break;
+            case 'share': {
+                const shareStr = track.source_url || `${track.title || ''} - ${track.artist || ''}`;
+                Promise.resolve().then(() => navigator.clipboard.writeText(shareStr))
+                    .then(() => showToast('Данные трека скопированы', 'success'))
+                    .catch(() => showToast('Не удалось скопировать данные трека', 'error'));
+                break;
+            }
             case 'download':
                 if (window.NeDotify?.downloadTrack) {
                     window.NeDotify.downloadTrack(track);
@@ -1252,7 +1400,9 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
                 showToast(`Загрузка '${track.title || ''}' начата`, 'info');
                 break;
             case 'cache':
-                showToast(`Функция пока недоступна (Кэшировать)`, 'info');
+                Promise.resolve().then(() => window.pywebview.api.prefetch_track(track)).then(ready => {
+                    showToast(ready ? 'Подготовка потока запущена' : 'Поток пока нельзя подготовить', ready ? 'info' : 'warning');
+                }).catch(() => showToast('Не удалось подготовить поток', 'error'));
                 break;
             case 'pin':
                 // Category must be 'personalization': that is what the profile
@@ -1383,7 +1533,7 @@ export function openEditTagsModal(track) {
     renderIcons();
     // Initial focus: the title field is the first field of the form and the one
     // the user almost always wants to change.
-    openModalFocusTrap(modal, { initialFocus: '#modal-et-title' });
+    openModalFocusTrap(modal, { initialFocus: '#modal-et-title', onClose: closeModal });
 
     const closeBtn = document.getElementById('modal-et-close');
     const cancelBtn = document.getElementById('modal-et-cancel');
@@ -1479,6 +1629,7 @@ export function getSkeletonGrid(count = 10) {
 
 export const selectedTracksMap = new Map(); // key -> track object
 let lastSelectedTrackIndex = -1;
+let lastSelectedCollection = null;
 
 /**
  * Синхронизирует отображение плавающего тулбара групповых действий
@@ -1510,6 +1661,7 @@ export function updateBatchActionBar() {
 export function clearTrackSelection() {
     selectedTracksMap.clear();
     lastSelectedTrackIndex = -1;
+    lastSelectedCollection = null;
     document.querySelectorAll('.track-item.selected').forEach(el => el.classList.remove('selected'));
     updateBatchActionBar();
 }
@@ -1525,6 +1677,8 @@ export function handleTrackMultiSelectClick(e, track, index, tracksArray, trackE
 
     const isCtrl = e.ctrlKey || e.metaKey;
     const isShift = e.shiftKey;
+    if (lastSelectedCollection !== tracksArray) lastSelectedTrackIndex = -1;
+    lastSelectedCollection = tracksArray;
 
     if (!isCtrl && !isShift) {
         // Обычный клик: если было выделено несколько треков, снимаем выделение
@@ -1568,9 +1722,10 @@ export function handleTrackMultiSelectClick(e, track, index, tracksArray, trackE
                 if (curTrack) {
                     const key = String(curTrack.source_id || curTrack.id || `track_${i}`);
                     selectedTracksMap.set(key, curTrack);
-                    if (itemElements[i]) itemElements[i].classList.add('selected');
                 }
             }
+            itemElements.forEach(row => row.classList.toggle('selected', selectedTracksMap.has(
+                String(row._trackData?.source_id || row._trackData?.id || `track_${row._trackIndex}`))));
         }
     }
 

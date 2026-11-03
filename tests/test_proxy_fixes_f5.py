@@ -5,7 +5,7 @@ import os
 import pytest
 
 from core import proxy as proxy_module
-from tests.test_proxy_harness import PROXY_TOKEN, nedotify_home, app_core, offline_handler  # noqa: F401
+from tests.helpers import PROXY_TOKEN, nedotify_home, app_core, offline_handler  # noqa: F401
 
 
 @pytest.mark.parametrize('raw', [

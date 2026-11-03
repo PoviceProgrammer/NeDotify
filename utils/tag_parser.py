@@ -6,7 +6,10 @@ Parses audio file metadata (ID3, FLAC, WAV) using mutagen.
 import os
 import io
 import hashlib
+import logging
+import struct
 from typing import Optional
+logger = logging.getLogger(__name__)
 
 try:
     from mutagen import File as MutagenFile
@@ -86,7 +89,7 @@ def parse_tags(filepath: str) -> dict:
 
             result["cover_data"], result["cover_mime"] = _extract_cover(filepath)
         except Exception as e:
-            print(f"[TagParser] Error parsing {filepath}: {e}")
+            logger.warning("Could not parse audio tags: %s", e)
 
     # Metadata Cleanup / Normalization
     import re
@@ -97,7 +100,7 @@ def parse_tags(filepath: str) -> dict:
         r"(?i)\(music.*?video\)", r"(?i)\[music.*?video\]",
         r"(?i)128kbps", r"(?i)320kbps", r"(?i)\(audio\)", r"(?i)\[audio\]",
         r"(?i)\(visualizer\)", r"(?i)\[visualizer\]",
-        r"(?i)HD", r"(?i)HQ", r"(?i)\(lyrics?\)", r"(?i)\[lyrics?\]"
+        r"(?i)\bHD\b", r"(?i)\bHQ\b", r"(?i)\(lyrics?\)", r"(?i)\[lyrics?\]"
     ]
     
     for pattern in junk_patterns:
@@ -111,8 +114,9 @@ def parse_tags(filepath: str) -> dict:
     if not result["artist"] or result["artist"] == "Unknown Artist":
         # Fallback to parsing from title if there's a dash and no artist
         if " - " in result["title"]:
-            parts = result["title"].split(" - ", 1)
-            result["artist"] = parts[0].strip()
+            parts = result["title"].rsplit(" - ", 1)
+            if not parts[0].strip().isdigit():
+                result["artist"] = parts[0].strip()
             result["title"] = parts[1].strip()
 
     return result
@@ -131,13 +135,19 @@ def extract_embedded_lyrics(filepath: str) -> str:
         if ext == '.mp3':
             for key in audio.tags:
                 if key.startswith('USLT'):
-                    texts.append(str(audio.tags[key].text))
+                    texts.append(audio.tags[key].text)
         elif ext in ('.m4a', '.mp4', '.aac'):
-            texts.extend(str(v) for v in audio.tags.get('\xa9lyr', []))
+            texts.append(audio.tags.get('\xa9lyr', []))
         else:
             for key in ('LYRICS', 'UNSYNCEDLYRICS', 'lyrics', 'unsyncedlyrics'):
-                texts.extend(str(v) for v in audio.tags.get(key, []))
-        return "\n".join(t.strip() for t in texts if t and t.strip())
+                texts.append(audio.tags.get(key, []))
+        def normalize(value):
+            if isinstance(value, (list, tuple)):
+                return '\n'.join(normalize(item) for item in value)
+            if isinstance(value, bytes):
+                return value.decode('utf-8', errors='replace')
+            return str(value or '')
+        return "\n".join(normalize(t).strip() for t in texts if normalize(t).strip())
     except Exception:
         return ""
 
@@ -146,6 +156,22 @@ def _get_tag(audio, key: str, default=None):
     """Safely get a tag value."""
     try:
         val = audio.get(key)
+        if not val:
+            # Mutagen's easy view does not translate ID3 frames embedded in
+            # WAV containers into easy keys, even though write_tags stores
+            # those frames there. Read the canonical frame as a fallback.
+            frame_keys = {
+                'title': ('TIT2',), 'artist': ('TPE1',), 'album': ('TALB',),
+                'genre': ('TCON',), 'date': ('TDRC', 'TYER'),
+                'tracknumber': ('TRCK',),
+            }.get(key, ())
+            tags = getattr(audio, 'tags', None)
+            for frame_key in frame_keys:
+                frame = tags.get(frame_key) if tags is not None else None
+                if frame is not None:
+                    val = getattr(frame, 'text', frame)
+                    if val:
+                        break
         if val:
             return str(val[0]) if isinstance(val, list) else str(val)
     except (KeyError, IndexError, TypeError):
@@ -161,10 +187,11 @@ def _extract_cover(filepath: str) -> tuple:
         if ext == '.mp3':
             try:
                 tags = ID3(filepath)
-                for key in tags:
-                    if key.startswith('APIC'):
-                        apic = tags[key]
-                        return apic.data, apic.mime
+                pictures = sorted(tags.getall('APIC'), key=lambda item: item.type != 3)
+                for apic in pictures:
+                    mime = cover_mime_from_bytes(apic.data)
+                    if mime:
+                        return apic.data, mime
             except Exception:
                 pass
 
@@ -172,8 +199,8 @@ def _extract_cover(filepath: str) -> tuple:
             try:
                 flac = FLAC(filepath)
                 if flac.pictures:
-                    pic = flac.pictures[0]
-                    return pic.data, pic.mime
+                    pic = sorted(flac.pictures, key=lambda item: item.type != 3)[0]
+                    return pic.data, cover_mime_from_bytes(pic.data)
             except Exception:
                 pass
 
@@ -183,8 +210,9 @@ def _extract_cover(filepath: str) -> tuple:
                 # OGG stores pictures in metadata_block_picture
                 import base64
                 if 'metadata_block_picture' in ogg:
-                    data = base64.b64decode(ogg['metadata_block_picture'][0])
-                    return data, 'image/png'
+                    pictures = [Picture(base64.b64decode(value)) for value in ogg['metadata_block_picture']]
+                    pic = sorted(pictures, key=lambda item: item.type != 3)[0]
+                    return pic.data, cover_mime_from_bytes(pic.data)
             except Exception:
                 pass
 
@@ -208,30 +236,53 @@ def _extract_cover(filepath: str) -> tuple:
     return None, None
 
 
+def cover_mime_from_bytes(data):
+    if data.startswith(b'\x89PNG\r\n\x1a\n'):
+        return 'image/png'
+    if data.startswith(b'\xff\xd8\xff'):
+        return 'image/jpeg'
+    if data.startswith((b'GIF87a', b'GIF89a')):
+        return 'image/gif'
+    if data.startswith(b'RIFF') and data[8:12] == b'WEBP':
+        return 'image/webp'
+    return None
+
+
 def save_cover_to_file(cover_data: bytes, cover_mime: str,
                        output_dir: str, track_id: int) -> Optional[str]:
-    """Save cover art to a file. Returns the file path."""
-    if not cover_data:
+    """Atomically publish artwork using the shared cover_<database id> name."""
+    import tempfile
+
+    if not isinstance(cover_data, bytes) or not cover_data:
         return None
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    ext = '.jpg'
-    if cover_mime:
-        if 'png' in cover_mime:
-            ext = '.png'
-        elif 'webp' in cover_mime:
-            ext = '.webp'
-
-    filename = f"cover_{track_id}{ext}"
-    filepath = os.path.join(output_dir, filename)
-
+    temporary = None
     try:
-        with open(filepath, 'wb') as f:
+        identifier = int(track_id)
+        if identifier <= 0:
+            return None
+        mime = cover_mime_from_bytes(cover_data) or str(cover_mime or '').lower().split(';', 1)[0].strip()
+        ext = {'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/png': '.png',
+               'image/webp': '.webp', 'image/gif': '.gif'}.get(mime)
+        if ext is None:
+            return None
+        os.makedirs(output_dir, exist_ok=True)
+        filepath = os.path.join(output_dir, f'cover_{identifier}{ext}')
+        with tempfile.NamedTemporaryFile(mode='wb', dir=output_dir, prefix='.cover-', suffix=ext,
+                                         delete=False) as f:
+            temporary = f.name
             f.write(cover_data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, filepath)
         return filepath
-    except IOError:
+    except (OSError, TypeError, ValueError, OverflowError):
         return None
+    finally:
+        if temporary and os.path.exists(temporary):
+            try:
+                os.remove(temporary)
+            except OSError:
+                logger.debug('Could not remove temporary cover', exc_info=True)
 
 
 def write_tags(
@@ -242,7 +293,8 @@ def write_tags(
     genre: Optional[str] = None,
     year: Optional[int] = None,
     cover_bytes: Optional[bytes] = None,
-    cover_mime: str = "image/jpeg"
+    cover_mime: str = "image/jpeg",
+    clear_year: bool = False,
 ) -> bool:
     """
     Safely write physical ID3v2/Vorbis/MP4 tags to an audio file using mutagen.
@@ -261,17 +313,26 @@ def write_tags(
     import tempfile
     import base64
 
-    # Create a unique temporary backup for atomic transaction
-    backup_fd, backup_path = tempfile.mkstemp(prefix="aura_tag_backup_", suffix=os.path.splitext(filepath)[1])
+    # The original stays intact until the replacement is fully saved and
+    # fsynced. The sibling copy guarantees an atomic same-volume replace.
+    original_path = os.path.abspath(filepath)
+    backup_fd, backup_path = tempfile.mkstemp(prefix="aura_tag_backup_", suffix=os.path.splitext(filepath)[1], dir=os.path.dirname(original_path))
     os.close(backup_fd)
     shutil.copy2(filepath, backup_path)
+    filepath = backup_path
 
     try:
         _, ext = os.path.splitext(filepath.lower())
 
-        if ext == '.mp3':
+        if ext in ('.mp3', '.aac', '.wav'):
+            wave_audio = None
+            if ext == '.wav':
+                from mutagen.wave import WAVE
+                wave_audio = WAVE(filepath)
+                if wave_audio.tags is None:
+                    wave_audio.add_tags()
             try:
-                tags = ID3(filepath)
+                tags = wave_audio.tags if wave_audio is not None else ID3(filepath)
             except ID3NoHeaderError:
                 tags = ID3()
 
@@ -286,6 +347,9 @@ def write_tags(
             if year is not None and str(year).strip():
                 tags.setall('TDRC', [TDRC(encoding=3, text=str(year))])
                 tags.setall('TYER', [TYER(encoding=3, text=str(year))])
+            if clear_year:
+                tags.delall('TDRC')
+                tags.delall('TYER')
 
             if cover_bytes:
                 tags.setall(
@@ -299,7 +363,10 @@ def write_tags(
                     )]
                 )
 
-            tags.save(filepath, v2_version=3)
+            if wave_audio is not None:
+                wave_audio.save()
+            else:
+                tags.save(filepath, v2_version=3)
 
         elif ext == '.flac':
             audio = FLAC(filepath)
@@ -313,6 +380,9 @@ def write_tags(
                 audio['genre'] = [str(genre)]
             if year is not None and str(year).strip():
                 audio['date'] = [str(year)]
+            if clear_year:
+                audio.pop('date', None)
+                audio.pop('year', None)
 
             if cover_bytes:
                 pic = Picture()
@@ -325,7 +395,7 @@ def write_tags(
 
             audio.save()
 
-        elif ext in ('.m4a', '.mp4', '.aac'):
+        elif ext in ('.m4a', '.mp4'):
             audio = MP4(filepath)
             if title is not None:
                 audio['\xa9nam'] = [str(title)]
@@ -337,6 +407,8 @@ def write_tags(
                 audio['\xa9gen'] = [str(genre)]
             if year is not None and str(year).strip():
                 audio['\xa9day'] = [str(year)]
+            if clear_year:
+                audio.pop('\xa9day', None)
 
             if cover_bytes:
                 fmt = MP4Cover.FORMAT_JPEG
@@ -358,6 +430,9 @@ def write_tags(
                 audio['genre'] = [str(genre)]
             if year is not None and str(year).strip():
                 audio['date'] = [str(year)]
+            if clear_year:
+                audio.pop('date', None)
+                audio.pop('year', None)
 
             if cover_bytes:
                 pic = Picture()
@@ -369,6 +444,18 @@ def write_tags(
 
             audio.save()
 
+        elif ext == '.wma':
+            from mutagen.asf import ASF, ASFByteArrayAttribute
+            audio = ASF(filepath)
+            for key, value in [('Title', title), ('Author', artist), ('WM/AlbumTitle', album), ('WM/Genre', genre), ('WM/Year', year)]:
+                if value is not None:
+                    audio[key] = [str(value)]
+            if clear_year:
+                audio.pop('WM/Year', None)
+            if cover_bytes:
+                picture = struct.pack('<BI', 3, len(cover_bytes)) + (cover_mime + '\0Cover\0').encode('utf-16-le') + cover_bytes
+                audio['WM/Picture'] = [ASFByteArrayAttribute(picture)]
+            audio.save()
         else:
             # Fallback for other formats with EasyID3/EasyMutagen
             audio = MutagenFile(filepath, easy=True)
@@ -383,16 +470,22 @@ def write_tags(
                     audio['genre'] = [str(genre)]
                 if year is not None and str(year).strip():
                     audio['date'] = [str(year)]
+                if clear_year:
+                    audio.pop('date', None)
+                    audio.pop('year', None)
                 audio.save()
 
-        if os.path.exists(backup_path):
-            os.remove(backup_path)
+        # Windows requires a writable handle for _commit/fsync. The temp file
+        # is private to this operation, so rb+ safely flushes the mutagen output
+        # before the atomic replace.
+        with open(backup_path, 'rb+') as saved:
+            os.fsync(saved.fileno())
+        os.replace(backup_path, original_path)
         return True
 
     except Exception as e:
         # Atomic rollback on any mutagen write failure
         if os.path.exists(backup_path):
-            shutil.copy2(backup_path, filepath)
             os.remove(backup_path)
         raise RuntimeError(f"Ошибка при записи тегов в файл: {e}")
 

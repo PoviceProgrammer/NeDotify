@@ -37,8 +37,9 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 from tools.bench import profile as prof  # noqa: E402
+from tools.bench.paths import results_dir  # noqa: E402
 
-RESULTS_DIR = Path(os.environ.get("NEDOTIFY_BENCH_OUT", REPO_ROOT / "tools" / "bench" / "results"))
+RESULTS_DIR = results_dir()
 PYTHON = REPO_ROOT / ".venv_win" / "Scripts" / "python.exe"
 CHILD = Path(__file__).resolve().parent / "bench_child.py"
 
@@ -106,9 +107,21 @@ def run_once(spec: dict, timeout: float = 300.0, debug_port: int = 9222,
     profile_root = Path(profile_root)
     try:
         covers = prof.write_covers(profile_root)
+        track_specs = prof.make_track_specs(spec.get("tracks", 2000))
+        if spec.get("scenario") in {"play", "audio", "idle_states", "combo"} and track_specs:
+            audio_path = profile_root / ".nedotify" / "bench-audio" / "fixture.wav"
+            if spec.get('audio_fixture'):
+                audio_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(spec['audio_fixture'], audio_path)
+            else:
+                prof.write_silent_audio(audio_path, int(spec.get("seconds", 60)) + 30)
+            track_specs[0].update({
+                "source": "local", "is_downloaded": 1,
+                "file_path": str(audio_path),
+            })
         seed_info = prof.seed_db(
             profile_root / ".nedotify" / "nedotify_storage.db",
-            prof.make_track_specs(spec.get("tracks", 2000)),
+            track_specs,
             covers, history_per_track=spec.get("history_per_track", 0),
             cookie_mode=spec.get("cookie_mode", "pinned"))
 
@@ -122,6 +135,7 @@ def run_once(spec: dict, timeout: float = 300.0, debug_port: int = 9222,
         env["NEDOTIFY_BENCH_SPEC"] = str(spec_file)
         env["NEDOTIFY_BENCH_RESULTS"] = str(results_file)
         env["NEDOTIFY_BENCH_PORT"] = str(debug_port)
+        env["NEDOTIFY_BENCH_PROFILE"] = str(profile_root)
 
         t_popen = time.time()
         t0 = time.monotonic()
@@ -137,6 +151,16 @@ def run_once(spec: dict, timeout: float = 300.0, debug_port: int = 9222,
             proc.kill()
             out, _ = proc.communicate()
             out += "\n[bench] TIMEOUT - killed"
+        except KeyboardInterrupt:
+            # A cancelled parent must not leave the measured app running with
+            # a scratch profile that is then removed in the finally block.
+            proc.terminate()
+            try:
+                proc.communicate(timeout=3.0)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
+            raise
         wall = time.monotonic() - t0
         exit_code = proc.returncode
 
@@ -158,7 +182,7 @@ def run_once(spec: dict, timeout: float = 300.0, debug_port: int = 9222,
                 payload = {"error": "unreadable results file"}
 
         return {
-            "ok": exit_code == 0 and not payload.get("error"),
+            "ok": exit_code == 0 and payload.get("ok") is True and not payload.get("error"),
             "exit_code": exit_code,
             "wall_sec": round(wall, 2),
             "cold_start": cold,
@@ -196,7 +220,8 @@ def _flatten(node, prefix: str, out: dict) -> None:
 def aggregate(runs: list[dict]) -> dict:
     """Median across repetitions of every numeric leaf (the task's >=5 rule)."""
     per_run: list[dict] = []
-    for r in runs:
+    successful = [r for r in runs if r.get("ok")]
+    for r in successful:
         flat: dict = {}
         _flatten({"cold_start": r.get("cold_start"), "child": r.get("child")}, "", flat)
         per_run.append(flat)
@@ -206,7 +231,13 @@ def aggregate(runs: list[dict]) -> dict:
         med = _median([f.get(k) for f in per_run])
         if med is not None:
             agg[k] = med
-    return {"n_runs": len(runs), "medians": agg}
+    return {
+        "n_runs": len(runs),
+        "n_successful": len(successful),
+        "n_failed": len(runs) - len(successful),
+        "failures": [r.get("error") or r.get("exit_code") for r in runs if not r.get("ok")],
+        "medians": agg,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -214,7 +245,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="NeDotify performance benchmark")
     ap.add_argument("--scenario", default="startup",
                     choices=["startup", "idle", "idle_states", "cpu_attribution",
-                             "scroll", "search", "feed", "combo"])
+                             "scroll", "search", "feed", "play", "download", "audio", "combo"])
     ap.add_argument("--reps", type=int, default=5)
     ap.add_argument("--tracks", type=int, default=2000)
     ap.add_argument("--history-per-track", type=int, default=0)
@@ -244,7 +275,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.list:
-        print("scenarios: startup, idle, scroll, search, feed, combo")
+        print("scenarios: startup, idle, idle_states, cpu_attribution, scroll, search, feed, play, download, audio, combo")
         return 0
 
     if not PYTHON.exists():
@@ -332,7 +363,7 @@ def main() -> int:
     med = payload["aggregate"]["medians"]
     for k in sorted(med):
         log(f"  {k} = {med[k]}")
-    return 0 if ok_runs else 1
+    return 0 if ok_runs == len(runs) else 1
 
 
 if __name__ == "__main__":

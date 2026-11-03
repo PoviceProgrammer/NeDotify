@@ -1,0 +1,173 @@
+/* Search discovery follows the user's background and active theme. */
+#view-search.view-page.active { display: block; position: relative; overflow-y: auto; overflow-x: hidden; padding: 24px 38px 36px; }
+#view-search .search-header-container,
+#view-search.search-active .search-header-container { position: relative; top: auto; left: auto; right: auto; transform: none; width: 100%; max-width: 800px; margin: clamp(76px,12vh,140px) auto 40px; transition: none; }
+.search-intro { width: 100%; text-align: center; margin-bottom: 26px; }
+.search-intro h1 { font: 750 clamp(28px,2.7vw,38px)/1.2 var(--font-family); letter-spacing: -.8px; margin: 0 0 12px; text-wrap: balance; }
+.search-intro h1 span { color: var(--primary); }
+.search-intro p { font-size: 13px; line-height: 1.5; color: var(--text-sec); margin: 0; text-wrap: balance; }
+.search-account-controls { position: absolute; top: 20px; right: 28px; display: flex; align-items: center; gap: 14px; z-index: 3; }
+#search-notices.has-notices::after { content: ''; position: absolute; top: 9px; right: 9px; width: 5px; height: 5px; border-radius: 50%; background: var(--primary); }
+#view-search .search-capsule { height: 64px; padding: 8px 10px 8px 22px; border-radius: 34px; border: 1px solid var(--home-edge); background: var(--bg-surface); box-shadow: inset 0 1px rgba(255,255,255,.04); }
+#view-search .search-capsule-icon { width: 22px; height: 22px; }
+#view-search .search-capsule .search-input { min-width: 0; width: 100%; font-family: var(--font-family); font-size: 14px; color: var(--text-main) !important; padding: 0 13px; }
+#view-search .search-capsule .search-input::placeholder { color: var(--text-sec) !important; font-weight: 400; }
+#view-search .search-capsule:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb,var(--primary) 15%,transparent); }
+.search-submit { display: grid; place-items: center; flex-shrink: 0; width: 42px; height: 42px; margin-left: 8px; padding: 0; border: 0; border-radius: 50%; background: var(--primary); color: var(--primary-fg); cursor: pointer; transition: transform .16s ease; }
+.search-submit svg { width: 22px; height: 22px; }
+.search-submit:hover { transform: scale(1.06); }
+#view-search .search-platform-btn { width: 32px; height: 32px; border: 0; background: transparent; }
+#view-search .search-platform-btn, #view-search .platform-item[data-source="all"] { color: var(--primary); }
+#view-search .search-platform-btn:hover { background: var(--bg-hover); }
+#view-search .search-platform-dropdown { z-index: 200; }
+#view-search .search-type-filters { display: flex; flex-wrap: wrap; justify-content: center; width: 100%; gap: 10px; margin-top: 28px; }
+#view-search .type-filter-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 17px; min-height: 40px; margin: 0; border-radius: 24px; border: 1px solid var(--home-edge); background: var(--bg-surface); color: var(--text-main); font: 500 12px/1.3 var(--font-family); white-space: nowrap; cursor: pointer; box-shadow: none; }
+#view-search .type-filter-btn svg { width: 16px; height: 16px; }
+#view-search .type-filter-btn.active { border-color: var(--primary); background: var(--primary); color: var(--primary-fg); font-weight: 650; box-shadow: 0 4px 16px color-mix(in srgb,var(--primary) 15%,transparent); }
+#view-search .type-filter-btn:hover:not(.active) { border-color: var(--primary); background: var(--bg-hover); }
+.search-discovery { width: 100%; max-width: 1240px; margin: 0 auto 24px; }
+.search-discovery .home-section-header { margin-bottom: 18px; }
+.search-discovery h2 { font: 650 20px/1.3 var(--font-family); letter-spacing: -.3px; margin: 0; }
+.search-history-all { display: inline-flex; align-items: center; gap: 8px; padding: 8px 0 8px 12px; min-height: 36px; border: 0; background: none; color: var(--text-sec); font: 500 12px/1.3 var(--font-family); cursor: pointer; white-space: nowrap; }
+.search-history-all svg { width: 16px; height: 16px; }
+.search-history-all:hover { color: var(--primary); }
+.search-listened-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; }
+.search-listened-card { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; height: 72px; padding: 10px; border-radius: 14px; border: 1px solid var(--home-edge); background: var(--bg-surface); color: var(--text-main); text-align: left; font: inherit; cursor: pointer; transition: transform .16s ease; }
+.search-listened-card > img { width: 48px; height: 48px; flex-shrink: 0; object-fit: cover; border-radius: 9px; }
+.search-listened-copy { display: flex; flex-direction: column; justify-content: center; min-width: 0; flex: 1; gap: 6px; }
+.search-listened-copy strong { font-size: 13px; line-height: 1.3; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-listened-copy > span { font-size: 11px; color: var(--text-sec); }
+.search-listened-arrow { display: grid; place-items: center; flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: color-mix(in srgb,var(--primary) 10%,transparent); color: var(--primary); }
+.search-listened-arrow svg { width: 18px; height: 18px; }
+.search-listened-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+.search-history-skeleton { height: 72px; border-radius: 14px; background: var(--bg-surface); border: 1px solid var(--home-edge); }
+.search-discovery-empty { grid-column: 1/-1; width: 100%; padding: 26px 20px; border: 1px dashed var(--home-edge); border-radius: 14px; text-align: center; background: var(--bg-surface); }
+.search-discovery-empty > svg { display: block; width: 26px; height: 26px; color: var(--primary); margin: 0 auto 12px; }
+.search-discovery-empty strong { display: block; font-size: 14px; font-weight: 600; }
+.search-discovery-empty p { color: var(--text-sec); font-size: 12px; line-height: 1.5; margin: 10px 0 0; }
+.search-discovery-empty .home-pill { margin-top: 15px; }
+.search-history-dialog-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.search-discovery-hint { margin: -6px 0 20px; color: var(--text-sec); font-size: 13px; }
+#view-search #search-results { position: relative; inset: auto; width: 100%; min-width: 0; padding: 0; overflow: visible; margin: 0 auto; max-width: 1240px; }
+#view-search.search-empty #search-results { display: none; visibility: hidden; }
+#view-search.search-active #search-results { display: block; visibility: visible; }
+#view-search.search-active .search-discovery { display: none; }
+#view-search.search-active .search-intro { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+#view-search.search-active .search-header-container { margin: 58px auto 28px; }
+#view-search .search-suggestions-dropdown { background: var(--bg-surface); border: 1px solid var(--home-edge); max-height: 320px; overflow-y: auto; }
+#view-search .search-discovery.hidden { display: none; }
+@supports (backdrop-filter: blur(1px)) {
+    #main-content:has(#view-search.active) { background: color-mix(in srgb,var(--home-panel) calc(24% + var(--app-bg-opacity,1) * 24%),transparent); }
+    #view-search .search-capsule, .search-listened-card { background: color-mix(in srgb,var(--bg-surface) 76%,transparent); backdrop-filter: blur(var(--glass-blur)); }
+}
+:root.no-backdrop #main-content:has(#view-search.active), :root.perf-low #main-content:has(#view-search.active) { background: var(--home-panel); }
+:root.no-backdrop .search-listened-card, :root.perf-low .search-listened-card { background: var(--bg-surface); backdrop-filter: none; }
+@media (max-width: 1350px) {
+    .search-listened-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    #view-search .search-header-container { margin-top: 74px; }
+}
+@media (max-width: 900px) {
+    #view-search.view-page.active { padding: 20px 24px 28px; }
+    .search-account-controls { top: 16px; right: 24px; gap: 10px; }
+    #view-search .search-type-filters { gap: 8px; margin-top: 22px; }
+    #view-search .type-filter-btn { padding: 9px 13px; font-size: 11px; }
+    .search-intro h1 { font-size: 31px; }
+    .search-intro p { font-size: 12px; }
+    .search-discovery h2 { font-size: 18px; }
+    .search-listened-card { height: 72px; gap: 10px; }
+    .search-listened-card > img { width: 48px; height: 48px; }
+}
+@media (max-width: 600px) {
+    #view-search.view-page.active { padding: 16px 18px 28px; }
+    #view-search .search-header-container { margin: 62px auto 28px; }
+    .search-account-controls { top: 12px; right: 18px; }
+    .search-account-controls .home-icon-button, .search-account-controls .home-profile { width: 36px; height: 36px; }
+    .search-intro { margin-bottom: 20px; }
+    .search-intro h1 { font-size: 29px; }
+    .search-intro p { max-width: 330px; margin: 0 auto; }
+    #view-search .search-capsule { height: 56px; padding-left: 14px; }
+    #view-search .search-capsule .search-input { padding: 0 8px; font-size: 12px; }
+    .search-submit { width: 34px; height: 34px; margin-left: 4px; }
+    #view-search .search-capsule-icon { width: 18px; height: 18px; }
+    #view-search .search-platform-btn { width: 26px; }
+    #view-search .search-type-filters { gap: 6px; }
+    #view-search .type-filter-btn { min-height: 36px; padding: 8px 10px; font-size: 10px; gap: 6px; }
+    #view-search .type-filter-btn svg { width: 14px; height: 14px; }
+    .search-listened-grid { gap: 10px; }
+    .search-listened-card { gap: 9px; height: 72px; padding: 9px; border-radius: 12px; }
+    .search-listened-card > img { width: 48px; height: 48px; border-radius: 7px; }
+    .search-listened-copy strong { font-size: 11px; }
+    .search-listened-copy > span { font-size: 10px; }
+    .search-listened-arrow { width: 24px; height: 24px; }
+    .search-discovery .home-section-header { gap: 8px; }
+    .search-discovery h2 { font-size: 16px; }
+    .search-history-all { font-size: 10px; gap: 5px; }
+    .search-history-dialog-grid { grid-template-columns: 1fr; }
+}
+@media (max-height: 800px) {
+    #view-search.search-empty .search-header-container { margin-top: 56px; margin-bottom: 26px; }
+    #view-search.search-empty .search-intro { margin-bottom: 18px; }
+    #view-search.search-empty .search-intro h1 { margin-bottom: 8px; }
+    #view-search.search-empty .search-type-filters { margin-top: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    #view-search *, .search-history-dialog-grid * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+
+/* macOS recent searches: cards sample the wallpaper directly, with no
+   nested backdrop root on the surrounding section. */
+html[data-ui-style="macos"] #search-discovery {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 0;
+    color: var(--mac-text);
+}
+html[data-ui-style="macos"] #search-discovery .search-listened-card {
+    background: var(--mac-glass-card);
+    backdrop-filter: blur(min(var(--mac-panel-blur,12px),var(--blur-surface-cap,16px)));
+    -webkit-backdrop-filter: blur(min(var(--mac-panel-blur,12px),var(--blur-surface-cap,16px)));
+    border: 1px solid var(--mac-glass-edge);
+    color: var(--mac-text);
+    border-radius: 12px;
+}
+html[data-ui-style="macos"] #search-discovery .search-listened-card:hover {
+    background: color-mix(in srgb,var(--mac-glass-card) 80%,var(--mac-hover));
+    border-color: var(--mac-secondary);
+}
+html[data-ui-style="macos"] #search-discovery .search-listened-copy strong,
+html[data-ui-style="macos"] #search-discovery h2 { color: var(--mac-text); }
+html[data-ui-style="macos"] #search-discovery .search-listened-copy > span { color: var(--mac-secondary); }
+html[data-ui-style="macos"].perf-low #search-discovery .search-listened-card,
+html[data-ui-style="macos"].no-backdrop #search-discovery .search-listened-card,
+html[data-ui-style="macos"][data-macos-transparency="false"] #search-discovery .search-listened-card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--mac-surface);
+}
+
+.search-more-results { margin: 16px 0; }
+.search-artists-shelf { margin-top: 24px; }
+.search-artists-shelf h2 { font-size: 20px; }
+.search-artists-cards { display: flex; gap: 18px; overflow-x: auto; padding: 12px 0; }
+.search-artist-card { width: 120px; flex-shrink: 0; border: 0; background: transparent; color: var(--text-main); cursor: pointer; display: grid; gap: 10px; justify-items: center; }
+.search-artist-card > :first-child { width: 84px; height: 84px; border-radius: 50%; overflow: hidden; }
+.search-artist-card strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Recent queries share the active skin's surface, text and accent tokens. */
+#view-search .search-suggestions-dropdown { padding: 14px; border-radius: 20px; box-shadow: 0 18px 46px #0003; }
+#view-search .search-history-header { padding: 2px 8px 10px; color: var(--text-sec); font-size: 12px; letter-spacing: .02em; text-transform: none; }
+#view-search .search-history-clear-all { padding: 6px 8px; border-radius: 8px; color: var(--text-sec); font: inherit; }
+#view-search .search-history-list { max-height: 260px; gap: 4px; }
+#view-search .search-history-item { padding: 0 8px 0 0; border-radius: 12px; gap: 8px; }
+#view-search .search-history-item:hover, #view-search .search-history-item:focus-within { background: color-mix(in srgb,var(--primary) 9%,transparent); }
+#view-search .search-history-query { min-width: 0; min-height: 46px; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--text-main); font: 500 13px/1.4 var(--font-family); cursor: pointer; text-align: left; }
+#view-search .search-history-query > svg { flex-shrink: 0; color: var(--text-sec); }
+#view-search .search-history-query > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#view-search .search-history-delete-btn { flex-shrink: 0; width: 30px; height: 30px; color: var(--text-sec); }
+#view-search .search-history-query:focus-visible, #view-search .search-history-delete-btn:focus-visible, #view-search .search-history-clear-all:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+#view-search .search-history-empty { display: grid; justify-items: center; gap: 8px; padding: 26px 12px; text-align: center; color: var(--text-sec); font-size: 12px; }
+#view-search .search-history-empty svg { width: 26px; height: 26px; margin-bottom: 4px; color: var(--primary); }
+#view-search .search-history-empty strong { color: var(--text-main); font-size: 14px; font-weight: 500; }
+/* The capsule already supplies a visible focus ring for keyboard input. */
+#view-search .search-capsule .search-input:focus-visible { outline: 0; box-shadow: none; }
+html[data-ui-style="macos"] #view-search .search-suggestions-dropdown { border-radius: 18px; }

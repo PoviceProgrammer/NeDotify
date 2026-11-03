@@ -1,0 +1,128 @@
+.download-manager {
+    margin: var(--space-lg) 0;
+    padding: var(--space-md) var(--space-lg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-text-main);
+}
+
+.download-manager summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    cursor: pointer;
+    font: 600 var(--font-size-md) var(--font-display);
+    list-style: none;
+}
+
+.download-manager-count,
+.download-manager-message,
+.download-manager-track > span,
+.download-manager-state {
+    color: var(--color-text-muted);
+    font: 400 var(--font-size-sm) var(--font-body);
+}
+
+.download-manager-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    margin: var(--space-md) 0;
+}
+
+.download-manager button {
+    min-height: 36px;
+    padding: 7px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-main);
+    font: 500 var(--font-size-sm) var(--font-body);
+    cursor: pointer;
+}
+
+.download-manager button:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+    border-color: var(--color-border-hover);
+}
+
+.download-manager :is(button, summary):focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 3px;
+}
+
+.download-manager button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.download-manager-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.download-manager-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(140px, 220px) auto;
+    align-items: center;
+    gap: var(--space-md);
+    padding: 12px 0;
+    border-top: 1px solid var(--color-border);
+}
+
+.download-manager-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); justify-content: flex-end; }
+
+.download-manager-track {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.download-manager-track strong,
+.download-manager-track > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.download-manager-track strong {
+    font: 600 var(--font-size-base) var(--font-body);
+}
+
+.download-manager-track small {
+    color: var(--color-danger);
+    overflow-wrap: anywhere;
+}
+
+.download-manager-state {
+    display: grid;
+    gap: 7px;
+}
+
+.download-manager progress {
+    width: 100%;
+    height: 5px;
+    accent-color: var(--color-primary);
+}
+
+.download-manager [hidden] {
+    display: none;
+}
+
+@media (max-width: 800px) {
+    .download-manager {
+        padding: var(--space-md);
+    }
+
+    .download-manager-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .download-manager-state {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+}

@@ -1,5 +1,5 @@
 """
-AURA Music - Yandex Music Service
+NeDotify - Yandex Music Service
 Search and stream audio from Yandex Music.
 """
 
@@ -8,8 +8,9 @@ import re
 import threading
 import logging
 import time
+from urllib.parse import urlsplit
 from concurrent.futures import ThreadPoolExecutor
-from services.base_service import BaseMusicService
+from services.base_service import BaseMusicService, normalize_proxy_url
 
 try:
     from yandex_music import Client
@@ -21,49 +22,84 @@ except ImportError:
 class YandexService(BaseMusicService):
     """Client-side Yandex Music extraction."""
 
-    def __init__(self, settings=None):
+    def __init__(self, settings=None, on_auth_error=None, on_subscription_status=None):
         super().__init__()
         self.settings = settings
-        self.on_auth_error = None
-        self.on_subscription_status = None
+        self.on_auth_error = on_auth_error
+        self.on_subscription_status = on_subscription_status
         self.auth_error = False
         self._executor = ThreadPoolExecutor(max_workers=3)
         self.logger = logging.getLogger(__name__)
         self._client = None
+        self._client_config = None
         self._client_lock = threading.Lock()
 
         if HAS_YANDEX:
             self._executor.submit(self._get_client)
 
+    @staticmethod
+    def _extract_track_id(value):
+        """Normalize a Yandex track id or supported Yandex track URL."""
+        raw = str(value or '').strip()
+        if not raw:
+            return ''
+        if raw.lower().startswith(('http://', 'https://')):
+            try:
+                parsed = urlsplit(raw)
+            except ValueError:
+                return ''
+            if (parsed.hostname or '').lower() not in {'music.yandex.ru', 'music.yandex.com'}:
+                return ''
+            match = re.search(r'(?:^|/)track/(\d+)(?:/|$)', parsed.path)
+            return match.group(1) if match else ''
+        if raw.lower().startswith('yandex:'):
+            raw = raw.split(':', 1)[1].strip()
+        return raw if re.fullmatch(r'\d+', raw) else ''
+
     def _get_client(self):
         with self._client_lock:
-            if not self._client and HAS_YANDEX:
-                token = self.settings.get("auth", "yandex_token", "") if self.settings else ""
-                if token and len(token.strip()) > 5:
-                    try:
-                        self._client = Client(token).init()
-                        self.logger.info("Yandex Music client initialized with token.")
-                        self.auth_error = False
-                        if self.on_auth_error:
-                            self.on_auth_error(False)
-                        self._check_subscription()
-                        return self._client
-                    except Exception as e:
-                        self.logger.error(f"Failed to initialize Yandex Music client with token: {e}")
-                        self.auth_error = True
-                        if self.on_auth_error:
-                            self.on_auth_error(True)
-                else:
-                    self.auth_error = False
-                    if self.on_auth_error:
-                        self.on_auth_error(False)
-
+            expires = self.settings.get('auth', 'yandex_token_expires_at', 0) if self.settings else 0
+            try:
+                needs_refresh = 0 < float(expires) <= time.time() + 60
+            except (TypeError, ValueError):
+                needs_refresh = False
+            if needs_refresh and time.monotonic() - getattr(self, '_last_refresh_attempt', -1e9) > 30:
+                self._last_refresh_attempt = time.monotonic()
                 try:
-                    self._client = Client().init()
-                    self.logger.info("Yandex Music client initialized (anonymous).")
-                except Exception as e:
-                    self.logger.error(f"Failed to initialize Yandex Music client (anonymous): {e}")
-
+                    from core.oauth import refresh_yandex_token
+                    refresh_yandex_token(self.settings)
+                except Exception:
+                    self.logger.warning('Yandex OAuth renewal failed')
+        token = str(self.settings.get("auth", "yandex_token", "") or "").strip() if self.settings else ""
+        proxy = normalize_proxy_url(self.settings.get("auth", "proxy_url", "")) if self.settings else ""
+        config = (token, proxy)
+        with self._client_lock:
+            if config != self._client_config:
+                self._client = None
+                self.auth_error = False
+                self._client_config = config
+                with self._cache_lock:
+                    for key in list(self._stream_cache):
+                        if key.startswith('yandex:'):
+                            self._stream_cache.pop(key, None)
+                    for key in list(self._search_cache):
+                        if key.startswith('ya_'):
+                            self._search_cache.pop(key, None)
+            if self._client or not HAS_YANDEX or self.auth_error:
+                return self._client
+            try:
+                from yandex_music.utils.request import Request
+                self._client = Client(token or None, request=Request(proxy_url=proxy or None)).init()
+                self.auth_error = False
+                if self.on_auth_error:
+                    self.on_auth_error(False)
+                self._check_subscription()
+            except Exception:
+                self._client = None
+                self.auth_error = bool(token)
+                self.logger.warning('Yandex Music authentication/connection failed', exc_info=True)
+                if self.on_auth_error:
+                    self.on_auth_error(self.auth_error)
             return self._client
 
     def _check_subscription(self):
@@ -73,7 +109,7 @@ class YandexService(BaseMusicService):
                 account = self._client.me.account
                 plus = getattr(self._client.me, 'plus', None)
                 has_plus = bool(plus and getattr(plus, 'has_plus', False))
-                self.logger.info(f"Yandex account: {getattr(account, 'login', '?')}, Plus: {has_plus}")
+                self.logger.info('Yandex subscription available: %s', has_plus)
                 if not has_plus:
                     self.logger.warning('No Yandex Plus subscription — tracks limited to 30-sec previews!')
                     if self.on_subscription_status:
@@ -112,7 +148,8 @@ class YandexService(BaseMusicService):
 
         def _search():
             try:
-                cache_key = f"ya_search:{query}"
+                self._get_client()
+                cache_key = f"ya_search:{query}:{max_results}"
                 cached = self.get_search_cache(cache_key)
                 if cached is not None:
                     if callback:
@@ -164,23 +201,23 @@ class YandexService(BaseMusicService):
                 error_callback('Функция yandex-music отключена')
             return
 
-        raw_id = str(track_id)
-        if raw_id.startswith("http"):
-            import re
-            m = re.search(r"/track/(\d+)", raw_id)
-            if m:
-                raw_id = m.group(1)
-            else:
-                if error_callback:
-                    error_callback('Не удалось извлечь ID трека из URL')
-                return
+        raw_id = self._extract_track_id(track_id)
+        if not raw_id:
+            if error_callback:
+                error_callback('Не удалось извлечь ID трека из URL')
+            return
 
-        raw_id = re.sub(r'[^a-zA-Z0-9_-]', '_', raw_id.split(":")[0].strip())
-
-        info = self.get_from_cache(f"yandex:{raw_id}")
+        token = str(self.settings.get('auth', 'yandex_token', '') or '').strip() if self.settings else ''
+        proxy = normalize_proxy_url(self.settings.get('auth', 'proxy_url', '')) if self.settings else ''
+        info = self.get_from_cache(f"yandex:{raw_id}") if (token, proxy) == self._client_config else None
         if info:
             if callback:
                 callback(info.get("stream_url"), info)
+            return
+
+        leader, callback, error_callback = self._join_request(
+            ('yandex:stream', raw_id, token, proxy), callback, error_callback)
+        if not leader:
             return
 
         def _extract():
@@ -198,7 +235,9 @@ class YandexService(BaseMusicService):
                     return
 
                 track = tracks[0]
-                download_infos = track.get_download_info(get_direct_links=True)
+                # Each direct link requires a separate signed XML request.
+                # Resolve the chosen quality only, rather than all formats.
+                download_infos = track.get_download_info()
                 if not download_infos:
                     if error_callback:
                         error_callback('Нет доступных аудиопотоков. Возможно, трек доступен только по подписке')
@@ -209,7 +248,7 @@ class YandexService(BaseMusicService):
                     if info.codec == 'mp3' and info.bitrate_in_kbps > best_info.bitrate_in_kbps:
                         best_info = info
 
-                stream_url = best_info.direct_link
+                stream_url = best_info.direct_link or best_info.get_direct_link()
                 cover_url = ""
                 if track.cover_uri:
                     cover_url = f'https://{track.cover_uri.replace("%%", "400x400")}'
@@ -249,10 +288,11 @@ class YandexService(BaseMusicService):
                 if error_callback:
                     error_callback(msg)
 
-        self._executor.submit(_extract)
+        if self.submit_playback(_extract) is None:
+            error_callback('Сервис завершает работу')
         return None
 
-    def download_audio_sync(self, source_id: str, output_dir: str) -> str:
+    def download_audio_sync(self, source_id: str, output_dir: str, download_context=None) -> str:
         """Download audio synchronously from Yandex Music."""
         import os
         import time
@@ -260,13 +300,26 @@ class YandexService(BaseMusicService):
         if not client:
             raise Exception("Yandex Music клиент не инициализирован")
 
-        raw_id = str(source_id).split(":")[0].strip()
+        raw_id = self._extract_track_id(source_id)
+        if not raw_id:
+            raise ValueError('Некорректный ID трека Яндекс.Музыки')
+        if download_context:
+            download_context.checkpoint()
         tracks = client.tracks([raw_id])
         if not tracks:
             raise Exception("Трек не найден в Яндекс Музыке")
 
         track = tracks[0]
-        file_name = f"ya_{raw_id}_{int(time.time())}.mp3"
+        safe_id = re.sub(r'[^a-zA-Z0-9_-]', '_', raw_id)
+        file_name = f"ya_{safe_id}_{int(time.time())}.mp3"
+        if download_context:
+            download_context.checkpoint()
+            variants = [item for item in track.get_download_info() if item.codec == 'mp3']
+            if not variants:
+                raise Exception('Для трека нет доступной MP3-загрузки')
+            variant = max(variants, key=lambda item: int(item.bitrate_in_kbps or 0))
+            output_path = os.path.join(output_dir, download_context.stem + '.mp3')
+            return download_context.download_http(variant.get_direct_link(), output_path)
         output_path = os.path.join(output_dir, file_name)
         track.download(output_path, codec="mp3", bitrate_in_kbps=320)
 

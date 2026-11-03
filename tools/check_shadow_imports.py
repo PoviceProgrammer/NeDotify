@@ -29,30 +29,26 @@ def module_level_imports(tree):
 
 
 def _own_body(fn):
-    """Walk a function's own body, NOT descending into nested defs/lambdas.
-
-    A nested function's local import only shadows within itself, so including it
-    would flag every helper that merely imports os.
-    """
-    stack = list(fn.body)
+    """Walk a function body without entering nested lexical scopes."""
     nested = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
-    stack = [n for n in stack if not isinstance(n, nested)]
+    stack = list(reversed(fn.body))
     while stack:
         node = stack.pop()
+        if isinstance(node, nested):
+            continue
         yield node
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, nested):
-                continue
-            stack.append(child)
+        stack.extend(reversed(list(ast.iter_child_nodes(node))))
 
 
 def local_imports(fn):
     out = set()
     for node in _own_body(fn):
-        for sub in ast.walk(node):
-            if isinstance(sub, ast.Import):
-                for a in sub.names:
-                    out.add((a.asname or a.name).split(".")[0])
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                out.add((a.asname or a.name).split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            for a in node.names:
+                out.add(a.asname or a.name)
     return out
 
 
@@ -60,23 +56,19 @@ def used_before(fn, name):
     """(use_line, import_line) of the first own-body Name load before the import."""
     first_import = None
     for node in _own_body(fn):
-        for sub in ast.walk(node):
-            if isinstance(sub, ast.Import):
-                for a in sub.names:
-                    n = (a.asname or a.name).split(".")[0]
-                    if n == name and (first_import is None or sub.lineno < first_import):
-                        first_import = sub.lineno
+        imported = []
+        if isinstance(node, ast.Import):
+            imported = [(a.asname or a.name).split(".")[0] for a in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            imported = [a.asname or a.name for a in node.names]
+        if name in imported and (first_import is None or node.lineno < first_import):
+            first_import = node.lineno
     if first_import is None:
         return None, None
     for node in _own_body(fn):
-        for sub in ast.walk(node):
-            if (
-                isinstance(sub, ast.Name)
-                and sub.id == name
-                and isinstance(sub.ctx, ast.Load)
-                and sub.lineno < first_import
-            ):
-                return sub.lineno, first_import
+        if (isinstance(node, ast.Name) and node.id == name
+                and isinstance(node.ctx, ast.Load) and node.lineno < first_import):
+            return node.lineno, first_import
     return None, None
 
 

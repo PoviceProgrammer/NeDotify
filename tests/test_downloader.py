@@ -8,6 +8,7 @@ import os
 
 
 def test_queue_download_returns_bool_and_dedups(downloader, tmp_db):
+    tmp_db.add_track(title='Queue', source='youtube', source_id='v1')
     assert downloader.queue_download(1, "youtube", "v1") is True
     # Same track twice -> rejected (DB UNIQUE + in-memory dedup).
     assert downloader.queue_download(1, "youtube", "v1") is False

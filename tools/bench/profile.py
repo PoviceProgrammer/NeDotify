@@ -23,6 +23,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import wave
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -115,6 +116,16 @@ def write_covers(profile_root: Path, n: int = 12, size: int = 300) -> list[str]:
     return paths
 
 
+def write_silent_audio(path: Path, seconds: int) -> None:
+    """Create deterministic local WAV audio for playback benchmarks."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as stream:
+        stream.setnchannels(1)
+        stream.setsampwidth(2)
+        stream.setframerate(22050)
+        stream.writeframes(b"\0\0" * (22050 * max(1, int(seconds))))
+
+
 # --------------------------------------------------------------------------
 # DB seeding
 # --------------------------------------------------------------------------
@@ -180,7 +191,7 @@ def seed_db(db_path: Path, tracks: list[dict], covers: list[str],
         cover = covers[t["index"] % len(covers)] if covers else None
         # file_path only for rows marked downloaded; add_track() treats a
         # non-null file_path as "already downloaded".
-        fp = (f"C:/fixture/library/track_{t['index']:05d}.mp3"
+        fp = (t.get("file_path") or f"C:/fixture/library/track_{t['index']:05d}.mp3"
               if t["is_downloaded"] else None)
         rows.append((
             t["title"], t["artist"], t["album"], t["duration"], fp, t["source"],

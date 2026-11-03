@@ -1,28 +1,21 @@
 """
 NeDotify - Lyrics Service
-Fetches synced and plain lyrics using 6 databases with a race condition weight system.
+Fetches verified plain lyrics and progressively upgrades compatible results to karaoke.
 """
 
 import atexit
 import concurrent.futures
-import html
 import json
 import logging
-import os
 import re
-import ssl
 import sys
 import threading
 import time
 import urllib.parse
 import urllib.request
-from typing import Any, Callable, Dict, Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
-
-# Verified TLS context (default). Certificate checks are restored for all
-# metadata/lyrics requests; stream extraction is handled by yt-dlp separately.
-ssl_ctx = ssl.create_default_context()
 
 # Every outbound lyrics request gets this ceiling so a hung host cannot pin a worker.
 HTTP_TIMEOUT = 6.0
@@ -82,103 +75,19 @@ class _LyricsSharedExecutor:
             logger.debug("Lyrics executor shutdown error: %s", e, exc_info=True)
 
 
-_lyrics_pool = _LyricsSharedExecutor(max_workers=4, thread_name_prefix="LyricsPool")
+# Every independent source can start together; recovery forms run in the same
+# job so a slow rich-lyrics host cannot queue out the original sources.
+_lyrics_pool = _LyricsSharedExecutor(max_workers=8, thread_name_prefix="LyricsPool")
 atexit.register(_lyrics_pool.shutdown, wait=False, cancel_futures=True)
 
 
-# Words that name a VARIANT of a song rather than the song itself. Lyrics
-# providers index the base recording, so these have to be stripped from a title
-# before querying -- otherwise a bootleg/slowed/remix is looked up verbatim,
-# matches nothing, and the app reports " lyrics not found" for a track whose
-# words are perfectly well indexed.
-#
-# Matched token-by-token (see _strip_variant_qualifiers) rather than as one
-# regex, because these qualifiers compose freely: "Hardstyle Bootleg",
-# "Radio Edit" and "Extended Mix" are all multi-word, and no single alternation
-# covers every combination of genre + variant.
-#
-# `instrumental` is intentionally absent: an instrumental has no sung lyrics,
-# and silently substituting the original's words would be wrong.
-_VARIANT_TOKENS = frozenset("""
-    mix mixes mixed remix remixes remixed bootleg boot mashup mash edit edits
-    extended ext club dub vip rework flip remaster remastered radio version ver
-    original album full clean slow slowed sped speed up down half double
-    doubler reverb nightcore 8d audio free download preview teaser snippet
-    live mono stereo remaster bonus
-    hardstyle rawstyle headhunter gabber uplift hardtrance euphoric
-    bass boosted reverse techno house trance edm dnb drum and bass progressive
-    psy psytrance electro dance electrohouse future
-    1x 1_5x 1_25x 0_75x 0_5x 2x
-""".split())
-
-# A bracketed qualifier longer than this is assumed to be part of the title
-# rather than decoration ("(I Love You)").
-_MAX_VARIANT_WORDS = 5
-
-# Words that on their own do NOT make a group a variant marker: either they name
-# a style rather than a particular version (hardstyle, house), or they are
-# ordinary words that can legitimately appear inside a real title ("radio" in
-# "(Radio Ga Ga)"). They only take part when a strong marker is present too, so
-# "(Radio Edit)" is still stripped while "(Radio Ga Ga)" is not.
-_WEAK_VARIANT_TOKENS = frozenset("""
-    hardstyle rawstyle headhunter gabber uplift euphoria hardtrance house
-    techno trance edm dnb drum and bass reverse progressive psy psytrance
-    electro electrohouse dance future futurebass garage radio
-""".split())
-
-# Everything else in the known set is an unambiguous version marker, so a group
-# containing one of these is stripped even when it also holds words we do not
-# know -- typically the remixer's name, as in "Song (SWEEQTY hardstyle remix)".
-_STRONG_VARIANT_TOKENS = _VARIANT_TOKENS - _WEAK_VARIANT_TOKENS
-
-
-def _strip_variant_qualifiers(title: str) -> str:
-    """Drop parenthesised/bracketed groups that consist only of variant words.
-
-    Applies to "(Hardstyle Bootleg)", "[Extended Mix]", "(Radio Edit)" and the
-    trailing-dash form "Song - Extended Mix". A group is removed only when every
-    one of its words is a known variant token, so real titles in brackets are
-    left alone.
-    """
-    if not title:
-        return title
-
-    def _is_variant_group(inner: str) -> bool:
-        words = re.findall(r'[0-9]+(?:[._][0-9]+)?[a-z]+|[0-9]{4}|[a-z]+', inner.lower())
-        if not words or len(words) > _MAX_VARIANT_WORDS:
-            return False
-        saw_strong = False
-        for w in words:
-            # A year inside the qualifier ("(Remastered 2009)") is not a variant
-            # word, but it must not veto the group either.
-            if w.isdigit() and len(w) == 4 and 1900 <= int(w) <= 2099:
-                continue
-            # "1.5x" and "1_5x" are the same token.
-            if w.replace('.', '_') in _STRONG_VARIANT_TOKENS:
-                saw_strong = True
-        # A strong marker is required. Unknown words and genre-only groups are
-        # left alone, so neither the remixer's name nor a genuine title fragment
-        # gets mistaken for decoration.
-        return saw_strong
-
-    def _strip_bracketed(m):
-        return "" if _is_variant_group(m.group(1)) else m.group(0)
-
-    cleaned = re.sub(r'[\(\[\{]([^\)\]\}]*)[\)\]\}]', _strip_bracketed, title)
-
-    # "Song - Extended Mix" / "Song – Radio Edit"
-    def _strip_dash(m):
-        return "" if _is_variant_group(m.group(1)) else m.group(0)
-
-    cleaned = re.sub(r'\s*[\-—–]\s*([A-Za-z0-9][^\-—–]*)$', _strip_dash, cleaned)
-    return re.sub(r'\s{2,}', ' ', cleaned).strip()
-
-
 class LyricsService:
-    def __init__(self, settings=None):
+    def __init__(self, settings=None, *, cache_path=None):
         self.settings = settings
         self._cache = {}
-        self._cache_lock = threading.Lock()
+        self._cache_lock = threading.RLock()
+        from services.lyrics_lookup import LyricsLookup
+        self._lookup = LyricsLookup(self, cache_path=cache_path)
 
     @classmethod
     def submit(cls, fn: Callable, *args, **kwargs) -> Optional[concurrent.futures.Future]:
@@ -190,416 +99,82 @@ class LyricsService:
         """Shut down the shared bounded lyrics thread pool."""
         _lyrics_pool.shutdown(wait=wait, cancel_futures=cancel_futures)
 
-    def _clean_track_and_artist(self, track_name: str, artist_name: str):
-        track = track_name.strip() if track_name else ""
-        artist = artist_name.strip() if artist_name else ""
-
-        # Remove video/audio suffixes and junk common in streaming and YouTube titles
-        junk_patterns = [
-            r'\s*[\(\[](official\s*(music\s*)?(video|audio|lyrics?|visualizer|track)?|lyric\s*video|audio|video|visualizer|clip|клип|премьера(\s*трека|\s*клипа)?)[\)\]]',
-            r'\s*[\(\[](feat|ft|featuring)\.?\s+[^\)\]]+[\)\]]',
-            r'\s*[\(\[](prod|produced)\.?\s+by\s+[^\)\]]+[\)\]]',
-            r'\s*[\(\[](remix|slowed(\s*\+\s*reverb)?|speed\s*up|sped\s*up)[\)\]]',
-            r'\s*[\(\[]\d+(?:[.,]\d+)?x[\)\]]',
-            r'\s*[\(\[]\d{4}[\)\]]',
-            r'\s*[\(\[](hd|hq|4k|1080p)[\)\]]',
-            r'\s*\|\s*.*$',
-        ]
-        for p in junk_patterns:
-            track = re.sub(p, '', track, flags=re.IGNORECASE)
-
-        # Compositional qualifier groups ("(Hardstyle Bootleg)", "[Extended Mix]")
-        track = _strip_variant_qualifiers(track)
-
-        track = track.replace('"', '').replace("'", "").strip()
-
-        # If artist is provided and is inside track title, remove it from track
-        if artist:
-            art_esc = re.escape(artist)
-            track = re.sub(rf'^{art_esc}\s*[\-—–:]\s*', '', track, flags=re.IGNORECASE).strip()
-            track = re.sub(rf'\s*[\-—–:]\s*{art_esc}$', '', track, flags=re.IGNORECASE).strip()
-        elif not artist:
-            # Try splitting "Artist - Title" or "Title — Artist"
-            parts = re.split(r'\s*[\-—–]\s*', track, maxsplit=1)
-            if len(parts) == 2 and parts[0] and parts[1]:
-                artist = parts[0].strip()
-                track = parts[1].strip()
-
-        track = track.strip(' -—–:;.,|')
-        artist = artist.strip(' -—–:;.,|')
-        return track or track_name.strip(), artist or (artist_name.strip() if artist_name else "")
-
     def _open_url(self, req_or_url, headers=None, timeout=3.5):
+        from services.base_service import BaseMusicService, normalize_proxy_url
         if isinstance(req_or_url, str):
             req = urllib.request.Request(req_or_url, headers=headers or {'User-Agent': 'Mozilla/5.0'})
         else:
             req = req_or_url
-        return urllib.request.urlopen(req, timeout=timeout, context=ssl_ctx)
+        proxy = normalize_proxy_url(self.settings.get('auth', 'proxy_url', '')) if self.settings else ''
+        if proxy:
+            return BaseMusicService.open_url(self, req, timeout=timeout)
+        # Reuse the verified public transport used for media. System proxy/TUN
+        # routing remains in force, while TLS setup and short metadata replies
+        # no longer pay for a fresh context/connection on every lyric request.
+        from utils.url_safety import guarded_open_url
+        return guarded_open_url(req, timeout=timeout)
+
+    # BUG-L2-007: one hung host must not pin the bridge — the whole translation
+    # gets this wall-clock budget (checked between chunk requests).
+    TRANSLATION_BUDGET_SECONDS = 45.0
+    # BUG-L2-010: a single line over the URL budget is force-split on spaces
+    # instead of failing the whole translation.
+    _CHUNK_URL_LIMIT = 6000
 
     def translate_lyrics(self, lyrics: str, target_lang="ru") -> str:
         if not lyrics:
             return ""
+        deadline = time.monotonic() + self.TRANSLATION_BUDGET_SECONDS
         # Chunk long lyrics: a whole song in one ?q= blows past URL limits (414)
         # and gets rate-limited. 1500 chars keeps each GET well under 8KB quoted.
-        chunks = []
-        text = str(lyrics)
-        while text:
-            if len(text) <= 1500:
-                chunks.append(text)
-                break
-            cut = text.rfind("\n", 0, 1500)
-            if cut <= 0:
-                cut = 1500
-            chunks.append(text[:cut])
-            text = text[cut:].lstrip("\n")
-            if len(chunks) >= 10:
-                break
+        chunks, current = [], []
+
+        def _emit(line):
+            if current and len(urllib.parse.quote('\n'.join(current + [line])).encode('ascii')) > self._CHUNK_URL_LIMIT:
+                chunks.append('\n'.join(current))
+                current.clear()
+            current.append(line)
+
+        for line in str(lyrics).split('\n'):
+            if len(urllib.parse.quote(line).encode('ascii')) > self._CHUNK_URL_LIMIT:
+                piece = ''
+                for word in re.split(r'(\s+)', line):
+                    if piece and len(urllib.parse.quote(piece + word).encode('ascii')) > self._CHUNK_URL_LIMIT:
+                        _emit(piece)
+                        piece = word.lstrip()
+                    else:
+                        piece += word
+                if piece:
+                    _emit(piece)
+            else:
+                _emit(line)
+        if current:
+            chunks.append('\n'.join(current))
+        if len(chunks) > 64:
+            raise ValueError('Текст слишком большой для перевода')
         out = []
         try:
             for ch in chunks:
-                url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={target_lang}&dt=t&q={urllib.parse.quote(ch)}"
+                if time.monotonic() >= deadline:
+                    raise TimeoutError('Перевод превысил бюджет времени')
+                url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl={urllib.parse.quote(str(target_lang), safe='')}&dt=t&q={urllib.parse.quote(ch)}"
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                with self._open_url(req, timeout=HTTP_TIMEOUT) as resp:
+                with self._open_url(req, timeout=min(HTTP_TIMEOUT, max(1.0, deadline - time.monotonic()))) as resp:
                     data = json.loads(resp.read().decode('utf-8', errors='ignore'))
                     out.append("".join([x[0] for x in data[0] if x[0]]))
-            return "\n".join(out) if out else lyrics
+            if not out:
+                raise RuntimeError('Сервис перевода не вернул результат')
+            return "\n".join(out)
         except Exception as e:
             logger.debug(f"Translation error: {e}")
-            return lyrics
+            raise RuntimeError('Не удалось перевести текст') from e
 
-    def get_lyrics(self, track_name: str, artist_name: str = "", duration_ms: int = 0, file_path: str = None) -> dict:
-        if file_path and os.path.exists(file_path):
-            try:
-                from utils.tag_parser import extract_embedded_lyrics
-                raw_lyr = extract_embedded_lyrics(file_path).strip()
-                if raw_lyr:
-                    is_synced = bool(re.search(r'\[\d+:\d+', raw_lyr))
-                    return self._make_result(raw_lyr if is_synced else None, raw_lyr)
-            except Exception as e:
-                logger.debug("Embedded lyrics lookup error for %s: %s", file_path, e)
-
-        if not track_name:
-            return {"syncedLyrics": None, "plainLyrics": None, "instrumental": False, "weight": 3}
-
-        track, artist = self._clean_track_and_artist(track_name, artist_name)
-
-        # Check in-memory lyrics cache
-        cache_key = (track.lower(), artist.lower())
-        with self._cache_lock:
-            if cache_key in self._cache:
-                hit = self._cache[cache_key]
-                if hit.get("weight", 3) < 3:
-                    return hit
-
-        # Define 6 fetcher methods to run concurrently in the shared bounded pool
-        fetchers = [
-            self._fetch_lrclib,
-            self._fetch_netease,
-            self._fetch_qqmusic,
-            self._fetch_megalobiz,
-            self._fetch_genius,
-            self._fetch_duckduckgo,
-        ]
-
-        def _execute_cascade(t, a, max_timeout=3.5):
-            futures = {}
-            for f in fetchers:
-                future = _lyrics_pool.submit(f, t, a)
-                if future is not None:
-                    futures[future] = getattr(f, '__name__', str(f))
-            if not futures:
-                return None
-
-            not_done = set(futures.keys())
-            best_weight_2 = None
-            weight2_found_time = None
-            start_time = time.time()
-
-            while not_done:
-                elapsed = time.time() - start_time
-                if elapsed >= max_timeout:
-                    break
-
-                if best_weight_2 and weight2_found_time:
-                    fast_exit_remaining = 0.6 - (time.time() - weight2_found_time)
-                    if fast_exit_remaining <= 0:
-                        return best_weight_2
-                    time_left = min(0.2, max_timeout - elapsed, max(0.01, fast_exit_remaining))
-                else:
-                    time_left = min(0.2, max_timeout - elapsed)
-
-                if time_left <= 0:
-                    break
-
-                done, not_done = concurrent.futures.wait(
-                    not_done,
-                    timeout=time_left,
-                    return_when=concurrent.futures.FIRST_COMPLETED,
-                )
-
-                for fut in done:
-                    try:
-                        res = fut.result()
-                        if res and isinstance(res, dict):
-                            w = res.get('weight', 3)
-                            if w == 1:
-                                return res  # Immediate WIN
-                            elif w == 2 and not best_weight_2:
-                                best_weight_2 = res
-                                weight2_found_time = time.time()
-                    except Exception as e:
-                        logger.debug(f"Lyrics fetcher {futures.get(fut, '?')} failed: {e}", exc_info=True)
-
-            return best_weight_2
-
-        # Netease is the only provider that reliably covers Russian/Cyrillic
-        # tracks, and its working endpoint is slow (2-6s), so the cascade has to
-        # wait long enough for it to be worth running. Lyrics are fetched off the
-        # UI thread and delivered via the lyrics_ready event, so this does not
-        # block playback.
-        result = _execute_cascade(track, artist, max_timeout=5.5)
-
-        # Extra query shapes, tried ONLY when the primary found nothing.
-        #
-        # A remix upload carries the REMIXER as its artist (SoundCloud's
-        # uploader) while the real artist is embedded in the title:
-        #   artist="SWEEQTY", title="KENTUKKI - Замигает свет (SWEEQTY hardstyle remix)"
-        # Querying that verbatim misses, because providers index the original
-        # recording under the original artist. The "A - B" split of the title is
-        # exactly the missing candidate.
-        fallbacks = []
-        parts = re.split(r'\s*[\-—–]\s*', track, maxsplit=1)
-        if (len(parts) == 2 and parts[0] and parts[1]
-                and parts[0].strip().lower() != artist.strip().lower()):
-            fallbacks.append((parts[0].strip(), parts[1].strip()))
-        # An artist inferred from the title means the two may be swapped.
-        if not artist_name and artist and track != artist:
-            fallbacks.append((artist, track))
-
-        for alt_artist, alt_track in fallbacks:
-            if result and result.get("weight", 3) < 3:
-                break
-            alt_res = _execute_cascade(alt_track, alt_artist, max_timeout=3.0)
-            if alt_res and alt_res.get("weight", 3) < 3:
-                result = alt_res
-                logger.info("[lyrics] resolved via fallback query: %s - %s",
-                            alt_artist, alt_track)
-
-        if result and result.get("weight", 3) < 3:
-            with self._cache_lock:
-                if len(self._cache) > 500:
-                    self._cache.clear()
-                self._cache[cache_key] = result
-                if track_name and (track_name.lower(), (artist_name or "").lower()) != cache_key:
-                    self._cache[(track_name.lower(), (artist_name or "").lower())] = result
-            return result
-
-        return {"syncedLyrics": None, "plainLyrics": None, "instrumental": False, "weight": 3}
-
-    def _make_result(self, synced, plain):
-        if synced and re.search(r'\[\d{2}:\d{2}', synced):
-            return {"syncedLyrics": synced, "plainLyrics": plain or synced, "weight": 1}
-        elif plain or (synced and len(synced.strip()) > 0):
-            return {"syncedLyrics": None, "plainLyrics": plain or synced, "weight": 2}
-        return None
-
-    def _clean_str(self, text):
-        if not text:
-            return ""
-        text = re.sub(r'\(feat\.[^\)]+\)', '', text, flags=re.IGNORECASE)
-        text = re.sub(r'\[[^\]]+\]', '', text)
-        text = re.sub(r'\(prod\.[^\)]+\)', '', text, flags=re.IGNORECASE)
-        return text.strip()
-
-    def _fetch_lrclib(self, track, artist):
-        c_track = self._clean_str(track)
-        c_artist = artist.split(',')[0].split('&')[0].strip() if artist else ""
-
-        # 1. Try exact /api/get
-        try:
-            url = f"https://lrclib.net/api/get?artist_name={urllib.parse.quote(c_artist)}&track_name={urllib.parse.quote(c_track)}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'NeDotify/1.0'})
-            with self._open_url(req, timeout=3.5) as resp:
-                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
-                res = self._make_result(data.get("syncedLyrics"), data.get("plainLyrics"))
-                if res:
-                    return res
-        except Exception as e:
-            logger.debug(f"lrclib exact lookup failed for '{c_artist} - {c_track}': {e}", exc_info=True)
-
-        # 2. Fallback to /api/search
-        try:
-            q = f"{c_artist} {c_track}".strip()
-            url = f"https://lrclib.net/api/search?q={urllib.parse.quote(q)}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'NeDotify/1.0'})
-            with self._open_url(req, timeout=3.5) as resp:
-                results = json.loads(resp.read().decode('utf-8', errors='ignore'))
-                if isinstance(results, list) and results:
-                    for item in results:
-                        res = self._make_result(item.get("syncedLyrics"), item.get("plainLyrics"))
-                        if res and res.get('weight') == 1:
-                            return res
-                    first_res = self._make_result(results[0].get("syncedLyrics"), results[0].get("plainLyrics"))
-                    if first_res:
-                        return first_res
-        except Exception as e:
-            logger.debug(f"lrclib search lookup failed for '{c_artist} {c_track}': {e}", exc_info=True)
-
-        return None
-
-    # A provider's fuzzy search happily returns a completely different song, so a
-    # candidate is only accepted when its title actually resembles the track we
-    # asked for. Without this gate the cascade happily shows the wrong lyrics.
-    _TITLE_MATCH_MIN = 0.6
-
-    @staticmethod
-    def _title_match_score(want: str, got: str) -> float:
-        """0..1 similarity between a wanted track title and a provider's title."""
-        def norm(s):
-            s = (s or "").lower()
-            s = re.sub(r'\s*[\(\[].*?[\)\]]', ' ', s)      # drop parentheticals
-            s = re.sub(r'[^0-9a-zа-яё]+', ' ', s)          # punctuation/whitespace
-            return " ".join(s.split())
-
-        a, b = norm(want), norm(got)
-        if not a or not b:
-            return 0.0
-        if a == b:
-            return 1.0
-        if a in b or b in a:
-            return 0.85
-        ta, tb = set(a.split()), set(b.split())
-        return len(ta & tb) / max(len(ta), len(tb))
-
-    def _fetch_netease(self, track, artist):
-        try:
-            query = f"{artist} {track}".strip()
-            # NOTE: the old /api/search/pc endpoint now answers code=-462 with zero
-            # songs for *every* query, and /api/search returns an empty body, so
-            # Netease was effectively dead. /api/cloudsearch/pc is the endpoint
-            # that still resolves. It is also slow, hence the wider timeout.
-            url = f"https://music.163.com/api/cloudsearch/pc?type=1&offset=0&limit=5&s={urllib.parse.quote(query)}"
-            req = urllib.request.Request(
-                url, headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/'})
-            with self._open_url(req, timeout=6.0) as resp:
-                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
-                songs = (data.get('result') or {}).get('songs') or []
-                if not songs:
-                    return None
-
-                # Pick the best title match rather than blindly taking songs[0].
-                song = max(
-                    songs,
-                    key=lambda s: self._title_match_score(track, s.get('name') or ''),
-                )
-                if self._title_match_score(track, song.get('name') or '') < self._TITLE_MATCH_MIN:
-                    logger.debug(
-                        "netease: no title match for '%s' (best was '%s')",
-                        track, song.get('name'),
-                    )
-                    return None
-                sid = song['id']
-
-            l_url = f"https://music.163.com/api/song/lyric?id={sid}&lv=1&kv=1&tv=-1"
-            l_req = urllib.request.Request(
-                l_url, headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/'})
-            with self._open_url(l_req, timeout=6.0) as l_resp:
-                l_data = json.loads(l_resp.read().decode('utf-8', errors='ignore'))
-                lrc = (l_data.get('lrc') or {}).get('lyric')
-                return self._make_result(lrc, lrc)
-        except Exception as e:
-            logger.debug(f"netease lookup failed for '{artist} {track}': {e}", exc_info=True)
-            return None
-
-    def _fetch_qqmusic(self, track, artist):
-        try:
-            query = f"{artist} {track}".strip()
-            url = f"https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w={urllib.parse.quote(query)}&format=json&n=1"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with self._open_url(req, timeout=3.5) as resp:
-                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
-                songs = data.get('data', {}).get('song', {}).get('list', [])
-                if not songs:
-                    return None
-                songmid = songs[0]['songmid']
-
-            l_url = f"https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid={songmid}&format=json&nobase64=1"
-            l_req = urllib.request.Request(l_url, headers={'User-Agent': 'Mozilla/5.0', 'Referer': 'https://y.qq.com/'})
-            with self._open_url(l_req, timeout=3.5) as l_resp:
-                l_data = json.loads(l_resp.read().decode('utf-8', errors='ignore'))
-                lrc = l_data.get('lyric')
-                lrc = html.unescape(lrc) if lrc else None
-                return self._make_result(lrc, lrc)
-        except Exception as e:
-            logger.debug(f"qqmusic lookup failed for '{artist} {track}': {e}", exc_info=True)
-            return None
-
-    def _fetch_genius(self, track, artist):
-        try:
-            query = f"{artist} {track}".strip()
-            url = f"https://genius.com/api/search/multi?per_page=1&q={urllib.parse.quote(query)}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with self._open_url(req, timeout=3.5) as resp:
-                data = json.loads(resp.read().decode('utf-8', errors='ignore'))
-                hits = data.get('response', {}).get('sections', [{}])[0].get('hits', [])
-                if not hits:
-                    return None
-                s_url = hits[0]['result']['url']
-
-            s_req = urllib.request.Request(s_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with self._open_url(s_req, timeout=3.5) as s_resp:
-                html_content = s_resp.read().decode('utf-8', errors='ignore')
-                lyrics_parts = re.findall(r'<div data-lyrics-container="true"[^>]*>(.*?)</div>', html_content)
-                if lyrics_parts:
-                    txt = "\n".join(lyrics_parts)
-                    txt = re.sub(r'<br/?>', '\n', txt)
-                    txt = re.sub(r'<[^>]+>', '', txt)
-                    txt = html.unescape(txt)
-                    return self._make_result(None, txt)
-        except Exception as e:
-            logger.debug(f"genius lookup failed for '{artist} {track}': {e}", exc_info=True)
-            return None
-        return None
-
-    def _fetch_megalobiz(self, track, artist):
-        try:
-            query = f"{artist} {track}".strip()
-            url = f"https://www.megalobiz.com/search/all?qry={urllib.parse.quote(query)}&searchButton.x=0&searchButton.y=0"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with self._open_url(req, timeout=3.5) as resp:
-                html_content = resp.read().decode('utf-8', errors='ignore')
-                link = re.search(r'href="(/lrc/maker/[^"]+)"', html_content)
-                if not link:
-                    return None
-
-            l_url = "https://www.megalobiz.com" + link.group(1)
-            l_req = urllib.request.Request(l_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with self._open_url(l_req, timeout=3.5) as l_resp:
-                l_html = l_resp.read().decode('utf-8', errors='ignore')
-                lrc_match = re.search(r'<div id="lrc_[^"]*"[^>]*>(.*?)</div>', l_html, re.S)
-                if not lrc_match:
-                    lrc_match = re.search(r'<span id="lrc_[^"]*"[^>]*>(.*?)</span>', l_html, re.S)
-                if lrc_match:
-                    txt = lrc_match.group(1).replace('<br>', '\n').strip()
-                    return self._make_result(txt, txt)
-        except Exception as e:
-            logger.debug(f"megalobiz lookup failed for '{artist} {track}': {e}", exc_info=True)
-            return None
-        return None
-
-    def _fetch_duckduckgo(self, track, artist):
-        try:
-            query = f"{artist} {track} lyrics".strip()
-            url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-            with self._open_url(req, timeout=3.5) as resp:
-                html_content = resp.read().decode('utf-8', errors='ignore')
-                snippets = re.findall(r'<a class="result__snippet[^>]*>(.*?)</a>', html_content, re.S)
-                if snippets:
-                    txt = "\n".join(snippets).replace('<b>', '').replace('</b>', '').strip()
-                    txt = html.unescape(txt)
-                    return self._make_result(None, txt)
-        except Exception as e:
-            logger.debug(f"duckduckgo lookup failed for '{artist} {track}': {e}", exc_info=True)
-            return None
-        return None
+    def get_lyrics(self, track_name: str, artist_name: str = '', duration_ms=0, file_path=None,
+                   album_name='', on_update=None, is_current=None, source='', source_id=''):
+        video_id = str(source_id or '') if source == 'youtube' else ''
+        if not re.fullmatch(r'[A-Za-z0-9_-]{11}', video_id):
+            video_id = ''
+        upload_id = str(source_id or '')
+        upload_source = source if video_id or source == 'soundcloud' and upload_id.isdigit() else ''
+        return self._lookup.get(track_name, artist_name, duration_ms, file_path, album_name, on_update, is_current,
+                                video_id=video_id, upload_source=upload_source, upload_id=upload_id)

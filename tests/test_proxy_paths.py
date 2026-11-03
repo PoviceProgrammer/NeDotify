@@ -9,7 +9,7 @@
 import os
 import sys
 
-from tests.test_proxy_harness import (
+from tests.helpers import (
     PROXY_TOKEN, nedotify_home, app_core, proxy_factory, proxy, qs, write_bytes,
 )
 from core import proxy as proxy_module
@@ -163,7 +163,7 @@ def test_cover_roots_only_offer_existing_directories(nedotify_home, monkeypatch,
 
 
 def test_cover_roots_include_a_bundled_covers_dir_when_present(nedotify_home, monkeypatch, tmp_path):
-    bundled = tmp_path / 'bundle' / 'ui' / 'web_new' / 'covers'
+    bundled = tmp_path / 'bundle' / 'ui' / 'web_new_v2' / 'covers'
     os.makedirs(bundled)
     monkeypatch.setattr(sys, '_MEIPASS', str(tmp_path / 'bundle'), raising=False)
 

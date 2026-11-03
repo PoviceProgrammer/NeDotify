@@ -67,14 +67,24 @@ import json
 import re
 import sys
 import traceback
+
+# Keep failure reports printable on Windows consoles using legacy code pages.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 from collections import Counter
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO))
 CSS = REPO / "ui" / "web_new_v2" / "css"
 JS = REPO / "ui" / "web_new_v2" / "js"
 HTML = REPO / "ui" / "web_new_v2" / "index.html"
-RES = REPO / "tools" / "bench" / "results"
+from tools.bench.paths import results_dir
+
+RES = results_dir()
 DOC_PATH = REPO / "docs" / "perf" / "prof_frontend.md"
 
 GUARD_SCHEMA = "nedotify.animation-declarations.v2"

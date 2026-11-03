@@ -128,8 +128,11 @@ def test_downloader_gate_rejects_a_bad_file(tmp_path):
 
 def test_downloader_gate_accepts_a_good_file(tmp_path):
     from core.downloader import _downloaded_file_defect
+    from tests.audio_helpers import wave_bytes
 
-    p = _audio(tmp_path)
+    p = os.path.join(str(tmp_path), "valid.wav")
+    with open(p, "wb") as f:
+        f.write(wave_bytes())
     assert _downloaded_file_defect(p) == ""
 
 

@@ -19,7 +19,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 HTML = REPO / "ui" / "web_new_v2" / "index.html"
 CSS_DIR = REPO / "ui" / "web_new_v2" / "css"
-OUT = REPO / "tools" / "bench" / "results" / "backdrop_nesting.json"
+from tools.bench.paths import results_dir  # noqa: E402
+
+OUT = results_dir() / "backdrop_nesting.json"
 
 VOID = {
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta",
@@ -105,8 +107,8 @@ def main() -> None:
     tb.feed(HTML.read_text(encoding="utf-8"))
 
     # ---- which selectors carry backdrop-filter / filter --------------------
-    sys.path.insert(0, str(REPO / "tools" / "bench"))
-    from css_inventory import IMPORT_ORDER, parse_file  # noqa: E402
+    sys.path.insert(0, str(REPO))
+    from tools.bench.css_inventory import IMPORT_ORDER, parse_file  # noqa: E402
 
     by_file: dict[str, list] = {}
     for rel in IMPORT_ORDER:

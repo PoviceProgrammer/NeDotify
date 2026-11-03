@@ -20,13 +20,17 @@
     document.body.appendChild(debugDiv);
 
     function log(type, args) {
-        const msg = Array.from(args).map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' ');
+        const msg = Array.from(args).map(arg => {
+            try { return typeof arg === 'object' ? JSON.stringify(arg) : String(arg); }
+            catch { return '[unserializable value]'; }
+        }).join(' ');
         const line = document.createElement('div');
         line.style.borderBottom = '1px solid #222';
         line.style.padding = '2px 0';
         line.style.color = type === 'error' ? '#ff3333' : (type === 'warn' ? '#ffaa00' : '#00ff00');
         line.textContent = `[${type.toUpperCase()}] ${msg}`;
         debugDiv.appendChild(line);
+        while (debugDiv.childNodes.length > 200) debugDiv.firstChild.remove();
         debugDiv.scrollTop = debugDiv.scrollHeight;
     }
 

@@ -158,6 +158,17 @@ def test_baseline_comparison_is_not_vacuous(tree):
     assert res["vacuous"] is False
 
 
+def test_empty_baseline_fails_closed(tmp_path):
+    _write_tree(tmp_path)
+    path = run_guard._baseline_path(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"schema": "nedotify.animation-declarations.v2",
+                                "declarations": []}), encoding="utf-8")
+    res = _guard(tmp_path)
+    assert res["ok"] is False
+    assert res["error"] == "empty CSS declaration baseline"
+
+
 # --------------------------------------------------------------------------
 # 2. changing an existing value is a regression
 # --------------------------------------------------------------------------

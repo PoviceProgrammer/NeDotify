@@ -10,11 +10,11 @@ to clicks and `track_changed` never reached the frontend (player bar stayed on
 "Не играет").
 """
 import threading
-import time
 
 import pytest
 
-from core.api import AppApi, _MAIN_THREAD
+import core.api as api_module
+from core.api import AppApi
 
 
 class _FakeWindow:
@@ -23,10 +23,19 @@ class _FakeWindow:
     def __init__(self):
         self.calls = []
         self.never = threading.Event()
+        self.evaluated = threading.Event()
+        self.release = threading.Event()
+        self.release.set()
 
     def evaluate_js(self, code):
         self.calls.append(code)
+        self.evaluated.set()
+        self.release.wait(5)
         return None
+
+
+def _wait_for_delivery(window):
+    assert window.evaluated.wait(2), "queued event was not delivered"
 
 
 def _make_api(window):
@@ -36,38 +45,23 @@ def _make_api(window):
     return api
 
 
-def test_emit_from_ui_thread_does_not_block():
+def test_emit_from_ui_thread_does_not_block(monkeypatch):
     """Emitting on the main thread must hand off and return immediately."""
     window = _FakeWindow()
+    window.release.clear()
     api = _make_api(window)
 
-    def run_on_main():
-        # Simulate pywebview invoking our callback on the UI thread.
-        assert threading.current_thread() is _MAIN_THREAD
-        start = time.monotonic()
-        api._emit("track_changed", {"title": "x"})
-        return time.monotonic() - start
-
-    # Execute the body on a thread object we control but treat as "main".
-    holder = {}
-
-    def body():
-        # Temporarily pretend the calling thread is the main thread.
-        global _MAIN_THREAD
-        original = _MAIN_THREAD
-        _MAIN_THREAD = threading.current_thread()
-        try:
-            holder["elapsed"] = run_on_main()
-        finally:
-            _MAIN_THREAD = original
-
-    t = threading.Thread(target=body)
+    t = threading.Thread(target=lambda: api._emit("track_changed", {"title": "x"}))
+    monkeypatch.setattr(api_module, "_MAIN_THREAD", t)
     t.start()
-    t.join(timeout=5)
-
-    assert not t.is_alive(), "_emit blocked the calling (UI) thread"
-    assert holder["elapsed"] < 1.0, f"_emit took {holder['elapsed']:.2f}s on the UI thread"
-    assert window.calls, "evaluate_js was never scheduled"
+    try:
+        assert window.evaluated.wait(2), "queued event was not delivered"
+        t.join(timeout=2)
+        assert not t.is_alive(), "_emit blocked the calling (UI) thread"
+        assert window.calls, "evaluate_js was never scheduled"
+    finally:
+        window.release.set()
+        t.join(timeout=2)
 
 
 def test_emit_from_worker_thread_runs_inline():
@@ -78,9 +72,7 @@ def test_emit_from_worker_thread_runs_inline():
     result = {}
 
     def worker():
-        start = time.monotonic()
         api._emit("queue_updated", {"tracks": []})
-        result["elapsed"] = time.monotonic() - start
         result["count_at_return"] = len(window.calls)
 
     t = threading.Thread(target=worker)
@@ -90,6 +82,27 @@ def test_emit_from_worker_thread_runs_inline():
     assert not t.is_alive()
     # Synchronous path: the call has already been made when _emit returns.
     assert result["count_at_return"] == 1
+
+
+def test_emit_does_not_wait_for_renderer_under_playback_command_lock(api):
+    window = _FakeWindow()
+    window.release.clear()
+    api._window = window
+    api._ui_ready_event.set()
+    returned = threading.Event()
+    def command():
+        with api._playback_guard():
+            api._emit('queue_updated', {'tracks': []})
+            returned.set()
+    worker = threading.Thread(target=command)
+    worker.start()
+    try:
+        assert window.evaluated.wait(2)
+        assert returned.wait(1), 'a playback command waited for blocked UI evaluation'
+    finally:
+        window.release.set()
+        worker.join(2)
+    assert not worker.is_alive()
 
 
 def test_emit_without_window_is_noop():
@@ -125,6 +138,7 @@ def test_emit_falsy_payload_is_preserved(payload):
     window = _FakeWindow()
     api = _make_api(window)
     api._emit("queue_updated", payload)
+    _wait_for_delivery(window)
 
     m = re.search(r"window\.onPythonEvent\(\"queue_updated\", (.*)\); \}", window.calls[0], re.S)
     assert json.loads(m.group(1)) == payload
@@ -156,6 +170,7 @@ def test_emit_heavy_payload_roundtrip():
         "repeat": "off",
     }
     api._emit("queue_updated", payload)
+    _wait_for_delivery(window)
     assert window.calls
 
     # json.dumps escapes non-ASCII by default; JS parses \uXXXX correctly.

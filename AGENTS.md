@@ -1,9 +1,25 @@
-# NeDotify (AURA Music) — agent rules
+# NeDotify — agent rules
 
 Windows desktop music app: Python 3.14 + pywebview (embedded WebView) + a loopback
-HTTP proxy + Vanilla JS. No build step, no bundler, no framework. The default UI
-is `ui/web_new_v2/`; `ui/web_new/` is legacy v1 behind `--ui-v1`, so edits there
-ship nothing.
+HTTP proxy + Vanilla JS. No build step, no bundler, no framework. The sole UI
+is `ui/web_new_v2/`. Legacy version flags and UI directory overrides are retired.
+
+## Scope: this file is about the DESKTOP product only
+
+The repository holds **two products**:
+
+| Product | Where | Rules |
+|---|---|---|
+| Windows desktop player (Python + pywebview) | `main.py`, `core/`, `services/`, `audio/`, `ui/web_new_v2/` | **this file** |
+| Native Android app (Kotlin + Compose + Media3 + Room) | `android/` | [`android/AGENTS.md`](android/AGENTS.md) |
+
+Everything below — the interpreter, the bridge, `~/.nedotify/`, the keybind
+tables — describes the **desktop** product. It does **not** apply to the code
+under `android/`: that tree is Kotlin, it has no `~/.nedotify/` (its library
+lives on the device), it has no pywebview bridge and no hotkeys, and it is
+built by Gradle, not by PyInstaller. Read `android/AGENTS.md` before editing
+anything under `android/`. The state of that port is in
+`android/PORTING_STATUS.md`.
 
 **Interpreter for every command:** `& ".venv_win\Scripts\python.exe"`. Bare
 `python` lacks pywebview/yt-dlp.
@@ -17,10 +33,11 @@ and conclude.
 
 - `CODING_STANDARDS.md` — read **before** editing the pywebview bridge, the
   proxy's socket handling, a download filename, or either keybind table.
-- `.claude/skills/aura-test` — running the suite, the `network` marker, what counts
+- `.claude/skills/nedotify-test` — running the suite, the `network` marker, what counts
   as done.
-- `.claude/skills/aura-run` — launching the app, the WebView2 pin, logs, shutdown.
-- `.claude/skills/aura-build` — installer, `sys._MEIPASS`, `datas`, hidden imports.
+- `.claude/skills/nedotify-run` — launching the app, the WebView2 pin, logs, shutdown.
+- `.claude/skills/nedotify-build` — installer, `sys._MEIPASS`, `datas`, hidden imports.
+- `.claude/skills/nedotify-perf` — isolated benchmarks in `tools/bench/`.
 - `STATUS.md` — what the code actually does. `docs/AUDIT.md` — what the
   2026-10-03 audit changed.
 

@@ -8,8 +8,9 @@
 (b) _authorized() returned True when no token was configured - fail open.
 """
 import os
+from types import SimpleNamespace
 
-from tests.test_proxy_harness import (
+from tests.helpers import (
     PROXY_TOKEN, nedotify_home, app_core, proxy_factory, proxy, qs, write_bytes,
 )
 from core import proxy as proxy_module
@@ -177,6 +178,25 @@ def test_unknown_path_is_refused_before_authentication_survives(proxy_factory, n
     assert tokenless.get('/favicon.ico').status == 403
 
 
+def test_proxy_errors_include_loopback_cors_for_visible_status(proxy):
+    origin = 'http://127.0.0.1:43123'
+
+    response = proxy.get('/unknown?' + qs(k=PROXY_TOKEN), headers={'Origin': origin})
+
+    assert response.status == 404
+    assert response.header('Access-Control-Allow-Origin') == origin
+    assert response.header('Vary') == 'Origin'
+
+
+def test_unauthenticated_options_is_rejected_with_loopback_cors(proxy):
+    origin = 'http://localhost:43123'
+
+    response = proxy.request('/api/stream', method='OPTIONS', headers={'Origin': origin})
+
+    assert response.status == 403
+    assert response.header('Access-Control-Allow-Origin') == origin
+
+
 def test_local_proxy_manager_always_mints_a_token(monkeypatch):
     """LocalProxyManager.start() generates one before the port is announced,
     so fail-closed cannot break normal playback."""
@@ -202,3 +222,83 @@ def test_local_proxy_manager_always_mints_a_token(monkeypatch):
     assert manager.token == 'minted-token'
     assert manager.auth_query() == '&k=minted-token'
     manager.stop()
+
+
+def test_non_ascii_proxy_token_is_authenticated_without_connection_error(proxy_factory, nedotify_home):
+    token = 'музыка🔒'
+    client = proxy_factory(token=token)
+
+    valid = client.get('/unknown?' + qs(k=token))
+    invalid = client.get('/unknown?' + qs(k='неверный'))
+
+    assert valid.status == 404
+    assert invalid.status == 403
+
+
+class _UpstreamResponse:
+    status = 200
+    reason = 'OK'
+
+    def __init__(self, body=b'audio'):
+        self.headers = {
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': str(len(body)),
+            'Set-Cookie': 'session=attacker-controlled; Path=/',
+        }
+        self._body = body
+
+    def getheaders(self):
+        return list(self.headers.items())
+
+    def getheader(self, name, default=None):
+        return self.headers.get(name, default)
+
+    def read(self, _size=-1):
+        body, self._body = self._body, b''
+        return body
+
+    def close(self):
+        pass
+
+
+def test_proxy_never_forwards_upstream_set_cookie(proxy, monkeypatch):
+    monkeypatch.setattr(proxy_module, '_is_ssrf_safe_url', lambda _url: True)
+    monkeypatch.setattr(proxy_module, '_safe_urlopen', lambda *_args, **_kwargs: _UpstreamResponse())
+
+    response = proxy.get('/?' + qs(url='https://media.example.test/audio.mp3', source='youtube', k=PROXY_TOKEN))
+
+    assert response.status == 200
+    assert response.body == b'audio'
+    assert response.header('Set-Cookie') is None
+    assert response.header('Content-Type') == 'audio/mpeg'
+
+
+def test_proxy_serves_cyrillic_library_path_with_casefold_match(proxy, app_core, tmp_path):
+    path = write_bytes(str(tmp_path / 'Музыка' / 'Ёлка.mp3'), MP3)
+    _register(app_core.db, path, title='Ёлка')
+    alternate_case = str(tmp_path / 'МУЗЫКА' / 'ёлка.MP3')
+
+    response = proxy.get('/api/stream?' + qs(url=alternate_case, source='local', k=PROXY_TOKEN))
+
+    assert response.status == 200
+    assert response.body == MP3
+
+
+def test_plain_http_yandex_target_never_receives_oauth_credentials(proxy, app_core, monkeypatch):
+    app_core.settings = SimpleNamespace(
+        get=lambda category, key, default=None: (
+            'private-yandex-token' if (category, key) == ('auth', 'yandex_token') else default
+        )
+    )
+    monkeypatch.setattr(proxy_module, '_is_ssrf_safe_url', lambda _url: True)
+    captured = {}
+
+    def open_upstream(request, **_kwargs):
+        captured['authorization'] = request.get_header('Authorization')
+        return _UpstreamResponse()
+
+    monkeypatch.setattr(proxy_module, '_safe_urlopen', open_upstream)
+    response = proxy.get('/?' + qs(url='http://music.yandex.ru/audio.mp3', source='yandex', k=PROXY_TOKEN))
+
+    assert response.status == 200
+    assert captured['authorization'] is None

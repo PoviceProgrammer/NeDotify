@@ -22,6 +22,8 @@ class _NoDb:
     def cache_stream(self, source, source_id, stream_url):
         self.cached.append((source, source_id, stream_url))
 
+    update_cached_stream_url = cache_stream
+
     def get_cached_stream(self, source, source_id, max_age_seconds=None):
         return None
 

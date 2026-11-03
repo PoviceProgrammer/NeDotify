@@ -1,12 +1,13 @@
 // NeDotify — Python Event Bridge
-import { onTrackChanged, onStateChanged, onPositionChanged, applySettings, togglePlayPause, seekTo, getIsPlaying, applyMuteState, getCurrentTrack, stopPlaybackForQueueEnd } from './player.js';
+import { onTrackChanged, onStateChanged, applySettings, applyMuteState, getCurrentTrack, stopPlaybackForQueueEnd } from './player.js';
 import { onSearchResults } from './search.js';
-import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome } from './home.js';
+import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome, isCurrentHomeEvent, renderHomeRetry } from './home.js';
 import { loadLibrary, loadDownloaded, loadPlaylists } from './library.js';
 import { applySettingsFromBackend, onStorageInfo, setYandexWarning } from './settings.js';
 import { showToast, renderIcons, escapeHtml } from './utils.js';
 
 let isNextTrackChange = false;
+let lastAudioErrorAt = 0;
 
 // O-5: track the visible page so hidden sections are not re-rendered on burst events
 let currentPageId = 'home';
@@ -45,8 +46,22 @@ export function addPythonEventHandler(fn) {
 // Installed by initEvents(); null before that so the registry stays usable even
 // if initEvents() throws or is never reached.
 let coreEventHandler = null;
+let eventsReady = false;
+let deferReplay = false;
+const pendingEvents = [];
+export function deferPythonEvents() { deferReplay = true; }
+
+export function flushPythonEvents() {
+    eventsReady = true;
+    for (const [name, payload] of pendingEvents.splice(0)) dispatchPythonEvent(name, payload);
+}
 
 function dispatchPythonEvent(eventName, data) {
+    if (!eventsReady) {
+        if (pendingEvents.length >= 1024) pendingEvents.shift();
+        pendingEvents.push([eventName, data]);
+        return;
+    }
     if (coreEventHandler) {
         try {
             coreEventHandler(eventName, data);
@@ -70,9 +85,31 @@ window.onPythonEvent = dispatchPythonEvent;
 export function initEvents() {
     window.onPythonEvent = dispatchPythonEvent;
     coreEventHandler = function(eventName, data) {
-        console.log('Python Event:', eventName, data);
+        // Media URLs and auth fields can contain credentials; never log payloads.
+        console.debug('Python Event:', eventName);
 
         switch (eventName) {
+            case 'setup_status':
+            case 'setup_progress':
+                document.dispatchEvent(new CustomEvent('nedotify:' + eventName, {detail: data}));
+                break;
+            case 'download_queue_updated':
+            case 'download_progress':
+                break;
+
+
+
+            case 'operation_error':
+                document.dispatchEvent(new CustomEvent('nedotify:operation_error', { detail: data }));
+                break;
+            case 'window_visibility': {
+                const hidden = data?.hidden === true;
+                const root = document.documentElement;
+                if (root.classList.contains('window-hidden') === hidden) break;
+                root.classList.toggle('window-hidden', hidden);
+                document.dispatchEvent(new CustomEvent('nedotify:window_visibility_changed', { detail: { hidden } }));
+                break;
+            }
             case 'track_changed':
                 isNextTrackChange = true;
                 onTrackChanged(data);
@@ -83,26 +120,6 @@ export function initEvents() {
                 // Normalize payload which could be string or { state: "..." }
                 const state = (typeof data === 'object' && data !== null && 'state' in data) ? data.state : data;
                 onStateChanged(state);
-                break;
-            }
-
-            case 'position_changed': {
-                // Pos and duration should be normalized to milliseconds for onPositionChanged
-                let posMs = data.position_ms !== undefined ? data.position_ms : (data.pos !== undefined ? Math.round(data.pos * 1000) : 0);
-                let durationMs = data.duration_ms !== undefined ? data.duration_ms : (data.duration !== undefined ? Math.round(data.duration * 1000) : 0);
-                onPositionChanged(posMs, durationMs);
-                // Unified time units: All time values across events are dispatched in milliseconds (posMs, pos, durationMs, duration).
-                // Seconds are provided under posSeconds / durationSeconds for backwards compatibility.
-                document.dispatchEvent(new CustomEvent('nedotify:position_changed', { 
-                    detail: { 
-                        pos: posMs, 
-                        posMs: posMs, 
-                        posSeconds: posMs / 1000, 
-                        duration: durationMs, 
-                        durationMs: durationMs, 
-                        durationSeconds: durationMs / 1000 
-                    } 
-                }));
                 break;
             }
 
@@ -121,16 +138,11 @@ export function initEvents() {
                 }
                 break;
                 
-            case 'yt_playlist_ready':
-                if (data && data.tracks && data.tracks.length > 0) {
-                    if (window.pywebview && window.pywebview.api && window.pywebview.api.play_track) {
-                        window.pywebview.api.play_track(data.tracks[0], data.tracks);
-                    }
-                } else {
-                    showToast('Не удалось получить треки', 'error');
-                }
-                break;
-                
+            // BUG-U3-007: мёртвый case 'yt_playlist_ready' удалён — событие не
+            // эмитится бэкендом. Импорт плейлистов завершается emission
+            // 'playlists_updated' (core/api.py::import_external_playlist) и
+            // обрабатывается группой library_updated/playlists_updated ниже.
+
             case 'authentic_home_error': {
                 const authContainer = document.getElementById('home-authentic-feed');
                 if (authContainer) {
@@ -140,7 +152,9 @@ export function initEvents() {
             }
 
             case 'popular_results':
+                if (!isCurrentHomeEvent('home-popular', data)) break;
                 clearFeedTimeout('home-popular');
+                if (data?.error) { renderHomeRetry('home-popular'); break; }
                 if (data) {
                     const tracks = Array.isArray(data) ? data : (data.tracks || []);
                     renderPopular(tracks);
@@ -148,16 +162,19 @@ export function initEvents() {
                 break;
 
             case 'feed_ready':
-            case 'recommendations_ready':
+            case 'recommendations_ready': {
+                if (!isCurrentHomeEvent('home-recommended', data)) break;
                 clearFeedTimeout('home-recommended');
-                if (data) {
-                    const tracks = Array.isArray(data) ? data : (data.tracks || []);
-                    if (tracks.length > 0) renderRecommendations(tracks);
-                }
+                if (data?.error) { renderHomeRetry('home-recommended'); break; }
+                const tracks = Array.isArray(data) ? data : (data?.tracks || []);
+                renderRecommendations(tracks);
                 break;
+            }
 
             case 'artists_ready':
+                if (!isCurrentHomeEvent('home-artists', data)) break;
                 clearFeedTimeout('home-artists');
+                if (data?.error) { renderHomeRetry('home-artists'); break; }
                 if (data) {
                     const artists = Array.isArray(data) ? data : (data.artists || []);
                     renderArtists(artists);
@@ -169,7 +186,9 @@ export function initEvents() {
                 break;
 
             case 'releases_ready':
+                if (!isCurrentHomeEvent('home-releases', data)) break;
                 clearFeedTimeout('home-releases');
+                if (data?.error) { renderHomeRetry('home-releases'); break; }
                 if (data) {
                     const tracks = Array.isArray(data) ? data : (data.tracks || []);
                     renderReleases(tracks);
@@ -177,19 +196,23 @@ export function initEvents() {
                 break;
 
             case 'mixes_ready':
+                if (!isCurrentHomeEvent('home-mixes', data)) break;
                 clearFeedTimeout('home-mixes');
+                if (data?.error) { renderHomeRetry('home-mixes'); break; }
                 if (data) {
                     const items = Array.isArray(data) ? data : (data.tracks || data.mixes || []);
                     renderMixes(items);
                 }
                 break;
                 
-            case 'mood_playlists_ready':
-                window.dispatchEvent(new CustomEvent('app:mood_playlists_ready', { detail: data }));
-                break;
+            // BUG-U3-003: мёртвый case 'mood_playlists_ready' удалён — событие не
+            // эмитится бэкендом (фича «Под настроение» снята; секция
+            // section-home-mood удалена из index.html и home.js).
 
-            case 'library_updated':
             case 'favorites_updated':
+                document.dispatchEvent(new CustomEvent('nedotify:favorites_updated', { detail: data }));
+                window.dispatchEvent(new CustomEvent('nedotify:favorites_updated', { detail: data }));
+            case 'library_updated':
             case 'playlists_updated':
             case 'playlist_changed':
                 // O-5: debounce burst events — a single refresh 300ms after the last one
@@ -211,12 +234,31 @@ export function initEvents() {
                 break;
 
             case 'mini_player_toggled':
-                if (data?.is_mini) {
-                    document.body.classList.add('mini-player-active');
-                } else {
-                    document.body.classList.remove('mini-player-active');
-                }
                 window.dispatchEvent(new CustomEvent('nedotify:mini_player_toggled', { detail: data }));
+                break;
+
+            case 'scan_progress':
+                window.dispatchEvent(new CustomEvent('nedotify:scan_progress', { detail: data }));
+                break;
+
+            case 'scan_complete':
+                window.dispatchEvent(new CustomEvent('nedotify:scan_complete', { detail: data }));
+                break;
+
+            case 'listening_history_cleared':
+                if (data?.success === true && typeof data.listening_session === 'string') {
+                    const track = getCurrentTrack();
+                    if (track && typeof track === 'object') track.listening_session = data.listening_session;
+                }
+                window.dispatchEvent(new CustomEvent('nedotify:listening_history_cleared', { detail: data }));
+                break;
+
+            case 'history_updated':
+                document.dispatchEvent(new CustomEvent('nedotify:history_updated', { detail: data }));
+                window.dispatchEvent(new CustomEvent('nedotify:history_updated', { detail: data }));
+                if (isPageVisible('library') && window.refreshActiveLibraryView) {
+                    window.refreshActiveLibraryView();
+                }
                 break;
 
             case 'batch_download_started':
@@ -236,25 +278,13 @@ export function initEvents() {
                 break;
 
             case 'download_complete':
-            case 'track_downloaded':
-                loadDownloaded();
-                loadPlaylists();
-                if (window.refreshActiveLibraryView) window.refreshActiveLibraryView();
                 document.dispatchEvent(new CustomEvent('nedotify:track_downloaded', { detail: data }));
                 break;
 
             case 'download_failed': {
-                // Drop the spinner on every download button (global fallback;
-                // utils.js also clears the exact track button by strict id match).
-                document.querySelectorAll('.download-btn.downloading').forEach(btn => {
-                    btn.classList.remove('downloading');
-                    if (!btn.classList.contains('downloaded')) {
-                        btn.innerHTML = '<i data-lucide="download" style="width:14px;height:14px"></i>';
-                    }
-                });
-                renderIcons();
                 const dlErr = (data?.error || data?.message || 'Неизвестная ошибка').toString();
-                showToast('Ошибка скачивания: ' + dlErr, 'error');
+
+                document.dispatchEvent(new CustomEvent('nedotify:operation_error', { detail: { ...data, method: 'download_track' } }));
                 document.dispatchEvent(new CustomEvent('nedotify:track_download_failed', { detail: data }));
                 break;
             }
@@ -289,12 +319,7 @@ export function initEvents() {
                 break;
             }
 
-            case 'setting_changed':
-                // data = { key, value, category }
-                break;
-
             case 'storage_info':
-            case 'storage_info_updated':
             case 'storage_updated':
                 onStorageInfo(data);
                 break;
@@ -302,28 +327,31 @@ export function initEvents() {
             case 'error': {
                 console.error('Backend Error:', data);
                 const cleanErr = (data || 'Неизвестная ошибка').toString().replace(/\x1b\[[0-9;]*m/g, '');
-                showToast('Ошибка: ' + cleanErr, 'error');
+                if (Date.now() - lastAudioErrorAt > 300) showToast('Не удалось выполнить действие. Подробности сохранены в журнале.', 'error');
                 onStateChanged('stopped');
                 break;
             }
 
-            // P0-4: core/api.py::_install_bridge_error_logging pushes this right
-            // before re-raising, so the caller's promise also rejects. Without a
-            // case here it only reached console.log('Unknown event') and the
-            // button looked like it silently does nothing.
+            // The bridge promise rejection is the UI error channel. This event
+            // is diagnostic only; surfacing it here would duplicate the
+            // caller's contextual status, toast, or operation error panel.
             case 'api_error': {
                 const apiMethod = (data && data.method) ? String(data.method) : '';
-                const cleanApiErr = ((data && data.error) || 'Неизвестная ошибка').toString().replace(/\x1b\[[0-9;]*m/g, '');
-                console.error('Bridge API Error:', apiMethod, cleanApiErr, data);
-                showToast(
-                    apiMethod ? ('Ошибка: ' + apiMethod + ' — ' + cleanApiErr) : ('Ошибка: ' + cleanApiErr),
-                    'error'
-                );
+                const errorCode = (data && data.code) ? String(data.code) : 'unknown';
+                console.error('Bridge API Error:', apiMethod, errorCode);
                 break;
             }
 
             case 'lyrics_ready':
                 document.dispatchEvent(new CustomEvent('nedotify:lyrics_ready', { detail: data }));
+                break;
+
+            case 'album_details_ready':
+                document.dispatchEvent(new CustomEvent('nedotify:album_details_ready', { detail: data }));
+                break;
+
+            case 'artist_candidates_ready':
+                document.dispatchEvent(new CustomEvent('nedotify:artist_candidates_ready', { detail: data }));
                 break;
 
             case 'artist_profile_ready':
@@ -340,6 +368,25 @@ export function initEvents() {
                 window.dispatchEvent(new CustomEvent('nedotify:track_wave_ready', { detail: data }));
                 break;
 
+
+            case 'zapret_update_checked':
+                window.dispatchEvent(new CustomEvent('nedotify:zapret_update_checked', { detail: data }));
+                break;
+
+            // Zapret lifecycle events (late crash BUG-025, non-stoppable exit
+            // BUG-009, network loss BUG-036, download phases BUG-038, autostart
+            // failure BUG-033). Routing only: toasts, toggle re-syncs and the
+            // status text live in the settings-panel subscriber.
+            case 'zapret_crashed':
+            case 'zapret_network_issue':
+            case 'zapret_still_running':
+            case 'zapret_autostart_failed':
+            case 'zapret_download_started':
+            case 'zapret_download_finished':
+            case 'zapret_download_failed':
+                window.dispatchEvent(new CustomEvent('nedotify:' + eventName, { detail: data }));
+                break;
+
             case 'yandex_device_auth_code':
                 document.dispatchEvent(new CustomEvent('nedotify:yandex_device_auth_code', { detail: data }));
                 break;
@@ -349,8 +396,10 @@ export function initEvents() {
                 break;
 
             case 'audio_error': {
+                lastAudioErrorAt = Date.now();
                 const cleanAudioErr = (data?.message || '').toString().replace(/\x1b\[[0-9;]*m/g, '');
-                showToast('Ошибка воспроизведения: ' + cleanAudioErr, 'error');
+
+                document.dispatchEvent(new CustomEvent('nedotify:operation_error', { detail: { ...data, source: 'audio' } }));
                 window._pendingResolveKey = null;
                 onStateChanged('stopped');
                 break;
@@ -383,42 +432,44 @@ export function initEvents() {
                     document.dispatchEvent(new CustomEvent('nedotify:track_changed', { detail: cur }));
                 }
                 document.dispatchEvent(new CustomEvent('nedotify:track_updated', { detail: data }));
+                window.dispatchEvent(new CustomEvent('nedotify:track_updated', { detail: data }));
+                if (isPageVisible('library') && window.refreshActiveLibraryView) {
+                    window.refreshActiveLibraryView();
+                }
                 break;
             }
-
-            case 'session_autoplay':
-                // Backend restored a session with autoplay enabled. Wait for the
-                // restored track's stream to land, then resume playback (and seek
-                // back to the saved position when provided).
-                setTimeout(() => {
-                    if (!getIsPlaying()) togglePlayPause();
-                    const pos = Number(data?.position_sec || 0);
-                    if (pos > 3) setTimeout(() => seekTo(Math.round(pos * 1000)), 600);
-                }, 400);
-                break;
 
             // ================= FUTURE EVENTS / DEPRECATED =================
             // NOTE: yandex_device_auth_* are handled above; do not duplicate
             // them here - JS switch silently shadows the first handler.
+            // BUG-U3-010: 'proxy_status' — живое событие (эмитят core/proxy.py
+            // при смене статуса прокси). Обрабатывается подписчиком в main.js
+            // (баннер состояния прокси), здесь — тихий пропуск, чтобы не
+            // попадать в default-лог 'Unknown event'.
+            // BUG-U3-008: мёртвый case 'smart_home_ready' удалён — событие не
+            // эмитится; живой путь — 'authentic_home_ready' (обработан выше).
             case 'proxy_status':
-            case 'smart_home_ready':
+                break;
+
             case 'yandex_auth_error':
-                logFutureEvent(eventName, data);
+                setYandexWarning(data?.invalid === true);
+                if (data?.invalid === true) showToast('Авторизация Яндекс Музыки истекла. Подключите аккаунт заново в настройках.', 'warning');
+                break;
+
+            case 'yandex_subscription_status':
+                showToast(data?.has_plus === true ? 'Подписка Яндекс Плюс активна' : 'Подписка Яндекс Плюс не найдена', 'info');
                 break;
 
             default:
                 console.log('Unknown event:', eventName);
         }
     };
+    if (!deferReplay) flushPythonEvents();
 }
 
-const loggedFutureEvents = new Set();
-function logFutureEvent(eventName, data) {
-    if (!loggedFutureEvents.has(eventName)) {
-        console.info(`[NeDotify] Future/deprecated event ignored: ${eventName}`, data || '');
-        loggedFutureEvents.add(eventName);
-    }
-}
+// BUG-U3-008/U3-010: механизм logFutureEvent удалён вместе с последними
+// записями FUTURE/DEPRECATED (smart_home_ready, proxy_status) — блок опустел,
+// а «deprecated»-маркер на живом proxy_status дезинформировал сопровождающих.
 
 // Mirrors player.js updateRepeatIcon so backend repeat_changed syncs both bars.
 function syncRepeatIcon(btn, mode) {

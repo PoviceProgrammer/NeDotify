@@ -4,13 +4,47 @@ Manages cover art cache, stream URL cache, and metadata cache with LRU eviction.
 """
 
 import os
+import hashlib
 import shutil
 import time
 import logging
 import threading
 import concurrent.futures
+import re
 from typing import Optional, Dict, Any, List
 from core.database import DatabaseManager
+
+
+# BUG-A1-006: stream cache files are named by a digest of (source, source_id).
+# The legacy scheme (`re.sub('[^a-zA-Z0-9_-]', '_', source_id)`) mapped every
+# two Cyrillic search expressions of equal length onto the SAME file name, so
+# the proxy's disk probe served one user's track for another. Only names in the
+# new hashed format may ever be served from disk; legacy files are left alone
+# (LRU purge removes them eventually) and stream_cache rows that still point at
+# a legacy name are ignored by every consumer.
+_SAFE_SOURCE_RE = re.compile(r'[^a-zA-Z0-9_-]')
+_HASHED_STEM_RE = re.compile(r'^[a-z0-9]+_[0-9a-f]{16}$')
+
+
+def stream_cache_stem(source: str, source_id) -> str:
+    """Deterministic, collision-free cache-file stem for (source, source_id)."""
+    safe_source = _SAFE_SOURCE_RE.sub('_', str(source or 'unknown')).strip('_').lower() or 'unknown'
+    digest = hashlib.sha256(f'{source}:{source_id}'.encode('utf-8')).hexdigest()[:16]
+    return f"{safe_source}_{digest}"
+
+
+def is_hashed_cache_stem(name: str) -> bool:
+    """True when *name* (a cache-file basename without extension) was produced
+    by :func:`stream_cache_stem`. Anything else is legacy and must never be
+    treated as a valid cached stream for a track."""
+    return bool(_HASHED_STEM_RE.fullmatch(str(name or '')))
+
+
+def is_valid_cache_file(path: str) -> bool:
+    """True when *path* points at a stream-cache file of the current naming scheme."""
+    if not path:
+        return False
+    return is_hashed_cache_stem(os.path.splitext(os.path.basename(path))[0])
 
 
 class CacheManager:
@@ -55,6 +89,26 @@ class CacheManager:
     def temp_dir(self) -> str:
         return self._temp_dir
 
+    @staticmethod
+    def _cache_file_stats(directory):
+        """Yield file paths and metadata from one directory scan per folder."""
+        pending = [directory]
+        while pending:
+            current = pending.pop()
+            try:
+                with os.scandir(current) as entries:
+                    for entry in entries:
+                        try:
+                            if entry.is_dir():
+                                if not entry.is_symlink():
+                                    pending.append(entry.path)
+                            else:
+                                yield entry.path, entry.stat()
+                        except OSError:
+                            pass
+            except OSError:
+                pass
+
     def get_cache_size(self, force_rescan: bool = False) -> int:
         """Get total cache size in bytes (cached with 60s TTL)."""
         now = time.time()
@@ -65,14 +119,8 @@ class CacheManager:
             total = 0
             cache_dirs = [self._covers_dir, self._streams_dir, self._temp_dir]
             for c_dir in cache_dirs:
-                if os.path.exists(c_dir):
-                    for dirpath, _, filenames in os.walk(c_dir):
-                        for f in filenames:
-                            fp = os.path.join(dirpath, f)
-                            try:
-                                total += os.path.getsize(fp)
-                            except OSError:
-                                pass
+                for _, file_stat in self._cache_file_stats(c_dir):
+                    total += file_stat.st_size
 
             self._cached_size_bytes = total
             self._last_size_scan = now
@@ -93,14 +141,20 @@ class CacheManager:
         Returns: {used_bytes, quota_bytes, protected_count, quota_gb}
         """
         quota_gb = 5
-        if self.settings:
+        settings = getattr(self, "settings", None)
+        if settings:
             try:
-                quota_gb = int(self.settings.get("storage", "cache_quota_gb", 5))
+                quota_gb = int(settings.get("storage", "cache_quota_gb", 5))
             except Exception:
                 quota_gb = 5
 
         quota_bytes = quota_gb * 1024 * 1024 * 1024 if quota_gb > 0 else 0
-        used_bytes = self.get_cache_size()
+        # The configurable quota is for evictable stream files only. Cover art
+        # and short-lived temp files have separate cleanup controls; including
+        # them here made the stream purge impossible to satisfy and could erase
+        # every reusable stream while the reported total stayed over quota.
+        used_bytes = sum(stat.st_size for _, stat in self._cache_file_stats(self._streams_dir))
+        total_cache_bytes = self.get_cache_size()
 
         # Count protected tracks (downloaded or favorites)
         protected_count = 0
@@ -115,6 +169,7 @@ class CacheManager:
 
         return {
             "used_bytes": used_bytes,
+            "total_cache_bytes": total_cache_bytes,
             "quota_bytes": quota_bytes,
             "quota_gb": quota_gb,
             "protected_count": protected_count
@@ -164,9 +219,10 @@ class CacheManager:
         """
         if quota_bytes is None:
             quota_gb = 5
-            if self.settings:
+            settings = getattr(self, "settings", None)
+            if settings:
                 try:
-                    quota_gb = int(self.settings.get("storage", "cache_quota_gb", 5))
+                    quota_gb = int(settings.get("storage", "cache_quota_gb", 5))
                 except Exception:
                     quota_gb = 5
             quota_bytes = quota_gb * 1024 * 1024 * 1024 if quota_gb > 0 else 0
@@ -175,7 +231,9 @@ class CacheManager:
         if quota_bytes == 0 and not force_all_temporary:
             return 0
 
-        total_used = self.get_cache_size(force_rescan=True)
+        # This quota governs stream files. Covers/temp have their own clear
+        # operations and cannot force eviction of every playable stream.
+        total_used = sum(stat.st_size for _, stat in self._cache_file_stats(self._streams_dir))
         if not force_all_temporary and total_used <= quota_bytes:
             return 0
 
@@ -196,7 +254,12 @@ class CacheManager:
                 src = row[1]
                 src_id = row[2]
                 if src and src_id:
-                    protected_sources.add(f"{src}_{src_id}".lower())
+                    # Protect both the current hashed stem and the legacy one:
+                    # pre-migration files of protected (downloaded/favourite)
+                    # tracks must not be purged before their DB rows move on.
+                    safe_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(src_id))
+                    protected_sources.add(f"{src}_{safe_id}".casefold())
+                    protected_sources.add(stream_cache_stem(src, src_id))
         except Exception as e:
             self.logger.error(f"Error fetching protected tracks: {e}")
 
@@ -206,25 +269,18 @@ class CacheManager:
 
         # Step 3: Collect purge candidates from streams_dir
         candidates = []
-        for dirpath, _, filenames in os.walk(self._streams_dir):
-            for f in filenames:
-                fp = os.path.join(dirpath, f)
-                norm_fp = os.path.normpath(fp).lower()
-                base_name = os.path.splitext(f)[0].lower()
+        for fp, file_stat in self._cache_file_stats(self._streams_dir):
+            norm_fp = os.path.normpath(fp).lower()
+            base_name = os.path.splitext(os.path.basename(fp))[0].lower()
 
-                # Check if protected
-                if norm_fp in protected_paths:
-                    continue
-                if any(p_src in base_name for p_src in protected_sources):
-                    continue
-                if any(act in base_name for act in active_downloads_copy):
-                    continue
+            if norm_fp in protected_paths:
+                continue
+            if base_name in protected_sources:
+                continue
+            if any(act in base_name for act in active_downloads_copy):
+                continue
 
-                try:
-                    stat = os.stat(fp)
-                    candidates.append((fp, stat.st_mtime, stat.st_size))
-                except OSError:
-                    pass
+            candidates.append((fp, file_stat.st_mtime, file_stat.st_size))
 
         # Sort candidates by mtime ASC (oldest first - LRU)
         candidates.sort(key=lambda x: x[1])
@@ -245,7 +301,7 @@ class CacheManager:
         # Step 4: Synchronize DB in a single transaction (Decision 3)
         if deleted_files:
             try:
-                with self.db.conn:
+                with self.db._write_lock, self.db.conn:
                     for dfp in deleted_files:
                         self.db.conn.execute(
                             "UPDATE stream_cache SET cached_file_path = NULL WHERE cached_file_path = ?",
@@ -281,84 +337,80 @@ class CacheManager:
 
     def download_audio_stream(self, source: str, source_id: str, url: str):
         """Asynchronously download audio stream to disk with active tracking and LRU enforcement."""
-        download_id = f"{source}_{source_id}"
+        from urllib.parse import urlparse
+        download_id = stream_cache_stem(source, source_id)
         with self._active_downloads_lock:
             if download_id in self._active_downloads:
                 return
             self._active_downloads.add(download_id)
 
-        # Enforce quota before starting new download
-        self._executor.submit(self.purge_stream_cache)
-
         def _download_task():
-            import yt_dlp
             try:
-                out_template = os.path.join(self._streams_dir, f"{download_id}.%(ext)s")
-                if source == "youtube":
+                from services.youtube_service import _require_audio_file
+                get_cached_stream = getattr(self.db, 'get_cached_stream', None)
+                if callable(get_cached_stream):
                     try:
-                        from services.youtube_service import YouTubeService
-                        yt_svc = YouTubeService(settings=getattr(self, 'settings', None))
-                        ydl_opts = yt_svc._get_ydl_opts('bestaudio/best', fallback=True)
+                        cached = get_cached_stream(source, str(source_id), max_age_seconds=2 ** 31 - 1)
+                        cached_path = cached.get('cached_file_path') if cached else None
+                        # A legacy-format path predates the hashed naming scheme:
+                        # it can belong to a colliding track, so never reuse it.
+                        if cached_path and is_valid_cache_file(cached_path):
+                            _require_audio_file(cached_path)
+                            return
                     except Exception:
-                        # NB: no `player_client` pin here. _get_ydl_opts()
-                        # deliberately leaves it unset: pinned modern clients
-                        # need a PO token and filter out every format, which was
-                        # verified to break the exact videos that then worked.
-                        # What this path must NOT lose are the retry and
-                        # timeout knobs, so it mirrors them instead of
-                        # hardening a bare options dict.
-                        logger.warning(
-                            "cache: could not build yt-dlp options via "
-                            "YouTubeService, using the fallback options",
-                            exc_info=True,
-                        )
-                        ydl_opts = {
-                            'quiet': True,
-                            'no_warnings': False,
-                            'format': 'bestaudio/best',
-                            'noplaylist': True,
-                            'nocheckcertificate': True,
-                            'socket_timeout': 30,
-                            'retries': 10,
-                            'extractor_retries': 3,
-                            'fragment_retries': 10,
-                            'http_chunk_size': 10 * 1024 * 1024,
-                            'concurrent_fragment_downloads': 4,
-                            'buffersize': 1024 * 1024,
-                            'source_address': '0.0.0.0',
-                        }
-                else:
-                    ydl_opts = {
-                        'quiet': True,
-                        'no_warnings': True,
-                        'format': 'bestaudio/best',
-                    }
-                ydl_opts['outtmpl'] = out_template
-                ydl_opts['skip_download'] = False
-                # A leftover file from a previous partial download must not be
-                # mistaken for a good one; yt-dlp reuses an existing file by
-                # default and the check below only asked os.path.exists().
-                ydl_opts['overwrites'] = True
+                        self.logger.debug('No reusable cached audio for %s/%s', source, source_id,
+                                          exc_info=True)
 
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    if info:
-                        ext = info.get('ext', 'm4a')
-                        final_path = os.path.join(self._streams_dir, f"{download_id}.{ext}")
-                        # Same integrity gate the downloader uses: a 0-byte or
-                        # non-audio artefact must not become the cached stream.
-                        from services.youtube_service import _require_audio_file
-                        _require_audio_file(final_path)
-                        self.logger.info(f"Successfully cached {source}/{source_id} to {final_path}")
-                        self.db.set_cached_file(source, source_id, final_path)
-                        self.mark_cache_dirty()
+                from utils.url_safety import guarded_open_url
+                from core.downloader import _downloaded_file_defect
+                self.purge_stream_cache()
+                temp_path = os.path.join(self._temp_dir, f"{download_id}_{threading.get_ident()}.part")
+                try:
+                    with guarded_open_url(url, timeout=10) as response:
+                        content_type = str(response.headers.get('Content-Type', '')).lower()
+                        if 'mpegurl' in content_type:
+                            return  # The proxy streams manifests; do not extract them twice.
+                        extension = {
+                            'audio/mpeg': '.mp3', 'audio/ogg': '.ogg',
+                            'audio/wav': '.wav', 'audio/x-wav': '.wav',
+                            'audio/webm': '.webm', 'video/webm': '.webm',
+                        }.get(content_type.split(';')[0], '.m4a')
+                        expected = int(response.headers.get('Content-Length') or 0)
+                        total = 0
+                        with open(temp_path, 'wb') as output:
+                            while True:
+                                chunk = response.read(128 * 1024)
+                                if not chunk:
+                                    break
+                                output.write(chunk)
+                                total += len(chunk)
+                        if expected and total != expected:
+                            raise IOError('Incomplete cache response')
+                    final_path = os.path.join(self._streams_dir, download_id + extension)
+                    # Preserve the real extension for container detection.
+                    verify_path = temp_path + extension
+                    os.replace(temp_path, verify_path)
+                    temp_path = verify_path
+                    defect = _downloaded_file_defect(verify_path)
+                    if defect:
+                        raise IOError(defect)
+                    os.replace(verify_path, final_path)
+                    self.db.set_cached_file(source, source_id, final_path)
+                    self.mark_cache_dirty()
+                finally:
+                    if os.path.isfile(temp_path):
+                        os.remove(temp_path)
             except Exception as e:
                 self.logger.error(f"Failed to cache {source}/{source_id}: {e}")
             finally:
                 with self._active_downloads_lock:
                     self._active_downloads.discard(download_id)
 
-        self._executor.submit(_download_task)
+        try:
+            self._executor.submit(_download_task)
+        except RuntimeError:
+            with self._active_downloads_lock:
+                self._active_downloads.discard(download_id)
 
     def save_cover_from_url(self, url: str, track_id: int) -> Optional[str]:
         """Download and cache a cover image. Returns local path."""
@@ -369,7 +421,7 @@ class CacheManager:
         if not url.startswith(("http://", "https://")):
             return None
 
-        from core.proxy import _is_ssrf_safe_url
+        from utils.url_safety import safe_public_url as _is_ssrf_safe_url, guarded_open_url
         if not _is_ssrf_safe_url(url):
             self.logger.warning(f"Blocked unsafe cover URL: {url[:100]}")
             return None
@@ -401,8 +453,12 @@ class CacheManager:
         tmp_path = filepath + f".{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.part"
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with opener.open(req, timeout=10) as response, open(tmp_path, 'wb') as f:
-                shutil.copyfileobj(response, f)
+            with guarded_open_url(req, timeout=10) as response, open(tmp_path, 'wb') as f:
+                body = response.read(10 * 1024 * 1024 + 1)
+                from utils.tag_parser import cover_mime_from_bytes
+                if len(body) > 10 * 1024 * 1024 or not cover_mime_from_bytes(body):
+                    raise ValueError('Invalid cover image')
+                f.write(body)
             if os.path.getsize(tmp_path) == 0:
                 raise ValueError("empty cover response")
             os.replace(tmp_path, filepath)

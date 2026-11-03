@@ -8,12 +8,48 @@ The old parser read the field positionally:
 instead of 416, and an unparsable range produced a 500.
 """
 import os
+import io
 
-from tests.test_proxy_harness import (
+import pytest
+
+from tests.helpers import (
     PROXY_TOKEN, nedotify_home, app_core, proxy_factory, proxy,
     offline_handler, qs, write_bytes,
 )
 from core.proxy import _parse_byte_range
+
+
+@pytest.mark.parametrize('path', ['/', '/api/stream'])
+def test_googlevideo_open_ranges_are_bounded_and_never_cached(proxy, app_core, monkeypatch, path):
+    from core import proxy as module
+    from email.message import Message
+    monkeypatch.setattr(module, '_is_ssrf_safe_url', lambda url: True)
+    upstream_ranges = []
+    class Response(io.BytesIO):
+        status = 206
+        def __init__(self, start):
+            super().__init__(b'x' * 1048576)
+            self.headers = Message()
+            self.headers['Content-Length'] = '1048576'
+            self.headers['Content-Type'] = 'audio/webm'
+            self.headers['Content-Range'] = f'bytes {start}-{start + 1048575}/3145728'
+        def getheaders(self):
+            return self.headers.items()
+    def open_upstream(req, **kwargs):
+        header = req.get_header('Range')
+        upstream_ranges.append(header)
+        return Response(int(header[6:].split('-')[0]))
+    monkeypatch.setattr(module, '_safe_urlopen', open_upstream)
+    for start in (0, 1048576):
+        response = proxy.get(proxy.url(path, url='https://cdn.googlevideo.com/videoplayback',
+                                       source='youtube', source_id='range-test'),
+                             headers={'Range': f'bytes={start}-'})
+        assert response.status == 206
+        assert response.header('Content-Range') == f'bytes {start}-{start + 1048575}/3145728'
+        assert len(response.body) == 1048576
+    assert upstream_ranges == ['bytes=0-1048575', 'bytes=1048576-2097151']
+    assert not os.listdir(app_core.cache._streams_dir)
+    assert app_core.db.get_cached_stream('youtube', 'range-test') is None
 
 
 PAYLOAD = bytes(bytearray(range(256))) * 4  # 1024 deterministic bytes
@@ -43,7 +79,7 @@ def test_parse_byte_range_suffix_form():
 def test_parse_byte_range_rejects_unsatisfiable():
     assert _parse_byte_range('bytes=1024-', 1024) == ('invalid', None, None)
     assert _parse_byte_range('bytes=2048-3000', 1024) == ('invalid', None, None)
-    assert _parse_byte_range('bytes=100-50', 1024) == ('invalid', None, None)
+    assert _parse_byte_range('bytes=100-50', 1024) == ('full', 0, 1023)
     assert _parse_byte_range('bytes=0-', 0) == ('invalid', None, None)
 
 
@@ -107,7 +143,7 @@ def test_plain_get_is_unchanged(proxy, nedotify_home):
 
 def test_unsatisfiable_range_answers_416(proxy, nedotify_home):
     url = _stream_url(nedotify_home)
-    for header in ('bytes=100-50', 'bytes=1024-', 'bytes=99999-100000'):
+    for header in ('bytes=1024-', 'bytes=99999-100000'):
         resp = proxy.get('/api/stream?' + qs(url=url, k=PROXY_TOKEN),
                          headers={'Range': header})
         assert resp.status == 416, (header, resp.status)

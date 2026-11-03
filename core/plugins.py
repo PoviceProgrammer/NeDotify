@@ -23,14 +23,9 @@ class PluginManager:
         self._core = app_core
         self.plugins = []
 
-        self.plugins_dir = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            'plugins'
-        )
-        try:
-            os.makedirs(self.plugins_dir, exist_ok=True)
-        except Exception as e:
-            logger.warning(f'Could not create plugins dir {self.plugins_dir}: {e}')
+        base = (os.path.dirname(sys.executable) if getattr(sys, 'frozen', False)
+                else os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.plugins_dir = os.path.join(base, 'plugins')
 
     def _plugins_enabled(self) -> bool:
         """Plugins execute arbitrary user code, so they stay off unless enabled."""
@@ -73,6 +68,8 @@ class PluginManager:
             file_path = candidate if os.path.isfile(candidate) else package_init
 
         qualified_name = f'{PLUGIN_NAMESPACE}.{module_name}'
+        if any(getattr(plugin, '__name__', None) == qualified_name for plugin in self.plugins):
+            return
 
         try:
             if not os.path.isfile(file_path):
@@ -93,15 +90,25 @@ class PluginManager:
             try:
                 spec.loader.exec_module(module)
             except Exception:
-                sys.modules.pop(qualified_name, None)
+                self._remove_modules(qualified_name)
                 raise
 
             if hasattr(module, 'setup') and callable(module.setup):
-                module.setup(self._core)
+                try:
+                    module.setup(self._core)
+                except Exception:
+                    teardown = getattr(module, 'teardown', None)
+                    if callable(teardown):
+                        try:
+                            teardown()
+                        except Exception:
+                            logger.warning('Failed plugin setup teardown also failed', exc_info=True)
+                    self._remove_modules(qualified_name)
+                    raise
                 self.plugins.append(module)
                 logger.info(f'Loaded plugin: {module_name}')
             else:
-                sys.modules.pop(qualified_name, None)
+                self._remove_modules(qualified_name)
                 logger.warning(f'Plugin {module_name} missing setup(app_core) function. Ignored.')
         except Exception as e:
             logger.error(f'Failed to load plugin {module_name}: {e}', exc_info=True)
@@ -115,6 +122,13 @@ class PluginManager:
             except Exception as e:
                 logger.error(f'Error unloading plugin {module.__name__}: {e}', exc_info=True)
             finally:
-                sys.modules.pop(getattr(module, '__name__', ''), None)
+                self._remove_modules(getattr(module, '__name__', ''))
 
         self.plugins.clear()
+
+    @staticmethod
+    def _remove_modules(qualified_name):
+        if qualified_name.startswith(PLUGIN_NAMESPACE + '.'):
+            for name in tuple(sys.modules):
+                if name == qualified_name or name.startswith(qualified_name + '.'):
+                    sys.modules.pop(name, None)

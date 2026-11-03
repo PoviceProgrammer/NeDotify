@@ -25,7 +25,11 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
+import importlib.metadata
+import os
+import platform
 import re
 import shutil
 import subprocess
@@ -37,13 +41,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from tools.bench import profile as prof  # noqa: E402
+from tools.bench.paths import visual_artifacts_dir  # noqa: E402
 from tools.visual_guard import diff as vg_diff  # noqa: E402
 from tools.visual_guard import fixtures as vg_fixtures  # noqa: E402
 
 GUARD_DIR = Path(__file__).resolve().parent
 GOLDENS = GUARD_DIR / "goldens"
-CURRENT = GUARD_DIR / "current"
-REPORTS = GUARD_DIR / "reports"
+ARTIFACTS = visual_artifacts_dir()
+CURRENT = ARTIFACTS / "current"
+REPORTS = ARTIFACTS / "reports"
 PYTHON = REPO_ROOT / ".venv_win" / "Scripts" / "python.exe"
 CHILD = REPO_ROOT / "tools" / "bench" / "bench_child.py"
 ANIM_DECLS = REPO_ROOT / "tools" / "bench" / "results" / "animation_declarations.json"
@@ -51,6 +57,102 @@ ANIM_DECLS = REPO_ROOT / "tools" / "bench" / "results" / "animation_declarations
 
 def log(msg: str) -> None:
     print(f"[guard] {msg}", flush=True)
+
+
+def capture_machine_manifest(themes, screens, viewports, dprs) -> dict:
+    """Describe source and host inputs that affect visual capture repeatability."""
+    try:
+        pywebview_version = importlib.metadata.version("pywebview")
+    except importlib.metadata.PackageNotFoundError:
+        pywebview_version = None
+    font_root = REPO_ROOT / "ui" / "web_new_v2" / "assets" / "fonts"
+    bundled_fonts = {
+        path.relative_to(REPO_ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(font_root.rglob("*")) if path.is_file()
+    } if font_root.exists() else {}
+    return {
+        "schema": "nedotify.visual-capture-machine.v1",
+        "os": platform.platform(),
+        "windows_version": platform.version(),
+        "architecture": platform.machine(),
+        "processor": platform.processor() or None,
+        "python": platform.python_version(),
+        "pywebview": pywebview_version,
+        "webview2_runtime": _webview2_runtime_version(),
+        "webview2_runtime_override": os.environ.get("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER"),
+        "display_adapters": _display_adapters(),
+        "bundled_font_sha256": bundled_fonts,
+        "themes": list(themes),
+        "screens": list(screens),
+        "viewports": [list(value) for value in viewports],
+        "dprs": list(dprs),
+        "code_fingerprint": prof.tree_fingerprint_short(prof.fingerprint_tree()),
+    }
+
+
+def _webview2_runtime_version() -> str | None:
+    """Read the installed WebView2 runtime version without opening a window."""
+    try:
+        import winreg
+    except ImportError:
+        return None
+    clients = r"Software\Microsoft\EdgeUpdate\Clients"
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for view in (getattr(winreg, "KEY_WOW64_64KEY", 0), 0):
+            try:
+                with winreg.OpenKey(hive, clients, 0, winreg.KEY_READ | view) as root:
+                    index = 0
+                    while True:
+                        try:
+                            client = winreg.EnumKey(root, index)
+                        except OSError:
+                            break
+                        index += 1
+                        try:
+                            with winreg.OpenKey(root, client) as key:
+                                name, _ = winreg.QueryValueEx(key, "name")
+                                version, _ = winreg.QueryValueEx(key, "pv")
+                            if "webview2" in str(name).lower():
+                                return str(version)
+                        except OSError:
+                            continue
+            except OSError:
+                continue
+    return None
+
+
+def _display_adapters() -> list[dict[str, str]]:
+    """Read display driver names/versions from the Windows device registry."""
+    try:
+        import winreg
+    except ImportError:
+        return []
+    class_key = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+    result = []
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, class_key) as root:
+            index = 0
+            while True:
+                try:
+                    name = winreg.EnumKey(root, index)
+                except OSError:
+                    break
+                index += 1
+                if len(name) != 4 or not name.isdecimal():
+                    continue
+                try:
+                    with winreg.OpenKey(root, name) as adapter:
+                        desc, _ = winreg.QueryValueEx(adapter, "DriverDesc")
+                        try:
+                            version, _ = winreg.QueryValueEx(adapter, "DriverVersion")
+                        except OSError:
+                            version = ""
+                        result.append({"name": str(desc), "driver_version": str(version)})
+                except OSError:
+                    continue
+    except OSError:
+        return []
+    return result
 
 
 # --------------------------------------------------------------------------
@@ -114,6 +216,10 @@ def _launch(spec: dict, theme_name: str, profile_root: Path,
 def capture(out_dir: Path, themes: list[str], screens: list[str],
             tracks: int, port: int, viewports, dprs) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "machine_manifest.json").write_text(
+        json.dumps(capture_machine_manifest(themes, screens, viewports, dprs),
+                   indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8")
     summary = {}
     for theme_name in themes:
         if not _ensure_single_instance_free():
@@ -518,6 +624,10 @@ def css_declaration_guard(root: Path | None = None) -> dict:
         base_map = _load_baseline(baseline_path)
     except ValueError as e:
         return {"ok": False, "error": str(e)}
+    if not base_map:
+        return {"ok": False, "error": "empty CSS declaration baseline",
+                "hint": ("record a baseline from the current UI with "
+                         "python tools/visual_guard/run_guard.py --write-css-baseline")}
     cur_map = collect_declarations(base_root)
 
     base_keys = set(base_map)
@@ -634,11 +744,18 @@ def main() -> int:
     ap.add_argument("--screens", default=",".join(vg_fixtures.ALL_SCREENS))
     ap.add_argument("--tracks", type=int, default=200)
     ap.add_argument("--port", type=int, default=9222)
+    ap.add_argument("--artifacts-dir", default=str(visual_artifacts_dir()),
+                    help="directory for current captures and reports (default: temp cache)")
     ap.add_argument("--skip-css", action="store_true")
     ap.add_argument("--write-css-baseline", action="store_true",
                     help="regenerate tools/bench/results/animation_declarations.json "
                          "from the current tree and exit (no capture, no compare)")
     args = ap.parse_args()
+
+    global ARTIFACTS, CURRENT, REPORTS
+    ARTIFACTS = Path(args.artifacts_dir).expanduser().resolve()
+    CURRENT = ARTIFACTS / "current"
+    REPORTS = ARTIFACTS / "reports"
 
     if args.write_css_baseline:
         n = write_css_baseline()
@@ -663,16 +780,11 @@ def main() -> int:
         log(f"unknown themes: {unknown}; known={list(vg_fixtures.THEMES)}")
         return 2
 
-    do_capture = args.capture or (args.all and not GOLDENS.exists())
-    if args.all:
-        do_capture = True
+    do_capture = args.capture or args.all
 
     capture_summary = None
     if do_capture:
-        if GOLDENS.exists() and args.capture:
-            log(f"rebuilding goldens in {GOLDENS} (old set removed)")
-            shutil.rmtree(GOLDENS, ignore_errors=True)
-        capture_summary = capture(CURRENT if args.compare else GOLDENS, themes,
+        capture_summary = capture(CURRENT, themes,
                                   screens, args.tracks, args.port,
                                   vg_fixtures.VIEWPORTS, vg_fixtures.DPRS)
 

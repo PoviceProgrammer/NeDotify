@@ -1,5 +1,5 @@
 """
-NeDotify / AURA Music - Stream URL Resolution Coordinator (C-3)
+NeDotify - Stream URL Resolution Coordinator (C-3)
 
 Cache layer in front of the network resolution cascade:
     in-memory dict -> DB stream_cache -> network cascade (single-flight).
@@ -9,16 +9,17 @@ background resolution instead of each triggering the full network cascade.
 """
 
 import logging
-import re
 import threading
 import time
 from typing import Callable, Optional, Tuple
+
+from utils.stream_urls import stream_url_expired
 
 logger = logging.getLogger(__name__)
 
 _MEM_TTL = 3600.0        # in-memory URL lifetime (seconds)
 _MEM_MAX_SIZE = 1024     # in-memory cache cap; least recently used entry is evicted on overflow
-_RESOLVE_TIMEOUT = 12.0  # max wait for a single-flight resolution
+_RESOLVE_TIMEOUT = 35.0  # owner and waiters share one cascade deadline
 _DB_MAX_AGE = 14400      # DB stream_cache max age (seconds) — googlevideo URLs expire in ~6h
 #: A key whose cascade just produced nothing is skipped for this long. Short on
 #: purpose: a DRM-protected or deleted track keeps the same answer for good,
@@ -28,23 +29,25 @@ _FAIL_MAX_SIZE = 512
 
 
 class _Flight:
-    __slots__ = ("event", "url", "error")
+    __slots__ = ("event", "url", "error", "deadline")
 
     def __init__(self):
         self.event = threading.Event()
         self.url = None
         self.error = None
+        self.deadline = 0.0
 
 
 class StreamResolver:
     """Coordinates stream URL resolution: cache lookup, then single-flight network cascade."""
 
     def __init__(self, db, mem_ttl: float = _MEM_TTL, resolve_timeout: float = _RESOLVE_TIMEOUT,
-                 db_max_age: int = _DB_MAX_AGE):
+                 db_max_age: int = _DB_MAX_AGE, settings=None):
         self._db = db
         self._mem_ttl = mem_ttl
         self._resolve_timeout = resolve_timeout
         self._db_max_age = db_max_age
+        self._settings = settings
         self._lock = threading.Lock()
         self._mem = {}      # key -> (url, ts)
         self._inflight = {} # key -> _Flight
@@ -122,32 +125,29 @@ class StreamResolver:
 
     @staticmethod
     def _url_expired(url: Optional[str]) -> bool:
-        """A stream URL carrying an 'expire=' param (googlevideo) is dead past it."""
-        if not url:
-            return False
-        try:
-            m = re.search(r'[?&]expire=(\d{6,})', url)
-            if m and int(m.group(1)) < time.time() + 60:
-                return True
-        except Exception:
-            pass
-        return False
+        """Reject explicit expired CDN tokens without a network round trip."""
+        return stream_url_expired(url, now=time.time())
+
+    def _mem_get(self, key, now):
+        """Read and touch a valid memory entry. Caller holds ``self._lock``."""
+        entry = self._mem.get(key)
+        if entry and now - entry[1] <= self._mem_ttl and not self._url_expired(entry[0]):
+            self._stats["mem_hits"] += 1
+            # LRU recency changes; the original TTL timestamp does not.
+            self._mem_set(key, entry)
+            return entry[0]
+        if entry:
+            self._mem.pop(key, None)
+        return None
 
     def get_cached_url(self, source: str, source_id) -> Optional[str]:
         """Return a cached stream URL (in-memory first, then DB), or None."""
         key = self._key(source, source_id)
         now = time.time()
         with self._lock:
-            entry = self._mem.get(key)
-            if entry and now - entry[1] <= self._mem_ttl:
-                if not self._url_expired(entry[0]):
-                    self._stats["mem_hits"] += 1
-                    # Re-insert under the original timestamp: a hit makes the
-                    # entry most-recently-used for eviction purposes only, it
-                    # must not extend the TTL lifetime.
-                    self._mem_set(key, entry)
-                    return entry[0]
-                self._mem.pop(key, None)
+            cached = self._mem_get(key, now)
+            if cached:
+                return cached
 
         if self._db is not None:
             try:
@@ -156,8 +156,25 @@ class StreamResolver:
                     if self._url_expired(cached["stream_url"]):
                         self.invalidate(source, str(source_id))
                         return None
+                    expires_at = cached.get("expires_at")
+                    if expires_at:
+                        try:
+                            from datetime import datetime
+                            exp_ts = datetime.fromisoformat(str(expires_at)).timestamp() if isinstance(expires_at, str) else expires_at.timestamp()
+                            if exp_ts <= now:
+                                self.invalidate(source, str(source_id))
+                                return None
+                        except Exception:
+                            pass
                     with self._lock:
-                        self._mem_set(key, (cached["stream_url"], now))
+                        # Memory must not extend the persisted URL's lifetime.
+                        stamp = cached.get("cached_at")
+                        try:
+                            from datetime import datetime
+                            cached_at = datetime.fromisoformat(str(stamp)).timestamp()
+                        except (TypeError, ValueError):
+                            cached_at = now - self._mem_ttl
+                        self._mem_set(key, (cached["stream_url"], min(now, cached_at)))
                         self._stats["db_hits"] += 1
                     return cached["stream_url"]
             except Exception as e:
@@ -188,9 +205,16 @@ class StreamResolver:
 
         owner = False
         with self._lock:
+            # A previous owner can finish after our initial cache miss but
+            # before this lock. Re-check atomically with creating the flight,
+            # otherwise prefetch + Play can extract the same track twice.
+            cached = self._mem_get(key, time.time())
+            if cached:
+                return cached
             flight = self._inflight.get(key)
             if flight is None:
                 flight = _Flight()
+                flight.deadline = time.monotonic() + self._resolve_timeout
                 self._inflight[key] = flight
                 owner = True
                 # Counted here, inside the same critical section that decides
@@ -202,22 +226,41 @@ class StreamResolver:
             else:
                 self._stats["single_flight_waits"] += 1
 
-        if owner:
+        def run_owner():
             try:
                 url, error = resolver_fn()
-                flight.url = url
-                flight.error = error
+                with self._lock:
+                    if self._inflight.get(key) is not flight or flight.event.is_set():
+                        return
+                    flight.url, flight.error = url, error
                 if url:
                     self._persist(source, source_id, url)
+                elif not url and error:
+                    verdict = str(error).lower()
+                    if "403" in verdict or "forbidden" in verdict:
+                        self.invalidate(source, str(source_id))
+                    if any(mark in verdict for mark in ("deleted", "removed", "private video", "not available", "drm protected")):
+                        self.mark_unavailable(source, source_id, str(error))
             except Exception as e:
                 flight.error = str(e)
+                if "403" in str(e).lower() or "forbidden" in str(e).lower():
+                    self.invalidate(source, str(source_id))
             finally:
                 with self._lock:
                     if self._inflight.get(key) is flight:
                         self._inflight.pop(key, None)
                 flight.event.set()
-        else:
-            flight.event.wait(timeout=self._resolve_timeout)
+
+        if owner:
+            # A provider may block before invoking its callback. A daemon owns
+            # that call so every caller still gets the same finite deadline.
+            threading.Thread(target=run_owner, name="StreamResolve", daemon=True).start()
+        if not flight.event.wait(timeout=max(0.0, flight.deadline - time.monotonic())):
+            with self._lock:
+                if self._inflight.get(key) is flight:
+                    self._inflight.pop(key, None)
+                    flight.error = "Stream resolution deadline exceeded"
+                    flight.event.set()
 
         if flight.url:
             return flight.url
@@ -258,7 +301,7 @@ class StreamResolver:
             self._failed.pop(key, None)
         if self._db is not None:
             try:
-                self._db.cache_stream(source, str(source_id), url)
+                self._db.update_cached_stream_url(source, str(source_id), url)
             except Exception as e:
                 logger.debug(f"Failed to cache stream URL: {e}")
 

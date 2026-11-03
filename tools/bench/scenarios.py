@@ -244,12 +244,7 @@ def scenario_cpu_attribution(ctx, seconds: float = 15.0) -> dict:
 
 
 def scenario_idle_states(ctx, seconds: float = 60.0) -> dict:
-    """Idle CPU/RAM in the three states the task names.
-
-    visible+playing, visible+idle, and minimised. The minimised figure is the
-    interesting one: it reveals whether the renderer keeps painting when nobody
-    can see the window.
-    """
+    """Measure idle, confirmed playback, and minimized playback states."""
     hwnd = find_main_window()
     out = {"hwnd": hwnd, "states": {}}
 
@@ -275,23 +270,89 @@ def scenario_idle_states(ctx, seconds: float = 60.0) -> dict:
     ctx.sampler.start()
     sample("visible_idle")
 
-    # start playback on a real library track so the progress loop is live
-    try:
-        ctx.js_async("""(async () => {
-            const t = await window.pywebview.api.get_library();
-            if (t && t.length) { window.__benchTrack = t[0]; }
-            return true;
-        })()""", timeout=30.0)
-    except Exception:
-        pass
+    playback = _start_fixture_playback(ctx, timeout=30.0)
+    out["playback"] = playback
+    if not playback.get("playing"):
+        ctx.sampler.stop()
+        out["error"] = playback.get("error", "playback was not confirmed")
+        return out
+    sample("visible_playing", wait_before=2.0)
 
     # ACTUALLY minimise before sampling, then restore
     set_window_minimized(hwnd, True)
-    sample("minimized", wait_before=4.0)
+    sample("minimized_playing", wait_before=4.0)
     set_window_minimized(hwnd, False)
-    sample("restored", wait_before=3.0)
+    sample("restored_playing", wait_before=3.0)
     ctx.sampler.stop()
     return out
+
+
+def _start_fixture_playback(ctx, timeout: float = 30.0) -> dict:
+    """Start a seeded local WAV and require the real playing-state bridge event."""
+    return ctx.js_async(r"""
+(async (timeoutMs) => {
+  const api = window.pywebview?.api;
+  if (!api) return { playing: false, error: 'bridge unavailable' };
+  const rows = await api.get_library(200, 0);
+  const track = (rows || []).find(row => row.source === 'local' &&
+    String(row.file_path || '').includes('bench-audio'));
+  if (!track) return { playing: false, error: 'seeded local playback file missing' };
+  const before = (window.__bench?.pythonEvents || []).length;
+  const result = await api.play_track(track, [track], 0);
+  if (!result || result.success !== true) {
+    return { playing: false, error: result?.error || result?.code || 'play_track rejected' };
+  }
+  const deadline = performance.now() + timeoutMs;
+  while (performance.now() < deadline) {
+    const events = (window.__bench?.pythonEvents || []).slice(before);
+    if (events.some(e => e.name === 'state_changed' && e.state === 'playing')) {
+      return { playing: true, track_id: track.id, confirmed_ms: performance.now() };
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  return { playing: false, track_id: track.id, error: 'playing state event timed out' };
+})""", args_fmt=f"({int(timeout * 1000)})", timeout=timeout + 5)
+
+
+def scenario_play(ctx, timeout: float = 30.0) -> dict:
+    """Measure local playback until the backend reports state=playing."""
+    started = time.monotonic()
+    state = _start_fixture_playback(ctx, timeout=timeout)
+    return {
+        **state,
+        "wall_ms": round((time.monotonic() - started) * 1000, 1),
+        "fixture": "seeded silent local WAV; no provider/network resolution",
+    }
+
+
+def scenario_download(ctx, timeout: float = 15.0) -> dict:
+    """Measure a completed download bridge flow using a scratch-profile fixture."""
+    started = time.monotonic()
+    result = ctx.js_async(r"""
+(async (timeoutMs) => {
+  const api = window.pywebview?.api;
+  if (!api) return { completed: false, error: 'bridge unavailable' };
+  const rows = await api.get_library(500, 0);
+  const track = (rows || []).find(row => row.source !== 'local');
+  if (!track) return { completed: false, error: 'seeded provider track missing' };
+  const before = (window.__bench?.pythonEvents || []).length;
+  const accepted = await api.download_track(track);
+  if (accepted !== true) return { completed: false, error: 'download request rejected' };
+  const deadline = performance.now() + timeoutMs;
+  while (performance.now() < deadline) {
+    const events = (window.__bench?.pythonEvents || []).slice(before);
+    if (events.some(e => e.name === 'download_complete' && e.track_id === track.id)) {
+      return { completed: true, track_id: track.id, event_ms: performance.now() };
+    }
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  return { completed: false, track_id: track.id, error: 'download completion event timed out' };
+})""", args_fmt=f"({timeout * 1000})", timeout=timeout + 5)
+    return {
+        **result,
+        "wall_ms": round((time.monotonic() - started) * 1000, 1),
+        "fixture": "scratch-profile WAV written by benchmark-only API stub",
+    }
 
 
 # --------------------------------------------------------------------------
@@ -347,6 +408,10 @@ SCROLL_JS = r"""
 (async (sel, frames) => {
   const el = document.querySelector(sel);
   if (!el) return { error: 'selector not found: ' + sel };
+  if (el.clientHeight <= 0 || el.scrollHeight <= el.clientHeight) {
+    return { error: 'scroll target has no overflow: ' + sel,
+             clientHeight: el.clientHeight, scrollHeight: el.scrollHeight };
+  }
   const times = [];
   let last = performance.now();
   let stop = false;
@@ -387,13 +452,69 @@ SCROLL_JS = r"""
 """
 
 
+PREPARE_SCROLL_JS = r"""
+(async (selector) => {
+  const pause=()=>new Promise(r=>setTimeout(r,25));
+  const deadline=performance.now()+20000;
+  const {showPage}=await import('./js/pages.js');
+  if(selector==='#lib-active-tracks'){
+    showPage('library');
+    await (await import('./js/library.js')).selectSection('all');
+    while(document.getElementById('lib-all-more')){
+      if(performance.now()>deadline)throw Error('library pagination deadline');
+      const more=document.getElementById('lib-all-more');
+      if(!more.disabled)more.click();
+      do{await pause();}while(more.isConnected&&more.disabled&&performance.now()<deadline);
+      if(more.isConnected&&more.textContent.includes('Повторить'))throw Error('library pagination failed');
+    }
+  }else if(selector==='#search-results'){
+    showPage('search');
+    const input=document.getElementById('search-input');input.value='Benchmark';
+    input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+    while(!document.querySelector('#search-results .track-item')){
+      if(performance.now()>deadline)throw Error('search result deadline');await pause();
+    }
+    while(document.querySelector('.search-more-results')){
+      if(performance.now()>deadline)throw Error('search pagination deadline');
+      document.querySelector('.search-more-results').click();await pause();
+    }
+  }
+  await pause();
+  const list=document.querySelector(selector);
+  if(!list||!list.getBoundingClientRect().height)return {error:'list is not visible: '+selector};
+  let parent=list;
+  while(parent&&!(/(auto|scroll)/.test(getComputedStyle(parent).overflowY)&&parent.clientHeight>0&&parent.scrollHeight>parent.clientHeight))parent=parent.parentElement;
+  if(!parent)return {error:'no scrollable ancestor: '+selector};
+  document.querySelectorAll('[data-bench-scroll]').forEach(el=>el.removeAttribute('data-bench-scroll'));
+  parent.setAttribute('data-bench-scroll','active');
+  return {selector:'[data-bench-scroll="active"]',mountedRows:list.querySelectorAll('.track-item').length,collectionLabel:document.getElementById('lib-active-sub')?.textContent};
+})
+"""
+
+
+def scenario_errors(value, path='data'):
+    """Do not accept a successful process as a successful measurement."""
+    errors=[]
+    if isinstance(value,dict):
+        if value.get('error'):errors.append(f"{path}: {value['error']}")
+        for key,child in value.items():
+            if isinstance(child,(dict,list)):errors.extend(scenario_errors(child,f'{path}.{key}'))
+    elif isinstance(value,list):
+        for index,child in enumerate(value):errors.extend(scenario_errors(child,f'{path}[{index}]'))
+    return errors
+
+
 def scenario_scroll(ctx, selector: str, label: str, rounds: int = 3) -> dict:
     """Scroll FPS over a long list. Median of `rounds` passes per call."""
+    prepared=ctx.js_async(PREPARE_SCROLL_JS,args_fmt=repr(selector),timeout=30)
+    if not prepared or prepared.get('error'):
+        return {'label':label,'selector':selector,'error':prepared.get('error') if prepared else 'null preparation'}
+    measured_selector=prepared['selector']
     runs = []
     for _ in range(rounds):
         res = ctx.js_async(SCROLL_JS.replace("async (sel, frames)", "async (sel)")
                            .replace("(sel, frames)", "(sel)"),
-                           args_fmt=f"({selector!r})")
+                           args_fmt=repr(measured_selector))
         if not res or res.get("error"):
             return {"label": label, "selector": selector, "error": res.get("error") if res else "null result"}
         runs.append(res)
@@ -406,7 +527,9 @@ def scenario_scroll(ctx, selector: str, label: str, rounds: int = 3) -> dict:
         "p95FrameMs_worst": round(max(r["p95FrameMs"] for r in runs), 2),
         "worstFrameMs_worst": round(max(r["worstFrameMs"] for r in runs), 2),
         "longFramesOver50ms_total": sum(r["longFramesOver50ms"] for r in runs),
-        "rows_rendered": runs[0].get("scrollHeight"),
+        "mountedRows": prepared.get("mountedRows"),
+        "collectionLabel": prepared.get("collectionLabel"),
+        "scrollHeight": runs[0].get("scrollHeight"),
         "runs": runs,
     }
 
@@ -468,3 +591,43 @@ def scenario_search(ctx, query: str = "Daft Punk", rounds: int = 3) -> dict:
 def scenario_feed(ctx) -> dict:
     """Home-feed build time + Last.fm request count for one build."""
     return ctx.measure_feed()
+
+
+def scenario_audio(ctx):
+    """Exercise the shipped panel against the native settings/playback bridge."""
+    playback=_start_fixture_playback(ctx)
+    if playback.get('error'):return playback
+    return ctx.js_async(r"""
+(async()=>{
+ const wait=ms=>new Promise(r=>setTimeout(r,ms));
+ const require=(ok,message)=>{if(!ok)throw Error(message);};
+ const player=await import('./js/player.js');
+ const dialog=document.getElementById('audio-tools-dialog'),checks=[];
+ for(const style of ['current','macos']){
+  window.NeDotifyAppearance.apply(style,'dark');await wait(150);
+  document.getElementById('pb-btn-device').click();
+  for(let i=0;i<100&&!dialog.open;i++)await wait(25);
+  require(dialog.open,'audio did not open');await wait(250);
+  const base=dialog.getBoundingClientRect();
+  require(base.left>=0&&innerWidth-base.right<32,'audio is not at the right edge');
+  for(const tab of ['gain','speed','effects','equalizer','sleep']){
+   dialog.querySelector(`[data-audio-tab="${tab}"]`).click();
+   const r=dialog.getBoundingClientRect();require(Math.abs(base.height-r.height)<1&&Math.abs(base.top-r.top)<1,'tab geometry changed');
+  }
+  dialog.querySelector('[data-audio-tab="speed"]').click();
+  const input=dialog.querySelector('[data-audio-key="speed"]');input.value='1.25';input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));
+  let saved=false;
+  for(let i=0;i<60;i++){await wait(25);const settings=await window.pywebview.api.get_settings();if(settings.audio.audio_tools.speed===1.25){saved=true;break;}}
+  require(saved,'speed did not reach the real settings bridge');
+  const before=player.getLyricsPlaybackClock();await wait(300);const after=player.getLyricsPlaybackClock();
+  require(after.playbackRate===1.25&&!after.paused&&after.positionMs>before.positionMs,'playback rate or continuity failed');
+  dialog.querySelector('[data-audio-tab="sleep"]').click();dialog.querySelector('[data-sleep-minutes="15"]').click();require(dialog.querySelector('#audio-sleep-status').textContent==='15:00','sleep preset failed');
+  dialog.querySelector('[data-sleep-minutes="off"]').click();require(dialog.querySelector('#audio-sleep-status').textContent==='Выключен','sleep cancellation failed');
+  dialog.querySelector('.audio-tools-reset').click();await wait(300);
+  dialog.querySelector('.audio-tools-close').click();require(!dialog.open,'audio did not close');
+  checks.push({style,tabs:5,persisted:true,sleep:true});
+ }
+ await player.fadeOutAndPause();require(player.getLyricsPlaybackClock().paused,'sleep fade did not pause native playback');
+ return {checks,fixture:'real WebView2, native bridge, seeded silent WAV; physical output not assessed'};
+})
+""",timeout=40)

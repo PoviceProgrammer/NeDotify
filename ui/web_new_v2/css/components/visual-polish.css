@@ -95,8 +95,8 @@
 
 /* ── 6. Player bar: Liquid Glass edge light ── */
 #player-bar {
-    backdrop-filter: blur(16px) saturate(160%);
-    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    backdrop-filter: blur(var(--glass-blur, 16px)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--glass-blur, 16px)) saturate(160%);
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55),
                 inset 0 1px 0 rgba(255, 255, 255, 0.09);
 }

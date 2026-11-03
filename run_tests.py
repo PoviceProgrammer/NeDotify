@@ -1,4 +1,4 @@
-"""Entry point for the AURA Music test suite.
+"""Entry point for the NeDotify test suite.
 
 Delegates entirely to pytest so that pytest.ini (testpaths, markers, addopts)
 is the single source of truth for what runs.

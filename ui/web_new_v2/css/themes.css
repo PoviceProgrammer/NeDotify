@@ -66,17 +66,18 @@
 
 /* 2. Dark */
 :root[data-theme="dark"], [data-theme="dark"] {
-    --bg-main: #0a0a0f;
-    --bg-surface: #14141d;
-    --accent: #a855f7;
-    --accent-glow: rgba(168, 85, 247, 0.25);
-    --ambient-glow: radial-gradient(circle at 30% 20%, rgba(168, 85, 247, 0.18), transparent 55%),
-                   radial-gradient(circle at 75% 75%, rgba(59, 130, 246, 0.12), transparent 50%),
-                   radial-gradient(circle at 15% 85%, rgba(236, 72, 153, 0.08), transparent 40%);
-    --border-glow: rgba(168, 85, 247, 0.12);
-    --primary: #a855f7;
-    --primary-rgb: 168, 85, 247;
-    --primary-fg: #ffffff;
+    --bg-main: #061711;
+    --bg-surface: #0c241c;
+    --bg-card: #12382d;
+    --accent: #18d6a2;
+    --accent-glow: rgba(24, 214, 162, 0.16);
+    --ambient-glow: rgba(24, 214, 162, 0.08);
+    --border-glow: rgba(24, 214, 162, 0.12);
+    --primary: #18d6a2;
+    --primary-rgb: 24, 214, 162;
+    --primary-fg: #04261c;
+    --text-sec: #adbfba;
+    --text-dim: #839d95;
     /* --background / --surface used to be repeated here as literals. They are
        plain aliases of --bg-main / --bg-surface and are single-sourced in
        tokens.css section 6, so the copies only added a second place to edit. */

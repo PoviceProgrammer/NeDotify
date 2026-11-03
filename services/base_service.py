@@ -10,14 +10,23 @@ import time
 import threading
 import urllib.parse
 from concurrent.futures import Future, ThreadPoolExecutor
+from functools import lru_cache
 from typing import Any, Callable, Dict, Optional
+
+from utils.stream_urls import stream_url_expired
 
 logger = logging.getLogger(__name__)
 
 
 # Proxy schemes a provider client can actually dial. Anything else is not a
 # proxy we know how to use.
-_PROXY_SCHEMES = frozenset({"http", "https", "socks4", "socks4a", "socks5", "socks5h"})
+_PROXY_SCHEMES = frozenset({"http", "https"})
+try:
+    import socks  # noqa: F401 - requests only supports SOCKS when PySocks exists
+except ImportError:
+    pass
+else:
+    _PROXY_SCHEMES |= frozenset({"socks4", "socks4a", "socks5", "socks5h"})
 
 
 def normalize_proxy_url(raw: Any) -> str:
@@ -52,12 +61,18 @@ def normalize_proxy_url(raw: Any) -> str:
         scheme, hostname = "", None
     if scheme in _PROXY_SCHEMES and hostname:
         return value
+    _warn_invalid_proxy_once(value)
+    return ""
+
+
+@lru_cache(maxsize=16)
+def _warn_invalid_proxy_once(value):
+    """Diagnose each bad configuration without logging on every media request."""
     logger.warning(
         "Ignoring unusable auth.proxy_url %r: expected a full URL such as "
         "'http://127.0.0.1:1080'. Falling back to a direct connection.",
-        raw,
+        '<redacted>',
     )
-    return ""
 
 
 class _SharedExecutor:
@@ -120,6 +135,7 @@ class BaseMusicService:
     """Base class for music services providing a shared thread pool and caching."""
 
     _executor = _SharedExecutor(max_workers=8)
+    _playback_executor = _SharedExecutor(max_workers=4, thread_name_prefix='ProviderPlayback')
     _cache_lock = threading.RLock()
     _stream_cache: Dict[str, Any] = {}
     _MAX_CACHE_SIZE = 2000
@@ -130,9 +146,61 @@ class BaseMusicService:
     _search_cache: Dict[str, Dict[str, Any]] = {}
     _SEARCH_CACHE_TTL = 300
     _SEARCH_CACHE_MAX_SIZE = 300
+    _REQUEST_TTL = 30.0
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # Home-feed candidates must not evict provider search results.
+        cls._search_cache = {}
 
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
+        self._pending_requests = {}
+
+    def configure_session(self, session):
+        """Apply the live app proxy to an owned HTTP session before a request."""
+        settings = getattr(self, 'settings', None)
+        proxy = normalize_proxy_url(settings.get('auth', 'proxy_url', '')) if settings else ''
+        session.proxies = {'http': proxy, 'https': proxy} if proxy else {}
+        return session
+
+    def open_url(self, request, timeout=6.0):
+        """Verified TLS and the app's proxy for urllib clients."""
+        import urllib.request
+        import ssl
+        settings = getattr(self, 'settings', None)
+        proxy = normalize_proxy_url(settings.get('auth', 'proxy_url', '')) if settings else ''
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({'http': proxy, 'https': proxy} if proxy else None),
+            urllib.request.HTTPSHandler(context=ssl.create_default_context()))
+        return opener.open(request, timeout=timeout)
+
+    def _join_request(self, key, callback, error_callback):
+        """Fan out identical pending requests; shared state uses _cache_lock."""
+        with self._cache_lock:
+            flight = self._pending_requests.get(key)
+            if flight is not None and time.monotonic() - flight['started'] < self._REQUEST_TTL:
+                flight['listeners'].append((callback, error_callback))
+                return False, None, None
+            flight = {'started': time.monotonic(), 'listeners': [(callback, error_callback)]}
+            self._pending_requests[key] = flight
+
+        def finish(data=None, error=None):
+            with self._cache_lock:
+                if self._pending_requests.get(key) is not flight:
+                    return
+                self._pending_requests.pop(key, None)
+                listeners = flight['listeners']
+            for on_success, on_error in listeners:
+                try:
+                    if error is not None:
+                        if on_error:
+                            on_error(error)
+                    elif on_success:
+                        on_success(*data)
+                except Exception:
+                    self.logger.exception('Provider callback failed')
+        return True, lambda *args: finish(data=args), lambda error: finish(error=error)
 
     @classmethod
     def submit(cls, fn: Callable, *args, **kwargs) -> Optional[Future]:
@@ -148,14 +216,21 @@ class BaseMusicService:
     @classmethod
     def shutdown_executor(cls) -> None:
         """Shut the shared pool down without waiting; later submits become no-ops."""
-        executor = cls._executor
-        shutdown = getattr(executor, 'shutdown', None)
-        if not callable(shutdown):
-            return
+        for executor in (cls._executor, cls._playback_executor):
+            shutdown = getattr(executor, 'shutdown', None)
+            if callable(shutdown):
+                try:
+                    shutdown(wait=False, cancel_futures=True)
+                except Exception as e:
+                    logger.debug('shutdown_executor failed: %s', e, exc_info=True)
+
+    def submit_playback(self, fn: Callable, *args, **kwargs) -> Optional[Future]:
+        """Keep stream resolution out of background catalogue/search queues."""
         try:
-            shutdown(wait=False, cancel_futures=True)
-        except Exception as e:
-            logger.debug('shutdown_executor failed: %s', e, exc_info=True)
+            return self._playback_executor.submit(fn, *args, **kwargs)
+        except RuntimeError:
+            logger.debug('Playback executor unavailable during shutdown')
+            return None
 
     @classmethod
     def get_from_cache(cls, key: str) -> Optional[dict]:
@@ -170,7 +245,10 @@ class BaseMusicService:
             if entry is None:
                 return None
             if isinstance(entry, dict) and 'data' in entry and 'ts' in entry:
-                if time.time() - entry['ts'] > cls._STREAM_CACHE_TTL:
+                data = entry['data']
+                url = data.get('stream_url') if isinstance(data, dict) else None
+                if (time.time() - entry['ts'] > cls._STREAM_CACHE_TTL
+                        or stream_url_expired(url)):
                     cls._stream_cache.pop(key, None)
                     return None
                 # Hit: re-insert with the ORIGINAL timestamp, so the entry
@@ -179,6 +257,9 @@ class BaseMusicService:
                 cls._cache_recent(cls._stream_cache, key, cls._MAX_CACHE_SIZE)
                 cls._stream_cache[key] = entry
                 return entry['data']
+            if isinstance(entry, dict) and stream_url_expired(entry.get('stream_url')):
+                cls._stream_cache.pop(key, None)
+                return None
             return entry
 
     @classmethod
@@ -187,6 +268,14 @@ class BaseMusicService:
         with cls._cache_lock:
             cls._cache_recent(cls._stream_cache, key, cls._MAX_CACHE_SIZE)
             cls._stream_cache[key] = {'data': data, 'ts': time.time()}
+
+    @classmethod
+    def invalidate_stream_cache_keys(cls, *keys: str) -> None:
+        """Drop provider stream-cache keys after an upstream rejects their URL."""
+        with cls._cache_lock:
+            for key in keys:
+                if key:
+                    cls._stream_cache.pop(str(key), None)
 
     @staticmethod
     def _cache_recent(cache: Dict[str, Any], key: str, max_size: int) -> None:

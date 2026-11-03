@@ -13,6 +13,7 @@ Each test targets one audit finding and fails on the pre-fix code:
 """
 
 import inspect
+import pytest
 import threading
 
 from core.database import DatabaseManager
@@ -52,6 +53,8 @@ def test_ensure_download_queue_table_both_call_modes(tmp_db):
     assert "download_queue" in names
 
     # Still fully functional afterwards: unique index enforced, dedup collapse.
+    tmp_db.conn.execute("INSERT INTO tracks(id,title) VALUES(500,'Queue')")
+    tmp_db.conn.commit()
     assert tmp_db.download_queue_add(500, "youtube", "dq1") is True
     assert tmp_db.download_queue_add(500, "youtube", "dq1") is False
 
@@ -60,9 +63,9 @@ def test_ensure_download_queue_table_both_call_modes(tmp_db):
 
 def _seed_duplicate_system_playlists(db):
     """Two empty 'Локальные' rows plus one 'Локальные треки'."""
-    db.conn.execute("INSERT INTO playlists (name) VALUES ('Локальные')")
-    db.conn.execute("INSERT INTO playlists (name) VALUES ('Локальные')")
-    db.conn.execute("INSERT INTO playlists (name) VALUES ('Локальные треки')")
+    db.conn.execute("INSERT INTO playlists (name,is_system) VALUES ('Локальные',1)")
+    db.conn.execute("INSERT INTO playlists (name,is_system) VALUES ('Локальные',1)")
+    db.conn.execute("INSERT INTO playlists (name,is_system) VALUES ('Локальные треки',1)")
     db.conn.commit()
     return db.get_playlists_count()
 
@@ -325,3 +328,171 @@ def test_close_thread_connection_closes_and_reopens(tmp_db):
     tmp_db.close_thread_connection()
     assert getattr(tmp_db._local, "connection", None) is None
     assert tmp_db.get_tracks_count() >= 0
+
+
+# --- S4-003: cover backfill must not rewrite genuine metadata -----------------
+
+def test_backfill_keeps_genuine_title_and_artist(tmp_db):
+    """A row picked only for its missing cover keeps its real names.
+
+    Pre-fix the provider payload (raw video title + channel name) replaced
+    them unconditionally.
+    """
+    tid = tmp_db.add_track(title="Group Blood", artist="Kino",
+                           source="youtube", source_id="s4003a")
+    tmp_db.backfill_track_metadata(
+        tid, "http://x/c.jpg",
+        title="Group Blood (Official Video)", artist="Kino - Topic",
+    )
+    row = tmp_db.get_track(tid)
+    assert row["title"] == "Group Blood"
+    assert row["artist"] == "Kino"
+    assert row["cover_url"] == "http://x/c.jpg"  # the cover itself landed
+
+
+def test_backfill_fills_placeholder_names(tmp_db):
+    """The legitimate backfill (Unknown Artist -> real name) still works,
+    and the raw video title is cleaned of decorations/embedded credits."""
+    tid = tmp_db.add_track(title="Unknown Title", artist="Unknown Artist",
+                           source="youtube", source_id="s4003b")
+    tmp_db.backfill_track_metadata(
+        tid, "http://x/c2.jpg",
+        title="Real Artist - Real Song (Official Video)",
+        artist="Ripper Channel - Topic",
+    )
+    row = tmp_db.get_track(tid)
+    assert row["title"] == "Real Song"
+    assert row["artist"] == "Real Artist", \
+        "a re-uploader channel name must not become the artist"
+
+
+def test_backfill_duo_channel_name_survives(tmp_db):
+    """'Miyagi & Andy Panda - Topic' is the DUO: the cleaned channel name
+    must not be collapsed to the first title credit."""
+    tid = tmp_db.add_track(title="Unknown Title", artist="Unknown Artist",
+                           source="youtube", source_id="s4003c")
+    tmp_db.backfill_track_metadata(
+        tid, "",
+        title="Miyagi & Andy Panda - Utopia (Official Music Video)",
+        artist="Miyagi & Andy Panda - Topic",
+    )
+    row = tmp_db.get_track(tid)
+    assert row["artist"] == "Miyagi & Andy Panda"
+    assert row["title"] == "Utopia"
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("Мория - Topic", "Мория"),
+    ("EminemVEVO", "Eminem"),
+    ("Artist - Official", "Artist"),
+    ("Miyagi & Andy Panda - Topic", "Miyagi & Andy Panda"),
+    ("Real Artist", "Real Artist"),
+])
+def test_clean_channel_artist_strips_suffixes(raw, expected):
+    from core.database import _clean_channel_artist
+    assert _clean_channel_artist(raw) == expected
+
+
+def test_backfill_channel_only_placeholder_keeps_channel_name(tmp_db):
+    """A plain video title with a Topic channel: the channel is the artist."""
+    tid = tmp_db.add_track(title="Unknown Title", artist="Unknown Artist",
+                           source="youtube", source_id="s4003d")
+    tmp_db.backfill_track_metadata(tid, "", title="Just A Song",
+                                   artist="Someone - Topic")
+    row = tmp_db.get_track(tid)
+    assert row["artist"] == "Someone"
+    assert row["title"] == "Just A Song"
+
+
+def test_backfill_cosmetic_variant_of_genuine_value_wins(tmp_db):
+    """A near-identical variant (punctuation difference) may land on a
+    genuine row; a different name never does (covered by the test above)."""
+    tid = tmp_db.add_track(title="Кино – Группа крови", artist="Кино",
+                           source="youtube", source_id="s4003e")
+    tmp_db.backfill_track_metadata(tid, "", title="Кино - Группа крови",
+                                   artist="Кино")
+    assert tmp_db.get_track(tid)["title"] == "Кино - Группа крови"
+
+
+def test_backfill_unknown_track_id_is_a_noop(tmp_db):
+    tmp_db.backfill_track_metadata(999999, "http://x/none.jpg",
+                                   title="X", artist="Y")
+
+
+# --- S4-003: manual repair migration for already-corrupted rows ---------------
+
+def _seed_corrupted(db):
+    corrupted_dash = db.add_track(title="Песня (Official Video)",
+                                  artist="Мория - Topic",
+                                  source="youtube", source_id="s4003f")
+    corrupted_vevo = db.add_track(title="Without Me (Official Music Video)",
+                                  artist="EminemVEVO",
+                                  source="youtube", source_id="s4003g")
+    clean = db.add_track(title="Clean Song", artist="Clean Artist",
+                         source="youtube", source_id="s4003h")
+    return corrupted_dash, corrupted_vevo, clean
+
+
+def test_repair_channel_corrupted_metadata_repairs_and_backs_up(tmp_db):
+    dash, vevo, clean = _seed_corrupted(tmp_db)
+
+    summary = tmp_db.repair_channel_corrupted_metadata()
+
+    assert summary["repaired"] == 2
+    row = tmp_db.get_track(dash)
+    assert row["artist"] == "Мория"
+    assert row["title"] == "Песня"
+    assert tmp_db.get_track(vevo)["artist"] == "Eminem"
+    assert tmp_db.get_track(clean)["artist"] == "Clean Artist"  # untouched
+    backed = tmp_db.conn.execute(
+        "SELECT track_id, old_title, old_artist FROM metadata_repairs_backup "
+        "ORDER BY track_id").fetchall()
+    assert [r["track_id"] for r in backed] == sorted([dash, vevo])
+    assert {r["old_artist"] for r in backed} == {"Мория - Topic", "EminemVEVO"}
+
+
+def test_repair_is_idempotent(tmp_db):
+    _seed_corrupted(tmp_db)
+    first = tmp_db.repair_channel_corrupted_metadata()
+    assert first["repaired"] == 2
+    second = tmp_db.repair_channel_corrupted_metadata()
+    assert second["repaired"] == 0, "the channel markers are gone after the first pass"
+
+
+def test_rollback_restores_original_values(tmp_db):
+    dash, vevo, _ = _seed_corrupted(tmp_db)
+    tmp_db.repair_channel_corrupted_metadata()
+
+    result = tmp_db.rollback_channel_corrupted_metadata()
+
+    assert result == {"restored": 2, "skipped": 0}
+    assert tmp_db.get_track(dash)["artist"] == "Мория - Topic"
+    assert tmp_db.get_track(dash)["title"] == "Песня (Official Video)"
+    assert tmp_db.get_track(vevo)["artist"] == "EminemVEVO"
+    left = tmp_db.conn.execute(
+        "SELECT COUNT(*) FROM metadata_repairs_backup").fetchone()[0]
+    assert left == 0
+
+
+def test_rollback_never_clobbers_later_edits(tmp_db):
+    dash, vevo, _ = _seed_corrupted(tmp_db)
+    tmp_db.repair_channel_corrupted_metadata()
+    # the user renames one repaired row afterwards
+    tmp_db.conn.execute("UPDATE tracks SET artist = ? WHERE id = ?",
+                        ("Human Edit", vevo))
+    tmp_db.conn.commit()
+
+    result = tmp_db.rollback_channel_corrupted_metadata()
+
+    assert result == {"restored": 1, "skipped": 1}
+    assert tmp_db.get_track(dash)["artist"] == "Мория - Topic"
+    assert tmp_db.get_track(vevo)["artist"] == "Human Edit", \
+        "rollback must not overwrite a row edited after the repair"
+
+
+def test_rollback_without_backup_table_is_a_noop(tmp_db):
+    fresh = DatabaseManager(":memory:")
+    try:
+        assert fresh.rollback_channel_corrupted_metadata() == {"restored": 0, "skipped": 0}
+    finally:
+        fresh.close()
