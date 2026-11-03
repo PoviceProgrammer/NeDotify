@@ -11,6 +11,7 @@
   <img src="https://img.shields.io/github/stars/PoviceProgrammer/NeDotify?style=flat-square" alt="Stars">
   <img src="https://img.shields.io/github/last-commit/PoviceProgrammer/NeDotify?style=flat-square" alt="Последний коммит">
   <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?style=flat-square" alt="Windows">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/PoviceProgrammer/NeDotify?style=flat-square" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square" alt="Python">
 </p>
 
@@ -163,33 +164,8 @@ Python 3.14 · pywebview + WebView2 · SQLite (WAL) · yt-dlp · Vanilla JS
 
 ---
 
-## 📱 Второй продукт: нативное Android-приложение
-
-В этом репозитории лежат **два разных продукта**. Кроме настольного плеера
-под Windows (Python + pywebview, `ui/web_new_v2/`) здесь есть **второй,
-нативный Android-продукт**: Kotlin, Jetpack Compose, Media3, Room — без
-Python и без WebView-обёртки. Он лежит в `android/` и собирается Gradle'ом,
-а не PyInstaller'ом; его `applicationId` — `ru.nedotify.app`.
-
-* правила работы с Android-кодом — [`android/AGENTS.md`](android/AGENTS.md);
-* состояние переноса, что ещё не реализовано и что не проверено на
-  устройстве — [`android/PORTING_STATUS.md`](android/PORTING_STATUS.md);
-* проверки исходников — [`android/review/VALIDATION.md`](android/review/VALIDATION.md).
-
-Проверить Android-исходники без APK можно так (из корня репозитория):
-
-```powershell
-powershell -NoProfile -File android/tools/run-unit-tests.ps1 -Summarize
-```
-
-APK-задачи (`assemble*`, `bundle*`, `package*`) **запрещены**, сборка APK не
-выполнялась; 66 инструментальных тестов только скомпилированы и ни разу не
-выполнялись — устройства и эмулятора не было. Общие с desktop правила
-(`~/.nedotify/`, мост pywebview, горячие клавиши) к Android-коду **не**
-применяются: у него своя библиотека, и она живёт на устройстве.
-
----
-
 ## 📄 Лицензия
 
-Учебный проект, для ознакомления.
+Проект распространяется по лицензии [MIT](LICENSE).
+
+Уведомления об авторстве и лицензии сторонних компонентов сохранены в [licenses/](licenses/).
