@@ -362,20 +362,26 @@ export async function loadArtistProfile(artistName, targetContainer = null, arti
         paneAlbums.classList.remove('active');
 
         tabTracks.onclick = () => {
+            const change = () => {
             tabTracks.classList.add('active');
             tabAlbums.classList.remove('active');
             paneTracks.classList.remove('hidden');
             paneTracks.classList.add('active');
             paneAlbums.classList.add('hidden');
             paneAlbums.classList.remove('active');
+            };
+            if (window.NeDotifyMotion) window.NeDotifyMotion.swap(paneTracks.parentElement, change); else change();
         };
         tabAlbums.onclick = () => {
+            const change = () => {
             tabAlbums.classList.add('active');
             tabTracks.classList.remove('active');
             paneAlbums.classList.remove('hidden');
             paneAlbums.classList.add('active');
             paneTracks.classList.add('hidden');
             paneTracks.classList.remove('active');
+            };
+            if (window.NeDotifyMotion) window.NeDotifyMotion.swap(paneTracks.parentElement, change); else change();
         };
     }
 

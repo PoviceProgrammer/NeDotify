@@ -1,7 +1,7 @@
 <p align="center"><img src="screenshots/banner.png" width="100%" alt="NeDotify — Your music space"></p>
 
 <h1 align="center">NeDotify</h1>
-<p align="center"><b>NeDotify 2.5.0 для Windows 10 / 11</b><br>Локальная библиотека, онлайн-источники, тексты песен и оформление под себя.</p>
+<p align="center"><b>NeDotify 2.5.1 для Windows 10 / 11</b><br>Локальная библиотека, онлайн-источники, тексты песен и оформление под себя.</p>
 <p align="center">
   <a href="https://github.com/PoviceProgrammer/NeDotify/releases/latest"><img src="https://img.shields.io/badge/СКАЧАТЬ_ДЛЯ_WINDOWS-8b5cf6?style=for-the-badge&logo=windows&logoColor=white" alt="Скачать"></a>
   <a href="https://github.com/PoviceProgrammer/NeDotify/releases"><img src="https://img.shields.io/badge/ВСЕ_РЕЛИЗЫ-24292f?style=for-the-badge&logo=github" alt="Релизы"></a>
@@ -39,10 +39,10 @@
 
 ---
 
-## Что нового в 2.5.0
+## Что нового в 2.5.1
 
-Новые оформления, обновлённые плейлисты и рекомендации, исправления потоков,
-поиска и фотографий исполнителей. [Полный список изменений](CHANGELOG.md).
+Очередь с историей воспроизведения, исправление видимости её кнопки и плавные
+анимации окон, меню и переключения разделов в обоих оформлениях. [Полный список изменений](CHANGELOG.md).
 
 ## Возможности
 
@@ -77,7 +77,7 @@
 ## Установка
 
 Установщик `.exe` ставит ярлыки на рабочий стол и в меню «Пуск».
-Актуальная сборка — **2.5.0**, файл `NeDotify_Setup.exe` на странице релизов:
+Актуальная сборка — **2.5.1**, файл `NeDotify_Setup.exe` на странице релизов:
 
 **[Скачать на GitHub Releases](https://github.com/PoviceProgrammer/NeDotify/releases)**
 

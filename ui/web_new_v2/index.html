@@ -18,6 +18,8 @@
          default skin for macOS-style users. -->
     <script src="js/appearance-assets.js?v=20261021_webp" defer></script>
     <script src="js/notifications.js" defer></script>
+    <script src="js/ui-motion.js" defer></script>
+    <link rel="stylesheet" href="css/components/ui-motion.css">
     <script src="js/ui-style.js?v=20261017_appearance"></script>
     <!-- Fonts: Sora (Headings) + DM Sans (Body). Self-hosted WOFF2 cuts live in
          assets/fonts/ and are declared by css/fonts.css, so no font CDN is
@@ -1955,7 +1957,7 @@
     <!-- Right: Queue + Volume (compact) -->
     <div class="pb-right">
         <button class="btn-ctrl" id="pb-btn-device" aria-label="Настройки звука" title="Настройки звука"><i data-lucide="monitor-speaker"></i></button>
-        <button class="btn-ctrl" id="pb-btn-queue" title="Очередь" aria-label="Очередь">
+        <button class="btn-ctrl" id="pb-btn-queue" title="Очередь воспроизведения" aria-label="Очередь воспроизведения" aria-controls="queue-drawer" aria-expanded="false">
             <i data-lucide="list-music" style="width:16px;height:16px"></i>
         </button>
         <div class="volume-wrap">
@@ -2270,11 +2272,12 @@
 </div>
 
 <!-- QUEUE DRAWER -->
-<div id="queue-drawer">
+<div id="queue-drawer" role="region" aria-label="Очередь воспроизведения" aria-hidden="true" inert>
     <div id="queue-drawer-header">
         <h2>Очередь воспроизведения</h2>
         <button id="queue-drawer-close" class="icon-btn" title="Закрыть" aria-label="Закрыть"><i data-lucide="x" style="width:16px;height:16px;"></i></button>
     </div>
+    <div class="queue-view-tabs" aria-label="Раздел очереди"><button type="button" data-queue-tab="upcoming" aria-pressed="true">Далее <span>0</span></button><button type="button" data-queue-tab="history" aria-pressed="false">Прослушано <span>0</span></button></div>
     <div id="queue-drawer-content"></div>
 </div>
 

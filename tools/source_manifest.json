@@ -252,6 +252,7 @@
       "ui/web_new_v2/js/setup-panel.js",
       "ui/web_new_v2/js/style-loader.js",
       "ui/web_new_v2/js/tooltip.js",
+      "ui/web_new_v2/js/ui-motion.js",
       "ui/web_new_v2/js/ui-style.js",
       "ui/web_new_v2/js/utils.js",
       "ui/web_new_v2/js/visualizer.js",

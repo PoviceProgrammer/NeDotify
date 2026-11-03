@@ -475,6 +475,11 @@ export function applySettingsFromBackend(settings) {
     }
 
     if (settings.player) {
+        if (upgradeQueuePanelPreferences(settings.player)) {
+            Promise.resolve(saveSetting('show_queue', true, 'player')).then(result => {
+                if (result !== false && result?.success !== false) return saveSetting('queue_panel_version', 1, 'player');
+            }).catch(() => {});
+        }
         if (settings.player.title_align) applyTitleAlignment(settings.player.title_align);
         if (settings.player.player_style) applyPlayerStyle(settings.player.player_style);
         if (settings.player.slider_type) applySliderType(settings.player.slider_type);
@@ -1746,6 +1751,13 @@ function applyProgressTransparency(value) {
     document.documentElement.style.setProperty('--player-progress-opacity', String(1 - transparency / 100));
     document.dispatchEvent(new Event('nedotify:progress_appearance_changed'));
     return transparency;
+}
+
+export function upgradeQueuePanelPreferences(player) {
+    if (Number(player.queue_panel_version || 0) >= 1) return false;
+    player.show_queue = true;
+    player.queue_panel_version = 1;
+    return true;
 }
 
 export function applyShowQueue(enabled) {

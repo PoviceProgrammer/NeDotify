@@ -1127,10 +1127,10 @@ const FLOATING_MENU_IDS = ['playlist-context-menu', 'track-options-menu'];
 
 export function closeAllFloatingMenus() {
     if (activeRichMenu) {
-        activeRichMenu.remove();
+        if (window.NeDotifyMotion) window.NeDotifyMotion.remove(activeRichMenu); else activeRichMenu.remove();
         activeRichMenu = null;
     }
-    document.querySelectorAll('.rich-track-menu').forEach(m => m.remove());
+    document.querySelectorAll('.rich-track-menu').forEach(m => window.NeDotifyMotion ? window.NeDotifyMotion.remove(m) : m.remove());
     FLOATING_MENU_IDS.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.remove('visible');
@@ -1183,7 +1183,7 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
     }
 
     if (activeRichMenu) {
-        activeRichMenu.remove();
+        if (window.NeDotifyMotion) window.NeDotifyMotion.remove(activeRichMenu); else activeRichMenu.remove();
         activeRichMenu = null;
     }
 
@@ -1476,7 +1476,7 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
 
     function closeMenu() {
         if (activeRichMenu) {
-            activeRichMenu.remove();
+            if (window.NeDotifyMotion) window.NeDotifyMotion.remove(activeRichMenu); else activeRichMenu.remove();
             activeRichMenu = null;
         }
         document.removeEventListener('click', onDocumentClick);

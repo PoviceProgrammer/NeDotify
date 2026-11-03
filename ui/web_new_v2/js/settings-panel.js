@@ -73,6 +73,7 @@ export function initSettings() {
             const panelName = btn.dataset.panel;
             if (!panelName) return;
 
+            const change = () => {
             document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
@@ -87,6 +88,9 @@ export function initSettings() {
                 target.style.display = 'block';
             }
             document.querySelector('#view-settings .settings-panels').scrollTop = 0;
+
+            };
+            if (window.NeDotifyMotion) window.NeDotifyMotion.swap(document.querySelector('#view-settings .settings-panels'), change); else change();
 
             if (panelName === 'icons') setupIconsPanel();
             if (panelName === 'workshop') setupWorkshopPanel();

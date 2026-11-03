@@ -6,6 +6,16 @@ let draggedItemIndex = null;
 let currentQueue = [];
 let queueLoadGen = 0;
 let queueRevision = null;
+let queueTab = 'upcoming';
+let lastSnapshot = {tracks: [], currentIndex: -1, history: []};
+
+export function queueRows(tracks, currentIndex, history = [], tab = 'upcoming') {
+    if (tab === 'history') return history.slice().reverse().map(track => ({track, index: track.queue_index, section: 'Прослушано'}));
+    return [
+        ...(tracks[currentIndex] ? [{track: tracks[currentIndex], index: currentIndex, section: 'Сейчас играет'}] : []),
+        ...tracks.slice(Math.max(0, currentIndex + 1)).map((track, i) => ({track, index: Math.max(0, currentIndex + 1) + i, section: 'Далее'})),
+    ];
+}
 
 export function getQueueTracks() { return currentQueue; }
 function syncQueueToWindow() { window.currentQueue = currentQueue; }
@@ -15,6 +25,24 @@ export function initQueue() {
     const btnPB = document.getElementById('pb-btn-queue');
     const closeBtn = document.getElementById('queue-drawer-close');
     const drawer = document.getElementById('queue-drawer');
+    const setOpen = open => {
+        drawer?.setAttribute('aria-hidden', String(!open));
+        if (drawer) drawer.inert = !open;
+        [btnPP, btnPB].forEach(button => {
+            button?.classList.toggle('active', open);
+            button?.setAttribute('aria-expanded', String(open));
+        });
+    };
+    setOpen(false);
+    document.querySelectorAll('[data-queue-tab]').forEach(button => button.addEventListener('click', () => {
+        const content = document.getElementById('queue-drawer-content');
+        const change = () => {
+            queueTab = button.dataset.queueTab;
+            renderQueue(lastSnapshot.tracks, lastSnapshot.currentIndex, lastSnapshot.history);
+            if (content) content.scrollTop = 0;
+        };
+        if (window.NeDotifyMotion) window.NeDotifyMotion.swap(content, change); else change();
+    }));
 
     // Clean up any legacy backdrop if present
     const oldBackdrop = document.getElementById('queue-backdrop');
@@ -23,11 +51,13 @@ export function initQueue() {
     const closeQueue = () => {
         isQueueVisible = false;
         if (drawer) drawer.classList.remove('open');
+        setOpen(false);
     };
 
     const openQueue = () => {
         isQueueVisible = true;
         if (drawer) drawer.classList.add('open');
+        setOpen(true);
         loadQueue();
     };
 
@@ -134,9 +164,18 @@ function ensureClearButton(drawer) {
 function renderQueue(tracks, currentIndex, history = []) {
     const content = document.getElementById('queue-drawer-content');
     if (!content) return;
+    tracks = Array.isArray(tracks) ? tracks : [];
+    history = Array.isArray(history) ? history : [];
+    lastSnapshot = {tracks, currentIndex, history};
+    document.querySelectorAll('[data-queue-tab]').forEach(button => {
+        const selected = button.dataset.queueTab === queueTab;
+        button.setAttribute('aria-pressed', String(selected));
+        const count = button.querySelector('span');
+        if (count) count.textContent = button.dataset.queueTab === 'history' ? history.length : Math.max(0, tracks.length - Math.max(0, currentIndex + 1));
+    });
     const renderedRevision = queueRevision;
-    if (!tracks || tracks.length === 0) {
-        content.innerHTML = '<div class="empty-state">Очередь пуста</div>';
+    if (!tracks.length || (queueTab === 'history' && !history.length)) {
+        content.innerHTML = `<div class="empty-state">${queueTab === 'history' ? 'Здесь появятся прослушанные треки' : 'Добавьте треки в очередь'}</div>`;
         return;
     }
 
@@ -148,11 +187,7 @@ function renderQueue(tracks, currentIndex, history = []) {
     // dragover/drop handlers, which can only fire after this loop returns.
     const fragment = document.createDocumentFragment();
 
-    const rows = [
-        ...history.map(track=>({track,index:track.queue_index,section:'История'})),
-        ...(tracks[currentIndex] ? [{track:tracks[currentIndex],index:currentIndex,section:'Сейчас воспроизводится'}] : []),
-        ...tracks.slice(Math.max(0,currentIndex+1)).map((track,i)=>({track,index:Math.max(0,currentIndex+1)+i,section:'Далее'}))
-    ];
+    const rows = queueRows(tracks, currentIndex, history, queueTab);
     let previousSection = null;
     rows.forEach(({track,index,section}, position) => {
         if (section !== previousSection) {
@@ -164,7 +199,8 @@ function renderQueue(tracks, currentIndex, history = []) {
         }
         const item = document.createElement('div');
         item._trackData = track;
-        item.className = 'track-item' + (index === currentIndex ? ' playing' : '');
+        item.className = 'track-item' + (queueTab !== 'history' && index === currentIndex ? ' playing' : '');
+        item.classList.toggle('queue-history-row', queueTab === 'history');
         item.draggable = false;
         item.dataset.index = index;
         item.style.cursor = 'pointer';
@@ -178,7 +214,7 @@ function renderQueue(tracks, currentIndex, history = []) {
             </div>
             ${coverUrl ? `<img class="track-item-cover" src="${escapeHtml(coverUrl)}" alt="" width="42" height="42" style="width:42px;height:42px;min-width:42px;max-width:42px;border-radius:8px;object-fit:cover;flex-shrink:0;display:block;" loading="lazy" decoding="async" data-hide-on-error="1" loading="lazy">` : `<div class="track-item-cover fallback-note-cover" style="width:42px;height:42px;min-width:42px;max-width:42px;display:flex;align-items:center;justify-content:center;background:#18181f;border-radius:8px;flex-shrink:0;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#555" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`}
             <div class="track-item-info">
-                <div class="track-item-title" style="${index === currentIndex ? 'color:var(--primary)' : ''}">${escapeHtml(track.title || 'Unknown')}</div>
+                <div class="track-item-title" style="${queueTab !== 'history' && index === currentIndex ? 'color:var(--primary)' : ''}">${escapeHtml(track.title || 'Unknown')}</div>
                 <div class="track-item-artist">${escapeHtml(track.artist || 'Unknown Artist')}</div>
             </div>
             <div class="track-item-duration">${formatTime(track.duration || 0)}</div>
