@@ -7,6 +7,8 @@
 AppId={{8F56F2A1-90E1-4A0A-AB89-24A326E6D371}
 AppName=NeDotify
 AppVersion=2.5.1
+VersionInfoVersion=2.5.1
+VersionInfoProductVersion=2.5.1
 AppPublisher=The pAura Team
 AppCopyright=Copyright (C) 2024 The pAura Team
 DefaultDirName={localappdata}\Programs\NeDotify
