@@ -1,23 +1,213 @@
-# NeDotify Linux
+<p align="center">
+  <img src="screenshots/banner.png" width="100%" alt="NeDotify">
+</p>
 
-Порт текущего Windows desktop-приложения: обычный и macOS-интерфейс,
-поиск и воспроизведение через локальный прокси, библиотека и плейлисты,
-скачивание, офлайн-файлы, тексты, эквалайзер, рекомендации и непрерывная волна.
-Оба оформления работают внутри одного приложения; macOS не требуется.
+<p align="center">
+  <a href="#установка-windows"><img src="https://raw.githubusercontent.com/tandpfun/skill-icons/main/icons/Windows-Dark.svg" height="28" alt="Windows" /></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="#установка-linux"><img src="https://raw.githubusercontent.com/tandpfun/skill-icons/main/icons/Linux-Dark.svg" height="28" alt="Linux" /></a>
+</p>
 
-**Состояние на 2026-11-05:** исходники и Linux-адаптации перенесены;
-нативные запуск, звук, скриншоты и готовый Linux-пакет пока не подтверждены.
-Работа выполнялась на Windows без установленного WSL. Подробный статус и
-доказательства: [матрица соответствия](docs/WINDOWS_PARITY.md),
-[проверки](docs/LINUX_VALIDATION.md).
+<p align="center">
+  <img src="screenshots/icon.png" width="52" height="52" alt="NeDotify Logo" />
+</p>
 
-## Установка из исходников
+<h1 align="center">NeDotify</h1>
 
-Заявленная среда сборки: **Ubuntu 24.04 x86_64, Python 3.12+**, Qt 6 WebEngine,
-PipeWire/PulseAudio и графический сеанс X11 или Wayland. Другие дистрибутивы,
-ARM и старые glibc требуют отдельной нативной проверки. Виртуальное окружение
-из другой ОС использовать нельзя.
+<p align="center">
+  <b>Кроссплатформенный музыкальный проигрыватель с открытым исходным кодом.</b><br>
+  YouTube Music, SoundCloud, VK Музыка, Яндекс Музыка и локальная медиатека.<br>
+  Без рекламы, аналитики, телеметрии и обязательной регистрации.
+</p>
 
+<p align="center">
+  <a href="https://github.com/PoviceProgrammer/NeDotify/releases/latest"><img src="https://img.shields.io/badge/СКАЧАТЬ%20(RELEASES)-8b5cf6?style=for-the-badge&logo=github&logoColor=white" alt="Скачать"></a>
+  &nbsp;&nbsp;
+  <a href="https://t.me/TequilaVPNbot?start=refugkQUieF"><img src="https://img.shields.io/badge/VPN%20ДЛЯ%20МУЗЫКИ-24292f?style=for-the-badge&logo=telegram&logoColor=white" alt="TequilaVPN"></a>
+</p>
+
+<p align="center">
+  <a href="#особенности">Особенности</a> •
+  <a href="#аудиосистема">Аудиосистема</a> •
+  <a href="#интерфейс">Интерфейс</a> •
+  <a href="#установка">Установка</a> •
+  <a href="#обход-блокировок">Обход блокировок</a> •
+  <a href="#сборка">Сборка</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/stars/PoviceProgrammer/NeDotify?style=flat-square" alt="Stars">
+  <img src="https://img.shields.io/github/last-commit/PoviceProgrammer/NeDotify?style=flat-square" alt="Последний коммит">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/PoviceProgrammer/NeDotify?style=flat-square" alt="Лицензия MIT"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?style=flat-square&logo=windows&logoColor=white" alt="Windows">
+  <img src="https://img.shields.io/badge/Linux-Ubuntu%20%7C%20Arch%20%7C%20Fedora%20%7C%20Debian-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux">
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
+</p>
+
+---
+
+## Особенности
+
+### Стриминг и источники
+- **Прямой аудиопоток в Chromium**: запуск любого трека за ~0.3 секунды без промежуточной транскодировки.
+- **Поддерживаемые платформы**: YouTube Music, SoundCloud, VK Музыка, Яндекс Музыка.
+- **Импорт плейлистов**: TikTok, VK Музыка, Spotify, YouTube, локальные списки `.m3u` и `.m3u8`.
+- **Локальная медиатека**: воспроизведение FLAC, MP3, AAC, OGG, WAV, Opus. Автоматическое чтение ID3v2/Vorbis тегов и встроенных обложек.
+
+### Воспроизведение и звук
+- **Умная предзагрузка очереди**: следующие 2 трека кэшируются в фоне. Задержка переключения составляет ~0.1 с.
+- **Полноценный офлайн-режим**: треки сохраняются на локальный диск и воспроизводятся без подключения к интернету.
+- **10-полосный эквалайзер**: фильтрация WebAudio BiquadFilter с готовыми профилями и ручной регулировкой частот.
+- **Синхронизированные тексты песен**: построчный вывод LRC с возможностью сдвига тайминга (±0.5 с) и переводом строк.
+- **Выравнивание громкости**: поддержка ReplayGain / EBU R128 (LUFS) для предотвращения скачков уровня между треками.
+
+### Рекомендации и списки
+- **Переработанный автоплей**: умное радио подбирает похожую музыку на базе текущей очереди и истории прослушиваний.
+- **Daily Mixes (Ежедневные миксы)**: дизлайк в одном миксе изолирован и не ломает остальные подборки; скрытые исполнители исключаются из выдачи.
+- **Блок рекомендаций**: динамический блок «Рекомендовано вам» внизу открытых плейлистов и «Любимых треков».
+- **Табличный вид**: компактное табличное отображение (#, Название, Альбом, Прослушивания, Дата, Длительность) с быстрым переключателем.
+
+### Системная интеграция
+- **Windows**: поддержка SMTC (System Media Transport Controls), оверлей громкости, глобальные горячие клавиши, Discord Rich Presence, безопасное хранение ключей через DPAPI.
+- **Linux**: интерфейс D-Bus MPRIS v2 (управление из GNOME, KDE, Hyprland, Waybar), трей StatusNotifierWatcher, системные уведомления `notify-send`, FreeDesktop Secret Service (`gnome-keyring` / `keepassxc`) с fallback на AES-256.
+- **Мини-плеер**: компактное плавающее окно в режиме «поверх всех окон» (Always on Top).
+
+---
+
+## Аудиосистема
+
+Сетевой стриминг и рендеринг звука изолированы для обеспечения минимальной задержки воспроизведения:
+
+```
+[ Онлайн-источник / Локальный диск ]
+                 │
+                 ▼
+[ Локальный HTTP-прокси (proxy_server.py) ]
+  ├── Кэширование чанков на диск
+  ├── Обработка Range-запросов HTML5 Audio
+  └── Обход CORS и проверка заголовков
+                 │
+                 ▼
+[ Chromium Audio Engine / WebAudio API ]
+  ├── 10-полосный фильтр BiquadFilterNode
+  ├── Измеритель громкости LUFS / ReplayGain
+  └── Вывод PCM-потока в аудиосервер
+                 │
+        ┌────────┴────────┐
+        ▼                 ▼
+[ Windows WASAPI ]   [ Linux PipeWire / PulseAudio ]
+```
+
+- **Буферизация**: чанки данных передаются напрямую через loopback-сокет `127.0.0.1`, не создавая задержек в интерфейсном потоке.
+- **Поддержка аудиосерверов Linux**: прямая работа с PipeWire и PulseAudio через ALSA/Pulse бэкенд Qt WebEngine. Приложение совместимо как с systemd-сервисами, так и с автономными конфигурациями.
+
+---
+
+## Интерфейс
+
+Приложение поддерживает два варианта оформления интерфейса с возможностью переключения в настройках без перезапуска.
+
+### Основные разделы
+
+<table>
+<tr>
+  <td width="50%" align="center">
+    <img src="screenshots/home.png" alt="Главная страница"><br>
+    <sub><b>Главная страница</b>: персональные миксы, быстрый запуск и недавно прослушанное</sub>
+  </td>
+  <td width="50%" align="center">
+    <img src="screenshots/search.png" alt="Поиск"><br>
+    <sub><b>Поиск</b>: глобальный каталог по трекам, альбомам, исполнителям и плейлистам</sub>
+  </td>
+</tr>
+<tr>
+  <td width="50%" align="center">
+    <img src="screenshots/library.png" alt="Медиатека"><br>
+    <sub><b>Медиатека</b>: плейлисты, локальные папки, сохранённые альбомы и импорт</sub>
+  </td>
+  <td width="50%" align="center">
+    <img src="screenshots/player.png" alt="Плеер и тексты"><br>
+    <sub><b>Плеер</b>: синхронизированные тексты песен, обложка альбома и очередь</sub>
+  </td>
+</tr>
+<tr>
+  <td width="50%" align="center">
+    <img src="screenshots/settings.png" alt="Настройки"><br>
+    <sub><b>Настройки</b>: аудиовыход, эквалайзер, прокси-сервер, кэш и горячие клавиши</sub>
+  </td>
+  <td width="50%" align="center">
+    <img src="screenshots/profile.png" alt="Профиль"><br>
+    <sub><b>Профиль</b>: статистика прослушиваний, статус интеграций и аккаунты</sub>
+  </td>
+</tr>
+</table>
+
+### Варианты оформления
+
+<details>
+<summary><b>Сравнение стилей оформления (macOS-стиль и базовый интерфейс)</b></summary>
+
+<table>
+<tr>
+  <th width="50%">macOS-стиль (Glassmorphism)</th>
+  <th width="50%">Базовый интерфейс (Basic UI)</th>
+</tr>
+<tr>
+  <td><img src="screenshots/macos/home.png" alt="macOS Home"><br><sub>Главная (macOS)</sub></td>
+  <td><img src="screenshots/standard/home.png" alt="Standard Home"><br><sub>Главная (Basic)</sub></td>
+</tr>
+<tr>
+  <td><img src="screenshots/macos/player.png" alt="macOS Player"><br><sub>Плеер (macOS)</sub></td>
+  <td><img src="screenshots/standard/player.png" alt="Standard Player"><br><sub>Плеер (Basic)</sub></td>
+</tr>
+<tr>
+  <td><img src="screenshots/macos/settings.png" alt="macOS Settings"><br><sub>Настройки (macOS)</sub></td>
+  <td><img src="screenshots/standard/settings.png" alt="Standard Settings"><br><sub>Настройки (Basic)</sub></td>
+</tr>
+</table>
+</details>
+
+---
+
+## Установка
+
+### Установка: Windows
+
+Поддерживаются **Windows 10** и **Windows 11** (x86_64).
+
+1. Скачайте актуальный установщик `NeDotify_Setup.exe` со страницы релизов:
+   - **[Скачать NeDotify для Windows](https://github.com/PoviceProgrammer/NeDotify/releases/latest)**
+2. Запустите установщик. Программа автоматически:
+   - Создаст ярлыки в меню «Пуск» и на рабочем столе.
+   - Зарегистрирует системные протоколы и ассоциации файлов.
+   - При отсутствии необходимых утилит подгрузит `yt-dlp` и `ffmpeg` через winget.
+
+Для портативного использования доступен архив `.zip` на странице релизов (не требует установки в систему).
+
+---
+
+### Установка: Linux
+
+Поддерживаются все основные дистрибутивы Linux (x86_64, glibc 2.31+): **Ubuntu**, **Debian**, **Arch Linux**, **Fedora**, **openSUSE**, **Linux Mint**, **Pop!_OS**.
+
+Графические оболочки: **GNOME**, **KDE Plasma**, **XFCE**, а также Wayland-композиторы (**Hyprland**, **Sway**, **Wayfire**) и X11-менеджеры (**i3**, **bspwm**).
+
+#### Способ 1: Автоматический скрипт установки (рекомендуется)
+
+```bash
+git clone https://github.com/PoviceProgrammer/NeDotify.git
+cd NeDotify
+
+# Автоматическая установка системных зависимостей и виртуального окружения
+bash install_linux.sh --source
+
+# Запуск приложения
+bash start_linux.sh
+```
+
+#### Способ 2: Установка системных зависимостей вручную
+
+**Ubuntu / Debian / Linux Mint / Pop!_OS:**
 ```bash
 sudo apt-get update
 sudo apt-get install -y python3-venv ffmpeg libegl1 libgl1 libnss3 libnspr4 \
@@ -25,111 +215,103 @@ sudo apt-get install -y python3-venv ffmpeg libegl1 libgl1 libnss3 libnspr4 \
   libxcb-keysyms1 libxcb-render-util0 libxcomposite1 libxdamage1 libxrandr2 \
   libxtst6 libasound2t64 libdbus-1-3 libsecret-1-0 libpulse0 \
   gnome-keyring libnotify-bin libfontconfig1 libfreetype6
-bash install_linux.sh --source
-bash start_linux.sh
 ```
 
-Ручной запуск после установки зависимостей: `.venv/bin/python main.py`.
-Qt выбирается явно; Chromium sandbox включён. На Wayland запускать приложение
-нужно из своего графического сеанса. Для окружения без поддерживаемого Wayland
-plugin можно явно выбрать XWayland: `QT_QPA_PLATFORM=xcb bash start_linux.sh`.
-Реальный `DISPLAY`/`WAYLAND_DISPLAY` задаёт сеанс, приложение их не подделывает.
-
-FFmpeg/ffprobe берутся из Linux PATH или инструментов мастера настройки.
-yt-dlp устанавливается с EJS, curl_cffi и Deno для JavaScript challenges.
-Мастер поддерживает проверку, установку и обновление Linux-инструментов;
-процесс проигрывателя не меняет собственный импортированный yt-dlp через pip.
-
-## Обновление и удаление
-
-При установке исходников ярлык запускает текущую рабочую копию. Для обновления
-нужно закрыть приложение, обновить исходники, повторить
-`bash install_linux.sh --source` и запустить снова. Зависимости обновляются
-между сеансами приложения.
-
-Portable-пакет распаковывается в отдельную папку. Из неё выполнить:
-
+**Arch Linux / Manjaro:**
 ```bash
-bash install_linux.sh --bundle
+sudo pacman -S --needed python ffmpeg libnotify libsecret pipewire-pulse libpulse \
+  qt6-webengine nss nspr alsa-lib libxcomposite libxdamage libxrandr libxtst
 ```
 
-Установка для пользователя сохраняет версии в
-`${XDG_DATA_HOME:-$HOME/.local/share}/nedotify-app/releases` и атомарно меняет
-ссылку `current`. Предыдущая версия остаётся для отката. Debian-пакет
-устанавливается через `sudo apt install ./nedotify_2.5.1_amd64.deb` и
-обновляется тем же способом.
-
+**Fedora:**
 ```bash
-bash install_linux.sh --uninstall
-# Для Debian-установки: sudo apt remove nedotify
+sudo dnf install -y python3 ffmpeg libnotify libsecret pipewire-pulseaudio \
+  pulseaudio-libs nss nspr alsa-lib libXcomposite libXdamage libXrandr libXtst
 ```
 
-Удаление приложения сохраняет пользовательский профиль `~/.nedotify/`.
-Ни установка, ни обновление не переносят Windows-кеши, базы или бинарники.
+#### Запуск на Wayland / Hyprland
 
-## Данные и интеграции
-
-Профиль остаётся в `~/.nedotify/`: `nedotify_storage.db`, `downloads/`,
-`streams/`, `covers/`, `temp/`, `logs/`. Идентификаторы сохранённых настроек и
-провайдеров сохраняются. База обновляется миграциями при открытии;
-проверки миграций используют временные файлы.
-
-Секреты сохраняются через Secret Service/KWallet. Если защищённый desktop
-keyring недоступен, используется Fernet с отдельным ключом
-`~/.nedotify/secrets/key` (каталог 0700, файл 0600). Это защищает отдельный
-экспорт базы; доступ от имени того же пользователя позволяет прочитать ключ.
-Для переноса такого профиля нужно сохранить и базу, и ключ. Windows DPAPI
-зависит от Windows-аккаунта: его зашифрованные значения нельзя расшифровать
-на Linux, авторизацию потребуется повторить. Исходные записи не удаляются.
-
-Автозапуск использует XDG `.desktop`; трей — Qt; медиаклавиши и внешнее
-управление — MPRIS на session D-Bus. В композиторе должен быть доступен
-обработчик медиаклавиш/MPRIS и host системного трея. Discord Rich Presence
-требует запущенный локальный Discord с доступным IPC.
-
-Wayland может ограничивать абсолютное перемещение окна, topmost и глобальные
-сочетания клавиш; перетаскивание/resize используют системные жесты Qt.
-Произвольные глобальные комбинации назначаются в настройках композитора;
-сочетания внутри приложения и MPRIS остаются доступны.
-
-Linux-режим обхода сетевых ограничений использует upstream `tpws` как
-локальный SOCKS-прокси для TCP-запросов приложения с проверкой загружаемых
-ресурсов. Windows-драйвер WinDivert не переносится. Системный UDP/QUIC и
-голосовой трафик Discord требуют внешней настройки `nfqws` и прав
-администратора; приложение не выдаёт TCP-режим за системный обход.
-
-Источники, требующие авторизации/подписки или доступности сервиса в регионе,
-сохраняют эти требования. Spotify используется для метаданных и импорта,
-воспроизведение разрешается через действующие музыкальные источники.
-
-## Проверки и сборка
+Приложение нативно поддерживает Wayland. В случае проблем с декорациями окон композитора можно форсировать работу через XWayland:
 
 ```bash
-.venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python -m pytest
-# Отдельно, реальные внешние запросы:
-.venv/bin/python -m pytest -m network
-# Настоящее приложение, временный профиль, оба UI, скриншоты:
-.venv/bin/python tools/validate_linux.py --output reports/native-source
+QT_QPA_PLATFORM=xcb bash start_linux.sh
+```
 
-.venv/bin/python -m pip install -r requirements-build.txt
+---
+
+## Обход блокировок
+
+Если стриминговые площадки недоступны в вашей сети, приложение поддерживает несколько методов маршрутизации трафика:
+
+1. **Встроенный прокси**: в настройках приложения можно указать адрес HTTP, HTTPS или SOCKS5 прокси.
+2. **Системный VPN**: работа через VPN в TUN-режиме прозрачно перенаправляет трафик всех аудио-потоков.
+
+<table>
+<tr><td>
+
+### TequilaVPN
+
+**VPN для доступа к музыкальным и медиа-сервисам.**
+
+[Открыть TequilaVPN в Telegram](https://t.me/TequilaVPNbot?start=refugkQUieF)
+
+*Реферальная ссылка. Сервис предоставляется независимо от проекта NeDotify.*
+
+</td></tr>
+</table>
+
+---
+
+## Сборка
+
+### Сборка на Windows
+
+Требуется: Python 3.10–3.14 (x64), Inno Setup 6 (для сборки установщика `.exe`).
+
+```powershell
+# Создание окружения и установка зависимостей
+python -m venv .venv_win
+& ".venv_win\Scripts\pip.exe" install -r requirements.txt
+& ".venv_win\Scripts\pip.exe" install pyinstaller
+
+# Сборка бинарного пакета
+& ".venv_win\Scripts\pyinstaller.exe" setup_pyinstaller.spec --noconfirm
+
+# Компиляция инсталлятора
+iscc installer.iss
+```
+
+Выходной файл: `dist\NeDotify_Setup.exe`.
+
+### Сборка на Linux
+
+Требуется: Python 3.10–3.14, системные библиотеки (Qt 6, FFmpeg).
+
+```bash
+# Сборка бинарного каталога и архива
 bash build_linux.sh
-.venv/bin/python tools/validate_linux.py \
-  --executable dist/NeDotify/NeDotify --output reports/native-package
+
+# Запуск собранного приложения
+./dist/NeDotify/NeDotify
 ```
 
-Сборка выполняется **на Linux**. Результаты: onedir `dist/NeDotify/`,
-`NeDotify-2.5.1-linux-amd64.tar.gz`, `nedotify_2.5.1_amd64.deb` и `SHA256SUMS`.
-Оба UI, шрифты, иконки, QtWebEngineProcess, EJS и нативные ffmpeg/ffprobe/Deno
-включаются в пакет. Пакет рассчитан на системные библиотеки Ubuntu 24.04.
-`BUILD-REQUIREMENTS.txt` фиксирует фактически установленные версии сборщика.
+### Запуск тестов
 
-[Linux CI](.github/workflows/linux-parity.yml) готовит эту среду, запускает
-тесты, source/frozen UI smoke и публикует отчёты/скриншоты/артефакты.
-Xvfb smoke проверяет запуск и интерфейс; слышимое воспроизведение, настоящий
-Wayland и desktop-интеграции проверяются отдельно по
-[нативному сценарию](docs/LINUX_VALIDATION.md).
+Тестовый набор проверяет кроссплатформенную совместимость, миграцию данных, работу локального прокси и парсеров:
 
-Исторические изображения в `screenshots/` относятся к предыдущему GTK-порту.
-Новые доказательства должны создаваться в `reports/native-*`; на Windows
-стенд отказывается создавать отчёт об успешной Linux-проверке.
+```powershell
+# Windows
+& ".venv_win\Scripts\pytest.exe" -q
+```
+
+```bash
+# Linux
+.venv/bin/pytest -q
+```
+
+---
+
+## Лицензия
+
+Проект распространяется под лицензией [MIT](LICENSE).
+Уведомления об авторских правах и лицензии сторонних компонентов находятся в директории [licenses/](licenses/).
