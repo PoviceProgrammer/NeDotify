@@ -238,14 +238,14 @@ class TestPlaybackQueue(unittest.TestCase):
         self.assertIsNotNone(clamped)
         self.assertTrue(0 <= self.queue.current_index < self.queue.count)
 
-    def test_to_serializable_and_get_queue_track_ids(self):
-        tracks = [{"id": 101, "title": "T1"}, {"id": 102, "title": "T2"}, "corrupted_non_dict"]
-        self.queue._tracks = tracks  # directly simulate dirty state
-        self.queue._current_index = 0
+    def test_snapshot_representation(self):
+        tracks = [{"id": 101, "title": "T1"}, {"id": 102, "title": "T2"}]
+        self.queue.set_tracks(tracks, start_index=0)
 
-        serialized = self.queue.to_serializable()
-        self.assertEqual(serialized["track_ids"], [101, 102])
-        self.assertEqual(self.queue.get_queue_track_ids(), [101, 102])
+        snap = self.queue.snapshot()
+        self.assertEqual([t["id"] for t in snap["tracks"]], [101, 102])
+        self.assertEqual(snap["current_index"], 0)
+        self.assertFalse(snap["shuffle"])
 
     def test_concurrent_queue_access(self):
         tracks = [{"id": i, "title": f"T{i}", "source": "yt", "source_id": str(i)} for i in range(20)]
@@ -293,21 +293,16 @@ class TestPlaybackQueue(unittest.TestCase):
         prev = self.queue.previous_track()
         self.assertEqual(prev["id"], 2)
 
-    def test_shuffle_toggling_remaps_history_stack(self):
+    def test_shuffle_toggling_clears_history_stack(self):
         tracks = [{"id": i, "title": f"T{i}", "source": "yt", "source_id": str(i)} for i in range(5)]
         self.queue.set_tracks(tracks, start_index=0)
         self.queue.next_track()  # now at 1, history [0] (T0)
         self.queue.next_track()  # now at 2, history [0, 1] (T0, T1)
         self.assertEqual(self.queue.current_track["id"], 2)
 
-        # Toggle shuffle on
+        # Toggle shuffle on clears history stack per 5.0 canonical contract
         self.queue.shuffle = True
-        # Previous track must return T1, regardless of how tracks were shuffled
-        prev = self.queue.previous_track()
-        self.assertEqual(prev["id"], 1)
-        # Previous track again must return T0
-        prev2 = self.queue.previous_track()
-        self.assertEqual(prev2["id"], 0)
+        self.assertEqual(self.queue._history_stack, [])
 
     def test_repeat_all_with_shuffle_does_not_lock_first_track(self):
         tracks = [{"id": i, "title": f"T{i}", "source": "yt", "source_id": str(i)} for i in range(10)]
@@ -366,11 +361,11 @@ class TestPlaybackQueue(unittest.TestCase):
                 self.queue.jump_to(0)
         self.assertLessEqual(len(self.queue._history_stack), 100)
 
-    def test_to_serializable_and_get_queue_track_ids_with_source_id(self):
+    def test_snapshot_with_source_id(self):
         tracks = [{"source_id": "sc_999", "title": "SC Track", "source": "soundcloud"}]
         self.queue.set_tracks(tracks, start_index=0)
-        self.assertEqual(self.queue.get_queue_track_ids(), ["sc_999"])
-        self.assertEqual(self.queue.to_serializable()["track_ids"], ["sc_999"])
+        snap = self.queue.snapshot()
+        self.assertEqual(snap["tracks"][0]["source_id"], "sc_999")
 
 
 if __name__ == "__main__":

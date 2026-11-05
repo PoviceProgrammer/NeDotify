@@ -1,19 +1,30 @@
-# NeDotify (AURA Music) - runtime dependencies
-# Requires Python 3.12+
-# Versions are capped at the next major to keep installs reproducible while
-# still allowing patch/minor updates. Bump caps deliberately, not silently.
-pywebview>=5.0.0,<6
+# Linux runtime: Python 3.12+, Ubuntu 24.04 x86_64 release baseline.
+# Qt WebEngine is intentional: no WinForms/pythonnet or implicit GTK fallback.
+pywebview[qt]>=5.4,<6
+PyQt6>=6.7,<7
+PyQt6-WebEngine>=6.7,<7
+QtPy>=2.4,<3
+bottle>=0.13.0,<1
 mutagen>=1.47.0,<2
-yt-dlp>=2024.1.1
+yt-dlp[default]>=2026.8.19,<2027
+# Official Deno runtime redistribution; yt-dlp needs an external JS runtime.
+deno>=2.6.6,<3
+curl_cffi>=0.10.0,<0.17
 Pillow>=10.0.0,<12
 pyloudnorm>=0.1.1,<0.2
 pypresence>=4.3.0,<5
 pystray>=0.19.5,<0.21
 requests>=2.31.0,<3
-python-dotenv>=1.0.0,<2
+urllib3>=2.2,<3
 yandex-music>=3.0.0,<4
 ytmusicapi>=1.12.0,<2
 miniaudio>=1.60,<2
 numpy>=1.24.0,<3
+scipy>=1.10.0,<2
 watchdog>=4.0.0,<6
+keyring>=25,<26
+SecretStorage>=3.3,<4
+dbus-next>=0.2.3,<1
+cryptography>=43,<47
+PySocks>=1.7.1,<2
 

@@ -1,0 +1,42 @@
+/* Native discrete transitions retain the closing pixels, not modal state. */
+html body dialog {
+    opacity:0; transform:translateY(12px) scale(.975);
+    transition:opacity 170ms ease,transform 220ms cubic-bezier(.2,.75,.2,1),display 220ms allow-discrete,overlay 220ms allow-discrete;
+}
+html body dialog[open] { opacity:1; transform:none; animation:none; }
+html body dialog::backdrop { opacity:0; transition:opacity 200ms ease,display 220ms allow-discrete,overlay 220ms allow-discrete; }
+html body dialog[open]::backdrop { opacity:1; }
+@starting-style {
+    html body dialog[open] { opacity:0; transform:translateY(16px) scale(.97); }
+    html body dialog[open]::backdrop { opacity:0; }
+}
+html body #view-settings.view-page.settings-overlay {
+    transition:opacity 200ms ease,visibility 220ms allow-discrete;
+}
+html body #view-settings.view-page.settings-overlay .settings-modal-card {
+    transition:opacity 180ms ease,transform 240ms cubic-bezier(.2,.75,.2,1);
+}
+html body #view-settings.view-page.settings-overlay.active .settings-modal-card {
+    transition:opacity 180ms ease,transform 240ms cubic-bezier(.2,.75,.2,1);
+}
+::view-transition-group(panel-content) { animation-duration:240ms; animation-timing-function:cubic-bezier(.2,.75,.2,1); }
+::view-transition-old(panel-content) { animation:panelMotionOut 140ms ease-in both; }
+::view-transition-new(panel-content) { animation:panelMotionIn 240ms cubic-bezier(.2,.75,.2,1) both; }
+@keyframes panelMotionOut { to { opacity:0; transform:translateY(-6px); } }
+@keyframes panelMotionIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+html body :is(.search-platform-dropdown,.search-suggestions-dropdown,.custom-glass-dropdown-menu) {
+    opacity:1; transform:none;
+    transition:opacity 140ms ease,transform 180ms cubic-bezier(.2,.75,.2,1),display 180ms allow-discrete;
+}
+html body :is(.search-platform-dropdown,.search-suggestions-dropdown,.custom-glass-dropdown-menu).hidden {
+    opacity:0; transform:translateY(-5px) scale(.985);
+}
+@starting-style {
+    html body :is(.search-platform-dropdown,.search-suggestions-dropdown,.custom-glass-dropdown-menu):not(.hidden) { opacity:0; transform:translateY(-5px) scale(.985); }
+}
+@media(prefers-reduced-motion:reduce) {
+    html body dialog,html body dialog::backdrop,html body #view-settings.view-page.settings-overlay,
+    html body #view-settings.view-page.settings-overlay .settings-modal-card,
+    html body :is(.search-platform-dropdown,.search-suggestions-dropdown,.custom-glass-dropdown-menu) { transition:none; }
+    ::view-transition-group(panel-content),::view-transition-old(panel-content),::view-transition-new(panel-content) { animation:none; }
+}

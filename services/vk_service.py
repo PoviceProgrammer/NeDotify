@@ -1,26 +1,56 @@
-"""
-NeDotify - VK Music Service
-Basic VK Music integration with manual link support and BaseMusicService caching.
-"""
-
 import os
 import re
 import time
-from typing import Callable, Optional
-from services.base_service import BaseMusicService
+"""
+NeDotify - VK Music Service
+Basic VK Music integration with manual link support.
+"""
 
-try:
-    import yt_dlp
-    HAS_YTDLP = True
-except ImportError:
-    HAS_YTDLP = False
+import threading
+from typing import Callable, Optional
+from urllib.parse import urlsplit
+from services.base_service import BaseMusicService, normalize_proxy_url
+
+def _ytdlp():
+    """Return the yt-dlp module, importing it on first use.
+
+    yt-dlp costs ~125ms to import and VK extraction only runs on an
+    explicit user link, so the import stays off the startup path. Tests
+    may monkeypatch the module-level ``yt_dlp`` global; that override
+    wins over the import.
+    """
+    module = globals().get('yt_dlp')
+    if module is None:
+        try:
+            import yt_dlp as module
+        except ImportError:
+            module = False
+        globals()['yt_dlp'] = module
+    return module or None
+
+
+def _has_ytdlp():
+    """Availability flag honouring a monkeypatched HAS_YTDLP global."""
+    flag = globals().get('HAS_YTDLP')
+    if flag is None:
+        flag = _ytdlp() is not None
+    return flag
+
+
+def __getattr__(name):
+    # PEP 562: resolve 'yt_dlp'/'HAS_YTDLP' before the lazy import ran.
+    if name == 'yt_dlp':
+        return _ytdlp()
+    if name == 'HAS_YTDLP':
+        return _has_ytdlp()
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
 
 
 class VKService(BaseMusicService):
     """
     VK Music integration.
     Due to VK's anti-bot protection, full automated parsing is limited.
-    Supports direct link playback, caching, and basic yt-dlp extraction.
+    Supports direct link playback and basic yt-dlp extraction.
     """
 
     def __init__(self, settings=None):
@@ -29,70 +59,40 @@ class VKService(BaseMusicService):
 
     @property
     def available(self) -> bool:
-        return HAS_YTDLP
+        # Direct links can be extracted, but this provider has no search API.
+        return False
 
     def search(self, query: str, max_results: int = 20, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None):
         """
         Search VK Music. Limited functionality due to anti-bot protection.
         Falls back to basic yt-dlp VK extractor.
         """
-        if not query or not str(query).strip():
-            if callback:
-                callback([])
-            return
-
-        if not HAS_YTDLP:
-            if error_callback:
-                error_callback("yt-dlp не установлен")
-            return
-
-        def _search():
-            try:
-                cache_key = f"vk_search:{query}"
-                cached = self.get_search_cache(cache_key)
-                if cached is not None:
-                    if callback:
-                        callback(cached)
-                    return
-
-                # VK anti-bot requires authentication; return empty for raw query
-                tracks = []
-                self.set_search_cache(cache_key, tracks)
-                if callback:
-                    callback(tracks)
-            except Exception as e:
-                if error_callback:
-                    error_callback(str(e))
-
-        BaseMusicService.submit(_search)
-
-    @staticmethod
-    def _normalize_url(url_or_id: str) -> str:
-        """Normalize URL or raw audio ID into a full VK URL."""
-        s = str(url_or_id).strip()
-        if s.startswith(('http://', 'https://')):
-            return s
-        if s.startswith('audio') or s.startswith('video'):
-            return f"https://vk.com/{s}"
-        return f"https://vk.com/audio?id={s}"
+        if error_callback:
+            error_callback('Поиск VK Music недоступен; поддерживаются только прямые ссылки')
+        elif callback:
+            callback([])
 
     def get_stream_url(self, vk_url: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, quality: str = "high", **kwargs):
-        """Extract audio from a VK Music URL with caching and error handling."""
+        """Extract audio from a VK Music URL."""
         if not vk_url or not str(vk_url).strip():
             if error_callback:
                 error_callback("Пустой или невалидный URL")
             return
-
-        if not HAS_YTDLP:
+        if not _has_ytdlp():
             if error_callback:
                 error_callback("yt-dlp не установлен")
             return
 
-        target_url = self._normalize_url(vk_url)
-        cached = self.get_from_cache(str(vk_url).strip()) or self.get_from_cache(target_url)
+        cached = self.get_from_cache(str(vk_url).strip())
         if cached and cached.get("stream_url"):
             if callback:
                 callback(cached.get("stream_url"), cached)
+            return
+
+        target = urlsplit(str(vk_url or ''))
+        if target.scheme != 'https' or target.hostname not in ('vk.com', 'www.vk.com', 'vkvideo.ru'):
+            if error_callback:
+                error_callback('Нужна HTTPS-ссылка VK')
             return
 
         def _extract():
@@ -101,60 +101,39 @@ class VKService(BaseMusicService):
                     'quiet': True,
                     'no_warnings': True,
                     'format': 'bestaudio/best',
-                    'nocheckcertificate': True,
                     'socket_timeout': 10,
-                    'retries': 2,
+                    'retries': 1,
                     'source_address': '0.0.0.0'
                 }
+                proxy = normalize_proxy_url(self.settings.get('auth', 'proxy_url', '')) if self.settings else ''
+                if proxy:
+                    ydl_opts['proxy'] = proxy
 
-                if self.settings:
-                    proxy = self.settings.get("auth", "proxy_url", "")
-                    if proxy:
-                        ydl_opts["proxy"] = proxy
-                    cookies = self.settings.get("auth", "cookies_file_path", "")
-                    if cookies and os.path.exists(cookies):
-                        ydl_opts["cookiefile"] = cookies
-
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(target_url, download=False)
+                with _ytdlp().YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(vk_url, download=False)
 
                 if info:
                     stream_url = info.get('url')
-                    if not stream_url and info.get('formats'):
-                        audio_fmts = [f for f in info['formats'] if f.get('acodec') != 'none' and f.get('url')]
-                        if audio_fmts:
-                            stream_url = audio_fmts[-1].get('url')
-
-                    artist = info.get('artist') or info.get('uploader') or 'Unknown Artist'
-                    title = info.get('title') or 'VK Audio'
-                    duration = info.get('duration') or 0
-                    cover_url = info.get('thumbnail') or ''
-                    source_id = str(info.get('id') or target_url)
-
                     metadata = {
-                        'title': title,
-                        'artist': artist,
-                        'duration': duration,
-                        'cover_url': cover_url,
-                        'source_id': source_id,
+                        'title': info.get('title') or 'VK Hit',
+                        'artist': info.get('artist') or info.get('uploader') or 'Unknown Artist',
+                        'duration': info.get('duration', 0),
+                        'cover_url': info.get('thumbnail', ''),
+                        'source_id': str(info.get('id', '')),
                         'stream_url': stream_url
                     }
-                    self.set_to_cache(target_url, metadata)
-                    if source_id and source_id != target_url:
-                        self.set_to_cache(source_id, metadata)
-                    raw_in = str(vk_url).strip()
-                    if raw_in not in (target_url, source_id):
-                        self.set_to_cache(raw_in, metadata)
+                    self.set_to_cache(str(vk_url).strip(), metadata)
+                    sid = str(info.get('id') or '')
+                    if sid:
+                        self.set_to_cache(sid, metadata)
                     if callback:
                         callback(stream_url, metadata)
-                else:
-                    if error_callback:
-                        error_callback("Не удалось извлечь информацию о треке VK")
             except Exception as e:
                 if error_callback:
                     error_callback(f"VK Music ошибка: {str(e)}")
 
-        BaseMusicService.submit(_extract)
+        if self.submit_playback(_extract) is None and error_callback:
+            error_callback('Сервис завершает работу')
 
     def play_direct_url(self, url: str) -> dict:
         """Create a track dict from a direct audio URL or local file path."""
@@ -175,15 +154,20 @@ class VKService(BaseMusicService):
         if not source_id or not str(source_id).strip():
             raise ValueError("source_id не может быть пустым")
 
-        if not HAS_YTDLP:
+        if not _has_ytdlp():
             raise Exception("yt-dlp не установлен")
 
         os.makedirs(output_dir, exist_ok=True)
-        target_url = self._normalize_url(source_id)
-        raw_token = str(source_id).strip().split('/')[-1].split('?')[0]
-        clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', raw_token) or "track"
+        clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id))
         ts = int(time.time())
         out_template = os.path.join(output_dir, f"vk_{clean_id}_{ts}.%(ext)s")
+
+        target_url = str(source_id).strip()
+        if not target_url.startswith(('http://', 'https://')):
+            if target_url.startswith('audio'):
+                target_url = f"https://vk.com/{target_url}"
+            else:
+                target_url = f"https://vk.com/audio?id={target_url}"
 
         ydl_opts = {
             'quiet': True,
@@ -196,7 +180,7 @@ class VKService(BaseMusicService):
         }
 
         if self.settings:
-            proxy = self.settings.get("auth", "proxy_url", "")
+            proxy = normalize_proxy_url(self.settings.get("auth", "proxy_url", ""))
             if proxy:
                 ydl_opts["proxy"] = proxy
             cookies = self.settings.get("auth", "cookies_file_path", "")
@@ -204,7 +188,7 @@ class VKService(BaseMusicService):
                 ydl_opts["cookiefile"] = cookies
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            with _ytdlp().YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(target_url, download=True)
                 if not info:
                     raise Exception("Не удалось извлечь информацию о треке VK")
@@ -225,15 +209,14 @@ class VKService(BaseMusicService):
 
                 prefix = f"vk_{clean_id}_{ts}"
                 for fname in os.listdir(output_dir):
-                    if fname.startswith(prefix) and not (fname.endswith('.part') or fname.endswith('.ytdl')):
+                    if fname.startswith(prefix) and not fname.endswith('.part'):
                         return os.path.join(output_dir, fname)
 
                 raise Exception("Файл не был найден после загрузки из VK")
         except Exception:
             try:
-                prefix = f"vk_{clean_id}_{ts}"
                 for fname in os.listdir(output_dir):
-                    if fname.startswith(prefix) and (fname.endswith('.part') or fname.endswith('.ytdl')):
+                    if fname.startswith(f"vk_{clean_id}_") and fname.endswith(".part"):
                         try:
                             os.remove(os.path.join(output_dir, fname))
                         except OSError:

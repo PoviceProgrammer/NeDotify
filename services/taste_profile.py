@@ -1,5 +1,5 @@
 """
-NeDotify / AURA Music - User Taste Profile Extractor
+NeDotify - User Taste Profile Extractor
 Aggregates ALL local signals: history (play_count + completed), favorites, downloads,
 playlist contents. Weights: like/download ≈ 3, completed play ≈ 2, play ≈ 1, + recency boost.
 Merges with Last.fm scrobbles if username configured.
@@ -9,19 +9,38 @@ import sqlite3
 import logging
 import threading
 import time
+import copy
+import os
+import unicodedata
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
+from services.artist_identity import artist_aliases, canonical_artist, track_key as identity_track_key
+from services.music_matching import title_metadata
 
 logger = logging.getLogger(__name__)
 
 #: Hard cap on how much listening history is ever pulled into memory (privacy + cost).
-HISTORY_LIMIT = 500
+HISTORY_LIMIT = 1500
 #: Recomputing the same profile several times per second is pure waste; reuse it briefly.
 PROFILE_CACHE_TTL = 60.0
 
 _profile_cache: Dict[int, Any] = {}
 _profile_cache_lock = threading.Lock()
+
+
+def recommendation_track_key(track, aliases):
+    """Explicit musical credits match across uploads; versions remain distinct."""
+    original = identity_track_key(track, aliases)
+    if original[0].startswith('@catalog:'):
+        return original
+    metadata = title_metadata(track.get('title'), track.get('artist'))
+    if metadata['embedded']:
+        artist, title = metadata['embedded']
+        metadata = title_metadata(title, artist)
+    else:
+        artist = track.get('artist') or ''
+    return identity_track_key(dict(track, artist=artist, title=metadata['title']), aliases)
 
 
 class UserTasteProfile:
@@ -35,7 +54,9 @@ class UserTasteProfile:
     WEIGHT_PLAY = 1.0
     RECENCY_HALF_LIFE_DAYS = 30.0
 
-    def __init__(self):
+    def __init__(self, settings=None):
+        self.settings = settings
+        self.artist_aliases = artist_aliases(settings)
         self.top_artists = []
         self.top_tracks = []
         self.recent_history = []
@@ -43,6 +64,7 @@ class UserTasteProfile:
         self.favorite_tracks = []
         self.downloaded_tracks = []
         self.playlist_tracks = []
+        self.known_content_keys = set()
         self.time_of_day_habits = {
             'morning': 0,
             'afternoon': 0,
@@ -55,15 +77,10 @@ class UserTasteProfile:
     def build_from_db(self, db: Any) -> 'UserTasteProfile':
         import traceback as _tb
 
-        cache_key = self._cache_key(db)
-        cached_state = self._cache_get(cache_key, db)
-        if cached_state is not None:
-            self._restore_state(cached_state)
-            logger.debug('[PROFILE] Reusing profile computed less than %.0fs ago', PROFILE_CACHE_TTL)
-            return self
-
+        self.artist_aliases = artist_aliases(self.settings)
+        cache_key = (self._cache_key(db), tuple(sorted(self.artist_aliases.items())))
+        owned_connection = isinstance(db, str)
         conn = None
-        should_close_conn = isinstance(db, str)
         try:
             conn = self._get_conn(db)
 
@@ -73,6 +90,30 @@ class UserTasteProfile:
                 print(msg, flush=True)
                 return self
 
+            revision = getattr(db, 'data_revision', None)
+            path = getattr(db, 'db_path', db if isinstance(db, str) else None)
+            if path and path != ':memory:':
+                stamps = []
+                for candidate in (path, path + '-wal'):
+                    try:
+                        stat = os.stat(candidate)
+                        stamps.append((stat.st_mtime_ns, stat.st_size))
+                    except OSError:
+                        stamps.append(None)
+                revision = (revision, tuple(stamps))
+            if revision is None:
+                revision = self._connection_revision(conn)
+            self._source_revision = (cache_key, revision)
+            cached_state = self._cache_get(cache_key, db, revision)
+            if cached_state is not None:
+                self._restore_state(cached_state)
+                logger.debug('[PROFILE] Reusing unchanged profile computed less than %.0fs ago', PROFILE_CACHE_TTL)
+                return self
+
+            # Reusing a profile object after its source changes must not retain
+            # fields from a previous build or a failed query.
+            UserTasteProfile.__init__(self, self.settings)
+            self._source_revision = (cache_key, revision)
             cursor = conn.cursor()
 
             schema = self._detect_schema(cursor)
@@ -87,6 +128,11 @@ class UserTasteProfile:
             has_source_url = 'source_url' in track_cols
             has_added_at = 'added_at' in track_cols
             has_playlist_tracks = 'playlist_tracks' in schema.get('_tables', set())
+            history_cols = schema.get('history', set())
+
+            def _fetch_dicts():
+                names = [col[0] for col in cursor.description]
+                return [dict(zip(names, row)) for row in cursor.fetchall()]
 
             if not has_is_downloaded:
                 logger.info('[PROFILE] is_downloaded column not found in tracks — skipping download signal')
@@ -108,11 +154,12 @@ class UserTasteProfile:
                     cols.append(f'{p}source_id')
                 if has_source_url:
                     cols.append(f'{p}source_url')
-                cols.append(f'{p}genre')
-                cols.append(f'{p}is_favorite')
+                for name, default in (('genre', "''"), ('is_favorite', '0'), ('play_count', '0')):
+                    cols.append(f'{p}{name}' if name in track_cols else f'{default} AS {name}')
                 if has_is_downloaded:
                     cols.append(f'{p}is_downloaded')
-                cols.append(f'{p}play_count')
+                if 'file_path' in track_cols:
+                    cols.append(f'{p}file_path')
                 if has_added_at:
                     cols.append(f'{p}added_at')
                 if extra:
@@ -120,7 +167,10 @@ class UserTasteProfile:
                 return ', '.join(cols)
 
             try:
-                h_extra = ['h.played_at', 'h.completed', 'h.duration_listened']
+                h_extra = [
+                    f'h.{name}' if name in history_cols else f'{default} AS {name}'
+                    for name, default in (('played_at', 'NULL'), ('completed', '0'), ('duration_listened', 'NULL'), ('listening_measured', '0'), ('media_listened', '0'), ('session_finished', '0'))
+                ]
                 cursor.execute(
                     f"""
                     SELECT {_track_cols('t', h_extra)}
@@ -130,11 +180,35 @@ class UserTasteProfile:
                     LIMIT {HISTORY_LIMIT}
                 """
                 )
-                history_rows = cursor.fetchall()
-                self.recent_history = [self._row_to_dict(r) for r in history_rows[:50]]
+                history_rows = _fetch_dicts()
+                get_history = getattr(db, 'get_history', None)
+                if callable(get_history):
+                    # The public recent feed is one row per track and carries
+                    # the same event metrics as the home screen. Keep the raw
+                    # bounded rows above for weighted taste scoring below.
+                    try:
+                        feed_rows = get_history(limit=50)
+                        self.recent_history = []
+                        for row in (feed_rows or []):
+                            if not isinstance(row, dict):
+                                continue
+                            item = dict(row)
+                            track_id = item.get('track_id', item.get('id'))
+                            if track_id is not None:
+                                item.setdefault('id', track_id)
+                                item.setdefault('track_id', track_id)
+                            self.recent_history.append(item)
+                            if len(self.recent_history) == 50:
+                                break
+                    except Exception as e:
+                        logger.warning(f'[PROFILE] Canonical history feed error: {e}')
+                        self.recent_history = self._recent_history_fallback(history_rows)
+                else:
+                    self.recent_history = self._recent_history_fallback(history_rows)
             except Exception as e:
                 logger.warning(f'[PROFILE] History fetch error: {e}')
                 history_rows = []
+                self.recent_history = []
 
             try:
                 cursor.execute(
@@ -146,7 +220,7 @@ class UserTasteProfile:
                     LIMIT {HISTORY_LIMIT}
                 """
                 )
-                self.favorite_tracks = [self._row_to_dict(r) for r in cursor.fetchall()]
+                self.favorite_tracks = _fetch_dicts()
             except Exception as e:
                 logger.warning(f'[PROFILE] Favorites fetch error: {e}')
                 self.favorite_tracks = []
@@ -154,8 +228,6 @@ class UserTasteProfile:
             if has_is_downloaded:
                 try:
                     dl_where = 'is_downloaded = 1'
-                    if has_source:
-                        dl_where += " OR source = 'local'"
                     cursor.execute(
                         f"""
                         SELECT {_track_cols('')}
@@ -165,7 +237,7 @@ class UserTasteProfile:
                         LIMIT {HISTORY_LIMIT}
                     """
                     )
-                    self.downloaded_tracks = [self._row_to_dict(r) for r in cursor.fetchall()]
+                    self.downloaded_tracks = _fetch_dicts()
                 except Exception as e:
                     logger.warning(f'[PROFILE] Downloads fetch error: {e}')
                     self.downloaded_tracks = []
@@ -180,7 +252,7 @@ class UserTasteProfile:
                             LIMIT {HISTORY_LIMIT}
                         """
                     )
-                    self.downloaded_tracks = [self._row_to_dict(r) for r in cursor.fetchall()]
+                    self.downloaded_tracks = _fetch_dicts()
                 except Exception as e:
                     logger.warning(f'[PROFILE] Downloads (no is_downloaded) fetch error: {e}')
                     self.downloaded_tracks = []
@@ -197,60 +269,87 @@ class UserTasteProfile:
                         LIMIT {HISTORY_LIMIT}
                     """
                     )
-                    self.playlist_tracks = [self._row_to_dict(r) for r in cursor.fetchall()]
+                    self.playlist_tracks = _fetch_dicts()
                 except Exception as e:
                     logger.warning(f'[PROFILE] Playlist tracks fetch error: {e}')
                     self.playlist_tracks = []
             else:
                 self.playlist_tracks = []
 
+            # Exclusion identity is complete even when taste payloads/history
+            # are bounded. Stream only lightweight columns, never artwork or
+            # full library objects, and cache against the same DB revision.
+            identity_columns = [name for name in ('id', 'title', 'artist', 'source', 'source_id') if name in track_cols]
+            try:
+                cursor.execute('SELECT ' + ','.join(identity_columns) + ' FROM tracks')
+                while rows := cursor.fetchmany(256):
+                    for row in rows:
+                        item = dict(zip(identity_columns, row))
+                        self.known_content_keys.add(recommendation_track_key(item, self.artist_aliases))
+            except Exception as exc:
+                logger.warning('Known recommendation identities unavailable: %s', exc)
+
             self._artist_scores = defaultdict(float)
             now = datetime.now()
+            artist_names = {}
+            track_scores = defaultdict(float)
+            signal_tracks = {}
+
+            def _add_signal(row, weight):
+                artist = self._get_artist(row)
+                if not artist or weight <= 0:
+                    return
+                artist_key = identity_track_key(dict(row), self.artist_aliases)[0]
+                artist_names.setdefault(artist_key, artist)
+                self._artist_scores[artist_key] += weight
+                track_key = str(self._field(row, 'id') or '') or (
+                    f"{artist_key}:{self._name_key(self._field(row, 'title', ''))}"
+                )
+                track_scores[track_key] += weight
+                signal_tracks.setdefault(track_key, dict(row))
 
             for row in history_rows:
                 artist = self._get_artist(row)
                 if not artist:
                     continue
-                played_at = self._parse_dt(row['played_at'] if hasattr(row, '__getitem__') else getattr(row, 'played_at', None))
+                played_at = self._parse_dt(self._field(row, 'played_at'))
                 recency = self._recency_factor(played_at, now)
-                completed = row['completed'] if hasattr(row, '__getitem__') else getattr(row, 'completed', 0)
-                w = self.WEIGHT_COMPLETED_PLAY if completed else self.WEIGHT_PLAY
-                self._artist_scores[artist] += w * recency
+                _add_signal(row, self._listening_weight(row) * recency)
 
             for row in self.favorite_tracks:
                 artist = self._get_artist(row)
                 if not artist:
                     continue
-                self._artist_scores[artist] += self.WEIGHT_LIKE
+                _add_signal(row, self.WEIGHT_LIKE)
 
             for row in self.downloaded_tracks:
                 artist = self._get_artist(row)
                 if not artist:
                     continue
-                self._artist_scores[artist] += self.WEIGHT_DOWNLOAD
+                _add_signal(row, self.WEIGHT_DOWNLOAD)
 
             for row in self.playlist_tracks:
                 artist = self._get_artist(row)
                 if not artist:
                     continue
-                self._artist_scores[artist] += self.WEIGHT_PLAY
+                _add_signal(row, self.WEIGHT_PLAY)
 
             sorted_artists = sorted(self._artist_scores.items(), key=lambda x: x[1], reverse=True)
             self.top_artists = [
-                {'name': name, 'play_count': round(score, 2)}
-                for name, score in sorted_artists[:20]
+                dict({'name': artist_names.get(key, key), 'play_count': round(score, 2)}, **({'identity_key': key} if key.startswith('@catalog:') else {}))
+                for key, score in sorted_artists[:20]
             ]
 
             self._genre_scores = defaultdict(float)
 
             def _add_genre(row, weight=1.0):
-                genre = row.get('genre') if isinstance(row, dict) else getattr(row, 'genre', None)
+                genre = self._field(row, 'genre')
                 if genre and genre.strip():
                     self._genre_scores[genre.strip()] += weight
 
             for row in history_rows:
-                completed = row['completed'] if hasattr(row, '__getitem__') else getattr(row, 'completed', 0)
-                _add_genre(row, self.WEIGHT_COMPLETED_PLAY if completed else self.WEIGHT_PLAY)
+                played_at = self._parse_dt(self._field(row, 'played_at'))
+                _add_genre(row, self._listening_weight(row) * self._recency_factor(played_at, now))
 
             for row in self.favorite_tracks:
                 _add_genre(row, self.WEIGHT_LIKE)
@@ -267,24 +366,14 @@ class UserTasteProfile:
                 for g, s in sorted(self._genre_scores.items(), key=lambda x: x[1], reverse=True)
             }
 
-            try:
-                if has_is_downloaded:
-                    score_expr = '(t.play_count * 1 + t.is_favorite * 3 + t.is_downloaded * 3)'
-                else:
-                    score_expr = '(t.play_count * 1 + t.is_favorite * 3)'
-                cursor.execute(
-                    f"""
-                    SELECT {_track_cols('t')}, {score_expr} as weighted_score
-                    FROM tracks t
-                    WHERE t.artist IS NOT NULL AND t.artist != '' AND t.artist != 'Unknown Artist'
-                    ORDER BY weighted_score DESC, t.play_count DESC
-                    LIMIT 20
-                """
-                )
-                self.top_tracks = [self._row_to_dict(r) for r in cursor.fetchall()]
-            except Exception as e:
-                logger.warning(f'[PROFILE] Top tracks fetch error: {e}')
-                self.top_tracks = []
+            # An imported but never played/liked track is not a taste signal.
+            # Use the same recency/listening weights as artist ranking instead
+            # of ordering all library rows (including zero-score imports).
+            self.top_tracks = []
+            for key, score in sorted(track_scores.items(), key=lambda item: item[1], reverse=True)[:20]:
+                track = dict(signal_tracks[key])
+                track['weighted_score'] = round(score, 3)
+                self.top_tracks.append(track)
 
             try:
                 cursor.execute(
@@ -302,18 +391,16 @@ class UserTasteProfile:
                 logger.warning(f'[PROFILE] Time habits error: {e}')
 
             self._log_profile_summary()
-            self._cache_put(cache_key, db)
+            self._cache_put(cache_key, db, revision)
 
         except Exception as e:
             err_msg = f'[PROFILE_ERROR] Fatal error in build_from_db: {e}\n{_tb.format_exc()}'
             logger.error(err_msg)
             print(err_msg, flush=True)
+
         finally:
-            if should_close_conn and conn is not None:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+            if owned_connection and conn is not None:
+                conn.close()
 
         return self
 
@@ -321,9 +408,37 @@ class UserTasteProfile:
 
     _CACHE_MAX_ENTRIES = 4
 
+    @staticmethod
+    def _recent_history_fallback(rows):
+        """Deduplicate raw history rows for connection-only/legacy DB callers.
+
+        Rows arrive newest first. Preserve the newest event's fields and add
+        the recent-window event count and summed listened duration expected by
+        consumers of the canonical database history feed.
+        """
+        unique = {}
+        for raw in rows:
+            row = dict(raw)
+            track_id = row.get('track_id', row.get('id'))
+            if track_id is None:
+                continue
+            key = str(track_id)
+            listened = max(0, row.get('duration_listened') or 0)
+            row['id'] = track_id
+            row['track_id'] = track_id
+            if key not in unique:
+                row['play_count'] = 0
+                row['duration_listened'] = 0
+                row['latest_duration_listened'] = listened
+                unique[key] = row
+            current = unique[key]
+            current['play_count'] += 1
+            current['duration_listened'] += listened
+        return list(unique.values())[:50]
+
     _STATE_FIELDS = (
         'top_artists', 'top_tracks', 'recent_history', 'genre_distribution',
-        'favorite_tracks', 'downloaded_tracks', 'playlist_tracks',
+        'favorite_tracks', 'downloaded_tracks', 'playlist_tracks', 'known_content_keys',
         'time_of_day_habits', '_artist_scores', '_genre_scores',
     )
 
@@ -335,8 +450,24 @@ class UserTasteProfile:
             return f'path:{db}'
         return id(db)
 
+    @staticmethod
+    def _connection_revision(conn) -> Any:
+        """Detect writes on this connection and commits from other threads.
+
+        data_version is relative to a connection, so its identity is part of
+        the revision. A new connection rebuilds once rather than accidentally
+        reusing a coincidentally equal version from a different connection.
+        """
+        try:
+            data_version = conn.execute('PRAGMA data_version').fetchone()[0]
+            schema_version = conn.execute('PRAGMA schema_version').fetchone()[0]
+            return (conn.total_changes, data_version, schema_version)
+        except (AttributeError, sqlite3.Error, TypeError):
+            # If a connection cannot expose a revision, never reuse stale data.
+            return object()
+
     @classmethod
-    def _cache_get(cls, cache_key: Any, db: Any) -> Optional[Dict[str, Any]]:
+    def _cache_get(cls, cache_key: Any, db: Any, revision: Any = None) -> Optional[Dict[str, Any]]:
         now = time.time()
         with _profile_cache_lock:
             for key, entry in list(_profile_cache.items()):
@@ -347,12 +478,14 @@ class UserTasteProfile:
                 return None
             if not isinstance(cache_key, str) and entry['db'] is not db:
                 return None
-            return entry['state']
+            if entry.get('revision') != revision:
+                return None
+            return copy.deepcopy(entry['state'])
 
-    def _cache_put(self, cache_key: Any, db: Any) -> None:
-        state = {f: getattr(self, f) for f in self._STATE_FIELDS}
+    def _cache_put(self, cache_key: Any, db: Any, revision: Any = None) -> None:
+        state = copy.deepcopy({f: getattr(self, f) for f in self._STATE_FIELDS})
         with _profile_cache_lock:
-            _profile_cache[cache_key] = {'ts': time.time(), 'db': db, 'state': state}
+            _profile_cache[cache_key] = {'ts': time.time(), 'db': db, 'revision': revision, 'state': state}
             while len(_profile_cache) > self._CACHE_MAX_ENTRIES:
                 _profile_cache.pop(next(iter(_profile_cache)), None)
 
@@ -421,15 +554,16 @@ class UserTasteProfile:
         artists = []
         for src in (self.favorite_tracks, self.downloaded_tracks, self.playlist_tracks, self.recent_history):
             for trk in src:
-                a = trk.get('artist') if isinstance(trk, dict) else getattr(trk, 'artist', None)
+                a = self._field(trk, 'artist')
                 if not a:
                     continue
-                if a == 'Unknown Artist':
+                if self._name_key(a) in ('unknown artist', 'unknown'):
                     continue
-                if a in seen:
+                artist_key = self._name_key(a)
+                if artist_key in seen:
                     continue
-                seen.add(a)
-                artists.append(a)
+                seen.add(artist_key)
+                artists.append(' '.join(str(a).split()))
                 if len(artists) >= limit:
                     return artists
         if artists:
@@ -495,17 +629,56 @@ class UserTasteProfile:
         return None
 
     @staticmethod
-    def _get_artist(row) -> Optional[str]:
-        artist = row.get('artist') if isinstance(row, dict) else getattr(row, 'artist', None)
-        if not artist or artist in ('Unknown Artist', '', None):
+    def _field(row, name: str, default=None):
+        """Read a column from a dict or sqlite3.Row (Row has no attribute access)."""
+        if isinstance(row, dict):
+            return row.get(name, default)
+        try:
+            return row[name]
+        except (IndexError, KeyError, TypeError):
+            return default
+
+    @classmethod
+    def _get_artist(cls, row) -> Optional[str]:
+        artist = cls._field(row, 'artist')
+        if not artist or cls._name_key(artist) in ('unknown artist', 'unknown', 'none', 'null'):
             return None
-        return artist.strip()
+        return ' '.join(str(artist).split())
+
+    @staticmethod
+    def _name_key(value: Any) -> str:
+        return ' '.join(unicodedata.normalize('NFKC', str(value or '')).split()).casefold()
+
+    @classmethod
+    def _listening_weight(cls, row) -> float:
+        if cls._field(row, 'completed', 0):
+            return cls.WEIGHT_COMPLETED_PLAY
+        try:
+            listened = float(cls._field(row, 'duration_listened') or 0)
+            duration = float(cls._field(row, 'duration') or 0)
+        except (TypeError, ValueError):
+            return cls.WEIGHT_PLAY
+        if cls._field(row, 'listening_measured', 0) and listened <= 0:
+            return 0.0
+        if cls._field(row, 'listening_measured', 0) and not cls._field(row, 'session_finished', 0):
+            return cls.WEIGHT_PLAY
+        # Unknown/legacy duration values do not prove a skip. Positive measured
+        # short listens do; repeated one-second auditions must not outweigh a
+        # fully played or explicitly liked track.
+        if listened > 0 and duration > 0:
+            media_listened = cls._field(row, 'media_listened', 0)
+            fraction = (float(media_listened) if media_listened else listened) / duration
+            if listened < 10 and fraction < 0.1:
+                return cls.WEIGHT_PLAY * 0.1
+        return cls.WEIGHT_PLAY
 
     @staticmethod
     def _recency_factor(played_at: Optional[datetime], now: datetime, half_life_days: float = 30.0) -> float:
         if played_at is None:
             return 0.5
-        delta_days = max(0, (now - played_at).total_seconds() / 86400.0)
+        # timestamp() handles both local SQLite timestamps and imported ISO UTC
+        # values without subtracting aware and naive datetime objects.
+        delta_days = max(0, (now.timestamp() - played_at.timestamp()) / 86400.0)
         return 2.0 ** (-delta_days / half_life_days)
 
     @staticmethod

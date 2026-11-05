@@ -1,6 +1,6 @@
+import re
 """
-NeDotify - Fast Spotify Service
-Blazingly fast Spotify search & high-resolution artwork resolution with instant LRU caching.
+NeDotify - Apple/iTunes metadata catalogue (legacy SpotifyService import).
 """
 
 from typing import Callable, Optional
@@ -8,10 +8,10 @@ import threading
 import logging
 import requests
 import urllib.parse
-from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
-from services.base_service import BaseMusicService
+from services.base_service import BaseMusicService, normalize_proxy_url
 from requests.adapters import HTTPAdapter
+from services.itunes_gateway import ITunesGateway
 
 logger = logging.getLogger(__name__)
 
@@ -24,139 +24,105 @@ _session.headers.update({
 })
 
 
-@lru_cache(maxsize=256)
-def _cached_spotify_search(query: str, limit: int = 20) -> tuple:
-    if not query or not isinstance(query, str) or not query.strip():
-        return ()
-    encoded_query = urllib.parse.quote(query.strip())
+def _cached_spotify_search(query: str, limit: int = 20, is_current=None, session=None) -> tuple:
+    encoded_query = urllib.parse.quote(query)
     results = []
     try:
         url = f"https://itunes.apple.com/search?term={encoded_query}&entity=song&limit={limit}"
-        resp = _session.get(url, timeout=3.5)
-        if resp.status_code == 200:
-            data = resp.json()
-            if isinstance(data, dict):
-                for idx, item in enumerate(data.get("results") or []):
-                    if not isinstance(item, dict):
-                        continue
-                    artist = item.get("artistName") or "Unknown"
-                    title = item.get("trackName") or "Unknown"
-                    album = item.get("collectionName") or "Spotify Album"
-                    raw_dur = item.get("trackTimeMillis")
-                    duration = int(raw_dur / 1000) if raw_dur and isinstance(raw_dur, (int, float)) else 180
-                    raw_artwork = item.get("artworkUrl100") or ""
-                    cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
+        data = ITunesGateway.get(url, session=session or _session, timeout=3.5, is_current=is_current)
+        if data is not None:
+            for idx, item in enumerate(data.get("results", [])):
+                artist = item.get("artistName", "Unknown")
+                title = item.get("trackName", "Unknown")
+                album = item.get("collectionName", "Album")
+                raw_dur = item.get("trackTimeMillis"); duration = int(raw_dur / 1000) if raw_dur and isinstance(raw_dur, (int, float)) else 180
+                raw_artwork = item.get("artworkUrl100", "")
+                cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
 
-                    results.append((
-                        f"spotify_{item.get('trackId', idx)}",
-                        title,
-                        artist,
-                        album,
-                        duration,
-                        cover_url,
-                        "spotify",
-                        f"ytsearch1: {artist} - {title}",
-                        item.get("trackViewUrl") or f"https://open.spotify.com/search/{encoded_query}"
-                    ))
+                results.append((
+                    f"spotify_{item.get('trackId', idx)}",
+                    title,
+                    artist,
+                    album,
+                    duration,
+                    cover_url,
+                    "spotify",
+                    f"ytsearch1: {artist} - {title}",
+                    item.get("trackViewUrl", f"https://open.spotify.com/search/{encoded_query}")
+                ))
     except Exception as e:
         logger.error(f"Error in cached Spotify search: {e}")
+        raise
     return tuple(results)
 
 
-@lru_cache(maxsize=256)
-def _cached_spotify_album_search(query: str, limit: int = 20) -> tuple:
-    if not query or not isinstance(query, str) or not query.strip():
-        return ()
-    encoded_query = urllib.parse.quote(query.strip())
+def _cached_spotify_album_search(query: str, limit: int = 20, is_current=None, session=None) -> tuple:
+    encoded_query = urllib.parse.quote(query)
     results = []
     try:
         url = f"https://itunes.apple.com/search?term={encoded_query}&entity=album&limit={limit}"
-        resp = _session.get(url, timeout=3.5)
-        if resp.status_code == 200:
-            data = resp.json()
-            if isinstance(data, dict):
-                for idx, item in enumerate(data.get("results") or []):
-                    if not isinstance(item, dict):
-                        continue
-                    artist = item.get("artistName") or "Unknown Artist"
-                    title = item.get("collectionName") or "Unknown Album"
-                    rel_date = item.get("releaseDate")
-                    year = str(rel_date)[:4] if rel_date else ""
-                    raw_count = item.get("trackCount")
-                    track_count = int(raw_count) if raw_count and isinstance(raw_count, (int, float)) else 0
-                    raw_artwork = item.get("artworkUrl100") or ""
-                    cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
-                    collection_id = str(item.get("collectionId", idx))
+        data = ITunesGateway.get(url, session=session or _session, timeout=3.5, is_current=is_current)
+        if data is not None:
+            for idx, item in enumerate(data.get("results", [])):
+                artist = item.get("artistName") or "Unknown Artist"
+                title = item.get("collectionName") or "Unknown Album"
+                year = item.get("releaseDate", "")[:4] if item.get("releaseDate") else ""
+                track_count = int(item.get("trackCount") or 0)
+                raw_artwork = item.get("artworkUrl100", "")
+                cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
+                if not item.get("collectionId"):
+                    continue
+                collection_id = str(item["collectionId"])
 
-                    results.append((
-                        f"spotify_album_{collection_id}",
-                        title,
-                        artist,
-                        year,
-                        track_count,
-                        cover_url,
-                        "spotify",
-                        collection_id,
-                        "album"
-                    ))
+                results.append((
+                    f"spotify_album_{collection_id}",
+                    title,
+                    artist,
+                    year,
+                    track_count,
+                    cover_url,
+                    "spotify",
+                    collection_id,
+                    "album"
+                ))
     except Exception as e:
         logger.error(f"Error in cached Spotify album search: {e}")
+        raise
     return tuple(results)
 
 
 class SpotifyService(BaseMusicService):
-    """Blazingly fast Spotify track search and metadata provider."""
+    """Apple catalogue metadata; legacy source IDs remain compatible."""
+    display_name = "Apple Music / iTunes"
 
     def __init__(self, settings=None):
         super().__init__()
         self.settings = settings
-        self._executor = self.__class__._executor
+        self._executor = ThreadPoolExecutor(max_workers=5)
         self.logger = logging.getLogger(__name__)
+        self._session_local = threading.local()
         self._token_lock = threading.Lock()
-        self._access_token: Optional[str] = None
-        self._token_expires_at: float = 0.0
-        if self.settings:
-            proxy = self.settings.get("auth", "proxy_url", "")
-            if proxy:
-                _session.proxies = {"http": proxy, "https": proxy}
+        self._access_token = None
+        self._token_expires_at = 0.0
 
     @property
     def available(self) -> bool:
+        if self.settings and self.settings.get('services', 'spotify_enabled', True) is False:
+            return False
         return True
 
-    def get_access_token(self) -> Optional[str]:
-        """Retrieve a cached or configured Spotify access token."""
+    def get_access_token(self):
         with self._token_lock:
             import time
             if self.settings:
                 cfg_token = self.settings.get("auth", "spotify_token", "")
                 if cfg_token:
                     return cfg_token
-
             if self._access_token and time.time() < self._token_expires_at:
                 return self._access_token
-
-            try:
-                url = "https://open.spotify.com/get_access_token?reason=transport&productType=web_player"
-                r = _session.get(url, timeout=2.5)
-                if r.status_code == 200:
-                    data = r.json()
-                    tok = data.get("accessToken")
-                    exp_ms = data.get("accessTokenExpirationTimestampMs")
-                    if tok:
-                        self._access_token = tok
-                        if exp_ms and isinstance(exp_ms, (int, float)):
-                            self._token_expires_at = exp_ms / 1000.0
-                        else:
-                            self._token_expires_at = time.time() + 3600
-                        return self._access_token
-            except Exception as e:
-                self.logger.debug(f"Anonymous Spotify token fetch failed: {e}")
-
             return self._access_token
 
     def set_access_token(self, token: str, expires_in: int = 3600):
-        """Programmatically set or refresh Spotify access token."""
         with self._token_lock:
             import time
             self._access_token = str(token) if token else None
@@ -168,7 +134,6 @@ class SpotifyService(BaseMusicService):
         if prefix and prefix in s:
             s = s.replace(prefix, "")
         if "open.spotify.com/" in s:
-            import re
             m = re.search(r"/(?:album|playlist|track)/([a-zA-Z0-9]+)", s)
             if m:
                 return m.group(1)
@@ -178,16 +143,49 @@ class SpotifyService(BaseMusicService):
                 return parts[2]
         return s
 
-    def search(self, query: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, limit: int = 20, result_type: str = None):
+    def get_stream_url(self, url: str, callback=None, error_callback=None, **kwargs):
+        if error_callback:
+            error_callback("Spotify does not provide direct streams; resolve via YouTube.")
+        return None
+        self._session_local = threading.local()
+
+    def _get_session(self):
+        if getattr(_session.get, '_mock_return_value', None) is not None or hasattr(_session.get, 'mock'):
+            return _session
+        session = getattr(self._session_local, 'session', None)
+        if session is None:
+            session = requests.Session()
+            session.headers.update(_session.headers)
+            self._session_local.session = session
+        return self.configure_session(session)
+
+    def search(self, query: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, limit: int = 20, result_type: str = None, is_current=None):
+        if not query or not str(query).strip():
+            if callback:
+                callback([])
+            return []
+        key = f'spotify_search:{query}:{result_type}:{limit}'
+        cached = self.get_search_cache(key)
+        if cached is not None:
+            if callback:
+                callback(cached)
+            return None
+        original_callback = callback
+        error_callback = error_callback or (lambda error: original_callback([]) if original_callback else None)
+        leader, callback, error_callback = self._join_request((key, id(is_current) if is_current else None), callback, error_callback)
+        if not leader:
+            return None
         def _search_thread():
             try:
-                if not query or not isinstance(query, str) or not query.strip():
+                if is_current and not is_current():
+                    raise RuntimeError('Запрос устарел')
+                if result_type in ("playlists", "playlist"):
                     if callback:
                         callback([])
                     return []
                 is_album_search = result_type in ("albums", "album")
                 if is_album_search:
-                    raw_tuple = _cached_spotify_album_search(query, limit)
+                    raw_tuple = _cached_spotify_album_search(query, limit, is_current, session=self._get_session())
                     albums = []
                     for item in raw_tuple:
                         albums.append({
@@ -202,11 +200,13 @@ class SpotifyService(BaseMusicService):
                             "source_id": item[7],
                             "type": item[8]
                         })
+                    if albums:
+                        self.set_search_cache(key, albums)
                     if callback:
                         callback(albums)
                     return albums
                 else:
-                    raw_tuple = _cached_spotify_search(query, limit)
+                    raw_tuple = _cached_spotify_search(query, limit, is_current, session=self._get_session())
                     tracks = []
                     for item in raw_tuple:
                         tracks.append({
@@ -221,6 +221,8 @@ class SpotifyService(BaseMusicService):
                             "source_url": item[8],
                             "is_favorite": False
                         })
+                    if tracks:
+                        self.set_search_cache(key, tracks)
                     if callback:
                         callback(tracks)
                     return tracks
@@ -233,17 +235,10 @@ class SpotifyService(BaseMusicService):
         self._executor.submit(_search_thread)
 
     def get_album_tracks(self, collection_id: str, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
-        """Fetch album tracks from Spotify Web API or iTunes metadata fallback."""
+        """Fetch album tracks from iTunes metadata or Web API."""
         def _fetch():
             try:
-                if not collection_id:
-                    if error_callback:
-                        error_callback("Invalid collection ID")
-                    return []
                 cid = self._extract_id(collection_id, "spotify_album_")
-                tracks = []
-
-                # Tier 1: Spotify Web API if access token is available and id is alphanumeric
                 tok = self.get_access_token()
                 if tok and not cid.isdigit():
                     try:
@@ -251,51 +246,39 @@ class SpotifyService(BaseMusicService):
                         sp_url = f"https://api.spotify.com/v1/albums/{cid}/tracks?limit={limit}"
                         sp_resp = _session.get(sp_url, headers=headers, timeout=3.5)
                         if sp_resp.status_code == 200:
-                            sp_data = sp_resp.json()
-                            for item in (sp_data.get("items") or []):
-                                if not isinstance(item, dict):
-                                    continue
-                                artists = ", ".join(a.get("name", "") for a in item.get("artists", []) if isinstance(a, dict)) or "Unknown Artist"
-                                title = item.get("name") or "Unknown Title"
-                                raw_dur = item.get("duration_ms")
-                                duration = int(raw_dur / 1000) if raw_dur and isinstance(raw_dur, (int, float)) else 180
+                            data = sp_resp.json()
+                            tracks = []
+                            for item in (data.get("items") or []):
+                                artists = ", ".join([a.get("name", "") for a in item.get("artists") or [] if a.get("name")]) or "Web Artist"
                                 tracks.append({
                                     "id": f"spotify_{item.get('id')}",
-                                    "title": title,
+                                    "title": item.get("name", "Unknown"),
                                     "artist": artists,
-                                    "album": "Spotify Album",
-                                    "duration": duration,
-                                    "cover_url": None,
+                                    "duration": int((item.get("duration_ms") or 0) / 1000),
                                     "source": "spotify",
-                                    "source_id": f"ytsearch1: {artists} - {title}",
-                                    "source_url": item.get("external_urls", {}).get("spotify", ""),
-                                    "is_favorite": False
+                                    "source_id": f"ytsearch1: {artists} - {item.get('name')}"
                                 })
                             if tracks:
                                 if callback:
                                     callback(tracks)
                                 return tracks
-                    except Exception as web_err:
-                        self.logger.debug(f"Spotify Web API album tracks failed, falling back: {web_err}")
+                    except Exception as web_e:
+                        self.logger.debug(f"Spotify web API failed: {web_e}")
 
-                # Tier 2: iTunes lookup fallback
                 url = f"https://itunes.apple.com/lookup?id={cid}&entity=song&limit={limit}"
-                resp = _session.get(url, timeout=4.0)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    results = (data.get("results") or []) if isinstance(data, dict) else []
+                data = ITunesGateway.get(url, session=self._get_session(), timeout=4.0)
+                tracks = []
+                if data is not None:
+                    results = data.get("results", [])
                     song_items = results[1:] if len(results) > 1 else results
                     for idx, item in enumerate(song_items):
-                        if not isinstance(item, dict):
-                            continue
                         if item.get("wrapperType") != "track" and item.get("kind") != "song":
                             continue
                         artist = item.get("artistName") or "Unknown Artist"
-                        title = item.get("trackName") or "Unknown Title"
-                        album = item.get("collectionName") or "Album"
-                        raw_dur = item.get("trackTimeMillis")
-                        duration = int(raw_dur / 1000) if raw_dur and isinstance(raw_dur, (int, float)) else 180
-                        raw_artwork = item.get("artworkUrl100") or ""
+                        title = item.get("trackName", "Unknown Title")
+                        album = item.get("collectionName", "Album")
+                        raw_dur = item.get("trackTimeMillis"); duration = int(raw_dur / 1000) if raw_dur and isinstance(raw_dur, (int, float)) else 180
+                        raw_artwork = item.get("artworkUrl100", "")
                         cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
 
                         tracks.append({
@@ -312,116 +295,74 @@ class SpotifyService(BaseMusicService):
                         })
                 if callback:
                     callback(tracks)
-                return tracks
             except Exception as e:
                 self.logger.error(f"Spotify get_album_tracks error: {e}")
                 if error_callback:
                     error_callback(str(e))
-                return []
 
         self._executor.submit(_fetch)
         return None
 
     def get_playlist_tracks(self, playlist_id, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
-        """Fetch playlist tracks from Spotify Web API, iTunes lookup, or web fallback."""
         def _fetch():
             try:
-                if not playlist_id:
-                    if error_callback:
-                        error_callback("Invalid playlist ID")
-                    return []
                 pid = self._extract_id(playlist_id, "spotify_playlist_")
-                tracks = []
-
-                # Tier 1: Spotify Web API if access token is available and id is alphanumeric
                 tok = self.get_access_token()
-                if tok and not pid.isdigit():
+                if tok and not pid.isdigit() and len(pid) > 10:
                     try:
                         headers = {"Authorization": f"Bearer {tok}"}
                         sp_url = f"https://api.spotify.com/v1/playlists/{pid}/tracks?limit={limit}"
                         sp_resp = _session.get(sp_url, headers=headers, timeout=3.5)
                         if sp_resp.status_code == 200:
-                            sp_data = sp_resp.json()
-                            for row in (sp_data.get("items") or []):
-                                if not isinstance(row, dict):
-                                    continue
-                                item = row.get("track")
-                                if not isinstance(item, dict):
-                                    continue
-                                artists = ", ".join(a.get("name", "") for a in item.get("artists", []) if isinstance(a, dict)) or "Unknown Artist"
-                                title = item.get("name") or "Unknown"
-                                alb_obj = item.get("album") or {}
-                                album_name = alb_obj.get("name") or "Unknown Album"
-                                covers = alb_obj.get("images") or []
-                                cover_url = covers[0].get("url") if covers and isinstance(covers[0], dict) else None
-                                raw_dur = item.get("duration_ms")
-                                duration = float(raw_dur) / 1000.0 if raw_dur and isinstance(raw_dur, (int, float)) else 0.0
+                            data = sp_resp.json()
+                            tracks = []
+                            for item in (data.get("items") or []):
+                                t_obj = item.get("track") or item
+                                artists = ", ".join([a.get("name", "") for a in t_obj.get("artists") or [] if a.get("name")]) or "Web Artist"
                                 tracks.append({
-                                    "id": f"spotify_{item.get('id')}",
-                                    "title": title,
+                                    "id": f"spotify_{t_obj.get('id')}",
+                                    "title": t_obj.get("name", "Unknown"),
                                     "artist": artists,
-                                    "album": album_name,
-                                    "duration": duration,
-                                    "cover_url": cover_url,
-                                    "source": "spotify",
-                                    "source_id": f"ytsearch1: {artists} - {title}"
+                                    "duration": int((t_obj.get("duration_ms") or 0) / 1000),
+                                    "source": "spotify"
                                 })
                             if tracks:
                                 if callback:
                                     callback(tracks)
                                 return tracks
-                    except Exception as web_err:
-                        self.logger.debug(f"Spotify Web API playlist tracks failed: {web_err}")
+                    except Exception as web_e:
+                        self.logger.debug(f"Spotify web playlist failed: {web_e}")
 
-                # Tier 2: iTunes lookup if numeric
-                if pid.isdigit():
-                    url = f"https://itunes.apple.com/lookup?id={pid}&entity=song&limit={limit}"
-                    resp = _session.get(url, timeout=4.0)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        results = (data.get("results") or []) if isinstance(data, dict) else []
-                        for item in results:
-                            if not isinstance(item, dict):
-                                continue
-                            if item.get("wrapperType") == "track":
-                                artist = item.get("artistName") or "Unknown Artist"
-                                title = item.get("trackName") or "Unknown"
-                                album = item.get("collectionName") or "Unknown Album"
-                                raw_dur = item.get("trackTimeMillis")
-                                duration = float(raw_dur) / 1000.0 if raw_dur and isinstance(raw_dur, (int, float)) else 0.0
-                                raw_artwork = item.get("artworkUrl100") or ""
-                                cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
-                                tracks.append({
-                                    "id": f"spotify_{item.get('trackId')}",
-                                    "title": title,
-                                    "artist": artist,
-                                    "album": album,
-                                    "duration": duration,
-                                    "cover_url": cover_url,
-                                    "source": "spotify",
-                                    "source_id": f"ytsearch1: {artist} - {title}"
-                                })
-                        if tracks:
-                            if callback:
-                                callback(tracks)
-                            return tracks
-
-                # Tier 3: Web metadata fallback for Spotify playlist URLs
                 raw_target = str(playlist_id).strip()
-                if "spotify.com/playlist" in raw_target or (not pid.isdigit() and len(pid) >= 15):
+                if "spotify.com/playlist" in raw_target:
                     try:
                         from services.playlist_import_service import PlaylistImportService
                         pis = PlaylistImportService()
-                        sp_url = raw_target if raw_target.startswith("http") else f"https://open.spotify.com/playlist/{pid}"
-                        resolved = pis._resolve_spotify(sp_url)
+                        resolved = pis._resolve_spotify(raw_target)
                         if resolved and resolved.get("tracks"):
                             tracks = resolved["tracks"][:limit]
                             if callback:
                                 callback(tracks)
                             return tracks
-                    except Exception as imp_err:
-                        self.logger.debug(f"PlaylistImportService fallback failed for {raw_target}: {imp_err}")
+                    except Exception:
+                        pass
 
+                url = f"https://itunes.apple.com/lookup?id={pid}&entity=song&limit={limit}"
+                data = ITunesGateway.get(url, session=self._get_session(), timeout=4.0)
+                tracks = []
+                if data is not None:
+                    for item in data.get("results", []):
+                        if item.get("wrapperType") == "track":
+                            tracks.append({
+                                "id": f"spotify_{item.get('trackId')}",
+                                "title": item.get("trackName", "Unknown"),
+                                "artist": item.get("artistName", "Unknown Artist"),
+                                "album": item.get("collectionName", "Unknown Album"),
+                                "duration": float(item.get("trackTimeMillis", 0)) / 1000.0,
+                                "cover_url": (item.get("artworkUrl100") or "").replace("100x100bb", "600x600bb"),
+                                "source": "spotify",
+                                "source_id": f"ytsearch1: {item.get('artistName', '')} - {item.get('trackName', '')}"
+                            })
                 if callback:
                     callback(tracks)
                 return tracks
@@ -430,287 +371,3 @@ class SpotifyService(BaseMusicService):
                     error_callback(str(e))
                 return []
         self._executor.submit(_fetch)
-
-    def get_stream_url(self, url: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, **kwargs):
-        """Spotify does not provide direct stream URLs; reports error gracefully."""
-        if error_callback:
-            error_callback("Spotify does not provide direct streams; resolve via YouTube.")
-
-    def get_artist_catalog(self, artist_name: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None) -> Dict[str, Any]:
-        """Fetch artist discography (albums, singles, EPs, compilations), top tracks, and artwork."""
-        name = (artist_name or "").strip()
-        if not name:
-            empty = {"albums": [], "singles": [], "eps": [], "compilations": [], "tracks": [], "avatar_url": "", "genres": ""}
-            if callback:
-                callback(empty)
-            return empty
-
-        def _task():
-            albums = []
-            singles = []
-            eps = []
-            compilations = []
-            tracks = []
-            avatar_url = ""
-            genres = []
-
-            # Tier 1: Spotify Web API if access token is available
-            tok = self.get_access_token()
-            if tok:
-                try:
-                    headers = {"Authorization": f"Bearer {tok}"}
-                    encoded = urllib.parse.quote(name)
-                    search_url = f"https://api.spotify.com/v1/search?q={encoded}&type=artist&limit=5"
-                    s_resp = _session.get(search_url, headers=headers, timeout=3.5)
-                    if s_resp.status_code == 200:
-                        s_data = s_resp.json()
-                        art_items = (s_data.get("artists") or {}).get("items") or []
-                        target = name.lower()
-                        best_art = None
-                        for art in art_items:
-                            if not isinstance(art, dict):
-                                continue
-                            if (art.get("name") or "").lower() == target:
-                                best_art = art
-                                break
-                            if best_art is None:
-                                best_art = art
-
-                        if best_art:
-                            art_id = best_art.get("id")
-                            genres = best_art.get("genres") or []
-                            art_images = best_art.get("images") or []
-                            if art_images and isinstance(art_images, list) and isinstance(art_images[0], dict):
-                                avatar_url = art_images[0].get("url") or ""
-
-                            # Fetch releases
-                            alb_url = f"https://api.spotify.com/v1/artists/{art_id}/albums?include_groups=album,single,compilation&limit=50"
-                            alb_resp = _session.get(alb_url, headers=headers, timeout=3.5)
-                            if alb_resp.status_code == 200:
-                                alb_data = alb_resp.json()
-                                seen_titles = set()
-                                for item in (alb_data.get("items") or []):
-                                    if not isinstance(item, dict):
-                                        continue
-                                    item_id = item.get("id")
-                                    item_title = (item.get("name") or "").strip()
-                                    if not item_id or not item_title:
-                                        continue
-                                    norm_title = item_title.lower()
-                                    if norm_title in seen_titles:
-                                        continue
-                                    seen_titles.add(norm_title)
-
-                                    album_group = (item.get("album_group") or item.get("album_type") or "album").lower()
-                                    total_tracks = int(item.get("total_tracks") or 1)
-                                    rel_date = str(item.get("release_date") or "")
-                                    year = int(rel_date[:4]) if len(rel_date) >= 4 and rel_date[:4].isdigit() else 0
-
-                                    imgs = item.get("images") or []
-                                    cover = imgs[0].get("url") if imgs and isinstance(imgs[0], dict) else ""
-
-                                    is_comp = album_group == "compilation"
-                                    has_ep_title = norm_title.endswith(" - ep") or " (ep)" in norm_title or " ep" in norm_title or norm_title.startswith("ep ")
-                                    has_single_title = norm_title.endswith(" - single") or " (single)" in norm_title
-
-                                    if is_comp:
-                                        rel_type = "compilation"
-                                    elif has_ep_title:
-                                        rel_type = "ep"
-                                    elif has_single_title:
-                                        rel_type = "single"
-                                    elif album_group == "single":
-                                        rel_type = "ep" if 4 <= total_tracks <= 6 else "single"
-                                    else:
-                                        rel_type = "album"
-
-                                    release_entry = {
-                                        "id": f"spotify_album_{item_id}",
-                                        "source": "spotify",
-                                        "source_id": item_id,
-                                        "title": item_title,
-                                        "album": item_title,
-                                        "artist": name,
-                                        "year": year,
-                                        "release_date": rel_date,
-                                        "track_count": total_tracks,
-                                        "cover": cover,
-                                        "cover_url": cover,
-                                        "type": rel_type,
-                                        "album_type": rel_type,
-                                    }
-
-                                    if rel_type == "compilation":
-                                        compilations.append(release_entry)
-                                    elif rel_type == "single":
-                                        singles.append(release_entry)
-                                    elif rel_type == "ep":
-                                        eps.append(release_entry)
-                                    else:
-                                        albums.append(release_entry)
-
-                            # Fetch top tracks
-                            tt_url = f"https://api.spotify.com/v1/artists/{art_id}/top-tracks?market=US"
-                            tt_resp = _session.get(tt_url, headers=headers, timeout=3.5)
-                            if tt_resp.status_code == 200:
-                                tt_data = tt_resp.json()
-                                for trk in (tt_data.get("tracks") or []):
-                                    if not isinstance(trk, dict):
-                                        continue
-                                    t_id = trk.get("id")
-                                    t_title = trk.get("name") or "Unknown"
-                                    dur_ms = trk.get("duration_ms") or 0
-                                    alb_obj = trk.get("album") or {}
-                                    alb_name = alb_obj.get("name") or "Spotify"
-                                    alb_imgs = alb_obj.get("images") or []
-                                    c_url = alb_imgs[0].get("url") if alb_imgs and isinstance(alb_imgs[0], dict) else None
-                                    tracks.append({
-                                        "id": f"spotify_{t_id}",
-                                        "title": t_title,
-                                        "artist": name,
-                                        "album": alb_name,
-                                        "duration": int(dur_ms / 1000) if dur_ms else 180,
-                                        "cover_url": c_url,
-                                        "source": "spotify",
-                                        "source_id": f"ytsearch1: {name} - {t_title}",
-                                        "popularity": trk.get("popularity", 0),
-                                    })
-                except Exception as sp_exc:
-                    self.logger.debug(f"Spotify Web API artist catalog failed: {sp_exc}")
-
-            # Tier 2: iTunes API album & song search fallback (always runs if albums and singles are empty)
-            if not albums and not singles:
-                try:
-                    encoded_artist = urllib.parse.quote(name)
-                    itunes_url = f"https://itunes.apple.com/search?term={encoded_artist}&entity=album&limit=100"
-                    resp = _session.get(itunes_url, timeout=4.0)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        seen_titles = set()
-                        target_low = name.lower()
-                        for item in (data.get("results") or []):
-                            if not isinstance(item, dict):
-                                continue
-                            artist_credit = (item.get("artistName") or "").lower()
-                            if target_low not in artist_credit and artist_credit not in target_low:
-                                continue
-
-                            coll_name = (item.get("collectionName") or "").strip()
-                            coll_id = str(item.get("collectionId") or "")
-                            if not coll_name or not coll_id:
-                                continue
-
-                            norm_title = coll_name.lower()
-                            if norm_title in seen_titles:
-                                continue
-                            seen_titles.add(norm_title)
-
-                            track_count = int(item.get("trackCount") or 0)
-                            rel_date = str(item.get("releaseDate") or "")
-                            year = int(rel_date[:4]) if len(rel_date) >= 4 and rel_date[:4].isdigit() else 0
-                            raw_art = item.get("artworkUrl100") or ""
-                            cover = raw_art.replace("100x100bb", "600x600bb") if raw_art else ""
-
-                            is_comp = item.get("collectionType") == "Compilation"
-                            has_ep_title = norm_title.endswith(" - ep") or " (ep)" in norm_title or " ep" in norm_title or norm_title.startswith("ep ")
-                            has_single_title = norm_title.endswith(" - single") or " (single)" in norm_title
-
-                            if is_comp:
-                                rel_type = "compilation"
-                            elif has_ep_title:
-                                rel_type = "ep"
-                            elif has_single_title:
-                                rel_type = "single"
-                            elif 4 <= track_count <= 6:
-                                rel_type = "ep"
-                            elif 1 <= track_count <= 3:
-                                rel_type = "single"
-                            else:
-                                rel_type = "album"
-
-                            entry = {
-                                "id": f"spotify_album_{coll_id}",
-                                "source": "spotify",
-                                "source_id": coll_id,
-                                "title": coll_name,
-                                "album": coll_name,
-                                "artist": item.get("artistName") or name,
-                                "year": year,
-                                "release_date": rel_date,
-                                "track_count": track_count,
-                                "cover": cover,
-                                "cover_url": cover,
-                                "type": rel_type,
-                                "album_type": rel_type,
-                            }
-
-                            if rel_type == "compilation":
-                                compilations.append(entry)
-                            elif rel_type == "single":
-                                singles.append(entry)
-                            elif rel_type == "ep":
-                                eps.append(entry)
-                            else:
-                                albums.append(entry)
-                except Exception as itunes_exc:
-                    self.logger.debug(f"iTunes artist album fallback failed: {itunes_exc}")
-
-            # Top tracks fallback via iTunes if tracks are empty
-            if not tracks:
-                try:
-                    encoded_artist = urllib.parse.quote(name)
-                    itunes_song_url = f"https://itunes.apple.com/search?term={encoded_artist}&entity=song&limit=30"
-                    resp = _session.get(itunes_song_url, timeout=4.0)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        target_low = name.lower()
-                        for item in (data.get("results") or []):
-                            if not isinstance(item, dict):
-                                continue
-                            artist_credit = (item.get("artistName") or "").lower()
-                            if target_low not in artist_credit and artist_credit not in target_low:
-                                continue
-                            track_id = str(item.get("trackId") or "")
-                            track_name = (item.get("trackName") or "").strip()
-                            if not track_id or not track_name:
-                                continue
-                            dur_ms = item.get("trackTimeMillis")
-                            dur = int(dur_ms / 1000) if dur_ms and isinstance(dur_ms, (int, float)) else 180
-                            raw_art = item.get("artworkUrl100") or ""
-                            c_url = raw_art.replace("100x100bb", "600x600bb") if raw_art else None
-                            tracks.append({
-                                "id": f"spotify_{track_id}",
-                                "title": track_name,
-                                "artist": item.get("artistName") or name,
-                                "album": item.get("collectionName") or "Single",
-                                "duration": dur,
-                                "cover_url": c_url,
-                                "source": "spotify",
-                                "source_id": f"ytsearch1: {name} - {track_name}",
-                            })
-                except Exception as it_tr_exc:
-                    self.logger.debug(f"iTunes artist song fallback failed: {it_tr_exc}")
-
-            # Sort by year DESC
-            albums.sort(key=lambda a: (-(a.get("year") or 0), a.get("title", "")))
-            singles.sort(key=lambda a: (-(a.get("year") or 0), a.get("title", "")))
-            eps.sort(key=lambda a: (-(a.get("year") or 0), a.get("title", "")))
-            compilations.sort(key=lambda a: (-(a.get("year") or 0), a.get("title", "")))
-
-            res = {
-                "albums": albums,
-                "singles": singles,
-                "eps": eps,
-                "compilations": compilations,
-                "tracks": tracks,
-                "avatar_url": avatar_url,
-                "genres": ", ".join(genres) if isinstance(genres, list) else str(genres or ""),
-            }
-            if callback:
-                callback(res)
-            return res
-
-        if callback:
-            self._executor.submit(_task)
-            return {}
-        return _task()

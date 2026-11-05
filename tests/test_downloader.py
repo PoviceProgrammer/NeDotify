@@ -1,108 +1,96 @@
+"""DownloadManager tests: queue dedup, batch accounting, worker outcomes.
+
+Workers run synchronously via ``_download_worker`` with a stub provider
+and ``~`` redirected, so no network and no real home directory are touched.
+"""
+
 import os
-import sys
-import unittest
-from unittest.mock import MagicMock, patch
-
-from core.downloader import DownloadManager
-from core.api import AppApi
 
 
-class TestDownloader(unittest.TestCase):
-    def setUp(self):
-        self.mock_core = MagicMock()
-        self.mock_db = MagicMock()
-        self.mock_core.db = self.mock_db
-        self.mock_api = MagicMock()
-        self.mock_core.api = self.mock_api
-
-        # Create DownloadManager instance without starting processor thread
-        with patch("threading.Thread"):
-            self.dm = DownloadManager(self.mock_core)
-
-    def test_queue_download_returns_true_on_success(self):
-        self.dm._queue.clear()
-        res = self.dm.queue_download(101, "youtube", "yt_vid_123")
-        self.assertTrue(res)
-        self.assertEqual(len(self.dm._queue), 1)
-        self.assertEqual(self.dm._queue[0]["track_id"], 101)
-
-    def test_queue_download_duplicate_in_memory_returns_true_and_does_not_duplicate(self):
-        self.dm._queue = [{"track_id": 101, "source": "youtube", "source_id": "yt_123"}]
-        res = self.dm.queue_download(101, "youtube", "yt_123")
-        self.assertTrue(res)
-        self.assertEqual(len(self.dm._queue), 1)
-
-    def test_queue_download_db_failure_returns_false(self):
-        self.mock_db.conn.execute.side_effect = Exception("Unique constraint failed")
-        res = self.dm.queue_download(999, "youtube", "yt_999")
-        self.assertFalse(res)
-
-    def test_api_download_track_returns_bool(self):
-        api = AppApi(self.mock_core)
-        self.mock_core.downloader = self.dm
-
-        # Success case
-        self.mock_db.conn.execute.side_effect = None
-        self.dm._queue.clear()
-        res = api.download_track({"id": 202, "source": "youtube", "source_id": "vid202"})
-        self.assertIs(res, True)
-
-        # Empty data case
-        res_empty = api.download_track({})
-        self.assertIs(res_empty, False)
-
-    def test_download_worker_spotify_resolves_via_youtube(self):
-        item = {"track_id": 303, "source": "spotify", "source_id": "ytsearch1: Artist - Song"}
-        self.mock_db.conn.cursor.return_value.fetchone.return_value = {"status": "pending"}
-        self.mock_db.get_track.return_value = {"id": 303, "artist": "Artist", "title": "Song"}
-
-        with patch("os.path.exists", return_value=True):
-            self.mock_core.youtube.download_audio_sync.return_value = "/tmp/fake_spotify.mp3"
-            self.dm._download_worker(item)
-
-            self.mock_core.youtube.download_audio_sync.assert_called_once()
-            called_target = self.mock_core.youtube.download_audio_sync.call_args[0][0]
-            self.assertTrue(called_target.startswith("ytsearch1:"))
-
-    def test_download_worker_closes_sqlite_thread_connection(self):
-        item = {"track_id": 404, "source": "youtube", "source_id": "yt_404"}
-        self.mock_db.conn.cursor.return_value.fetchone.return_value = {"status": "pending"}
-
-        with patch("os.path.exists", return_value=True):
-            self.mock_core.youtube.download_audio_sync.return_value = "/tmp/fake_yt.mp3"
-            self.dm._download_worker(item)
-
-            self.mock_db.close_thread_connection.assert_called_once()
-
-    def test_cancel_batch(self):
-        self.dm._queue = [{"track_id": 1}, {"track_id": 2}]
-        self.dm.start_batch(2)
-        self.assertTrue(self.dm._batch_active)
-
-        cancelled = self.dm.cancel_batch()
-        self.assertTrue(cancelled)
-        self.assertFalse(self.dm._batch_active)
-        self.assertEqual(len(self.dm._queue), 0)
-
-    def test_download_worker_vk_download_support(self):
-        item = {"track_id": 505, "source": "vk", "source_id": "https://vk.com/audio123"}
-        self.mock_db.conn.cursor.return_value.fetchone.return_value = {"status": "pending"}
-
-        with patch("os.path.exists", return_value=True):
-            self.mock_core.vk.download_audio_sync.return_value = "/tmp/fake_vk.mp3"
-            self.dm._download_worker(item)
-
-            self.mock_core.vk.download_audio_sync.assert_called_once_with("https://vk.com/audio123", self.dm.download_dir)
-
-    def test_download_worker_vk_missing_service_marks_failed(self):
-        item = {"track_id": 506, "source": "vk", "source_id": "https://vk.com/audio999"}
-        self.mock_db.conn.cursor.return_value.fetchone.return_value = {"status": "pending"}
-        self.mock_core.vk = None
-
-        self.dm._download_worker(item)
-        self.mock_db.conn.execute.assert_called_with("UPDATE download_queue SET status = 'failed' WHERE track_id = ?", (506,))
+def test_queue_download_returns_bool_and_dedups(downloader, tmp_db):
+    tmp_db.add_track(title='Queue', source='youtube', source_id='v1')
+    assert downloader.queue_download(1, "youtube", "v1") is True
+    # Same track twice -> rejected (DB UNIQUE + in-memory dedup).
+    assert downloader.queue_download(1, "youtube", "v1") is False
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_batch_dedup_shrinks_total(downloader, emitted):
+    downloader.start_batch(2)
+    downloader._decrement_batch_total_for_dedup()
+    assert downloader._batch_total == 1
+    downloader._on_batch_task_done(7, success=True)
+    kinds = [e for e, _ in emitted]
+    assert "batch_download_progress" in kinds
+    assert "batch_download_finished" in kinds
+    finished = [d for e, d in emitted if e == "batch_download_finished"][-1]
+    assert finished["failed"] == 0
 
+
+def test_batch_counts_failures(downloader, emitted):
+    downloader.start_batch(2)
+    downloader._on_batch_task_done(1, success=True)
+    downloader._on_batch_task_done(2, success=False)
+    finished = [d for e, d in emitted if e == "batch_download_finished"][-1]
+    assert finished["completed"] == 2
+    assert finished["failed"] == 1
+
+
+def test_cancel_batch_cancels_futures(downloader):
+    downloader.start_batch(5)
+    downloader.queue_download(21, "youtube", "v21")
+    downloader.cancel_batch()
+    assert downloader._batch_active is False
+    assert downloader._queue == []
+
+
+def _run_worker(downloader, tmp_db, track_id, source, source_id):
+    tmp_db.download_queue_add(track_id, source, source_id)
+    downloader._download_worker(
+        {"track_id": track_id, "source": source, "source_id": source_id}
+    )
+
+
+def test_worker_youtube_success(downloader, tmp_db, emitted, redirect_home):
+    tid = tmp_db.add_track(title="Y", artist="A", source="youtube", source_id="vy1")
+    _run_worker(downloader, tmp_db, tid, "youtube", "vy1")
+    row = tmp_db.get_track(tid)
+    assert row["is_downloaded"] == 1
+    assert row["file_path"] and os.path.exists(row["file_path"])
+    assert str(row["file_path"]).startswith(str(redirect_home))
+    kinds = [e for e, _ in emitted]
+    assert "download_complete" in kinds
+    assert "download_failed" not in kinds
+
+
+def test_worker_failure_emits_download_failed(downloader, tmp_db, emitted,
+                                              redirect_home, youtube_stub):
+    youtube_stub.fail = True
+    tid = tmp_db.add_track(title="B", artist="A", source="youtube", source_id="vb1")
+    _run_worker(downloader, tmp_db, tid, "youtube", "vb1")
+    row = tmp_db.get_track(tid)
+    assert row["is_downloaded"] == 0
+    failed = [d for e, d in emitted if e == "download_failed"]
+    assert len(failed) == 1
+    assert failed[0]["track_id"] == tid
+
+
+def test_worker_spotify_ytsearch_resolves_via_youtube(downloader, tmp_db, emitted,
+                                                     redirect_home, youtube_stub):
+    tid = tmp_db.add_track(title="S", artist="A", source="spotify",
+                           source_id="ytsearch1: A - S")
+    _run_worker(downloader, tmp_db, tid, "spotify", "ytsearch1: A - S")
+    row = tmp_db.get_track(tid)
+    assert row["is_downloaded"] == 1
+    assert row["source"] == "spotify"  # provider preserved, not overwritten
+    assert youtube_stub.calls, "spotify must fall back to the youtube provider"
+    assert youtube_stub.calls[0][0] == "ytsearch1: A - S"
+    assert "download_failed" not in [e for e, _ in emitted]
+
+
+def test_worker_unsupported_source_fails_loudly(downloader, tmp_db, emitted,
+                                               redirect_home):
+    tid = tmp_db.add_track(title="V", artist="A", source="vk", source_id="vk1")
+    _run_worker(downloader, tmp_db, tid, "vk", "vk1")
+    failed = [d for e, d in emitted if e == "download_failed"]
+    assert len(failed) == 1
+    assert tmp_db.download_queue_get_status(tid) == "failed"

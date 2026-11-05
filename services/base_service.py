@@ -8,10 +8,72 @@ import logging
 import sys
 import time
 import threading
+import urllib.parse
 from concurrent.futures import Future, ThreadPoolExecutor
+from functools import lru_cache
 from typing import Any, Callable, Dict, Optional
 
+from utils.stream_urls import stream_url_expired
+
 logger = logging.getLogger(__name__)
+
+
+# Proxy schemes a provider client can actually dial. Anything else is not a
+# proxy we know how to use.
+_PROXY_SCHEMES = frozenset({"http", "https"})
+try:
+    import socks  # noqa: F401 - requests only supports SOCKS when PySocks exists
+except ImportError:
+    pass
+else:
+    _PROXY_SCHEMES |= frozenset({"socks4", "socks4a", "socks5", "socks5h"})
+
+
+def normalize_proxy_url(raw: Any) -> str:
+    """Return `raw` when it is a usable proxy URL, otherwise "" (direct egress).
+
+    `auth.proxy_url` is a free-text settings field, and both `requests` and
+    yt-dlp accept a bare token in it: they prepend "http://" and dial that name.
+    So an unparseable value does not fail loudly at the point of configuration -
+    it becomes the proxy for EVERY provider call and takes search, stream
+    resolution and downloads down together with
+
+        ProxyError: Unable to connect to proxy, NameResolutionError(...)
+
+    which reads like a network outage rather than a bad settings value, even
+    though direct egress works fine.
+
+    Requiring an explicit scheme matches what the UI documents for the field
+    (placeholder "http://127.0.0.1:1080" in ui/web_new_v2/index.html). Ignoring
+    an unusable value is strictly better than applying it, and the rejection is
+    logged so the cause stays visible instead of silently changing behaviour.
+    """
+    if not raw or (isinstance(raw, str) and not raw.strip()):
+        from utils.linux_proxy import proxy_url
+        return proxy_url()
+    if not isinstance(raw, str):
+        return ""
+    value = raw.strip()
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        scheme = parsed.scheme.lower()
+        hostname = parsed.hostname
+    except ValueError:
+        scheme, hostname = "", None
+    if scheme in _PROXY_SCHEMES and hostname:
+        return value
+    _warn_invalid_proxy_once(value)
+    return ""
+
+
+@lru_cache(maxsize=16)
+def _warn_invalid_proxy_once(value):
+    """Diagnose each bad configuration without logging on every media request."""
+    logger.warning(
+        "Ignoring unusable auth.proxy_url %r: expected a full URL such as "
+        "'http://127.0.0.1:1080'. Falling back to a direct connection.",
+        '<redacted>',
+    )
 
 
 class _SharedExecutor:
@@ -74,9 +136,10 @@ class BaseMusicService:
     """Base class for music services providing a shared thread pool and caching."""
 
     _executor = _SharedExecutor(max_workers=8)
+    _playback_executor = _SharedExecutor(max_workers=4, thread_name_prefix='ProviderPlayback')
     _cache_lock = threading.RLock()
     _stream_cache: Dict[str, Any] = {}
-    _MAX_CACHE_SIZE = 500
+    _MAX_CACHE_SIZE = 2000
     # Provider stream URLs (googlevideo & co.) typically expire after ~6 hours,
     # so cached entries older than that are dead weight: serving them forces a
     # guaranteed 403 round trip through the proxy self-heal path.
@@ -84,9 +147,64 @@ class BaseMusicService:
     _search_cache: Dict[str, Dict[str, Any]] = {}
     _SEARCH_CACHE_TTL = 300
     _SEARCH_CACHE_MAX_SIZE = 300
+    _REQUEST_TTL = 30.0
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # Home-feed candidates must not evict provider search results.
+        cls._search_cache = {}
 
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
+        self._pending_requests = {}
+
+    def configure_session(self, session):
+        """Apply the live app proxy to an owned HTTP session before a request."""
+        settings = getattr(self, 'settings', None)
+        proxy = normalize_proxy_url(settings.get('auth', 'proxy_url', '')) if settings else ''
+        session.proxies = {'http': proxy, 'https': proxy} if proxy else {}
+        return session
+
+    def open_url(self, request, timeout=6.0):
+        """Verified TLS and the app's proxy for urllib clients."""
+        import urllib.request
+        import ssl
+        settings = getattr(self, 'settings', None)
+        proxy = normalize_proxy_url(settings.get('auth', 'proxy_url', '')) if settings else ''
+        if proxy.startswith(('socks5://', 'socks5h://')):
+            from utils.url_safety import guarded_open_url
+            return guarded_open_url(request, timeout=timeout)
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({'http': proxy, 'https': proxy} if proxy else None),
+            urllib.request.HTTPSHandler(context=ssl.create_default_context()))
+        return opener.open(request, timeout=timeout)
+
+    def _join_request(self, key, callback, error_callback):
+        """Fan out identical pending requests; shared state uses _cache_lock."""
+        with self._cache_lock:
+            flight = self._pending_requests.get(key)
+            if flight is not None and time.monotonic() - flight['started'] < self._REQUEST_TTL:
+                flight['listeners'].append((callback, error_callback))
+                return False, None, None
+            flight = {'started': time.monotonic(), 'listeners': [(callback, error_callback)]}
+            self._pending_requests[key] = flight
+
+        def finish(data=None, error=None):
+            with self._cache_lock:
+                if self._pending_requests.get(key) is not flight:
+                    return
+                self._pending_requests.pop(key, None)
+                listeners = flight['listeners']
+            for on_success, on_error in listeners:
+                try:
+                    if error is not None:
+                        if on_error:
+                            on_error(error)
+                    elif on_success:
+                        on_success(*data)
+                except Exception:
+                    self.logger.exception('Provider callback failed')
+        return True, lambda *args: finish(data=args), lambda error: finish(error=error)
 
     @classmethod
     def submit(cls, fn: Callable, *args, **kwargs) -> Optional[Future]:
@@ -102,14 +220,21 @@ class BaseMusicService:
     @classmethod
     def shutdown_executor(cls) -> None:
         """Shut the shared pool down without waiting; later submits become no-ops."""
-        executor = cls._executor
-        shutdown = getattr(executor, 'shutdown', None)
-        if not callable(shutdown):
-            return
+        for executor in (cls._executor, cls._playback_executor):
+            shutdown = getattr(executor, 'shutdown', None)
+            if callable(shutdown):
+                try:
+                    shutdown(wait=False, cancel_futures=True)
+                except Exception as e:
+                    logger.debug('shutdown_executor failed: %s', e, exc_info=True)
+
+    def submit_playback(self, fn: Callable, *args, **kwargs) -> Optional[Future]:
+        """Keep stream resolution out of background catalogue/search queues."""
         try:
-            shutdown(wait=False, cancel_futures=True)
-        except Exception as e:
-            logger.debug('shutdown_executor failed: %s', e, exc_info=True)
+            return self._playback_executor.submit(fn, *args, **kwargs)
+        except RuntimeError:
+            logger.debug('Playback executor unavailable during shutdown')
+            return None
 
     @classmethod
     def get_from_cache(cls, key: str) -> Optional[dict]:
@@ -124,40 +249,85 @@ class BaseMusicService:
             if entry is None:
                 return None
             if isinstance(entry, dict) and 'data' in entry and 'ts' in entry:
-                if time.time() - entry['ts'] > cls._STREAM_CACHE_TTL:
+                data = entry['data']
+                url = data.get('stream_url') if isinstance(data, dict) else None
+                if (time.time() - entry['ts'] > cls._STREAM_CACHE_TTL
+                        or stream_url_expired(url)):
                     cls._stream_cache.pop(key, None)
                     return None
+                # Hit: re-insert with the ORIGINAL timestamp, so the entry
+                # becomes most-recently-used for eviction purposes only and the
+                # TTL is not extended by reading.
+                cls._cache_recent(cls._stream_cache, key, cls._MAX_CACHE_SIZE)
+                cls._stream_cache[key] = entry
                 return entry['data']
+            if isinstance(entry, dict) and stream_url_expired(entry.get('stream_url')):
+                cls._stream_cache.pop(key, None)
+                return None
             return entry
 
     @classmethod
     def set_to_cache(cls, key: str, data: dict) -> None:
-        """Save an item to the stream cache with a TTL stamp, size-capped."""
+        """Save an item to the stream cache with a TTL stamp, size-capped (LRU)."""
         with cls._cache_lock:
-            if len(cls._stream_cache) >= cls._MAX_CACHE_SIZE and key not in cls._stream_cache:
-                oldest_key = next(iter(cls._stream_cache))
-                cls._stream_cache.pop(oldest_key, None)
+            cls._cache_recent(cls._stream_cache, key, cls._MAX_CACHE_SIZE)
             cls._stream_cache[key] = {'data': data, 'ts': time.time()}
 
     @classmethod
+    def invalidate_stream_cache_keys(cls, *keys: str) -> None:
+        """Drop provider stream-cache keys after an upstream rejects their URL."""
+        with cls._cache_lock:
+            for key in keys:
+                if key:
+                    cls._stream_cache.pop(str(key), None)
+
+    @staticmethod
+    def _cache_recent(cache: Dict[str, Any], key: str, max_size: int) -> None:
+        """Prepare `cache` for `key = ...`, keeping insertion order == LRU order.
+
+        Dicts keep insertion order, and re-assigning an existing key leaves its
+        position untouched. So before every write the key must be dropped: on a
+        write that is what makes it most-recently-used, and on a hit (where the
+        stored timestamp must be preserved) the caller re-inserts it right
+        after. Without this the "oldest entry" was really the first-inserted
+        one -- FIFO -- so a key that had just been served from the cache was the
+        next to be evicted.
+
+        Keeping plain dicts (rather than OrderedDict) matters:
+        services/yandex_service.py::reset_client iterates these caches directly.
+        Must be called under _cache_lock.
+        """
+        cache.pop(key, None)
+        if len(cache) >= max_size:
+            cache.pop(next(iter(cache)), None)
+
+    @classmethod
     def get_search_cache(cls, key: str) -> Optional[Any]:
-        """Retrieve an item from the search cache if it has not expired."""
+        """Retrieve an item from the search cache if it has not expired.
+
+        Symmetric with get_from_cache(): raw values placed directly into
+        _search_cache (tests, external code) are returned as-is instead of
+        raising KeyError on the missing 'ts'/'data' wrapper.
+        """
         with cls._cache_lock:
             entry = cls._search_cache.get(key)
             if entry is None:
                 return None
-            if time.time() - entry['ts'] > cls._SEARCH_CACHE_TTL:
-                cls._search_cache.pop(key, None)
-                return None
-            return entry['data']
+            if isinstance(entry, dict) and 'data' in entry and 'ts' in entry:
+                if time.time() - entry['ts'] > cls._SEARCH_CACHE_TTL:
+                    cls._search_cache.pop(key, None)
+                    return None
+                # Hit: re-insert with the ORIGINAL timestamp (recency only, TTL untouched).
+                cls._cache_recent(cls._search_cache, key, cls._SEARCH_CACHE_MAX_SIZE)
+                cls._search_cache[key] = entry
+                return entry['data']
+            return entry
 
     @classmethod
     def set_search_cache(cls, key: str, data: Any) -> None:
-        """Save an item to the search cache together with a timestamp (oldest entry evicted past the cap)."""
+        """Save an item to the search cache together with a timestamp (LRU eviction)."""
         with cls._cache_lock:
-            if len(cls._search_cache) >= cls._SEARCH_CACHE_MAX_SIZE and key not in cls._search_cache:
-                oldest_key = next(iter(cls._search_cache))
-                cls._search_cache.pop(oldest_key, None)
+            cls._cache_recent(cls._search_cache, key, cls._SEARCH_CACHE_MAX_SIZE)
             cls._search_cache[key] = {'data': data, 'ts': time.time()}
 
     @classmethod

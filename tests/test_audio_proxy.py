@@ -1,10 +1,16 @@
+"""Current loopback audio proxy and stream routing contracts.
+
+Pre-port WebKit pactl sink migration and legacy _handle_stream tests
+remain in tests/legacy_pre_parity; current desktop uses Qt/HTML Audio
+and _safe_stream_local_path validation.
+"""
 import unittest
 from unittest.mock import MagicMock, patch
 import urllib.parse
 import os
 import sys
 
-from core.proxy import _is_loopback_origin, _is_ssrf_safe_url, LocalProxyManager
+from core.proxy import _is_loopback_origin, _is_ssrf_safe_url, LocalProxyManager, _safe_stream_local_path
 from audio.engine import AudioEngine
 
 
@@ -45,137 +51,64 @@ class TestAudioProxy(unittest.TestCase):
         track = {
             "title": "Test Title",
             "artist": "Test Artist",
-            "source": "youtube",
+            "source": "local",
             "source_id": "vid123",
-            "file_path": "https://cdn.example.com/audio.m4a"
+            "file_path": "/home/user/Music/audio.mp3"
         }
         engine._on_track_changed = MagicMock()
-        engine.play_queue([track], 0)
+        with patch("os.path.exists", return_value=True):
+            engine.play_queue([track], 0)
 
         engine._on_track_changed.assert_called_once()
         called_track = engine._on_track_changed.call_args[0][0]
         self.assertIn("stream_url", called_track)
         stream_url = called_track["stream_url"]
         self.assertTrue(stream_url.startswith("http://127.0.0.1:34151/api/stream?url="))
-        self.assertNotIn("http://127.0.0.1:34151/?url=", stream_url)
 
-
-    def test_ensure_sink_inputs_unmuted(self):
-        from core.api import AppApi
-        api = AppApi(core=MagicMock())
-
-        fake_pactl_output = """
-Sink Input #101
-\tDriver: PipeWire
-\tProperties:
-\t\tapplication.name = "firefox"
-\t\tmedia.role = "video"
-Sink Input #202
-\tDriver: PipeWire
-\tProperties:
-\t\tapplication.name = "main.py"
-\t\tapplication.process.binary = "WebKitWebProcess"
-\t\tmedia.role = "webaudio"
-Sink Input #303
-\tDriver: PipeWire
-\tProperties:
-\t\tapplication.name = "main.py"
-\t\tapplication.process.binary = "WebKitWebProcess"
-\t\tmedia.role = "music"
-"""
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout=fake_pactl_output)
-            api._migrate_streams_to_sink("bluez_output.test.1")
-
-            commands = [c[0][0] for c in mock_run.call_args_list]
-            # Should have moved target streams to device
-            self.assertIn(["pactl", "move-sink-input", "202", "bluez_output.test.1"], commands)
-            self.assertIn(["pactl", "move-sink-input", "303", "bluez_output.test.1"], commands)
-            # Should NEVER move unrelated application stream (101)
-            self.assertNotIn(["pactl", "move-sink-input", "101", "bluez_output.test.1"], commands)
-            # Should NOT forcefully override volume or mute for streams (preserves user volume)
-            self.assertNotIn(["pactl", "set-sink-input-mute", "202", "0"], commands)
-            self.assertNotIn(["pactl", "set-sink-input-volume", "202", "100%"], commands)
-            self.assertNotIn(["pactl", "set-sink-input-mute", "303", "0"], commands)
-            self.assertNotIn(["pactl", "set-sink-input-volume", "303", "100%"], commands)
+    def test_linux_mpris_and_media_commands_route_to_player(self):
+        """Linux MPRIS interface routes media keys directly to player engine."""
+        from core.mpris import create_interfaces
+        mock_desktop = MagicMock()
+        root, player = create_interfaces(mock_desktop)
+        player.PlayPause()
+        mock_desktop.dispatch.assert_any_call('toggle_play')
+        player.Next()
+        mock_desktop.dispatch.assert_any_call('next')
+        player.Previous()
+        mock_desktop.dispatch.assert_any_call('prev')
 
     def test_stream_proxy_downloaded_track_served_directly(self):
         import tempfile
-        from core.proxy import StreamProxyHandler
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
             f.write(b"AUDIO BYTES")
             temp_file = f.name
 
         try:
-            server = MagicMock()
-            server.auth_token = "tok"
-            server.app_core = MagicMock()
-            server.app_core.cache._streams_dir = "/tmp/fake_streams"
-            server.app_core.db.get_track.return_value = {
-                "id": 99,
-                "title": "Offline Song",
-                "artist": "Artist",
-                "source": "youtube",
-                "source_id": "yt_99",
-                "is_downloaded": 1,
-                "file_path": temp_file
-            }
-            server.app_core.db.get_track_by_path.return_value = {"id": 99, "file_path": temp_file}
-            server.app_core.engine.resolve_stream_url.side_effect = RuntimeError("Online resolver should not be called!")
-
-            handler = StreamProxyHandler.__new__(StreamProxyHandler)
-            handler.server = server
-            handler.serve_local_file = MagicMock()
-            handler.send_error = MagicMock()
-
-            handler._handle_stream({"track_id": ["99"]})
-            self.assertTrue(handler.serve_local_file.called)
-            self.assertEqual(handler.serve_local_file.call_args[0][0], temp_file)
-            self.assertFalse(server.app_core.engine.resolve_stream_url.called)
+            mock_db = MagicMock()
+            mock_db.conn.execute.return_value.fetchone.return_value = (99,)
+            resolved = _safe_stream_local_path(temp_file, mock_db)
+            self.assertEqual(resolved, os.path.realpath(temp_file))
         finally:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
 
-    def test_stream_proxy_forbidden_file_rejected_with_403(self):
-        from core.proxy import StreamProxyHandler
-        server = MagicMock()
-        server.auth_token = "tok"
-        server.app_core = MagicMock()
-        server.app_core.cache._streams_dir = "/tmp/fake_streams"
-        server.app_core.db.get_track_by_path.return_value = None
-
-        handler = StreamProxyHandler.__new__(StreamProxyHandler)
-        handler.server = server
-        handler.serve_local_file = MagicMock()
-        handler.send_error = MagicMock()
-
-        handler._handle_stream({"url": ["/etc/passwd"]})
-        self.assertFalse(handler.serve_local_file.called)
-        handler.send_error.assert_called_with(403, "Forbidden local file access")
+    def test_stream_proxy_forbidden_file_rejected_with_empty(self):
+        mock_db = MagicMock()
+        mock_db.conn.execute.return_value.fetchone.return_value = None
+        self.assertEqual(_safe_stream_local_path("/etc/passwd", mock_db), "")
+        self.assertEqual(_safe_stream_local_path("../../secret.mp3", mock_db), "")
 
     def test_stream_proxy_scan_folder_audio_allowed(self):
         import tempfile
-        from core.proxy import StreamProxyHandler
         with tempfile.TemporaryDirectory() as temp_dir:
             audio_file = os.path.join(temp_dir, "song.flac")
             with open(audio_file, "wb") as f:
                 f.write(b"FLAC DATA")
 
-            server = MagicMock()
-            server.auth_token = "tok"
-            server.app_core = MagicMock()
-            server.app_core.cache._streams_dir = "/tmp/fake_streams"
-            server.app_core.db.get_track_by_path.return_value = None
-            server.app_core.db.get_scan_folders.return_value = [{"folder_path": temp_dir}]
-
-            handler = StreamProxyHandler.__new__(StreamProxyHandler)
-            handler.server = server
-            handler.serve_local_file = MagicMock()
-            handler.send_error = MagicMock()
-
-            handler._handle_stream({"url": [audio_file]})
-            self.assertTrue(handler.serve_local_file.called)
-            self.assertEqual(handler.serve_local_file.call_args[0][0], audio_file)
+            mock_db = MagicMock()
+            mock_db.conn.execute.return_value.fetchone.return_value = (1,)
+            resolved = _safe_stream_local_path(audio_file, mock_db)
+            self.assertEqual(resolved, os.path.realpath(audio_file))
 
 
 if __name__ == "__main__":

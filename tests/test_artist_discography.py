@@ -1,22 +1,21 @@
-"""
-Tests for Full Artist Discography & Biography Integration
-Covers:
-- MusicBrainzService (search, release groups, rate limiting, Wikipedia bios, CAA covers)
-- LastFMService (artist_get_info, artist_get_top_albums, HTML stripping, listeners/tags)
-- SpotifyService (get_artist_catalog, Web API + iTunes fallback, singles/EPs/albums)
-- ArtistService (multi-source cascade, deduplication, bilingual bio, avatar resolution, caching)
-"""
+"""Current catalogue/profile contracts, plus retained MusicBrainz regressions.
 
-import unittest
-from unittest.mock import MagicMock, patch
+Pre-port expectations for Spotify.get_artist_catalog, LastFM.artist_get_info,
+ArtistService injected providers/get_discography and AppApi.get_artist_discography
+are superseded by verified CatalogService identities and ArtistService.get_profile.
+Original tests remain in tests/legacy_pre_parity for traceability.
+"""
+import json
 import threading
 import time
+from types import SimpleNamespace
+import unittest
+from unittest.mock import MagicMock, patch
 
 from services.musicbrainz_service import MusicBrainzService
-from services.lastfm_service import LastFMService
-from services.spotify_service import SpotifyService
-from services.artist_service import ArtistService
-
+from services.artist_service import ArtistService, clean_artist_bio
+from services.catalog_service import CatalogService
+from services.itunes_gateway import ITunesGateway
 
 class TestMusicBrainzService(unittest.TestCase):
     def setUp(self):
@@ -129,463 +128,6 @@ class TestMusicBrainzService(unittest.TestCase):
         self.assertLess(elapsed, 0.5)
 
 
-class TestLastFMArtistIntegration(unittest.TestCase):
-    def setUp(self):
-        self.svc = LastFMService()
-
-    def test_artist_get_info_html_stripping_and_parsing(self):
-        mock_payload = {
-            "artist": {
-                "name": "Pink Floyd",
-                "bio": {
-                    "summary": 'Pink Floyd were an English rock band. <a href="https://last.fm">Read more on Last.fm</a>',
-                    "content": 'Pink Floyd were an English rock band formed in London in 1965. <a href="https://last.fm">User-contributed text</a>',
-                },
-                "stats": {"listeners": "4500000", "playcount": "150000000"},
-                "tags": {"tag": [{"name": "progressive rock"}, {"name": "classic rock"}]},
-                "image": [{"#text": "https://lastfm.freetls.fastly.net/image.png", "size": "extralarge"}],
-            }
-        }
-        with patch.object(self.svc, "_api_request", return_value=mock_payload):
-            res = self.svc.artist_get_info("Pink Floyd", lang="en")
-            self.assertEqual(res["name"], "Pink Floyd")
-            self.assertNotIn("<a", res["bio_summary"])
-            self.assertNotIn("<a", res["bio_content"])
-            self.assertIn("English rock band", res["bio_content"])
-            self.assertEqual(res["listeners"], 4500000)
-            self.assertEqual(res["playcount"], 150000000)
-            self.assertIn("progressive rock", res["tags"])
-            self.assertEqual(res["image"], "https://lastfm.freetls.fastly.net/image.png")
-
-    def test_artist_get_top_albums(self):
-        mock_payload = {
-            "topalbums": {
-                "album": [
-                    {"name": "The Dark Side of the Moon", "playcount": "5000000", "image": [{"#text": "https://img/dsotm.jpg"}]},
-                    {"name": "Wish You Were Here", "playcount": "4000000", "image": [{"#text": "https://img/wywh.jpg"}]},
-                ]
-            }
-        }
-        with patch.object(self.svc, "_api_request", return_value=mock_payload):
-            albums = self.svc.artist_get_top_albums("Pink Floyd", limit=10)
-            self.assertEqual(len(albums), 2)
-            self.assertEqual(albums[0]["title"], "The Dark Side of the Moon")
-            self.assertEqual(albums[0]["source"], "lastfm")
-            self.assertEqual(albums[0]["type"], "album")
-            self.assertEqual(albums[0]["cover"], "https://img/dsotm.jpg")
-
-    def test_artist_handler_proxy_calls(self):
-        with patch.object(self.svc, "artist_get_info", return_value={"name": "Test"}) as mock_info:
-            res = self.svc.artist.getInfo("Test")
-            self.assertEqual(res["name"], "Test")
-            mock_info.assert_called_once_with("Test", lang="ru")
-
-        with patch.object(self.svc, "artist_get_top_albums", return_value=[{"title": "Alb"}]) as mock_alb:
-            res = self.svc.artist.getTopAlbums("Test", limit=20)
-            self.assertEqual(len(res), 1)
-            mock_alb.assert_called_once_with("Test", limit=20)
-
-
-class TestSpotifyArtistCatalog(unittest.TestCase):
-    def setUp(self):
-        self.svc = SpotifyService()
-
-    def test_get_artist_catalog_empty(self):
-        res = self.svc.get_artist_catalog("")
-        self.assertEqual(res["albums"], [])
-        self.assertEqual(res["singles"], [])
-        self.assertEqual(res["eps"], [])
-
-    def test_get_artist_catalog_itunes_fallback(self):
-        itunes_album_payload = {
-            "results": [
-                {
-                    "collectionId": 1001,
-                    "collectionName": "Album One",
-                    "artistName": "Artist A",
-                    "collectionType": "Album",
-                    "trackCount": 10,
-                    "releaseDate": "2023-01-01T08:00:00Z",
-                    "artworkUrl100": "https://img/100x100bb.jpg",
-                },
-                {
-                    "collectionId": 1002,
-                    "collectionName": "Single One - Single",
-                    "artistName": "Artist A",
-                    "collectionType": "Album",
-                    "trackCount": 1,
-                    "releaseDate": "2023-05-01T08:00:00Z",
-                    "artworkUrl100": "https://img/100x100bb.jpg",
-                },
-                {
-                    "collectionId": 1003,
-                    "collectionName": "Mini Album - EP",
-                    "artistName": "Artist A",
-                    "collectionType": "Album",
-                    "trackCount": 5,
-                    "releaseDate": "2023-08-01T08:00:00Z",
-                    "artworkUrl100": "https://img/100x100bb.jpg",
-                },
-                {
-                    "collectionId": 1004,
-                    "collectionName": "Best Hits",
-                    "artistName": "Artist A",
-                    "collectionType": "Compilation",
-                    "trackCount": 20,
-                    "releaseDate": "2024-01-01T08:00:00Z",
-                    "artworkUrl100": "https://img/100x100bb.jpg",
-                },
-            ]
-        }
-        itunes_song_payload = {
-            "results": [
-                {
-                    "trackId": 5001,
-                    "trackName": "Hit Song",
-                    "artistName": "Artist A",
-                    "collectionName": "Album One",
-                    "trackTimeMillis": 210000,
-                    "artworkUrl100": "https://img/100x100bb.jpg",
-                }
-            ]
-        }
-
-        with patch.object(self.svc, "get_access_token", return_value=None):
-            with patch("services.spotify_service._session.get") as mock_get:
-                def fake_get(url, *args, **kwargs):
-                    m = MagicMock()
-                    m.status_code = 200
-                    if "entity=album" in url:
-                        m.json.return_value = itunes_album_payload
-                    elif "entity=song" in url:
-                        m.json.return_value = itunes_song_payload
-                    else:
-                        m.json.return_value = {"results": []}
-                    return m
-
-                mock_get.side_effect = fake_get
-                catalog = self.svc.get_artist_catalog("Artist A")
-
-                self.assertEqual(len(catalog["albums"]), 1)
-                self.assertEqual(catalog["albums"][0]["title"], "Album One")
-                self.assertEqual(catalog["albums"][0]["type"], "album")
-                self.assertEqual(catalog["albums"][0]["cover"], "https://img/600x600bb.jpg")
-
-                self.assertEqual(len(catalog["singles"]), 1)
-                self.assertEqual(catalog["singles"][0]["title"], "Single One - Single")
-                self.assertEqual(catalog["singles"][0]["type"], "single")
-
-                self.assertEqual(len(catalog["eps"]), 1)
-                self.assertEqual(catalog["eps"][0]["title"], "Mini Album - EP")
-                self.assertEqual(catalog["eps"][0]["type"], "ep")
-
-                self.assertEqual(len(catalog["compilations"]), 1)
-                self.assertEqual(catalog["compilations"][0]["title"], "Best Hits")
-                self.assertEqual(catalog["compilations"][0]["type"], "compilation")
-
-                self.assertEqual(len(catalog["tracks"]), 1)
-                self.assertEqual(catalog["tracks"][0]["title"], "Hit Song")
-                self.assertEqual(catalog["tracks"][0]["duration"], 210)
-
-
-class TestArtistServiceMultiSourceCascade(unittest.TestCase):
-    def setUp(self):
-        self.mock_spotify = MagicMock(spec=SpotifyService)
-        self.mock_lastfm = MagicMock(spec=LastFMService)
-        self.mock_musicbrainz = MagicMock(spec=MusicBrainzService)
-        self.mock_youtube = MagicMock()
-
-        self.svc = ArtistService(
-            youtube_service=self.mock_youtube,
-            settings={},
-            spotify_service=self.mock_spotify,
-            lastfm_service=self.mock_lastfm,
-            musicbrainz_service=self.mock_musicbrainz,
-        )
-
-    def test_cascade_merges_albums_singles_eps_and_bio(self):
-        # Mock Spotify Catalog
-        self.mock_spotify.get_artist_catalog.return_value = {
-            "albums": [
-                {"id": "sp_1", "title": "Great Album", "year": 2022, "type": "album", "cover": "https://sp.img/alb.jpg"},
-            ],
-            "singles": [
-                {"id": "sp_2", "title": "Fresh Single", "year": 2023, "type": "single", "cover": "https://sp.img/sng.jpg"},
-            ],
-            "eps": [
-                {"id": "sp_3", "title": "Debut EP", "year": 2021, "type": "ep", "cover": "https://sp.img/ep.jpg"},
-            ],
-            "compilations": [],
-            "tracks": [
-                {"id": "sp_t1", "title": "Track One", "artist": "Mega Artist", "album": "Great Album", "duration": 180},
-            ],
-            "avatar_url": "https://sp.img/avatar_hd.jpg",
-            "genres": "Rock, Indie",
-        }
-
-        # Mock Last.fm
-        self.mock_lastfm.artist_get_info.return_value = {
-            "bio_summary": "Известный рок-музыкант.",
-            "bio_content": "Известный рок-музыкант, начавший карьеру в 2020 году.",
-            "listeners": 1200000,
-            "playcount": 50000000,
-            "tags": ["rock", "indie"],
-            "image": "https://lastfm.img/artist.jpg",
-        }
-        self.mock_lastfm.artist_get_top_albums.return_value = []
-
-        # Mock MusicBrainz
-        self.mock_musicbrainz.search_artist.return_value = {"id": "mbid-mega"}
-        self.mock_musicbrainz.get_artist_release_groups.return_value = {
-            "albums": [
-                {"id": "mb_1", "title": "Great Album", "year": 2022, "type": "album"},
-                {"id": "mb_2", "title": "Rare Album", "year": 2020, "type": "album"},
-            ],
-            "singles": [],
-            "eps": [],
-            "compilations": [],
-        }
-        self.mock_musicbrainz.get_artist_bio.return_value = {
-            "bio_ru": "Известный рок-музыкант.",
-            "bio_en": "Famous rock musician.",
-            "bio": "Известный рок-музыкант.",
-            "avatar_url": "",
-            "source": "wikipedia",
-        }
-
-        # Mock YouTube Music (unavailable/failing to test resilience)
-        self.mock_youtube._ytmusic.return_value = None
-
-        result = None
-        event = threading.Event()
-
-        def on_ready(profile):
-            nonlocal result
-            result = profile
-            event.set()
-
-        self.svc.get_profile("Mega Artist", callback=on_ready)
-        event.wait(timeout=2.0)
-
-        self.assertIsNotNone(result)
-        self.assertEqual(result["name"], "Mega Artist")
-        self.assertEqual(result["avatar_url"], "https://sp.img/avatar_hd.jpg")
-        self.assertIn("рок-музыкант", result["bio_ru"])
-        self.assertEqual(result["listeners"], 1200000)
-
-        # Check discography categorization
-        self.assertGreaterEqual(len(result["albums"]), 2)  # Great Album and Rare Album
-        self.assertGreaterEqual(len(result["singles"]), 1)  # Fresh Single
-        self.assertGreaterEqual(len(result["eps"]), 1)      # Debut EP
-        self.assertIn("albums", result["discography"])
-        self.assertIn("singles", result["discography"])
-        self.assertIn("eps", result["discography"])
-
-        # Check tracks
-        self.assertGreaterEqual(len(result["tracks"]), 1)
-        self.assertEqual(result["tracks"][0]["title"], "Track One")
-
-    def test_cache_hit(self):
-        # Prime cache
-        cached_data = {"name": "Cached Artist", "albums": [], "tracks": [], "bio": "Cached"}
-        self.svc._cache_put("cached artist", cached_data)
-
-        res = None
-        event = threading.Event()
-        self.svc.get_profile("Cached Artist", callback=lambda p: (event.set(), globals().update(res=p)))
-        event.wait(timeout=1.0)
-
-        # Provider calls should not have been made
-        self.mock_spotify.get_artist_catalog.assert_not_called()
-        self.mock_musicbrainz.search_artist.assert_not_called()
-
-    def test_artist_not_found_invokes_error_callback(self):
-        self.mock_spotify.get_artist_catalog.return_value = {}
-        self.mock_lastfm.artist_get_info.return_value = {}
-        self.mock_lastfm.artist_get_top_albums.return_value = []
-        self.mock_musicbrainz.search_artist.return_value = None
-        self.mock_musicbrainz.get_artist_release_groups.return_value = {}
-        self.mock_musicbrainz.get_artist_bio.return_value = {}
-        self.mock_youtube._ytmusic.return_value = None
-
-        err = []
-        event = threading.Event()
-
-        self.svc.get_profile("NonExistentArtistXYZ", error_callback=lambda msg: (err.append(msg), event.set()))
-        event.wait(timeout=2.0)
-
-        self.assertTrue(len(err) > 0)
-        self.assertIn("Исполнитель не найден", err[0])
-
-    def test_avatar_priority_cascade(self):
-        self.mock_spotify.get_artist_catalog.return_value = {
-            "albums": [{"title": "Alb", "year": 2020}],
-            "avatar_url": "https://sp.img/hq.jpg",
-        }
-        self.mock_lastfm.artist_get_info.return_value = {"image": "https://lastfm.img/med.jpg"}
-        self.mock_lastfm.artist_get_top_albums.return_value = []
-        self.mock_musicbrainz.search_artist.return_value = None
-        self.mock_musicbrainz.get_artist_release_groups.return_value = {}
-        self.mock_musicbrainz.get_artist_bio.return_value = {"avatar_url": "https://wiki.img/wiki.jpg"}
-        self.mock_youtube._ytmusic.return_value = None
-
-        res = None
-        event = threading.Event()
-
-        def on_ready(p):
-            nonlocal res
-            res = p
-            event.set()
-
-        self.svc.get_profile("Avatar Priority Artist", callback=on_ready)
-        event.wait(timeout=2.0)
-
-        # Spotify avatar should win over Wiki and Last.fm
-        self.assertIsNotNone(res)
-        self.assertEqual(res["avatar_url"], "https://sp.img/hq.jpg")
-
-    def test_bio_resolution_bilingual(self):
-        self.mock_spotify.get_artist_catalog.return_value = {"albums": [{"title": "A"}]}
-        self.mock_lastfm.artist_get_info.return_value = {
-            "bio_content": "Популярный российский хип-хоп исполнитель.",
-        }
-        self.mock_lastfm.artist_get_top_albums.return_value = []
-        self.mock_musicbrainz.search_artist.return_value = None
-        self.mock_musicbrainz.get_artist_release_groups.return_value = {}
-        self.mock_musicbrainz.get_artist_bio.return_value = {
-            "bio_en": "Popular Russian hip-hop artist.",
-            "bio_ru": "",
-        }
-        self.mock_youtube._ytmusic.return_value = None
-
-        res = None
-        event = threading.Event()
-
-        def on_ready(p):
-            nonlocal res
-            res = p
-            event.set()
-
-        self.svc.get_profile("Bilingual Artist", callback=on_ready)
-        event.wait(timeout=2.0)
-
-        self.assertIsNotNone(res)
-        self.assertIn("российский", res["bio_ru"])
-        self.assertIn("Popular", res["bio_en"])
-        self.assertEqual(res["bio_source"], "lastfm")
-
-    def test_merge_discography_deduplication_and_yt_lookup(self):
-        sp_data = {
-            "albums": [
-                {"title": "Abbey Road", "year": 1969, "cover": "https://sp.img/abbey.jpg"},
-            ],
-            "singles": [
-                {"title": "Let It Be - Single", "year": 1970, "cover": ""},
-            ],
-            "eps": [],
-            "compilations": [],
-        }
-        mb_releases = {
-            "albums": [
-                {"title": "Abbey Road", "year": 1969, "cover": "https://mb.img/abbey_caa.jpg"},
-            ],
-            "singles": [
-                {"title": "Let It Be", "year": 1970, "cover": "https://mb.img/letitbe.jpg"},
-            ],
-            "eps": [],
-            "compilations": [],
-        }
-        yt_albums = [
-            {"title": "Abbey Road", "source_id": "MPREb_abbey", "type": "album"},
-            {"title": "Let It Be", "source_id": "MPREb_letitbe", "type": "single"},
-        ]
-
-        merged = self.svc._merge_discography(sp_data, mb_releases, [], yt_albums, "The Beatles")
-        # Deduplicated: Abbey Road appears once
-        self.assertEqual(len(merged["albums"]), 1)
-        self.assertEqual(merged["albums"][0]["title"], "Abbey Road")
-        # YouTube browse_id attached
-        self.assertEqual(merged["albums"][0]["yt_source_id"], "MPREb_abbey")
-
-        # Let It Be title cleaned and deduplicated
-        self.assertEqual(len(merged["singles"]), 1)
-        self.assertEqual(merged["singles"][0]["title"], "Let It Be")
-        self.assertEqual(merged["singles"][0]["yt_source_id"], "MPREb_letitbe")
-        # Cover updated from MB since SP cover was empty
-        self.assertEqual(merged["singles"][0]["cover"], "https://mb.img/letitbe.jpg")
-
-    def test_cross_category_deduplication_youtube_albums_shelf_ep(self):
-        # YouTube places EPs in its generic 'albums' shelf as type Album.
-        # Ensure Spotify's EP classification is preserved without creating duplicate album.
-        sp_data = {
-            "albums": [],
-            "singles": [],
-            "eps": [{"title": "My Dear Melancholy,", "year": 2018}],
-            "compilations": [],
-        }
-        mb_releases = {"albums": [], "singles": [], "eps": [], "compilations": []}
-        yt_albums = [
-            {"title": "My Dear Melancholy,", "type": "Album", "source_id": "MPREb_mdm", "year": 2018}
-        ]
-        merged = self.svc._merge_discography(sp_data, mb_releases, [], yt_albums, "The Weeknd")
-        # Zero duplicates in albums
-        self.assertEqual(len(merged["albums"]), 0)
-        # Exactly one in eps, with attached yt_source_id
-        self.assertEqual(len(merged["eps"]), 1)
-        self.assertEqual(merged["eps"][0]["title"], "My Dear Melancholy,")
-        self.assertEqual(merged["eps"][0]["yt_source_id"], "MPREb_mdm")
-
-    def test_all_releases_deduplication(self):
-        sp_data = {
-            "albums": [{"title": "Debut", "year": 2020}],
-            "singles": [{"title": "Debut", "year": 2020}],
-            "eps": [],
-            "compilations": [],
-        }
-        merged = self.svc._merge_discography(sp_data, {"albums": [], "singles": [], "eps": [], "compilations": []}, [], [], "Artist")
-        all_titles = [r["title"] for r in merged["all_releases"]]
-        self.assertEqual(len(all_titles), 1)
-        self.assertEqual(all_titles[0], "Debut")
-
-    def test_get_discography_standalone(self):
-        self.mock_spotify.get_artist_catalog.return_value = {
-            "albums": [{"title": "Solo Album", "year": 2021}],
-            "singles": [],
-            "eps": [],
-            "compilations": [],
-        }
-        self.mock_musicbrainz.search_artist.return_value = None
-        self.mock_musicbrainz.get_artist_release_groups.return_value = {}
-        self.mock_musicbrainz.get_artist_bio.return_value = {}
-        self.mock_lastfm.artist_get_top_albums.return_value = []
-
-        disco = self.svc.get_discography("Solo Artist")
-        self.assertIn("albums", disco)
-        self.assertEqual(len(disco["albums"]), 1)
-        self.assertEqual(disco["albums"][0]["title"], "Solo Album")
-
-    def test_concurrent_execution_in_get_profile(self):
-        def slow_fetch(*args, **kwargs):
-            time.sleep(0.12)
-            return {}
-
-        self.mock_spotify.get_artist_catalog.side_effect = slow_fetch
-        self.mock_lastfm.artist_get_info.side_effect = slow_fetch
-        self.mock_lastfm.artist_get_top_albums.return_value = []
-        self.mock_musicbrainz.search_artist.side_effect = slow_fetch
-        self.mock_musicbrainz.get_artist_release_groups.return_value = {}
-        self.mock_musicbrainz.get_artist_bio.return_value = {}
-        self.mock_youtube._ytmusic.return_value = None
-
-        start = time.time()
-        evt = threading.Event()
-        self.svc.get_profile("Concurrent Artist", callback=lambda p: evt.set(), error_callback=lambda e: evt.set())
-        evt.wait(timeout=2.0)
-        elapsed = time.time() - start
-        # If sequential, 3 * 0.12s = 0.36s minimum; concurrent runs in ~0.12s - 0.25s
-        self.assertLess(elapsed, 0.30, f"Expected parallel execution under 0.30s, took {elapsed:.2f}s")
-
-
 class TestMusicBrainzEdgeCases(unittest.TestCase):
     def test_sqlite_in_memory_cache_persistence(self):
         svc = MusicBrainzService()
@@ -621,78 +163,97 @@ class TestMusicBrainzEdgeCases(unittest.TestCase):
             self.assertEqual(res["albums"][0]["cover_url"], "")
 
 
-class TestLastFMBoilerplateClean(unittest.TestCase):
-    def test_bio_clean_creative_commons_and_read_more(self):
-        svc = LastFMService()
-        mock_payload = {
-            "artist": {
-                "name": "Artist B",
-                "bio": {
-                    "summary": 'Bio text. <a href="...">Read more on Last.fm</a>. User-contributed text is available under the Creative Commons By-SA License; additional terms may apply.',
-                    "content": 'Detailed content. <a href="...">Read more</a>. User-contributed text is available under the Creative Commons By-SA License.',
-                },
-                "stats": {"listeners": "100", "playcount": "200"},
-                "tags": {"tag": []},
-            }
-        }
-        with patch.object(svc, "_api_request", return_value=mock_payload):
-            res = svc.artist_get_info("Artist B")
-            self.assertEqual(res["bio_summary"], "Bio text.")
-            self.assertEqual(res["bio_content"], "Detailed content.")
+def immediate_profile_service(monkeypatch):
+    service = ArtistService()
+    def submit(task):
+        task()
+        return object()
+    monkeypatch.setattr(service, 'submit', submit)
+    return service
 
 
-class TestSpotifyCatalogEdgeCases(unittest.TestCase):
-    def test_ep_with_explicit_title_and_short_track_count(self):
-        svc = SpotifyService()
-        itunes_album_payload = {
-            "results": [
-                {
-                    "collectionId": 2001,
-                    "collectionName": "Summer Vibes - EP",
-                    "artistName": "Artist C",
-                    "collectionType": "Album",
-                    "trackCount": 3,
-                    "releaseDate": "2023-06-01T08:00:00Z",
-                    "artworkUrl100": "https://img/100x100bb.jpg",
-                }
-            ]
-        }
-        with patch.object(svc, "get_access_token", return_value=None):
-            with patch("services.spotify_service._session.get") as mock_get:
-                m = MagicMock()
-                m.status_code = 200
-                m.json.return_value = itunes_album_payload
-                mock_get.return_value = m
-                res = svc.get_artist_catalog("Artist C")
-                self.assertEqual(len(res["eps"]), 1)
-                self.assertEqual(res["eps"][0]["title"], "Summer Vibes - EP")
-                self.assertEqual(res["eps"][0]["type"], "ep")
-                self.assertEqual(len(res["singles"]), 0)
+def test_current_catalogue_keeps_unconfirmed_artist_names_as_choices():
+    youtube = SimpleNamespace(_ytmusic=SimpleNamespace(search=lambda *args, **kwargs: [
+        {'artist': 'Artist', 'browseId': 'UC-confirmed', 'thumbnails': [{'url': 'https://img/avatar.jpg'}]}]))
+    catalogue = CatalogService(youtube)
+    result = catalogue.resolve_artist('Artist', {'require_candidates': True})
+    assert result['status'] == 'ambiguous'
+    assert [(row['source'], row['source_id']) for row in result['candidates']] == [('youtube', 'UC-confirmed')]
 
 
-class TestApiBridgeArtistDiscography(unittest.TestCase):
-    def test_api_bridge_get_artist_discography(self):
-        from core.api import AppApi
-        mock_core = MagicMock()
-        mock_core.artists.get_discography.return_value = {
-            "albums": [{"title": "Core Album"}],
-            "singles": [],
-            "eps": [],
-            "compilations": [],
-        }
-        api = AppApi(mock_core)
-        res = api.get_artist_discography("Artist Core")
-        self.assertIn("albums", res)
-        self.assertEqual(len(res["albums"]), 1)
-        self.assertEqual(res["albums"][0]["title"], "Core Album")
+def test_current_itunes_profile_deduplicates_verified_releases_and_tracks(monkeypatch):
+    from urllib.parse import parse_qs, urlsplit
+    artist = {'wrapperType': 'artist', 'artistId': 77, 'artistName': 'Artist', 'primaryGenreName': 'Rock'}
+    album = {'wrapperType': 'collection', 'artistId': 77, 'collectionId': 101,
+             'collectionName': 'Album', 'collectionType': 'Album', 'releaseDate': '2024-01-01',
+             'artworkUrl100': 'https://img/100x100bb.jpg'}
+    single = dict(album, collectionId=102, collectionName='Single', collectionType='Single')
+    song = {'wrapperType': 'track', 'kind': 'song', 'artistId': 77, 'trackId': 201,
+            'artistName': 'Artist', 'trackName': 'Song', 'trackTimeMillis': 210000}
+    def get(url, **kwargs):
+        query = parse_qs(urlsplit(url).query)
+        if query.get('entity') == ['song']:
+            return {'results': [song, song, dict(song, artistId=88, trackId=999)]}
+        return {'results': [artist, album, album, single, dict(album, artistId=88, collectionId=999)]}
+    monkeypatch.setattr(ITunesGateway, 'get', staticmethod(get))
+    service = immediate_profile_service(monkeypatch)
+    monkeypatch.setattr(service, '_resolve_metadata_fallback', lambda *args, **kwargs: ('https://img/artist.jpg', 'Биография исполнителя.'))
+    result, errors = [], []
+    service.get_profile('Artist', callback=result.append, error_callback=errors.append,
+                        artist_ref={'source': 'itunes', 'source_id': '77'})
+    assert not errors
+    profile = result[0]
+    assert profile['verified'] is True and profile['source_id'] == '77'
+    assert [item['source_id'] for item in profile['albums']] == ['101', '102']
+    assert {item['type'] for item in profile['albums']} == {'album', 'single'}
+    assert profile['albums'][0]['cover_url'] == 'https://img/600x600bb.jpg'
+    assert [(item['title'], item['duration']) for item in profile['tracks']] == [('Song', 210)]
+    assert profile['bio_ru'] == profile['bio_original'] == 'Биография исполнителя.'
 
-    def test_api_bridge_get_artist_discography_empty(self):
-        from core.api import AppApi
-        mock_core = MagicMock()
-        api = AppApi(mock_core)
-        res = api.get_artist_discography("")
-        self.assertEqual(res.get("status"), "error")
+
+def test_profile_cache_uses_confirmed_source_identity_and_reports_missing_artist(monkeypatch):
+    service = immediate_profile_service(monkeypatch)
+    cached = {'status': 'found', 'verified': True, 'name': 'Confirmed', 'albums': [], 'tracks': []}
+    service._cache_put('youtube:UC-confirmed', cached)
+    monkeypatch.setattr(service.catalog, 'resolve_artist', lambda *args: {
+        'status': 'found', 'name': 'Confirmed', 'source': 'youtube', 'source_id': 'UC-confirmed'})
+    result = []
+    service.get_profile('Alias Name', callback=result.append)
+    assert result == [cached]
+    monkeypatch.setattr(service.catalog, 'resolve_artist', lambda *args: {'status': 'not_found', 'error': 'Исполнитель не найден'})
+    errors = []
+    service.get_profile('Missing', error_callback=errors.append)
+    assert errors == [{'status': 'not_found', 'artist': 'Missing', 'error': 'Исполнитель не найден'}]
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_cancelled_profile_never_delivers_stale_callback(monkeypatch):
+    service = immediate_profile_service(monkeypatch)
+    monkeypatch.setattr(service.catalog, 'resolve_artist', lambda *args: {'status': 'not_found'})
+    results = []
+    service.get_profile('Artist', callback=results.append, error_callback=results.append, is_current=lambda: False)
+    assert results == []
+
+
+def test_lastfm_biography_fallback_uses_current_metadata_path_and_strips_boilerplate(monkeypatch):
+    from services.deezer_service import DeezerService
+    from services.lastfm_service import LastFMService
+    service = ArtistService()
+    monkeypatch.setattr(DeezerService, 'get_artist', lambda *args: {'avatar_url': 'https://img/artist.jpg'})
+    monkeypatch.setattr('urllib.request.urlopen', MagicMock(side_effect=OSError('offline Wikipedia')))
+    monkeypatch.setattr(LastFMService, 'is_enabled', lambda self: True)
+    monkeypatch.setattr(LastFMService, '_resolve_api_keys', lambda self: ['test-key'])
+    monkeypatch.setattr(LastFMService, '_api_request', lambda *args, **kwargs: {'artist': {'bio': {'content':
+        'Artist &amp; band.<br>Second paragraph. <a href="https://last.fm">Read more on Last.fm</a> User-contributed text is available under the Creative Commons By-SA License.'}}})
+    avatar, bio = service._resolve_metadata_fallback('Artist')
+    assert avatar == 'https://img/artist.jpg'
+    assert bio == 'Artist & band.\nSecond paragraph.'
+
+
+def test_bilingual_bio_preserves_original_when_translation_fails(monkeypatch):
+    from services.lyrics_service import LyricsService
+    service = ArtistService()
+    monkeypatch.setattr(LyricsService, 'translate_lyrics', lambda *args, **kwargs: 'Перевод биографии.')
+    assert service._translate_bio('Original biography.') == ('Перевод биографии.', 'Original biography.')
+    monkeypatch.setattr(LyricsService, 'translate_lyrics', MagicMock(side_effect=OSError('offline')))
+    assert service._translate_bio('Original biography.') == ('Original biography.', 'Original biography.')
+

@@ -1,0 +1,98 @@
+/* The shared library, with the same collections, actions and row renderer. */
+html[data-ui-style="macos"] .macos-library-chevron { display: none; }
+html[data-ui-style="macos"] #main-content:has(#view-library.active) { background: rgba(17,31,48,.06); }
+html[data-ui-style="macos"] #main-content:has(#view-library.active) #macos-toolbar { flex-basis: 72px; padding: 17px 24px; border-bottom-color: #ffffff16; }
+html[data-ui-style="macos"] #main-content > #view-library { padding: 16px 24px 22px; overflow: hidden; }
+html[data-ui-style="macos"] #view-library .lib-toolbar { margin-bottom: 14px; }
+html[data-ui-style="macos"] #view-library .lib-top-cards { gap: 8px; }
+html[data-ui-style="macos"] #view-library :is(.lib-top-card,.lib-left-sidebar,.lib-right-content) {
+    background: rgba(108,149,199,.17); border: 1px solid var(--mac-glass-edge); border-radius: 15px;
+    box-shadow: inset 0 1px 1px #ffffff0c,0 5px 18px #00000012;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+html[data-ui-style="macos"] #view-library .lib-top-card { height: 38px; min-height: 38px; padding: 7px 12px; gap: 8px; border-radius: 12px; }
+html[data-ui-style="macos"] #view-library .lib-top-card.active { background: rgba(106,166,226,.22); border-color: var(--mac-glass-edge); }
+html[data-ui-style="macos"] #view-library .lib-top-card:hover { background: #ffffff18; border-color: var(--mac-glass-edge); }
+html[data-ui-style="macos"] #view-library .lib-stat-icon { width: 22px; height: 22px; border-radius: 6px; color: var(--primary); background: transparent; border-color: transparent; }
+html[data-ui-style="macos"] #view-library .lib-stat-icon svg { width: 18px; height: 18px; stroke-width: 1.7; }
+html[data-ui-style="macos"] #view-library .lib-stat-copy strong { font: 600 calc(13px * var(--mac-font-scale,1))/1.25 var(--mac-font); }
+html[data-ui-style="macos"] #view-library .lib-stat-copy > span { font: 400 calc(12px * var(--mac-font-scale,1))/1.4 var(--mac-font); color: var(--mac-secondary); }
+html[data-ui-style="macos"] #view-library .lib-stat-arrow { display: none; }
+html[data-ui-style="macos"] #view-library .lib-main-layout { grid-template-columns: minmax(0,1fr); gap: 12px; }
+html[data-ui-style="macos"] #view-library .lib-left-sidebar { display: none; }
+html[data-ui-style="macos"] #view-library .lib-add-btn { border-radius: 12px; background: rgba(var(--primary-rgb),.15); border-color: #ffffff1c; }
+html[data-ui-style="macos"] #view-library :is(.lib-sidebar-input,#lib-playlist-filter,.lib-action-btn) {
+    background: #ffffff08; border-color: #ffffff26; border-radius: 10px; color: var(--mac-text);
+    box-shadow: inset 0 1px 1px #ffffff07; font: 400 calc(12px * var(--mac-font-scale,1))/1.4 var(--mac-font);
+}
+html[data-ui-style="macos"] #view-library .lib-action-btn { gap: 9px; min-height: 36px; padding: 9px 11px; text-align: left; }
+html[data-ui-style="macos"] #view-library .lib-action-btn > span { flex: 1; }
+html[data-ui-style="macos"] #view-library .lib-action-btn .macos-library-chevron { display: block; width: 14px; height: 14px; opacity: .65; }
+html[data-ui-style="macos"] #view-library .lib-playlists-title { margin: 14px 0 0; font: 600 calc(13px * var(--mac-font-scale,1))/1.4 var(--mac-font); }
+html[data-ui-style="macos"] #view-library .lib-playlist-item { padding: 8px; font-size: calc(12px * var(--mac-font-scale,1)); }
+html[data-ui-style="macos"] #view-library .pl-drag-handle { opacity: .3; }
+html[data-ui-style="macos"] #view-library .lib-right-content { padding: 22px; }
+html[data-ui-style="macos"] #view-library .lib-active-header { margin-bottom: 24px; gap: 22px; }
+html[data-ui-style="macos"] #view-library .lib-hero-cover { width: 148px; height: 154px; border-radius: 11px; }
+html[data-ui-style="macos"] #lib-active-title { font: 650 clamp(28px,2.7vw,42px)/1.12 var(--mac-font); letter-spacing: -.9px; margin: 8px 0 12px; }
+html[data-ui-style="macos"] #view-library .lib-kind { font: 500 calc(11px * var(--mac-font-scale,1))/1.4 var(--mac-font); color: var(--mac-secondary); }
+html[data-ui-style="macos"] #view-library .lib-hero-meta { margin-bottom: 16px; font: 400 calc(12px * var(--mac-font-scale,1))/1.4 var(--mac-font); }
+html[data-ui-style="macos"] #view-library .lib-hero-actions { gap: 9px; }
+html[data-ui-style="macos"] #view-library .lib-hero-actions :is(.home-pill,.home-icon-button,.lib-primary-action,#lib-btn-download-all) { min-height: 42px; border-radius: 9px; padding: 9px 14px; font: 500 calc(12px * var(--mac-font-scale,1))/1.3 var(--mac-font); }
+html[data-ui-style="macos"] #view-library .lib-hero-actions :is(.home-pill,.home-icon-button) { border: 1px solid #ffffff26; background: #ffffff0c; }
+html[data-ui-style="macos"] #view-library .lib-hero-actions .home-icon-button { width: 42px; padding: 0; }
+html[data-ui-style="macos"] #view-library #lib-btn-playlist-options { order: 6; }
+html[data-ui-style="macos"] #view-library #lib-btn-download-all { height: 42px; background: #ffffff0c !important; border-color: #ffffff26 !important; font-size: calc(12px * var(--mac-font-scale,1)) !important; }
+html[data-ui-style="macos"] #view-library #lib-btn-back-overview::before { content: ''; width: 17px; height: 14px; display: inline-block; border: 1.5px solid currentColor; border-radius: 3px; opacity: .85; }
+html[data-ui-style="macos"] #view-library .lib-section-heading h2 { font: 600 calc(20px * var(--mac-font-scale,1))/1.3 var(--mac-font); letter-spacing: -.3px; }
+html[data-ui-style="macos"] #view-library .lib-section-heading .home-pill { min-height: 36px; border: 1px solid #ffffff24; border-radius: 9px; background: #ffffff09; font-size: calc(11px * var(--mac-font-scale,1)); }
+html[data-ui-style="macos"] #view-library .lib-collections-grid { grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap: 16px; }
+html[data-ui-style="macos"] #view-library :is(.lib-collection-card,.lib-collection-create) { border-radius: 11px; border-color: #ffffff2b; background: #ffffff08; }
+html[data-ui-style="macos"] #view-library .lib-collection-cover { height: auto; aspect-ratio: 1; border-radius: 10px 10px 0 0; margin-bottom: 10px; }
+html[data-ui-style="macos"] #view-library .lib-collection-open { padding-bottom: 12px; }
+html[data-ui-style="macos"] #view-library .lib-collection-open strong { font: 500 calc(13px * var(--mac-font-scale,1))/1.35 var(--mac-font); padding-inline: 14px 30px; }
+html[data-ui-style="macos"] #view-library .lib-collection-open > span:last-child { margin-top: 5px; font-size: calc(11px * var(--mac-font-scale,1)); }
+html[data-ui-style="macos"] #view-library .lib-collection-create { min-height: 220px; border-style: dashed; gap: 8px; padding: 12px; }
+html[data-ui-style="macos"] #view-library .lib-collection-create > span { width: 48px; height: 48px; background: #ffffff15; }
+html[data-ui-style="macos"] #view-library .lib-collection-create strong { font: 600 calc(13px * var(--mac-font-scale,1))/1.3 var(--mac-font); }
+html[data-ui-style="macos"] #view-library .lib-collection-create small { font-size: calc(11px * var(--mac-font-scale,1)); }
+html[data-ui-style="macos"] #view-library :is(.lib-collection-cover.is-favorites,.lib-hero-cover[data-collection-type="favorites"]) {
+    background: linear-gradient(#141d3420,#19213b10),url("assets/atmosphere-dusk.png") center 53%/cover;
+}
+html[data-ui-style="macos"] #view-library .lib-hero-cover[data-collection-type="favorites"] > svg { width: 64px; height: 64px; color: #ccbcff; fill: none; stroke-width: 1.2; filter: drop-shadow(0 0 5px #8887ff) drop-shadow(0 0 14px #8c75ff); }
+html[data-ui-style="macos"] #view-library .lib-collection-cover.is-favorites > svg { width: 36px; height: 36px; fill: #ff9fd7; color: #ff9fd7; filter: drop-shadow(0 1px 12px #fb96ca70); }
+html[data-ui-style="macos"] #view-library [data-collection-kind="local"]:not(:has(img)) { background: #0d2033 url("assets/library-wave.svg") center/cover; }
+html[data-ui-style="macos"] #view-library [data-collection-kind="local"]:not(:has(img)) > svg { opacity: 0; }
+html[data-ui-style="macos"] #view-library :is(.lib-table-heading,.lib-row-date,.lib-row-album,.lib-row-artist,.lib-row-number) { color: var(--mac-secondary); font-family: var(--mac-font); font-weight: 400; }
+html[data-ui-style="macos"] #view-library .lib-table-row .track-title { font: 500 calc(12px * var(--mac-font-scale,1))/1.4 var(--mac-font); }
+html[data-ui-style="macos"] #view-library .lib-table-row { border-bottom-color: #ffffff10; }
+html[data-ui-style="macos"][data-macos-mode="light"] #view-library :is(.lib-top-card,.lib-left-sidebar,.lib-right-content,.lib-collection-card,.lib-collection-create) { background-color: #ffffff80; border-color: #ffffff9c; }
+html[data-ui-style="macos"][data-macos-transparency="false"] #view-library :is(.lib-top-card,.lib-left-sidebar,.lib-right-content) { background: var(--mac-surface); }
+@supports (backdrop-filter: blur(1px)) {
+    html[data-ui-style="macos"][data-macos-transparency="true"] #main-content:has(#view-library.active) { backdrop-filter: blur(min(var(--mac-panel-blur,38px),var(--blur-surface-cap,16px))); -webkit-backdrop-filter: blur(min(var(--mac-panel-blur,38px),var(--blur-surface-cap,16px))); }
+}
+@media (min-width: 1000px) {
+    html[data-ui-style="macos"] #view-library .lib-active-view .lib-collections-section { display: block; }
+}
+@media (max-width: 1200px) {
+    html[data-ui-style="macos"] #view-library .lib-main-layout { grid-template-columns: minmax(0,1fr); }
+    html[data-ui-style="macos"] #view-library .lib-right-content { padding: 16px; }
+    html[data-ui-style="macos"] #view-library .lib-hero-cover { width: 114px; height: 130px; }
+    html[data-ui-style="macos"] #view-library .lib-active-header { gap: 16px; }
+    html[data-ui-style="macos"] #view-library .lib-hero-actions :is(.home-pill,.home-icon-button,.lib-primary-action) { padding-inline: 10px; }
+}
+@media (max-width: 900px) {
+    html[data-ui-style="macos"] #main-content > #view-library { padding: 12px; }
+    html[data-ui-style="macos"] #view-library .lib-main-layout { grid-template-columns: minmax(0,1fr); }
+    html[data-ui-style="macos"] #view-library .lib-stat-copy strong { font-size: 13px; }
+    html[data-ui-style="macos"] #lib-active-title { font-size: 27px; }
+}
+@media (max-width: 760px) {
+    html[data-ui-style="macos"] #view-library .lib-main-layout { grid-template-columns: minmax(0,1fr); }
+    html[data-ui-style="macos"] #view-library .lib-left-sidebar { padding: 10px; gap: 8px; }
+    html[data-ui-style="macos"] #view-library .lib-hero-cover { width: 82px; height: 96px; }
+    html[data-ui-style="macos"] #view-library .lib-active-view .lib-collections-section { display: block; }
+    html[data-ui-style="macos"] #view-library .lib-collections-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    html[data-ui-style="macos"] #view-library .lib-section-heading h2 { font-size: 17px; }
+    html[data-ui-style="macos"] #view-library .lib-hero-actions :is(.home-pill,.home-icon-button,.lib-primary-action) { min-height: 36px; font-size: 11px; }
+}

@@ -1,11 +1,14 @@
 // NeDotify — Settings Module
-import { renderIcons, escapeHtml, compressBackgroundImage, showToast } from './utils.js';
-import { initParticles, stopParticles, setParticlesFps } from './particles.js';
-import { setVisualizerFps } from './visualizer.js';
-import { initOnboarding } from './onboarding.js';
+import { renderIcons, escapeHtml, compressBackgroundImage, showToast, openModalFocusTrap, closeModalFocusTrap } from './utils.js';
+import { setParticlesFps } from './particles.js';
+import { restoreAtmosphereSettings } from './atmosphere-settings.js';
+import { restoreDiscordSettings } from './discord-settings.js';
+import { setVisualizerFps, setVisualizerEnabled } from './visualizer.js';
 import { DEFAULT_KEYBINDS, activeKeybinds, setListeningKeybind, getListeningKeybindId } from './hotkeys.js';
 import { evaluateEfficiencyState } from './efficiency.js';
-import { setUiFps } from './player.js';
+import { setUiFps, applyAudioSettings } from './player.js';
+import { initSettingsView, themePreviewPath, syncThemeSelection, syncCustomColorFields } from './settings-view.js';
+import { settingAliases } from './setting-aliases.js';
 
 // Helper: read a localStorage setting that was saved by saveSetting()
 function getLocalSetting(key, defaultVal) {
@@ -18,421 +21,29 @@ function getLocalSetting(key, defaultVal) {
     }
 }
 
-const THEMES = [
-    { id: 'amoled', name: 'AMOLED', colors: ['#ffffff', '#000000'] },
-    { id: 'dark', name: 'Dark', colors: ['#ffffff', '#121212'] },
-    { id: 'midnight', name: 'Midnight', colors: ['#3b82f6', '#0a0e17'] },
-    { id: 'emerald', name: 'Emerald', colors: ['#10b981', '#0b1410'] },
-    { id: 'sunset', name: 'Sunset', colors: ['#f97316', '#170c0a'] },
-    { id: 'ocean', name: 'Ocean', colors: ['#06b6d4', '#06141a'] },
-    { id: 'lavender', name: 'Lavender', colors: ['#a855f7', '#130b1c'] },
-    { id: 'rose', name: 'Rose', colors: ['#ec4899', '#1a0b12'] },
-    { id: 'amber', name: 'Amber', colors: ['#ff9f1c', '#1a120e'] },
-    { id: 'slate', name: 'Slate', colors: ['#94a3b8', '#0f172a'] }
-];
-
-let _settingsInitialized = false;
-
-export function initSettings() {
-    if (_settingsInitialized) return;
-    _settingsInitialized = true;
-
-    // Backend may push theme changes (theme string) at runtime — re-apply the active theme
-    window.addEventListener('nedotify:theme_changed', (e) => {
-        applyThemeMode?.(String(e.detail ?? getLocalSetting('theme_mode', 'system')));
-    });
-
-    setupEfficiencyPanel();
-    initSettingsSearchFilter();
-
-    // Settings panel navigation
-    document.querySelectorAll('.settings-nav-btn[data-panel]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            const panelName = btn.dataset.panel;
-            if (!panelName) return;
-
-            document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            document.querySelectorAll('.settings-panel').forEach(p => {
-                p.classList.remove('active');
-                p.style.display = 'none';
-            });
-
-            const target = document.getElementById('settings-' + panelName);
-            if (target) {
-                target.classList.add('active');
-                target.style.display = 'block';
-            }
-
-            if (panelName === 'audio') setupAudioDeviceSelector();
-            if (panelName === 'icons') setupIconsPanel();
-            if (panelName === 'workshop') setupWorkshopPanel();
-            if (panelName === 'optimization') {
-                setupEfficiencyPanel();
-                setupOptimizationPanel();
-            }
-            if (panelName === 'zapret') setupZapretPanel();
-
-            try {
-                if (window.lucide) window.lucide.createIcons();
-            } catch(err) {}
-        });
-    });
-
-    // Render theme grid & setup appearance handlers
-    renderThemeGrid();
-    setupAppearancePanel();
-    setupPlayerSettingsPanel();
-    setupBackgroundPanel();
-    setupWorkshopPanel();
-    setupIconsPanel();
-    setupAudioDeviceSelector();
-    window.addEventListener('pywebviewready', () => {
-        setupAudioDeviceSelector();
-    });
-
-    // Optimization panel
-    setupOptimizationPanel();
-
-    // Zapret panel
-    setupZapretPanel();
-
-    // Toggles
-    setupToggle('toggle-crossfade', 'crossfade_enabled', 'audio');
-    setupToggle('toggle-gapless', 'gapless_playback', 'audio');
-    setupToggle('toggle-normalization', 'volume_normalization', 'audio');
-    setupToggle('toggle-autoplay', 'autoplay', 'audio');
-    setupToggle('toggle-particles', 'particles_enabled', 'ui');
-    setupToggle('toggle-visualizer', 'cover_visualizer', 'ui');
-
-    setupSlider('slider-crossfade-sec', 'crossfade_duration_sec', 'audio', (v) => {
-        setElText('label-crossfade-sec', `${v} сек`);
-    });
-
-    // Sliders
-    setupSlider('slider-particles-count', 'particles_count', 'ui', (v) => {
-        setElText('label-particles-count', v);
-        initParticles();
-    });
-    setupSlider('slider-particles-size', 'particles_size', 'ui', (v) => {
-        const labels = { 1: 'Мелкий', 2: 'Обычный', 3: 'Средний', 4: 'Крупный', 5: 'Огромный' };
-        setElText('label-particles-size', labels[v] || 'Обычный');
-        initParticles();
-    });
-    setupSlider('slider-particles-speed', 'particles_speed', 'ui', (v) => {
-        const labels = { 1: 'Медленная', 2: 'Обычная', 3: 'Быстрая' };
-        setElText('label-particles-speed', labels[v] || 'Обычная');
-        initParticles();
-    });
-
-    const initialSize = document.getElementById('slider-particles-size')?.value || 2;
-    const sizeLabels = { 1: 'Мелкий', 2: 'Обычный', 3: 'Средний', 4: 'Крупный', 5: 'Огромный' };
-    setElText('label-particles-size', sizeLabels[initialSize] || 'Обычный');
-
-    const initialSpeed = document.getElementById('slider-particles-speed')?.value || 2;
-    const speedLabels = { 1: 'Медленная', 2: 'Обычная', 3: 'Быстрая' };
-    setElText('label-particles-speed', speedLabels[initialSpeed] || 'Обычная');
-    setupSlider('slider-glass-blur', 'glass_blur', 'theme', (v) => {
-        const val = parseInt(v) || 0;
-        setElText('label-glass-blur', `${val}px`);
-        document.documentElement.style.setProperty('--glass-blur', `${val}px`);
-        document.documentElement.style.setProperty('--blur-sm', `${Math.max(2, Math.round(val * 0.4))}px`);
-        document.documentElement.style.setProperty('--blur-md', `${val}px`);
-        document.documentElement.style.setProperty('--blur-lg', `${Math.round(val * 1.3)}px`);
-        document.documentElement.style.setProperty('--blur-xl', `${Math.round(val * 1.6)}px`);
-    });
-
-    // Font Selection Bindings
-    const selectFont = document.getElementById('select-font-family');
-    if (selectFont) {
-        selectFont.addEventListener('change', (e) => {
-            const fontVal = e.target.value;
-            applyFontFamily(fontVal, null, true);
-        });
-    }
-
-    // Window Transparency Bindings
-    const toggleTrans = document.getElementById('toggle-transparency');
-    const sliderTrans = document.getElementById('slider-transparency-level');
-    if (toggleTrans && sliderTrans) {
-        toggleTrans.addEventListener('click', () => {
-            const isOn = toggleTrans.classList.toggle('on');
-            saveSetting('transparency_enabled', isOn, 'theme');
-            sliderTrans.disabled = !isOn;
-            applyTransparency(sliderTrans.value, isOn);
-        });
-    }
-    setupSlider('slider-transparency-level', 'transparency_level', 'theme', (v) => {
-        setElText('label-transparency-level', `${v}%`);
-        applyTransparency(v, document.getElementById('toggle-transparency')?.classList.contains('on'));
-    });
-
-    // Discord Rich Presence Binding
-    const toggleDiscordRpc = document.getElementById('toggle-discord-rpc');
-    if (toggleDiscordRpc) {
-        const savedDiscordRpc = localStorage.getItem('nedotify_app_discord_rpc_enabled');
-        const initialEnabled = savedDiscordRpc !== null ? JSON.parse(savedDiscordRpc) : true;
-        toggleDiscordRpc.classList.toggle('on', initialEnabled);
-
-        toggleDiscordRpc.addEventListener('click', () => {
-            const isOn = toggleDiscordRpc.classList.toggle('on');
-            saveSetting('discord_rpc_enabled', isOn, 'app');
-            if (window.pywebview?.api?.toggle_discord_rpc) {
-                window.pywebview.api.toggle_discord_rpc(isOn);
-            }
-        });
-    }
-
-    // Particle shapes
-    document.querySelectorAll('.particle-shape-btn[data-shape]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.particle-shape-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            saveSetting('particles_shape', btn.dataset.shape, 'ui');
-            initParticles();
-        });
-    });
-
-    // Storage
-    const clearStorageBtn = document.getElementById('btn-clear-storage');
-    if (clearStorageBtn) {
-        clearStorageBtn.addEventListener('click', async () => {
-            if (window.pywebview?.api?.clear_storage_cache) {
-                const res = await window.pywebview.api.clear_storage_cache();
-                if (res && res.success) {
-                    showToast('Кэш успешно очищен!', 'success');
-                    if (res.details) onStorageInfo(res.details);
-                } else {
-                    showToast('Ошибка очистки кэша', 'error');
-                }
-            } else if (window.pywebview?.api?.clear_storage) {
-                await window.pywebview.api.clear_storage('all');
-                window.pywebview.api.get_storage_info();
-            }
-        });
-    }
-
-    const selectCacheQuota = document.getElementById('select-cache-quota');
-    if (selectCacheQuota) {
-        const savedQuota = getLocalSetting('nedotify_storage_cache_quota_gb', 5);
-        selectCacheQuota.value = String(savedQuota);
-
-        selectCacheQuota.addEventListener('change', async (e) => {
-            const val = parseInt(e.target.value);
-            saveSetting('cache_quota_gb', val, 'storage');
-            if (window.pywebview?.api?.set_cache_quota) {
-                const res = await window.pywebview.api.set_cache_quota(val);
-                if (res && res.success) {
-                    showToast(val === 0 ? 'Лимит кэша отключен' : `Лимит кэша установлен на ${val} ГБ`, 'info');
-                    if (res.details) onStorageInfo(res.details);
-                }
-            }
-        });
-    }
-
-    // Duplicate Scanner Binding
-    const scanDuplicatesBtn = document.getElementById('btn-scan-duplicates');
-    const duplicatesContainer = document.getElementById('duplicates-results-container');
-    if (scanDuplicatesBtn && duplicatesContainer) {
-        scanDuplicatesBtn.addEventListener('click', async () => {
-            duplicatesContainer.innerHTML = '<div style="font-size:12px; color:var(--text-sec); display:flex; align-items:center; gap:8px;"><div class="spinner" style="width:14px;height:14px;"></div> Сканирование медиатеки на дубликаты...</div>';
-            if (window.pywebview?.api?.find_duplicate_tracks) {
-                const groups = await window.pywebview.api.find_duplicate_tracks();
-                renderDuplicateGroups(groups, duplicatesContainer);
-            } else {
-                duplicatesContainer.innerHTML = '<div style="font-size:12px; color:var(--text-sec);">Сканирование недоступно</div>';
-            }
-        });
-    }
-    // Setup font size slider
-    setupSlider('slider-font-size', 'font_size', 'theme', (val) => {
-        applyFontSize(val);
-    });
-
-    const savedFontSize = localStorage.getItem('nedotify_theme_font_size');
-    if (savedFontSize) {
-        try { applyFontSize(JSON.parse(savedFontSize)); } catch(e) {}
-    }
-
-    const savedGlassBlur = localStorage.getItem('nedotify_theme_glass_blur');
-    if (savedGlassBlur !== null) {
-        try {
-            const v = JSON.parse(savedGlassBlur);
-            setElText('label-glass-blur', `${v}px`);
-            document.documentElement.style.setProperty('--glass-blur', `${v}px`);
-            const slider = document.getElementById('slider-glass-blur');
-            if (slider) {
-                slider.value = v;
-                const pct = (v - slider.min) / (slider.max - slider.min) * 100;
-                slider.style.setProperty('--value-percent', `${pct}%`);
-            }
-        } catch(e) {}
-    }
-
-    // Custom theme random button
-    const btnRandom = document.getElementById('btn-random-theme');
-    if (btnRandom) {
-        btnRandom.addEventListener('click', () => {
-            const rColor = () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
-            const p = rColor();
-            const a = rColor();
-            document.documentElement.style.setProperty('--primary', p);
-            document.documentElement.style.setProperty('--accent', a);
-            saveSetting('custom_primary', p, 'theme');
-            saveSetting('custom_accent', a, 'theme');
-        });
-    }
-
-    // Playlist Import
-    const btnImport = document.getElementById('btn-import-playlist');
-    const inputImportUrl = document.getElementById('input-import-playlist-url');
-    const inputImportName = document.getElementById('input-import-playlist-name');
-    const statusImport = document.getElementById('import-playlist-status');
-
-    if (btnImport && inputImportUrl) {
-        btnImport.addEventListener('click', () => {
-            const url = inputImportUrl.value.trim();
-            const name = inputImportName ? inputImportName.value.trim() : '';
-            if (!url) {
-                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Введите ссылку на плейлист', type: 'warning' } }));
-                return;
-            }
-            if (statusImport) {
-                statusImport.style.display = 'block';
-                statusImport.textContent = '⏳ Анализ и получение треков плейлиста...';
-            }
-            btnImport.disabled = true;
-
-            if (window.pywebview?.api?.import_external_playlist) {
-                window.pywebview.api.import_external_playlist(url, name);
-            }
-            setTimeout(() => {
-                btnImport.disabled = false;
-                if (statusImport) statusImport.style.display = 'none';
-                inputImportUrl.value = '';
-                if (inputImportName) inputImportName.value = '';
-            }, 4000);
-        });
-    }
-
-    // Auth inputs/select bindings
-    const inputYandexToken = document.getElementById('input-yandex-token');
-    if (inputYandexToken) {
-        inputYandexToken.addEventListener('change', (e) => {
-            saveSetting('yandex_token', e.target.value, 'auth');
-        });
-    }
-    const selectBrowserCookies = document.getElementById('select-browser-cookies');
-    if (selectBrowserCookies) {
-        selectBrowserCookies.addEventListener('change', (e) => {
-            saveSetting('browser_cookies', e.target.value, 'auth');
-        });
-    }
-    const inputCookiesPath = document.getElementById('input-cookies-path');
-    if (inputCookiesPath) {
-        inputCookiesPath.addEventListener('change', (e) => {
-            saveSetting('cookies_file_path', e.target.value, 'auth');
-        });
-    }
-    const inputProxyUrl = document.getElementById('input-proxy-url');
-    if (inputProxyUrl) {
-        inputProxyUrl.addEventListener('change', (e) => {
-            saveSetting('proxy_url', e.target.value, 'auth');
-        });
-    }
-
-
-    const selectRegion = document.getElementById('select-region');
-    if (selectRegion) {
-        selectRegion.addEventListener('change', (e) => {
-            saveSetting('region', e.target.value, 'general');
-        });
-    }
-
-    // YouTube Music OAuth 2.0 stub safeguard (in development)
-    const inputOauthClientId = document.getElementById('input-oauth-client-id');
-    if (inputOauthClientId) {
-        inputOauthClientId.disabled = true;
-        inputOauthClientId.title = 'В разработке';
-    }
-    const inputOauthClientSecret = document.getElementById('input-oauth-client-secret');
-    if (inputOauthClientSecret) {
-        inputOauthClientSecret.disabled = true;
-        inputOauthClientSecret.title = 'В разработке';
-    }
-    const btnYtmusicOauth = document.getElementById('btn-ytmusic-oauth');
-    if (btnYtmusicOauth) {
-        btnYtmusicOauth.disabled = true;
-        btnYtmusicOauth.title = 'В разработке (YouTube Music OAuth пока недоступен)';
-        btnYtmusicOauth.addEventListener('click', (e) => {
-            e.preventDefault();
-            showToast('YouTube Music OAuth находится в разработке', 'info');
-        });
-    }
-
-    // Yandex Device Auth button
-    const btnYandexAuth = document.getElementById('btn-yandex-auth');
-    if (btnYandexAuth) {
-        btnYandexAuth.addEventListener('click', async () => {
-            await window.awaitBridge();
-            if (!window.pywebview?.api) return;
-            const statusEl = document.getElementById('yandex-device-status');
-            if (statusEl) {
-                statusEl.style.display = 'block';
-                statusEl.innerHTML = '⏳ Запрос кода авторизации...';
-                statusEl.style.color = 'var(--text-sec)';
-            }
-            btnYandexAuth.disabled = true;
-            if (window.pywebview && window.pywebview.api && window.pywebview.api.yandex_device_auth) {
-                window.pywebview.api.yandex_device_auth().then(res => {
-                    if (res && !res.success) {
-                        if (statusEl) {
-                            statusEl.style.display = 'none';
-                        }
-                        btnYandexAuth.disabled = false;
-                        showToast(res.message || 'Ошибка авторизации Яндекс Музыки', 'error');
-                    }
-                }).catch(() => {
-                    if (statusEl) {
-                        statusEl.style.display = 'none';
-                    }
-                    btnYandexAuth.disabled = false;
-                });
-            } else {
-                showToast('Функция пока недоступна (Yandex Auth)', 'info');
-                if (statusEl) {
-                    statusEl.style.display = 'none';
-                }
-                btnYandexAuth.disabled = false;
-            }
-        });
-
-        document.addEventListener('nedotify:yandex_device_auth_code', (e) => {
-            const statusEl = document.getElementById('yandex-device-status');
-            const data = e.detail || {};
-            if (statusEl) {
-                statusEl.style.display = 'block';
-                statusEl.innerHTML = `🔑 Код авторизации: <b style="color:var(--primary);font-weight:800;letter-spacing:2px;">${escapeHtml(data.user_code || '')}</b><br><span style="font-size:11px;">Откройте ${escapeHtml(data.verification_url || 'passport.yandex.ru/device')} и введите код</span>`;
-                statusEl.style.color = 'var(--text-sec)';
-            }
-        });
-
-        document.addEventListener('nedotify:yandex_device_auth_result', (e) => {
-            const statusEl = document.getElementById('yandex-device-status');
-            const data = e.detail || {};
-            if (statusEl) {
-                statusEl.style.display = 'block';
-                statusEl.innerHTML = escapeHtml(data.message || '');
-                statusEl.style.color = data.success ? 'var(--primary)' : 'var(--danger, #f87171)';
-            }
-            btnYandexAuth.disabled = false;
-        });
-    }
-
-    initKeybinds();
+// Helper: read a saved setting, preferring the backend (the durable store).
+//
+// The restore helpers below used to read localStorage unconditionally, so a
+// cleared/evicted WebView2 cache silently reset every setting to its default
+// even though the backend still had the user's value -- the "my settings did
+// not save" symptom. window.settings is populated from the backend before these
+// run, so it wins; localStorage stays as the fallback for keys the backend has
+// not seen yet, and for the first paint before the bridge answers.
+function savedSetting(category, key, defaultVal) {
+    const fromBackend = window.settings?.[category]?.[key];
+    if (fromBackend !== undefined && fromBackend !== null) return fromBackend;
+    return getLocalSetting(`nedotify_${category}_${key}`, defaultVal);
 }
+
+function syncSwitch(toggle, enabled) {
+    if (!toggle) return;
+    toggle.classList.toggle('on', !!enabled);
+    toggle.setAttribute('aria-checked', String(!!enabled));
+}
+
+
+
+
 
 const PRESET_THEMES = [
     { id: 'dark', name: 'Dark', colors: ['#121212', '#ffffff', '#1e1e1e'] },
@@ -460,96 +71,81 @@ const PRESET_THEMES = [
 ];
 
 export const FONTS_LIST = [
-    // System / Linux
-    { id: 'default', name: 'По умолчанию', family: "'Inter', system-ui, -apple-system, sans-serif", cat: 'system' },
+    // System; native Linux families remain available without a font CDN.
+    { id: 'default', name: 'По умолчанию', family: "'DM Sans', 'NeDotify Cyrillic', system-ui, 'Ubuntu Sans', 'Ubuntu', 'Cantarell', 'Liberation Sans', sans-serif", cat: 'system' },
     { id: 'ubuntu', name: 'Ubuntu', family: "'Ubuntu', 'Ubuntu Sans', sans-serif", cat: 'system' },
     { id: 'cantarell', name: 'Cantarell (GNOME)', family: "'Cantarell', 'Adwaita Sans', sans-serif", cat: 'system' },
     { id: 'liberation', name: 'Liberation Sans', family: "'Liberation Sans', 'DejaVu Sans', sans-serif", cat: 'system' },
     { id: 'noto', name: 'Noto Sans', family: "'Noto Sans', sans-serif", cat: 'system' },
     { id: 'inter', name: 'Inter', family: "'Inter', sans-serif", cat: 'system' },
+    { id: 'arial', name: 'Arial', family: "Arial, sans-serif", cat: 'system' },
+    { id: 'segoe_ui', name: 'Segoe UI', family: "'Segoe UI', sans-serif", cat: 'system' },
     { id: 'roboto', name: 'Roboto', family: "'Roboto', sans-serif", cat: 'system' },
-    { id: 'segoe_ui', name: 'Segoe UI', family: "'Segoe UI', 'Ubuntu', 'Liberation Sans', sans-serif", cat: 'system' },
-    { id: 'arial', name: 'Arial', family: "Arial, 'Liberation Sans', sans-serif", cat: 'system' },
-    { id: 'san_francisco', name: 'San Francisco', family: "-apple-system, BlinkMacSystemFont, 'Cantarell', sans-serif", cat: 'system' },
-    { id: 'calibri', name: 'Calibri', family: "Calibri, 'Liberation Sans', sans-serif", cat: 'system' },
+    { id: 'helvetica', name: 'Helvetica Neue', family: "'Helvetica Neue', Arial, sans-serif", cat: 'system' },
+    { id: 'tahoma', name: 'Tahoma', family: "Tahoma, sans-serif", cat: 'system' },
+    { id: 'verdana', name: 'Verdana', family: "Verdana, sans-serif", cat: 'system' },
+    { id: 'san_francisco', name: 'San Francisco', family: "-apple-system, BlinkMacSystemFont, sans-serif", cat: 'system' },
+    { id: 'calibri', name: 'Calibri', family: "Calibri, sans-serif", cat: 'system' },
+    { id: 'lucida', name: 'Lucida Sans', family: "'Lucida Sans', sans-serif", cat: 'system' },
+    { id: 'arial_black', name: 'Arial Black', family: "'Arial Black', sans-serif", cat: 'system' },
+    { id: 'arial_narrow', name: 'Arial Narrow', family: "'Arial Narrow', sans-serif", cat: 'system' },
+    { id: 'segoe_light', name: 'Segoe UI Light', family: "'Segoe UI Light', 'Segoe UI', sans-serif", cat: 'system' },
+    { id: 'segoe_semibold', name: 'Segoe UI Semibold', family: "'Segoe UI Semibold', 'Segoe UI', sans-serif", cat: 'system' },
 
     // Modern
-    { id: 'outfit', name: 'Outfit', family: "'Outfit', 'Ubuntu', sans-serif", cat: 'modern' },
+    { id: 'outfit', name: 'Outfit', family: "'Outfit', sans-serif", cat: 'modern' },
     { id: 'montserrat', name: 'Montserrat', family: "'Montserrat', sans-serif", cat: 'modern' },
     { id: 'plus_jakarta', name: 'Plus Jakarta', family: "'Plus Jakarta Sans', sans-serif", cat: 'modern' },
 
     // Serif
-    { id: 'georgia', name: 'Georgia', family: "Georgia, 'Liberation Serif', serif", cat: 'serif' },
-    { id: 'times', name: 'Times New Roman', family: "'Times New Roman', 'Liberation Serif', serif", cat: 'serif' },
-    { id: 'garamond', name: 'Garamond', family: "Garamond, 'Liberation Serif', serif", cat: 'serif' },
+    { id: 'georgia', name: 'Georgia', family: "Georgia, serif", cat: 'serif' },
+    { id: 'times', name: 'Times New Roman', family: "'Times New Roman', serif", cat: 'serif' },
+    { id: 'garamond', name: 'Garamond', family: "Garamond, serif", cat: 'serif' },
 
     // Mono
-    { id: 'consolas', name: 'Consolas', family: "Consolas, 'Liberation Mono', 'Adwaita Mono', monospace", cat: 'mono' },
-    { id: 'courier', name: 'Courier New', family: "'Courier New', 'Liberation Mono', monospace", cat: 'mono' },
-    { id: 'monaco', name: 'Monaco', family: "Monaco, 'Liberation Mono', monospace", cat: 'mono' },
+    { id: 'consolas', name: 'Consolas', family: "Consolas, monospace", cat: 'mono' },
+    { id: 'courier', name: 'Courier New', family: "'Courier New', monospace", cat: 'mono' },
+    { id: 'monaco', name: 'Monaco', family: "Monaco, monospace", cat: 'mono' },
 
     // Hand
     { id: 'cursive', name: 'Cursive', family: "cursive", cat: 'hand' },
-    { id: 'comic_sans', name: 'Comic Sans', family: "'Comic Sans MS', 'Comic Neue', cursive, sans-serif", cat: 'hand' },
+    { id: 'comic_sans', name: 'Comic Sans', family: "'Comic Sans MS', cursive", cat: 'hand' },
 
     // Deco
-    { id: 'impact', name: 'Impact', family: "Impact, 'Liberation Sans', fantasy", cat: 'deco' },
-    { id: 'trebuchet', name: 'Trebuchet MS', family: "'Trebuchet MS', 'Ubuntu', sans-serif", cat: 'deco' },
+    { id: 'impact', name: 'Impact', family: "Impact, fantasy", cat: 'deco' },
+    { id: 'trebuchet', name: 'Trebuchet MS', family: "'Trebuchet MS', sans-serif", cat: 'deco' },
 
     // Game
-    { id: 'press_start', name: '8-Bit Retro', family: "'Courier New', 'Liberation Mono', monospace", cat: 'game' },
-    { id: 'copperplate', name: 'Copperplate', family: "Copperplate, 'Liberation Serif', fantasy", cat: 'game' }
+    { id: 'press_start', name: '8-Bit Retro', family: "'Courier New', monospace", cat: 'game' },
+    { id: 'copperplate', name: 'Copperplate', family: "Copperplate, fantasy", cat: 'game' }
 ];
 
-let currentActiveFontId = getLocalSetting('nedotify_theme_font_id', 'default');
+// Keep pre-port Linux font identifiers readable while the durable family value
+// remains the shared desktop setting. All typography reacts to a font change.
+const normalizeFont = value => String(value || '').replace(/["']/g, '').replace(/\s+/g, '').toLowerCase();
+const activeFontFamilies = {};
 
-export function highlightActiveFontCard(activeIdentifier) {
-    const container = document.getElementById('font-cards-grid');
-    if (!container) return;
-    container.querySelectorAll('.font-card').forEach(card => {
-        const isMatch = (card.dataset.fontId && card.dataset.fontId === activeIdentifier)
-            || (card.dataset.font && card.dataset.font === activeIdentifier);
-        card.classList.toggle('active', !!isMatch);
+export function highlightActiveFontCard(identifier) {
+    const grid = document.getElementById('font-cards-grid');
+    grid?.querySelectorAll('.font-card').forEach(card => {
+        const match = card.dataset.fontId === identifier || normalizeFont(card.dataset.font) === normalizeFont(identifier);
+        card.classList.toggle('active', match);
     });
 }
 
 export function applyFontFamily(fontFamily, fontId = null, save = true) {
-    let targetFamily = fontFamily;
-    let targetId = fontId;
-
-    if (!targetFamily || targetFamily === 'system' || targetFamily === 'default') {
-        const defaultFont = FONTS_LIST.find(f => f.id === 'default');
-        targetFamily = defaultFont ? defaultFont.family : "'Inter', system-ui, -apple-system, 'Ubuntu', 'Liberation Sans', sans-serif";
-        if (!targetId) targetId = 'default';
-    } else if (!targetId) {
-        const match = FONTS_LIST.find(f => f.id === targetFamily || f.family === targetFamily);
-        if (match) {
-            targetId = match.id;
-            targetFamily = match.family;
-        }
-    } else if (targetId && !targetFamily) {
-        const match = FONTS_LIST.find(f => f.id === targetId);
-        if (match) targetFamily = match.family;
-    }
-
-    currentActiveFontId = targetId || 'default';
-
-    // Update all typographic variables so player, lyrics, and cards all react
-    document.documentElement.style.setProperty('--font-family', targetFamily);
-    document.documentElement.style.setProperty('--font-body', targetFamily);
-    document.documentElement.style.setProperty('--font-display', targetFamily);
-
-    const selectFont = document.getElementById('select-font-family');
-    if (selectFont) {
-        selectFont.value = targetFamily;
-    }
-
-    if (save) {
-        saveSetting('font_family', targetId === 'default' ? 'default' : targetFamily, 'theme');
-        if (targetId) saveSetting('font_id', targetId, 'theme');
-    }
-
-    highlightActiveFontCard(targetId || targetFamily);
+    const match = FONTS_LIST.find(font => font.id === fontFamily || font.family === fontFamily)
+        || (!fontFamily ? FONTS_LIST.find(font => font.id === fontId) : null);
+    const isDefault = (!fontFamily && !fontId) || ['system', 'default'].includes(fontFamily) || (!fontFamily && fontId === 'default');
+    const family = isDefault ? FONTS_LIST[0].family : match?.family || fontFamily;
+    const style = document.documentElement.dataset.uiStyle === 'macos' ? 'macos' : 'current';
+    activeFontFamilies[style] = family;
+    document.documentElement.style.setProperty('--font-family', family);
+    document.documentElement.style.setProperty('--font-body', family);
+    document.documentElement.style.setProperty('--font-display', family);
+    const macos = document.documentElement.dataset.uiStyle === 'macos';
+    if (save) saveSetting(macos ? 'macos_font_family' : 'font_family', isDefault ? 'system' : family, macos ? 'interface' : 'theme');
+    highlightActiveFontCard(isDefault ? 'default' : family);
 }
 
 function renderThemePresets() {
@@ -560,62 +156,64 @@ function renderThemePresets() {
 
     container.innerHTML = '';
     PRESET_THEMES.forEach(t => {
-        const card = document.createElement('div');
+        const card = document.createElement('button');
+        card.type = 'button';
         const isActive = t.id === currentTheme;
         card.className = `theme-card${isActive ? ' active' : ''}`;
         card.dataset.theme = t.id;
+        card.setAttribute('aria-pressed',String(isActive));
+        card.setAttribute('aria-label',`Тема ${t.name}`);
         card.innerHTML = `
-            ${isActive ? '<div class="theme-card-badge">✓</div>' : ''}
+            <span class="theme-preview">${themePreviewPath(t.id) ? `<img src="${themePreviewPath(t.id)}" class="theme-preview-image" alt="" width="186" height="58" loading="lazy">` : ''}</span>
+            <span class="theme-card-badge" ${isActive?'':'hidden'} aria-hidden="true">✓</span>
             <div class="theme-dots-row">
-                <div class="theme-dot" style="background:${t.colors[0]}"></div>
                 <div class="theme-dot" style="background:${t.colors[1]}"></div>
                 <div class="theme-dot" style="background:${t.colors[2]}"></div>
             </div>
-            <span class="theme-card-name">${t.name}</span>
+            <span class="theme-card-name">${escapeHtml(t.name)}</span>
         `;
+        card.querySelector('.theme-preview').style.background = `linear-gradient(135deg,${t.colors[0]},${t.colors[1]})`;
+        card.querySelector('img')?.addEventListener('error', event => { event.currentTarget.hidden = true; });
         card.addEventListener('click', () => {
-            container.querySelectorAll('.theme-card').forEach(c => {
-                c.classList.remove('active');
-                const badge = c.querySelector('.theme-card-badge');
-                if (badge) badge.remove();
-            });
-            card.classList.add('active');
-            const badge = document.createElement('div');
-            badge.className = 'theme-card-badge';
-            badge.textContent = '✓';
-            card.appendChild(badge);
-
             document.documentElement.setAttribute('data-theme', t.id);
             saveSetting('theme', t.id, 'theme');
+            saveSetting('theme_mode','dark','theme');
+            document.querySelectorAll('.theme-mode-btn').forEach(button=>button.classList.toggle('active',button.dataset.mode==='dark'));
+            resetCustomPalette(false);
+            syncThemeSelection();
         });
         container.appendChild(card);
     });
 }
 
-export function renderFontCards(activeCat = 'system') {
+function renderFontCards(activeCat = 'system') {
     const container = document.getElementById('font-cards-grid');
     if (!container) return;
 
-    const currentFont = getComputedStyle(document.documentElement).getPropertyValue('--font-family').trim();
+    // Optional faces are bundled locally and loaded only when the picker opens.
+    // Keep first paint independent of these extra stylesheets and font requests.
+    if (typeof window.NeDotifyEnsurePickerFonts === 'function') {
+        try { window.NeDotifyEnsurePickerFonts(); } catch (e) {}
+    }
 
     container.innerHTML = '';
     const filteredFonts = FONTS_LIST.filter(f => f.cat === activeCat || activeCat === 'all');
     filteredFonts.forEach(f => {
         const card = document.createElement('div');
-        const isActive = currentActiveFontId
-            ? (f.id === currentActiveFontId || (f.id === 'default' && currentActiveFontId === 'default'))
-            : ((f.id === 'default' && (!currentFont || currentFont === 'default' || currentFont === 'system' || currentFont.includes('Inter')))
-               || (currentFont && (currentFont === f.family || currentFont.includes(f.name))));
-
+        const macos = document.documentElement.dataset.uiStyle === 'macos';
+        const savedFont = activeFontFamilies[macos ? 'macos' : 'current'] || savedSetting(macos?'interface':'theme',macos?'macos_font_family':'font_family','system');
+        const isActive = ['system', 'default'].includes(savedFont) ? f.id === 'default' : normalizeFont(savedFont) === normalizeFont(f.family);
         card.className = `font-card${isActive ? ' active' : ''}`;
-        card.dataset.fontId = f.id;
         card.dataset.font = f.family;
+        card.dataset.fontId = f.id;
         card.innerHTML = `
             <div class="font-preview-letters" style="font-family:${f.family}">Aa</div>
-            <span class="font-card-name">${f.name}</span>
+            <span class="font-card-name">${escapeHtml(f.name)}</span>
         `;
         card.addEventListener('click', () => {
-            applyFontFamily(f.family, f.id, true);
+            container.querySelectorAll('.font-card').forEach(c => c.classList.remove('active'));
+            card.classList.add('active');
+            applyFontFamily(f.family, f.id);
         });
         container.appendChild(card);
     });
@@ -629,37 +227,35 @@ function renderThemeGrid() {
 function setupToggle(id, key, category, onChange) {
     const toggle = document.getElementById(id);
     if (!toggle) return;
+    syncSwitch(toggle, savedSetting(category, key, toggle.classList.contains('on')));
 
     if (toggle._boundClick) toggle.removeEventListener('click', toggle._boundClick);
 
-    const clickHandler = () => {
+    const clickHandler = async () => {
         const isOn = toggle.classList.toggle('on');
-        saveSetting(key, isOn, category);
+        toggle.setAttribute('aria-checked', String(isOn));
+        const pending = saveSetting(key, isOn, category);
         
         if (onChange) onChange(isOn);
 
         // Apply immediately
-        if (key === 'particles_enabled') {
-            if (window.settings && window.settings.ui) window.settings.ui.particles_enabled = isOn;
-            saveSetting('resource_particles', isOn, 'optimization');
-            const optBtn = document.querySelector('#opt-active-resources [data-resource="particles"]');
-            if (optBtn) optBtn.classList.toggle('active', isOn);
-            if (isOn) {
-                initParticles();
-            } else {
-                stopParticles();
-            }
-        }
         if (key === 'cover_visualizer') {
             const canvas = document.getElementById('visualizer-canvas');
             if (canvas) canvas.style.display = isOn ? 'block' : 'none';
         }
+        const saved = await pending;
+        if (!saved) {
+            const restored = savedSetting(category, key, !isOn);
+            syncSwitch(toggle, restored);
+            if (onChange) onChange(restored);
+        }
+        return saved;
     };
     toggle._boundClick = clickHandler;
     toggle.addEventListener('click', clickHandler);
 }
 
-function setupSlider(id, key, category, onChange) {
+function setupSlider(id, key, category, onChange, resolveTarget = () => ({key,category}), afterSave) {
     const slider = document.getElementById(id);
     if (!slider) return;
 
@@ -674,12 +270,39 @@ function setupSlider(id, key, category, onChange) {
     if (slider._boundInput) slider.removeEventListener('input', slider._boundInput);
     if (slider._boundChange) slider.removeEventListener('change', slider._boundChange);
 
+    let preview;
     const inputHandler = (e) => {
+        const target = resolveTarget();
+        if (!preview || preview.category !== target.category || preview.key !== target.key) {
+            preview = { ...target, value: savedSetting(target.category, target.key, Number(slider.defaultValue || slider.value)),
+                previous: settingAliases(target.category, target.key).map(([cat, name]) => [cat, name, window.settings?.[cat]?.[name]]) };
+        }
+        // Preview consumers read window.settings; only change persists to disk.
+        window.settings ||= {};
+        window.settings[target.category] ||= {};
+        window.settings[target.category][target.key] = Number(e.target.value);
+        for (const [cat, name] of settingAliases(target.category, target.key)) {
+            window.settings[cat] ||= {};
+            window.settings[cat][name] = Number(e.target.value);
+        }
+        if (target.category === 'audio') applyAudioSettings(window.settings.audio);
         updatePercent(e.target.value);
         if (onChange) onChange(e.target.value);
     };
-    const changeHandler = (e) => {
-        saveSetting(key, parseInt(e.target.value), category);
+    const changeHandler = async (e) => {
+        inputHandler(e);
+        const target = resolveTarget();
+        const snapshot = preview;
+        preview = null;
+        const value = Number(e.target.value);
+        const saved = await saveSetting(target.key, value, target.category, { previous: snapshot.previous });
+        if (saved && afterSave) await afterSave(value);
+        if (!saved && !preview) {
+            const restored = savedSetting(target.category, target.key, snapshot.value);
+            syncSlider(id, restored);
+            if (onChange) onChange(String(restored));
+        }
+        return saved;
     };
 
     slider._boundInput = inputHandler;
@@ -688,8 +311,61 @@ function setupSlider(id, key, category, onChange) {
     slider.addEventListener('change', changeHandler);
 }
 
+export function syncPrivacySettings() {
+    syncSwitch(document.getElementById('toggle-lyrics-enabled'), window.settings?.lyrics?.enabled !== false);
+    for (const [key, fallback] of [['mode', 'auto'], ['animations', 'standard']]) {
+        const input = document.getElementById(`lyrics-${key}`);
+        if (input) input.value = window.settings?.lyrics?.[key] || fallback;
+    }
+    syncSwitch(document.getElementById('toggle-lastfm-enabled'), window.settings?.services?.lastfm_enabled === true);
+    for (const name of ['youtube','soundcloud']) {
+        syncSwitch(document.getElementById(`toggle-source-${name}`), window.settings?.services?.[`${name}_enabled`] !== false);
+    }
+    const lastfmUsername = document.getElementById('input-lastfm-username');
+    if (lastfmUsername && window.settings?.auth?.lastfm_username !== undefined) {
+        lastfmUsername.value = String(window.settings.auth.lastfm_username || '');
+    }
+    const lastfmApiKey = document.getElementById('input-lastfm-api-key');
+    if (lastfmApiKey) {
+        // The backend returns only the masked value plus has_lastfm_api_key.
+        // Never reflect a credential into this input from settings state.
+        const hasSavedKey = window.settings?.services?.has_lastfm_api_key === true ||
+            window.settings?.auth?.has_lastfm_api_key === true;
+        lastfmApiKey.placeholder = hasSavedKey ? 'Ключ сохранён (введите новый, чтобы заменить)' : 'Введите API-ключ';
+    }
+}
+
+export function applyBorderRadius(value = 12) {
+    const numeric = Number(value);
+    const radius = Number.isFinite(numeric) ? Math.max(0, Math.min(24, Math.round(numeric))) : 12;
+    const root = document.documentElement;
+    root.style.setProperty('--interface-radius', `${radius}px`);
+    for (const [name, scale] of [['xs',.25],['sm',.5],['md',1],['lg',1.5],['xl',2]]) {
+        root.style.setProperty(`--radius-${name}`, `${Math.round(radius * scale)}px`);
+    }
+    root.classList?.add?.('has-interface-radius');
+    const slider = document.getElementById('slider-border-radius');
+    if (slider) {
+        slider.value = radius;
+        slider.style.setProperty('--value-percent', `${radius / 24 * 100}%`);
+    }
+    setElText('label-border-radius', `${radius}px`);
+    return radius;
+}
+
 export function applySettingsFromBackend(settings) {
     if (!settings) return;
+    window.settings ||= {};
+    for (const [category, values] of Object.entries(settings)) {
+        if (values && typeof values === 'object' && !Array.isArray(values)) {
+            window.settings[category] = { ...window.settings[category], ...values };
+        }
+    }
+    syncPrivacySettings();
+    applyBorderRadius(window.settings.interface?.border_radius);
+    window.dispatchEvent(new CustomEvent('nedotify:lyrics_settings_changed', {detail: window.settings.lyrics || {}}));
+    window.NeDotifyAppearance?.restore(settings);
+    applyAudioSettings(settings.audio || {});
 
     const appliedTheme = settings.theme?.theme || settings.theme?.name || settings.theme?.mode || settings.ui?.theme || settings.interface?.theme;
     if (appliedTheme) {
@@ -699,53 +375,30 @@ export function applySettingsFromBackend(settings) {
         });
     }
 
-    if (settings.ui) {
-        if (settings.ui.particles_enabled !== undefined) {
-            const toggle = document.getElementById('toggle-particles');
-            if (toggle) toggle.classList.toggle('on', !!settings.ui.particles_enabled);
-            if (settings.ui.particles_enabled) {
-                initParticles();
-            } else {
-                stopParticles();
-            }
+    // theme_mode is the actual light/dark/system switch (theme.theme is the palette name).
+    // Both used to be written to the same data-theme attribute, so applying the
+    // mode straight after the palette made the chosen palette vanish on every
+    // restart. The palette now wins; the mode only picks the colours when no
+    // palette is stored, and the mode buttons always reflect the saved state.
+    if (settings.theme && settings.theme.theme_mode !== undefined) {
+        const mode = String(settings.theme.theme_mode);
+        document.querySelectorAll('.theme-mode-btn[data-mode]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === mode);
+        });
+        const hasPalette = !!(settings.theme.theme || settings.theme.name);
+        if (!hasPalette) {
+            try { applyThemeMode(mode); } catch(e) {}
         }
+    }
+    restoreCustomPalette(settings.theme);
+    syncThemeSelection();
+    renderSavedCustomThemes(settings.theme);
+
+    if (settings.ui) {
         if (settings.ui.cover_visualizer !== undefined) {
             const toggle = document.getElementById('toggle-visualizer');
-            if (toggle) toggle.classList.toggle('on', settings.ui.cover_visualizer);
-        }
-        if (settings.ui.particles_count !== undefined) {
-            const slider = document.getElementById('slider-particles-count');
-            if (slider) {
-                slider.value = settings.ui.particles_count;
-                const pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
-                slider.style.setProperty('--value-percent', `${pct}%`);
-            }
-            setElText('label-particles-count', settings.ui.particles_count);
-        }
-        if (settings.ui.particles_shape) {
-            document.querySelectorAll('.particle-shape-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.shape === settings.ui.particles_shape);
-            });
-        }
-        if (settings.ui.particles_size !== undefined) {
-            const slider = document.getElementById('slider-particles-size');
-            if (slider) {
-                slider.value = settings.ui.particles_size;
-                const pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
-                slider.style.setProperty('--value-percent', `${pct}%`);
-            }
-            const sizeLabels = { 1: 'Мелкий', 2: 'Обычный', 3: 'Средний', 4: 'Крупный', 5: 'Огромный' };
-            setElText('label-particles-size', sizeLabels[settings.ui.particles_size] || 'Обычный');
-        }
-        if (settings.ui.particles_speed !== undefined) {
-            const slider = document.getElementById('slider-particles-speed');
-            if (slider) {
-                slider.value = settings.ui.particles_speed;
-                const pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
-                slider.style.setProperty('--value-percent', `${pct}%`);
-            }
-            const speedLabels = { 1: 'Медленная', 2: 'Обычная', 3: 'Быстрая' };
-            setElText('label-particles-speed', speedLabels[settings.ui.particles_speed] || 'Обычная');
+            if (toggle) toggle.classList.toggle('on', !!settings.ui.cover_visualizer);
+            try { setVisualizerEnabled(!!settings.ui.cover_visualizer, { silent: true }); } catch(e) {}
         }
     }
 
@@ -761,6 +414,9 @@ export function applySettingsFromBackend(settings) {
         }
 
         if (settings.theme && settings.theme.font_family !== undefined) {
+            // BUG-U3-005: мёртвый lookup select-font-family удалён — элемента нет
+            // в разметке. setProperty — живое применение сохранённого шрифта при
+            // загрузке настроек (выбор — карточки font-cards-grid, settings.js:183).
             applyFontFamily(settings.theme.font_family, settings.theme.font_id, false);
         }
 
@@ -772,11 +428,11 @@ export function applySettingsFromBackend(settings) {
             if (settings.theme.transparency_level !== undefined) {
                 const slider = document.getElementById('slider-transparency-level');
                 if (slider) {
-                    slider.value = settings.theme.transparency_level;
+                    slider.value = transparencyPercent(settings.theme.transparency_level);
                     const pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
                     slider.style.setProperty('--value-percent', `${pct}%`);
                 }
-                setElText('label-transparency-level', `${settings.theme.transparency_level}%`);
+                setElText('label-transparency-level', `${transparencyPercent(settings.theme.transparency_level)}%`);
             }
             const enabled = !!settings.theme.transparency_enabled;
             const level = settings.theme.transparency_level !== undefined ? settings.theme.transparency_level : 80;
@@ -788,20 +444,15 @@ export function applySettingsFromBackend(settings) {
                 applyIconPack(settings.theme.icon_pack);
             }
             if (settings.theme.custom_bg_image !== undefined) {
-                let bgToApply = settings.theme.custom_bg_image;
-                const localBg = getLocalSetting('nedotify_theme_custom_bg_image', '');
-                if (!bgToApply && localBg) {
-                    bgToApply = localBg;
-                    saveSetting('custom_bg_image', localBg, 'theme');
-                }
-                const blur = settings.theme.bg_blur !== undefined ? settings.theme.bg_blur : getLocalSetting('nedotify_theme_bg_blur', 0);
-                const dim = settings.theme.bg_dim !== undefined ? settings.theme.bg_dim : getLocalSetting('nedotify_theme_bg_dim', 30);
+                const blur = settings.theme.bg_blur !== undefined ? settings.theme.bg_blur : 0;
+                const dim = settings.theme.bg_dim !== undefined ? settings.theme.bg_dim : 30;
+                // Also update localStorage so instant restore on boot works perfectly
                 try {
-                    localStorage.setItem('nedotify_theme_custom_bg_image', JSON.stringify(bgToApply || ''));
+                    localStorage.setItem('nedotify_theme_custom_bg_image', JSON.stringify(settings.theme.custom_bg_image));
                     localStorage.setItem('nedotify_theme_bg_blur', JSON.stringify(blur));
                     localStorage.setItem('nedotify_theme_bg_dim', JSON.stringify(dim));
                 } catch(e) {}
-                applyCustomBg(bgToApply, blur, dim);
+                applyCustomBg(settings.theme.custom_bg_image, blur, dim);
             }
         }
 
@@ -823,9 +474,14 @@ export function applySettingsFromBackend(settings) {
         if (toggleGL) toggleGL.classList.toggle('on', settings.audio.gapless_playback !== false);
         const toggleAP = document.getElementById('toggle-autoplay');
         if (toggleAP) toggleAP.classList.toggle('on', !!settings.audio.autoplay);
-
-        // Audio Output Device Selector
-        setupAudioDeviceSelector();
+        // volume_normalization is bound in setupToggle('toggle-normalization',
+        // 'volume_normalization', 'audio') so it was saved on every change but
+        // never read back here, leaving the toggle stuck at its default after a
+        // restart even though the backend had the right value.
+        if (settings.audio.volume_normalization !== undefined) {
+            const toggleVN = document.getElementById('toggle-normalization');
+            if (toggleVN) toggleVN.classList.toggle('on', !!settings.audio.volume_normalization);
+        }
     }
 
     if (settings.general) {
@@ -834,6 +490,8 @@ export function applySettingsFromBackend(settings) {
             selectRegion.value = settings.general.region;
         }
     }
+
+    restoreDiscordSettings(window.settings);
 
     if (settings.efficiency) {
         setupEfficiencyPanel();
@@ -844,29 +502,50 @@ export function applySettingsFromBackend(settings) {
     }
 
     if (settings.player) {
+        if (upgradeQueuePanelPreferences(settings.player)) {
+            Promise.resolve(saveSetting('show_queue', true, 'player')).then(result => {
+                if (result !== false && result?.success !== false) return saveSetting('queue_panel_version', 1, 'player');
+            }).catch(() => {});
+        }
         if (settings.player.title_align) applyTitleAlignment(settings.player.title_align);
         if (settings.player.player_style) applyPlayerStyle(settings.player.player_style);
         if (settings.player.slider_type) applySliderType(settings.player.slider_type);
+        applyProgressColor(savedSetting('player', 'progress_color', '#10d6a3'));
+        applyProgressTransparency(savedSetting('player', 'progress_transparency', 18));
         if (settings.player.show_queue !== undefined) applyShowQueue(settings.player.show_queue);
         if (settings.player.queue_pos) applyQueuePosition(settings.player.queue_pos);
         if (settings.player.compact_queue_btn !== undefined) applyCompactQueueBtn(settings.player.compact_queue_btn);
         if (settings.player.next_track_preview !== undefined) applyNextTrackPreview(settings.player.next_track_preview);
+        if (settings.player.aura_orbs_enabled !== undefined) applyAuraOrbs(settings.player.aura_orbs_enabled);
         if (settings.player.queue_view) applyQueueViewMode(settings.player.queue_view);
         if (settings.player.mp_progress) applyMpProgress(settings.player.mp_progress);
         if (settings.player.mp_cover_shape) applyMpCoverShape(settings.player.mp_cover_shape);
         if (settings.player.mp_shape) applyMpShape(settings.player.mp_shape);
         if (settings.player.mp_pos) applyMpPos(settings.player.mp_pos);
-        if (settings.player.queue_autopilot !== undefined || settings.player.flow_enabled !== undefined) {
-            const autoVal = settings.player.queue_autopilot !== undefined ? settings.player.queue_autopilot : settings.player.flow_enabled;
-            const toggleAP = document.getElementById('toggle-queue-autopilot');
-            if (toggleAP) toggleAP.classList.toggle('on', !!autoVal);
+        // Now that window.settings holds the backend values, repaint the Player
+        // tab's cards and toggles. The earlier setupPlayerSettingsPanel() pass
+        // ran before the bridge answered and could only guess from localStorage.
+        try { syncPlayerSettingsUI(); } catch(e) {}
+    }
+
+    if (settings.storage) {
+        document.getElementById('toggle-auto-download-favorites')?.classList.toggle('on', !!savedSetting('storage', 'auto_download_favorites', false));
+        for (const [id, key] of [['select-auto-download-quota','auto_download_favorites_quota_gb'], ['select-cache-quota','cache_quota_gb']]) {
+            const select = document.getElementById(id);
+            if (select && settings.storage[key] !== undefined) select.value = String(settings.storage[key]);
         }
     }
+    if (settings.theme?.font_family !== undefined) renderFontCards(document.querySelector('.font-cat-btn.active')?.dataset.cat || 'system');
+    if (settings.theme?.bg_blur !== undefined) syncSlider('slider-bg-blur', settings.theme.bg_blur, 'label-bg-blur', 'px');
+    if (settings.theme?.bg_dim !== undefined) syncSlider('slider-bg-dim', settings.theme.bg_dim, 'label-bg-dim', '%');
+    restoreAtmosphereSettings(window.settings);
+    document.dispatchEvent(new CustomEvent('nedotify:settings_applied', { detail: window.settings }));
 
     if (settings.auth) {
         const inputYandexToken = document.getElementById('input-yandex-token');
-        if (inputYandexToken && settings.auth.yandex_token !== undefined) {
-            inputYandexToken.value = settings.auth.yandex_token;
+        if (inputYandexToken) {
+            inputYandexToken.value = '';
+            inputYandexToken.placeholder = settings.auth.has_yandex_token ? 'Токен сохранён (введите новый, чтобы заменить)' : 'Введите yandex_token...';
         }
         const selectBrowserCookies = document.getElementById('select-browser-cookies');
         if (selectBrowserCookies && settings.auth.browser_cookies !== undefined) {
@@ -896,9 +575,8 @@ export function applySettingsFromBackend(settings) {
         if (inputOauthClientSecret) {
             inputOauthClientSecret.disabled = true;
             inputOauthClientSecret.title = 'В разработке';
-            if (settings.auth.oauth_client_secret !== undefined) {
-                inputOauthClientSecret.value = settings.auth.oauth_client_secret;
-            }
+            inputOauthClientSecret.value = '';
+            inputOauthClientSecret.placeholder = settings.auth.has_oauth_client_secret ? 'Секрет сохранён (введите новый, чтобы заменить)' : 'Client Secret...';
         }
         
         const btnYtmusicOauth = document.getElementById('btn-ytmusic-oauth');
@@ -911,10 +589,12 @@ export function applySettingsFromBackend(settings) {
             }
         }
         
-        setYandexWarning(!!settings.auth.yandex_auth_error);
+        // Yandex auth errors arrive as a dedicated event; token values stay
+        // backend-only and are never copied into this form.
     }
 }
 
+// The backend sends only an invalid flag, never the credential itself.
 export function setYandexWarning(visible) {
     const warning = document.getElementById('yandex-auth-warning');
     if (warning) {
@@ -941,17 +621,88 @@ export function onStorageInfo(data) {
     }
 }
 
-function saveSetting(key, value, category) {
-    if (window.settings && category) {
-        if (!window.settings[category]) window.settings[category] = {};
-        window.settings[category][key] = value;
+const settingRevisions = new Map();
+const SECRET_SETTING_KEYS = new Set([
+    'yandex_token', 'oauth_client_secret', 'proxy_url',
+    'lastfm_api_key', 'lastfm_api_secret',
+]);
+function saveSetting(key, value, category, options = {}) {
+    if (!window.settings) window.settings = {};
+    const storageKey = `nedotify_${category}_${key}`;
+    const isSecret = category === 'auth' || SECRET_SETTING_KEYS.has(String(key).toLowerCase());
+    const maskInMemory = SECRET_SETTING_KEYS.has(String(key).toLowerCase()) ||
+        (category === 'auth' && ['yandex_token', 'yandex_refresh_token', 'oauth_client_secret', 'proxy_url'].includes(String(key).toLowerCase()));
+    const aliases = settingAliases(category, key);
+    const revision = Math.max(...aliases.map(([cat,name]) => settingRevisions.get(`nedotify_${cat}_${name}`) || 0)) + 1;
+    const previous = options.previous || aliases.map(([cat,name]) => [cat,name,window.settings[cat]?.[name]]);
+    for (const [cat,name] of aliases) settingRevisions.set(`nedotify_${cat}_${name}`, revision);
+    const hasKey = `has_${key}`;
+    const previousHas = category ? window.settings[category]?.[hasKey] : undefined;
+    if (category) {
+        for (const [cat,name] of aliases) {
+            window.settings[cat] ||= {};
+            window.settings[cat][name] = maskInMemory ? '' : value;
+        }
+        if (maskInMemory && value) window.settings[category][hasKey] = true;
     }
     try {
-        localStorage.setItem(`nedotify_${category}_${key}`, JSON.stringify(value));
+        if (isSecret) localStorage.removeItem(storageKey);
+        else for (const [cat,name] of aliases) localStorage.setItem(`nedotify_${cat}_${name}`, JSON.stringify(value));
     } catch (e) {}
-    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_setting) {
-        window.pywebview.api.save_setting(key, value, category);
+    if (['interface', 'optimization', 'theme'].includes(category)) window.NeDotifyAppearance?.refresh();
+    if (category === 'interface' && key === 'border_radius') applyBorderRadius(value);
+    if (category === 'audio') applyAudioSettings(window.settings.audio || {});
+    const rollback = () => {
+        if (settingRevisions.get(storageKey) !== revision) return false;
+        for (const [cat,name,oldValue] of previous) {
+            if (oldValue === undefined) delete window.settings[cat][name];
+            else window.settings[cat][name] = oldValue;
+            try {
+                const aliasKey = `nedotify_${cat}_${name}`;
+                if (oldValue === undefined || isSecret) localStorage.removeItem(aliasKey);
+                else localStorage.setItem(aliasKey, JSON.stringify(oldValue));
+            } catch {}
+        }
+        if (previousHas === undefined) delete window.settings[category][hasKey];
+        else window.settings[category][hasKey] = previousHas;
+        applySettingsFromBackend(window.settings);
+        showToast('Не удалось сохранить настройку. Повторите изменение.', 'error');
+        return false;
+    };
+    try {
+        if (!window.pywebview?.api?.save_setting) throw new Error('Bridge unavailable');
+        return Promise.resolve(window.pywebview.api.save_setting(key, value, category)).then(result => {
+            if (result === false || result?.success === false) throw new Error('Setting rejected');
+            return true;
+        }).catch(rollback);
+    } catch {
+        // Roll back after the caller's optimistic preview, even when the
+        // bridge throws synchronously instead of returning a rejected promise.
+        return Promise.resolve().then(rollback);
     }
+}
+
+async function enableMacosGlass() {
+    // Explicitly enabling effects leaves FPS, covers and other resource choices
+    // alone. Only the options that suppress the requested glass are changed.
+    const pending = [saveSetting('macos_glass', true, 'interface')];
+    if (!Number(savedSetting('interface', 'macos_blur', 38))) pending.push(saveSetting('macos_blur', 38, 'interface'));
+    if (savedSetting('optimization', 'performance_preset', 'high') === 'low' || document.documentElement.classList.contains('perf-low')) {
+        document.documentElement.classList.remove('perf-low');
+        document.documentElement.classList.add('perf-medium');
+        _syncActiveCard('opt-perf-preset', 'balanced');
+        pending.push(saveSetting('performance_preset', 'balanced', 'optimization'));
+    }
+    const quality = savedSetting('optimization', 'blur_quality', 'hq');
+    const resolved = quality === 'off' ? 'lq' : quality;
+    const amount = Number(savedSetting('theme', 'glass_blur', 14)) || 14;
+    applyBlurQuality(resolved);
+    applyGlassBlur(amount);
+    pending.push(saveSetting('blur_quality', resolved, 'optimization'));
+    pending.push(saveSetting('glass_blur', amount, 'theme'));
+    pending.push(saveSetting('resource_blur', true, 'optimization'));
+    await Promise.all(pending);
+    window.NeDotifyAppearance?.refresh();
 }
 
 function setElText(id, text) {
@@ -959,14 +710,33 @@ function setElText(id, text) {
     if (el) el.textContent = text;
 }
 
-export function loadSettings() {
+export async function loadSettings() {
+    await ensureSettingsPanel();
     if (window.pywebview?.api) {
-        window.pywebview.api.get_storage_info();
+        Promise.resolve(window.pywebview.api.get_storage_info()).then(onStorageInfo).catch(() => {
+            showToast('Не удалось получить сведения о хранилище', 'error');
+        });
     }
 }
 
+function transparencyPercent(level) {
+    const value = Number(level);
+    return Math.max(10, Math.min(100, Math.round(value > 0 && value <= 1 ? value * 100 : value || 80)));
+}
+
+function syncSlider(id, value, labelId, suffix = '') {
+    const slider = document.getElementById(id);
+    if (!slider) return;
+    const min = Number(slider.min) || 0;
+    const max = Number(slider.max) || 100;
+    const numeric = Number(value);
+    slider.value = Math.max(min, Math.min(max, Number.isFinite(numeric) ? numeric : min));
+    slider.style.setProperty('--value-percent', `${(slider.value - slider.min) / (slider.max - slider.min) * 100}%`);
+    if (labelId) setElText(labelId, `${slider.value}${suffix}`);
+}
+
 export function applyTransparency(level, enabled) {
-    const opacity = enabled ? (level / 100) : 1.0;
+    const opacity = enabled ? (transparencyPercent(level) / 100) : 1.0;
     document.documentElement.style.setProperty('--app-bg-opacity', opacity);
     const slider = document.getElementById('slider-transparency-level');
     if (slider) slider.disabled = !enabled;
@@ -974,11 +744,13 @@ export function applyTransparency(level, enabled) {
 
 export function applyFontSize(val) {
     const size = parseInt(val) || 16;
-    const scale = size / 16;
+    const scale = size / 14;
     setElText('label-font-size', `${size}px`);
     document.documentElement.style.fontSize = `${size}px`;
     document.documentElement.style.setProperty('--font-size-base', `${size}px`);
+    document.documentElement.style.setProperty('--font-size', `${size}px`);
     document.documentElement.style.setProperty('--app-font-scale', scale);
+    window.NeDotifyAppearance?.refresh();
 
     const slider = document.getElementById('slider-font-size');
     if (slider) {
@@ -1007,37 +779,14 @@ export function initKeybinds() {
     }
 }
 
-function triggerKeybindAction(actionId) {
-    switch(actionId) {
-        case 'play_pause':
-            document.getElementById('pb-btn-play')?.click();
-            break;
-        case 'next_track':
-            document.getElementById('pb-btn-next')?.click();
-            break;
-        case 'prev_track':
-            document.getElementById('pb-btn-prev')?.click();
-            break;
-        case 'volume_up':
-            window.NeDotify?.adjustVolume?.(5);
-            break;
-        case 'volume_down':
-            window.NeDotify?.adjustVolume?.(-5);
-            break;
-        case 'toggle_mute':
-            document.getElementById('pb-volume-btn')?.click();
-            break;
-        case 'toggle_lyrics':
-            document.getElementById('pp-btn-lyrics')?.click();
-            break;
-        case 'toggle_mini':
-            document.getElementById('btn-mini-player')?.click();
-            break;
-    }
-}
-
-function formatKeyName(code) {
-    if (!code) return 'Не назначено';
+/**
+ * Human label for a single bare KeyboardEvent.code - no modifiers.
+ * Split out of formatKeyName() so the combo splitter below can reuse it.
+ * @param {string} code
+ * @returns {string}
+ */
+function formatBaseKeyName(code) {
+    if (!code) return code;
     const translations = {
         'Space': 'Пробел',
         'ArrowRight': 'Стрелка Вправо',
@@ -1075,6 +824,39 @@ function formatKeyName(code) {
     return code;
 }
 
+// Modifier names exactly as parseKeyEventCombo() emits them, in the order it
+// pushes them. 'Meta' is the Windows key.
+const KEYBIND_MODIFIER_LABELS = {
+    'Ctrl': 'Ctrl',
+    'Alt': 'Alt',
+    'Shift': 'Shift',
+    'Meta': 'Win'
+};
+
+/**
+ * Human label for a full combo string as stored in activeKeybinds.
+ *
+ * parseKeyEventCombo() joins the modifiers and the base key with '+', so
+ * 'Ctrl+ArrowRight' is a TWO-part string. This used to look the whole string up
+ * in a map that only ever contained bare codes, miss, and fall through to
+ * `return code` - which is why every modified default rendered as the literal
+ * text "Ctrl+ArrowRight" in the Settings list, while the unmodified 'ArrowRight'
+ * correctly rendered as "Стрелка Вправо". Any binding the user made with a
+ * modifier held down was equally unreadable. Split on '+' and label each part.
+ */
+function formatKeyName(code) {
+    if (!code) return 'Не назначено';
+    const parts = String(code).split('+').filter(Boolean);
+    if (parts.length === 0) return 'Не назначено';
+
+    const labels = parts.map(part =>
+        Object.prototype.hasOwnProperty.call(KEYBIND_MODIFIER_LABELS, part)
+            ? KEYBIND_MODIFIER_LABELS[part]
+            : formatBaseKeyName(part)
+    );
+    return labels.join(' + ');
+}
+
 function renderKeybindsList() {
     const listEl = document.getElementById('keybinds-list');
     if (!listEl) return;
@@ -1093,7 +875,7 @@ function renderKeybindsList() {
 
         row.innerHTML = `
             <div>
-                <div class="setting-label">${kb.label}</div>
+                <div class="setting-label">${escapeHtml(kb.label)}</div>
             </div>
             <button class="filter-btn keybind-record-btn ${isListening ? 'active' : ''}" style="min-width: 140px; font-size: 13px;">
                 ${isListening ? 'Нажмите клавишу...' : currentKeyDisplay}
@@ -1187,32 +969,44 @@ export function applyPerformancePreset(preset, skipSave = false) {
         root.classList.add('perf-low');
         applyBlurQuality('off');
         applyGlowSettings('off');
-        _setSlidersForPreset(15, 10, 30);
+        _setSlidersForPreset(15, 10, 30, skipSave);
         _syncActiveCard('opt-blur-quality', 'off');
         _syncActiveCard('opt-glow-quality', 'off');
     } else if (normalized === 'medium') {
         root.classList.add('perf-medium');
         applyBlurQuality('lq');
         applyGlowSettings('subtle');
-        _setSlidersForPreset(30, 18, 45);
+        _setSlidersForPreset(30, 18, 45, skipSave);
         _syncActiveCard('opt-blur-quality', 'lq');
         _syncActiveCard('opt-glow-quality', 'subtle');
     } else { // high
         applyBlurQuality('hq');
         applyGlowSettings('full');
-        _setSlidersForPreset(60, 24, 60);
+        _setSlidersForPreset(60, 24, 60, skipSave);
         _syncActiveCard('opt-blur-quality', 'hq');
         _syncActiveCard('opt-glow-quality', 'full');
     }
 
     if (!skipSave) {
         saveSetting('performance_preset', preset, 'optimization');
+        saveSetting('blur_quality', normalized === 'low' ? 'off' : normalized === 'medium' ? 'lq' : 'hq', 'optimization');
+        saveSetting('glow_quality', normalized === 'low' ? 'off' : normalized === 'medium' ? 'subtle' : 'full', 'optimization');
+        const target = glassSettingTarget();
+        saveSetting(target.key, normalized === 'low' ? 0 : normalized === 'medium' ? 6 : 14, target.category);
+        saveSetting('resource_blur', normalized !== 'low', 'optimization');
+        document.querySelector('#opt-active-resources [data-resource="blur"]')?.classList.toggle('active', normalized !== 'low');
     }
-    applyAuraOrbs(getLocalSetting('nedotify_player_aura_orbs_enabled', true));
+    applyAuraOrbs(savedSetting('player', 'aura_orbs_enabled', true));
     window.dispatchEvent(new CustomEvent('nedotify:performance_preset_changed', { detail: { preset: normalized } }));
 }
 
-function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
+// skipSave is threaded through so the restore path can lay the preset's values
+// onto the sliders without writing them back. saveSetting() also mutates
+// window.settings, so saving here during restore overwrote the user's own
+// fps_* / blur / glow values with the preset's defaults on every startup --
+// which also made the final applied value depend on a race with the restore
+// block that runs right after this call.
+function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60, skipSave = false) {
     const sv = document.getElementById('slider-fps-visualizer');
     if (sv) {
         sv.value = vizFps;
@@ -1220,7 +1014,7 @@ function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
         sv.style.setProperty('--value-percent', `${pct}%`);
         setElText('label-fps-visualizer', `${vizFps} FPS`);
         setVisualizerFps(vizFps);
-        saveSetting('fps_visualizer', vizFps, 'optimization');
+        if (!skipSave) saveSetting('fps_visualizer', vizFps, 'optimization');
     }
     const sp = document.getElementById('slider-fps-particles');
     if (sp) {
@@ -1229,7 +1023,7 @@ function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
         sp.style.setProperty('--value-percent', `${pct}%`);
         setElText('label-fps-particles', `${particlesFps} FPS`);
         setParticlesFps(particlesFps);
-        saveSetting('fps_particles', particlesFps, 'optimization');
+        if (!skipSave) saveSetting('fps_particles', particlesFps, 'optimization');
     }
     const su = document.getElementById('slider-fps-ui');
     if (su) {
@@ -1238,8 +1032,37 @@ function _setSlidersForPreset(vizFps, particlesFps, uiFps = 60) {
         su.style.setProperty('--value-percent', `${pct}%`);
         setElText('label-fps-ui', `${uiFps} FPS`);
         setUiFps(uiFps);
-        saveSetting('fps_ui', uiFps, 'optimization');
+        if (!skipSave) saveSetting('fps_ui', uiFps, 'optimization');
     }
+}
+
+function applyGlassBlur(value) {
+    const val = Math.max(0, Math.min(40, Number(value) || 0));
+    const root = document.documentElement;
+    root.style.setProperty('--glass-blur', `${val}px`);
+    root.style.setProperty('--blur-sm', `${Math.round(val * 0.4)}px`);
+    root.style.setProperty('--blur-md', `${val}px`);
+    root.style.setProperty('--blur-lg', `${Math.round(val * 1.3)}px`);
+    root.style.setProperty('--blur-xl', `${Math.round(val * 1.6)}px`);
+    root.classList.toggle('blur-disabled', val === 0);
+    syncSlider('slider-glass-blur', val, 'label-glass-blur', 'px');
+    _syncActiveCard('opt-blur-quality', ({0:'off',4:'fast',6:'lq',14:'hq'})[val] || 'custom');
+    document.querySelector('#opt-active-resources [data-resource="blur"]')?.classList.toggle('active', val > 0);
+}
+
+function glassSettingTarget() {
+    return document.documentElement.dataset.uiStyle === 'macos'
+        ? {key: 'macos_blur', category: 'interface'}
+        : {key: 'glass_blur', category: 'theme'};
+}
+
+export function enableBlurPerformance() {
+    if (savedSetting('optimization', 'performance_preset', 'balanced') !== 'low') return;
+    // Keep custom FPS limits when the user explicitly enables an effect.
+    document.documentElement.classList.remove('perf-low');
+    document.documentElement.classList.add('perf-medium');
+    _syncActiveCard('opt-perf-preset', 'balanced');
+    saveSetting('performance_preset', 'balanced', 'optimization');
 }
 
 export function applyBlurQuality(val) {
@@ -1259,6 +1082,7 @@ export function applyBlurQuality(val) {
     root.style.setProperty('--glass-blur', v.glass);
 
     root.classList.toggle('blur-disabled', val === 'off');
+    _syncActiveCard('opt-blur-quality', val);
 
     const glassSlider = document.getElementById('slider-glass-blur');
     if (glassSlider) {
@@ -1300,24 +1124,23 @@ export function applyResourceToggle(res, isActive) {
         root.classList.toggle('resource-bg-disabled', !isActive);
         const orbs = document.getElementById('aura-orbs-container');
         if (orbs) orbs.style.display = isActive ? '' : 'none';
+        window.dispatchEvent(new CustomEvent('nedotify:background_decoration_changed'));
     } else if (res === 'particles') {
-        if (isActive) initParticles(); else stopParticles();
-        const togglePart = document.getElementById('toggle-particles');
-        if (togglePart) togglePart.classList.toggle('on', isActive);
-        if (window.settings && window.settings.ui) window.settings.ui.particles_enabled = isActive;
+        window.settings ||= {};
+        window.settings.atmosphere ||= {};
+        window.settings.atmosphere.enabled = !!isActive;
+        restoreAtmosphereSettings(window.settings);
     } else if (res === 'covers') {
         root.classList.toggle('resource-covers-disabled', !isActive);
     } else if (res === 'visualizers') {
-        const canvases = ['visualizer-canvas', 'home-visualizer-canvas'];
-        canvases.forEach(id => {
-            const c = document.getElementById(id);
-            if (c) c.style.display = isActive ? '' : 'none';
-        });
-        const toggleViz = document.getElementById('toggle-visualizer');
-        if (toggleViz) toggleViz.classList.toggle('on', isActive);
+        setVisualizerEnabled(isActive, { silent: true });
     } else if (res === 'blur') {
-        applyBlurQuality(isActive ? 'hq' : 'off');
-        _syncActiveCard('opt-blur-quality', isActive ? 'hq' : 'off');
+        if (isActive) {
+            const quality = savedSetting('optimization', 'blur_quality', 'hq');
+            applyBlurQuality(quality === 'off' ? 'hq' : quality);
+            const target = glassSettingTarget();
+            applyGlassBlur(savedSetting(target.category, target.key, 14) || 14);
+        } else applyBlurQuality('off');
     }
 }
 
@@ -1327,10 +1150,10 @@ export function setupOptimizationPanel() {
         if (!container) return;
         container.querySelectorAll('.opt-card').forEach(card => {
             if (card._boundClick) card.removeEventListener('click', card._boundClick);
-            const clickHandler = () => {
+            const clickHandler = async () => {
                 container.querySelectorAll('.opt-card').forEach(c => c.classList.remove('active'));
                 card.classList.add('active');
-                saveSetting(settingKey, card.dataset.val, 'optimization');
+                if (settingKey !== 'performance_preset' && !await saveSetting(settingKey, card.dataset.val, 'optimization')) return;
                 if (onChange) onChange(card.dataset.val);
             };
             card._boundClick = clickHandler;
@@ -1350,21 +1173,38 @@ export function setupOptimizationPanel() {
     });
 
     // 3. Blur Quality
-    setupCardGroup('opt-blur-quality', 'blur_quality', applyBlurQuality);
+    setupCardGroup('opt-blur-quality', 'blur_quality', val => {
+        if (val !== 'off') enableBlurPerformance();
+        applyBlurQuality(val);
+        const macos = document.documentElement.dataset.uiStyle === 'macos';
+        saveSetting(macos ? 'macos_blur' : 'glass_blur', Number(document.getElementById('slider-glass-blur')?.value || 0), macos ? 'interface' : 'theme');
+        saveSetting('resource_blur', val !== 'off', 'optimization');
+        document.querySelector('#opt-active-resources [data-resource="blur"]')?.classList.toggle('active', val !== 'off');
+    });
 
     // 4. Ambient Glow
-    setupCardGroup('opt-glow-quality', 'glow_quality', applyGlowSettings);
+    setupCardGroup('opt-glow-quality', 'glow_quality', val => {
+        if (val !== 'off') enableBlurPerformance();
+        applyGlowSettings(val);
+    });
 
     // 5. Active resource toggles
     const resourceContainer = document.getElementById('opt-active-resources');
     if (resourceContainer) {
         resourceContainer.querySelectorAll('.opt-toggle-btn').forEach(btn => {
             if (btn._boundClick) btn.removeEventListener('click', btn._boundClick);
-            const clickHandler = () => {
+            const clickHandler = async () => {
                 const isActive = btn.classList.toggle('active');
                 const res = btn.dataset.resource;
-                saveSetting(`resource_${res}`, isActive, 'optimization');
+                if (!await saveSetting(`resource_${res}`, isActive, 'optimization')) return;
+                if (res === 'blur' && isActive) enableBlurPerformance();
                 applyResourceToggle(res, isActive);
+                if (res === 'blur' && isActive) {
+                    const quality = savedSetting('optimization', 'blur_quality', 'hq');
+                    saveSetting('blur_quality', quality === 'off' ? 'hq' : quality, 'optimization');
+                    const target = glassSettingTarget();
+                    saveSetting(target.key, Number(document.getElementById('slider-glass-blur')?.value || 14), target.category);
+                }
             };
             btn._boundClick = clickHandler;
             btn.addEventListener('click', clickHandler);
@@ -1384,12 +1224,6 @@ export function setupOptimizationPanel() {
         setElText('label-fps-ui', `${v} FPS`);
         setUiFps(v);
     });
-
-    // 7. Glass blur listener
-    const glassSlider = document.getElementById('slider-glass-blur');
-    if (glassSlider) {
-        glassSlider.addEventListener('mousedown', () => { glassSlider.dataset.userSet = '1'; });
-    }
 
     // 8. Restore all saved optimization settings from localStorage/window.settings
     try {
@@ -1431,28 +1265,28 @@ export function setupOptimizationPanel() {
         const sp = document.getElementById('slider-fps-particles');
         if (sp) {
             sp.value = fpsPart;
-            const pct = (fpsPart - sp.min) / (sp.max - sp.min) * 100;
+            const pct = (sp.value - sp.min) / (sp.max - sp.min) * 100;
             sp.style.setProperty('--value-percent', `${pct}%`);
-            setElText('label-fps-particles', `${fpsPart} FPS`);
-            setParticlesFps(fpsPart);
+            setElText('label-fps-particles', `${sp.value} FPS`);
+            setParticlesFps(sp.value);
         }
 
         const sv = document.getElementById('slider-fps-visualizer');
         if (sv) {
             sv.value = fpsViz;
-            const pct = (fpsViz - sv.min) / (sv.max - sv.min) * 100;
+            const pct = (sv.value - sv.min) / (sv.max - sv.min) * 100;
             sv.style.setProperty('--value-percent', `${pct}%`);
-            setElText('label-fps-visualizer', `${fpsViz} FPS`);
-            setVisualizerFps(fpsViz);
+            setElText('label-fps-visualizer', `${sv.value} FPS`);
+            setVisualizerFps(sv.value);
         }
 
         const su = document.getElementById('slider-fps-ui');
         if (su) {
             su.value = fpsUi;
-            const pct = (fpsUi - su.min) / (su.max - su.min) * 100;
+            const pct = (su.value - su.min) / (su.max - su.min) * 100;
             su.style.setProperty('--value-percent', `${pct}%`);
-            setElText('label-fps-ui', `${fpsUi} FPS`);
-            setUiFps(fpsUi);
+            setElText('label-fps-ui', `${su.value} FPS`);
+            setUiFps(su.value);
         }
 
         // Sync & apply resource toggle buttons
@@ -1461,194 +1295,76 @@ export function setupOptimizationPanel() {
             if (val === undefined) {
                 val = getLocalSetting(`nedotify_optimization_resource_${res}`, true);
             }
+            if (res === 'particles') val = !!val && savedSetting('atmosphere', 'enabled', false);
+            if (res === 'visualizers') val = !!val && savedSetting('ui', 'cover_visualizer', false);
             const btn = document.querySelector(`#opt-active-resources [data-resource="${res}"]`);
             if (btn) btn.classList.toggle('active', !!val);
             applyResourceToggle(res, !!val);
         });
+        if (savedSetting('optimization', 'resource_blur', true)) {
+            const target = glassSettingTarget();
+            applyGlassBlur(savedSetting(target.category, target.key, 14));
+        }
     } catch(e) {}
 }
 
-let audioDevicePollTimer = null;
-
-export function setupAudioDeviceSelector(deviceInfo) {
-    const selectDevice = document.getElementById('select-audio-device');
-    if (!selectDevice) return;
-
-    const renderDevices = (info) => {
-        if (!info || !info.devices || info.devices.length === 0) return;
-        const currentTarget = info.current || selectDevice.value;
-
-        // Compare current options to detect if device list actually changed
-        const currentOptions = Array.from(selectDevice.options).map(o => o.value).join(',');
-        const newOptions = info.devices.map(d => d.name).join(',');
-
-        if (currentOptions !== newOptions || selectDevice.options.length === 0) {
-            selectDevice.innerHTML = '';
-            info.devices.forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d.name;
-                opt.textContent = d.description || d.name;
-                if (d.name === currentTarget) {
-                    opt.selected = true;
-                }
-                selectDevice.appendChild(opt);
-            });
-        } else if (currentTarget && selectDevice.value !== currentTarget) {
-            selectDevice.value = currentTarget;
-        }
-    };
-
-    const fetchDevices = () => {
-        if (!window.pywebview?.api?.get_audio_devices) return;
-        window.pywebview.api.get_audio_devices().then(info => {
-            renderDevices(info);
-        }).catch(e => console.warn('Failed to load audio devices:', e));
-    };
-
-    if (deviceInfo) {
-        renderDevices(deviceInfo);
-    } else {
-        fetchDevices();
+const CUSTOM_COLOR_PROPS={primary:'--primary',accent:'--accent',bg:'--bg-main',text:'--text-main',card:'--bg-card',border:'--border',dim:'--text-dim',focus:'--focus'};
+function setCustomColor(key,value) {
+    const prop=CUSTOM_COLOR_PROPS[key];if(!prop)return;
+    const root=document.documentElement;
+    if(!/^#[\da-f]{6}$/i.test(value || '')){root.style.removeProperty(prop);if(['primary','accent'].includes(key))root.style.removeProperty(`${prop}-rgb`);return;}
+    root.style.setProperty(prop,value);
+    if(['primary','accent'].includes(key))root.style.setProperty(`${prop}-rgb`,[1,3,5].map(i=>parseInt(value.slice(i,i+2),16)).join(', '));
+}
+function restoreCustomPalette(theme={}) {
+    const enabled=theme?.custom_palette_enabled===true;
+    if(!enabled)for(const key of Object.keys(CUSTOM_COLOR_PROPS))setCustomColor(key,'');
+    const toggle=document.getElementById('custom-palette-enabled');if(toggle)toggle.checked=enabled;
+    const computed=getComputedStyle(document.documentElement);
+    for(const [key,prop] of Object.entries(CUSTOM_COLOR_PROPS)){
+        const value=enabled?(theme?.[`color_${key}`] ?? (['primary','accent'].includes(key)?theme?.[`custom_${key}`]:undefined) ?? ''):'';
+        if(value)setCustomColor(key,value);
+        else if(theme && Object.prototype.hasOwnProperty.call(theme,`color_${key}`))setCustomColor(key,'');
+        const picker=document.getElementById(`picker-color-${key}`);
+        if(picker){const active=value || computed.getPropertyValue(prop).trim();const rgb=active.match(/^rgb\((\d+),?\s+(\d+),?\s+(\d+)\)$/);picker.value=/^#[\da-f]{6}$/i.test(active)?active:rgb?'#'+rgb.slice(1).map(n=>Number(n).toString(16).padStart(2,'0')).join(''):picker.defaultValue;}
     }
-
-    // Refresh immediately when user clicks, touches, or focuses the selector
-    if (!selectDevice._boundEvents) {
-        selectDevice._boundEvents = true;
-        selectDevice.addEventListener('focus', fetchDevices);
-        selectDevice.addEventListener('mousedown', fetchDevices);
-        selectDevice.addEventListener('pointerdown', fetchDevices);
-        selectDevice.addEventListener('click', fetchDevices);
-
-        selectDevice.addEventListener('change', (e) => {
-            const devName = e.target.value;
-            if (devName && window.pywebview?.api?.set_audio_device) {
-                window.pywebview.api.set_audio_device(devName).then(ok => {
-                    if (ok && window.showToast) {
-                        const label = selectDevice.options[selectDevice.selectedIndex]?.text || devName;
-                        showToast('Вывод звука: ' + label, 'success');
-                    }
-                });
-            }
-        });
-    }
-
-    // Polling while Settings panel is open so newly connected headphones appear automatically
-    if (!audioDevicePollTimer) {
-        audioDevicePollTimer = setInterval(() => {
-            if (document.hidden) return;
-            const settingsView = document.getElementById('view-settings');
-            if (settingsView && settingsView.classList.contains('active')) {
-                fetchDevices();
-            }
-        }, 3000);
-    }
+    syncCustomColorFields();
+}
+function activateCustomPalette() {
+    if(window.settings?.theme?.custom_palette_enabled===true)return;
+    // Initialise from the currently visible palette, never from dormant legacy editor values.
+    for(const key of Object.keys(CUSTOM_COLOR_PROPS)){const picker=document.getElementById(`picker-color-${key}`);if(picker)saveSetting(`color_${key}`,picker.value,'theme');}
+    saveSetting('custom_palette_enabled',true,'theme');
+    const toggle=document.getElementById('custom-palette-enabled');if(toggle)toggle.checked=true;
+}
+function resetCustomPalette(notify=true) {
+    saveSetting('custom_palette_enabled',false,'theme');
+    for(const key of Object.keys(CUSTOM_COLOR_PROPS)){setCustomColor(key,'');saveSetting(`color_${key}`,'','theme');}
+    saveSetting('custom_primary','','theme');saveSetting('custom_accent','','theme');
+    restoreCustomPalette(window.settings?.theme);syncCustomColorFields();
+    if(notify)showToast('Цвета возвращены к выбранной теме','success');
+}
+function getSavedCustomThemes(theme=window.settings?.theme) {
+    let local=[];try{local=JSON.parse(localStorage.getItem('nedotify_custom_themes') || '[]');}catch{}
+    const backend=theme?.custom_themes;
+    const list=Array.isArray(backend)?backend:local;
+    return Array.isArray(list)?list.filter(item=>item && typeof item.name==='string' && item.palette && typeof item.palette==='object'):[];
+}
+function renderSavedCustomThemes(theme=window.settings?.theme) {
+    const container=document.getElementById('saved-custom-themes');if(!container)return;
+    container.replaceChildren();
+    getSavedCustomThemes(theme).forEach(item=>{
+        const button=document.createElement('button');button.className='saved-theme-button';button.type='button';button.textContent=item.name;button.title=`Применить тему «${item.name}»`;
+        const swatch=document.createElement('span');if(/^#[\da-f]{6}$/i.test(item.palette['--primary'] || ''))swatch.style.backgroundColor=item.palette['--primary'];button.prepend(swatch);
+        button.onclick=()=>{
+            activateCustomPalette();
+            for(const [key,prop] of Object.entries(CUSTOM_COLOR_PROPS)){const value=item.palette[prop];if(!/^#[\da-f]{6}$/i.test(value || ''))continue;setCustomColor(key,value);saveSetting(`color_${key}`,value,'theme');if(['primary','accent'].includes(key))saveSetting(`custom_${key}`,value,'theme');}
+            restoreCustomPalette(window.settings?.theme);document.getElementById('input-custom-theme-name').value=item.name;
+        };container.appendChild(button);
+    });
 }
 
-function setupAppearancePanel() {
-    // 1. Theme Mode Switcher (Dark, Light, System)
-    document.querySelectorAll('.theme-mode-btn[data-mode]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.theme-mode-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            const mode = btn.dataset.mode;
-            saveSetting('theme_mode', mode, 'theme');
-            applyThemeMode(mode);
-        });
-    });
 
-    // 2. Custom Theme Color Pickers
-    const colorPickers = [
-        { id: 'picker-color-primary', prop: '--primary', hasRgb: true },
-        { id: 'picker-color-accent', prop: '--accent', hasRgb: true },
-        { id: 'picker-color-bg', prop: '--bg-main' },
-        { id: 'picker-color-text', prop: '--text-main' },
-        { id: 'picker-color-card', prop: '--bg-card' },
-        { id: 'picker-color-border', prop: '--border' },
-        { id: 'picker-color-dim', prop: '--text-dim' },
-        { id: 'picker-color-focus', prop: '--focus' }
-    ];
-
-    colorPickers.forEach(item => {
-        const el = document.getElementById(item.id);
-        if (el) {
-            el.addEventListener('input', (e) => {
-                const val = e.target.value;
-                document.documentElement.style.setProperty(item.prop, val);
-                if (item.hasRgb) {
-                    const c = val.replace('#', '');
-                    const r = parseInt(c.substring(0, 2), 16) || 0;
-                    const g = parseInt(c.substring(2, 4), 16) || 0;
-                    const b = parseInt(c.substring(4, 6), 16) || 0;
-                    document.documentElement.style.setProperty(`${item.prop}-rgb`, `${r}, ${g}, ${b}`);
-                }
-                saveSetting(item.id.replace('picker-color-', 'color_'), val, 'theme');
-            });
-        }
-    });
-
-    // Random Theme Palette Generator
-    const btnRandom = document.getElementById('btn-random-theme');
-    if (btnRandom) {
-        btnRandom.addEventListener('click', () => {
-            const rHex = () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
-            colorPickers.forEach(item => {
-                const el = document.getElementById(item.id);
-                const val = rHex();
-                if (el) el.value = val;
-                document.documentElement.style.setProperty(item.prop, val);
-                if (item.hasRgb) {
-                    const c = val.replace('#', '');
-                    const r = parseInt(c.substring(0, 2), 16) || 0;
-                    const g = parseInt(c.substring(2, 4), 16) || 0;
-                    const b = parseInt(c.substring(4, 6), 16) || 0;
-                    document.documentElement.style.setProperty(`${item.prop}-rgb`, `${r}, ${g}, ${b}`);
-                }
-            });
-            window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Палитра случайно сгенерирована!', type: 'info' } }));
-        });
-    }
-
-    // Save Custom Theme
-    const btnSaveCustom = document.getElementById('btn-save-custom-theme');
-    const inputThemeName = document.getElementById('input-custom-theme-name');
-    if (btnSaveCustom) {
-        btnSaveCustom.addEventListener('click', () => {
-            const name = (inputThemeName?.value || 'Моя тема').trim();
-            const palette = {};
-            colorPickers.forEach(item => {
-                const el = document.getElementById(item.id);
-                if (el) palette[item.prop] = el.value;
-            });
-            const saved = JSON.parse(localStorage.getItem('nedotify_custom_themes') || '[]');
-            saved.push({ name, palette, date: Date.now() });
-            localStorage.setItem('nedotify_custom_themes', JSON.stringify(saved));
-            window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Тема "${name}" успешно сохранена!`, type: 'success' } }));
-        });
-    }
-
-    // 3. Font Category Switcher Buttons
-    document.querySelectorAll('.font-cat-btn[data-cat]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.font-cat-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            renderFontCards(btn.dataset.cat);
-        });
-    });
-
-    // 4. Export Font Button
-    const btnExportFont = document.getElementById('btn-export-font');
-    if (btnExportFont) {
-        btnExportFont.addEventListener('click', () => {
-            const fontVal = getComputedStyle(document.documentElement).getPropertyValue('--font-family').trim();
-            const fontSize = getComputedStyle(document.documentElement).fontSize;
-            const configStr = `font-family: ${fontVal}; font-size: ${fontSize};`;
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(configStr);
-            }
-            window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Конфигурация шрифта скопирована в буфер!', type: 'success' } }));
-        });
-    }
-}
 
 function applyThemeMode(mode) {
     if (mode === 'system') {
@@ -1657,177 +1373,16 @@ function applyThemeMode(mode) {
     } else {
         document.documentElement.setAttribute('data-theme', mode);
     }
-    applyAuraOrbs(getLocalSetting('nedotify_player_aura_orbs_enabled', true));
+    applyAuraOrbs(savedSetting('player', 'aura_orbs_enabled', true));
 }
 
-let _zapretListenersAttached = false;
 
-function _toBool(v) {
-    if (typeof v === 'boolean') return v;
-    if (typeof v === 'string') return v.trim().toLowerCase() === 'true' || v === '1';
-    return !!v;
-}
 
-function setupZapretPanel() {
-    const toggleZapret = document.getElementById('toggle-zapret-enabled');
-    const toggleAutoStart = document.getElementById('toggle-zapret-autostart');
-    const chkAutoStart = document.getElementById('zapret-auto-start');
-    const selectZapretMode = document.getElementById('select-zapret-mode');
-    const toggleAutoUpdate = document.getElementById('toggle-zapret-autoupdate');
-    const btnUpdateZapret = document.getElementById('btn-update-zapret');
-    const versionBadge = document.getElementById('zapret-version-badge');
-    const updateStatus = document.getElementById('zapret-update-status');
 
-    let selectedMode = 'youtube_discord';
-    let savedCustomArgs = '';
-    let savedBinaryPath = '';
-
-    function setAutoStartState(isOn) {
-        const flag = Boolean(isOn);
-        if (toggleAutoStart) toggleAutoStart.classList.toggle('on', flag);
-        if (chkAutoStart) chkAutoStart.checked = flag;
-    }
-
-    async function applyZapret(enable) {
-        const customArgs = savedCustomArgs || '';
-        const binPath = savedBinaryPath || '';
-
-        if (window.pywebview?.api?.toggle_zapret) {
-            const res = await window.pywebview.api.toggle_zapret(enable, selectedMode, customArgs, binPath);
-            if (res) {
-                if (enable && !res.success) {
-                    if (toggleZapret) toggleZapret.classList.remove('on');
-                    window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                        detail: { msg: res.message || res.error || 'Не удалось запустить winws.exe. Проверьте права администратора.', type: 'warning' }
-                    }));
-                } else if (enable) {
-                    window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                        detail: { msg: res.message || 'Zapret (Обход DPI) успешно включен!', type: 'success' }
-                    }));
-                } else {
-                    window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                        detail: { msg: res.message || 'Zapret остановлен', type: 'info' }
-                    }));
-                }
-            }
-        }
-    }
-
-    if (!_zapretListenersAttached) {
-        _zapretListenersAttached = true;
-
-        if (toggleAutoStart) {
-            toggleAutoStart.addEventListener('click', async () => {
-                const isOn = toggleAutoStart.classList.toggle('on');
-                if (chkAutoStart) chkAutoStart.checked = isOn;
-                saveSetting('auto_start', isOn, 'zapret');
-                if (window.pywebview?.api?.set_setting) {
-                    await window.pywebview.api.set_setting('zapret', 'auto_start', isOn);
-                }
-                window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                    detail: { msg: isOn ? 'Автозапуск Zapret включен' : 'Автозапуск Zapret отключен', type: 'info' }
-                }));
-            });
-        }
-
-        if (chkAutoStart) {
-            chkAutoStart.addEventListener('change', async (e) => {
-                const isOn = e.target.checked;
-                if (toggleAutoStart) toggleAutoStart.classList.toggle('on', isOn);
-                saveSetting('auto_start', isOn, 'zapret');
-                if (window.pywebview?.api?.set_setting) {
-                    await window.pywebview.api.set_setting('zapret', 'auto_start', isOn);
-                }
-                window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                    detail: { msg: isOn ? 'Автозапуск Zapret включен' : 'Автозапуск Zapret отключен', type: 'info' }
-                }));
-            });
-        }
-
-        if (selectZapretMode) {
-            selectZapretMode.addEventListener('change', (e) => {
-                selectedMode = e.target.value;
-                if (toggleZapret && toggleZapret.classList.contains('on')) {
-                    applyZapret(true);
-                }
-            });
-        }
-
-        if (toggleAutoUpdate) {
-            toggleAutoUpdate.addEventListener('click', () => {
-                const isOn = toggleAutoUpdate.classList.toggle('on');
-                saveSetting('autoupdate', isOn, 'zapret');
-                if (window.pywebview?.api?.set_setting) {
-                    window.pywebview.api.set_setting('zapret', 'autoupdate', isOn);
-                }
-            });
-        }
-
-        if (btnUpdateZapret) {
-            btnUpdateZapret.addEventListener('click', async () => {
-                btnUpdateZapret.disabled = true;
-                btnUpdateZapret.style.opacity = '0.6';
-                if (updateStatus) updateStatus.textContent = 'Проверка и загрузка актуальной версии...';
-
-                try {
-                    if (window.pywebview?.api?.update_zapret) {
-                        const res = await window.pywebview.api.update_zapret(true);
-                        if (res?.success) {
-                            if (versionBadge && res.status?.version) versionBadge.textContent = res.status.version;
-                            if (updateStatus) updateStatus.textContent = 'Установлена последняя версия';
-                            window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                                detail: { msg: res.message || 'Zapret успешно обновлен!', type: 'success' }
-                            }));
-                        } else {
-                            if (updateStatus) updateStatus.textContent = 'Ошибка проверки обновления';
-                            window.dispatchEvent(new CustomEvent('nedotify:toast', {
-                                detail: { msg: res.message || 'Не удалось обновить Zapret', type: 'error' }
-                            }));
-                        }
-                    }
-                } catch (err) {
-                    if (updateStatus) updateStatus.textContent = 'Ошибка сети при обновлении';
-                } finally {
-                    btnUpdateZapret.disabled = false;
-                    btnUpdateZapret.style.opacity = '1';
-                }
-            });
-        }
-
-        if (toggleZapret) {
-            toggleZapret.addEventListener('click', () => {
-                const isOn = toggleZapret.classList.toggle('on');
-                applyZapret(isOn);
-            });
-        }
-    }
-
-    // Refresh Status
-    if (window.pywebview?.api?.get_zapret_status) {
-        window.pywebview.api.get_zapret_status().then(status => {
-            if (status) {
-                const isRunning = _toBool(status.running);
-                if (toggleZapret) toggleZapret.classList.toggle('on', isRunning);
-                const isAutoStart = _toBool(status.auto_start);
-                setAutoStartState(isAutoStart);
-                if (status.mode && selectZapretMode) {
-                    selectedMode = status.mode;
-                    selectZapretMode.value = status.mode;
-                }
-                if (versionBadge && status.version) {
-                    versionBadge.textContent = status.version;
-                }
-                savedCustomArgs = status.custom_args || '';
-                savedBinaryPath = status.binary_path || '';
-                if (toggleAutoUpdate && status.autoupdate !== undefined) {
-                    toggleAutoUpdate.classList.toggle('on', _toBool(status.autoupdate));
-                }
-            }
-        }).catch(() => {});
-    }
-}
 
 export function applyCustomBg(bgDataUrl, blurPx = 0, dimPct = 30) {
+    bgDataUrl = window.NeDotifyAssets?.resolveBackground(bgDataUrl) ?? bgDataUrl;
+    blurPx = Math.max(0, Math.min(16, Number(blurPx) || 0));
     let bgLayer = document.getElementById('custom-bg-layer');
     let dimLayer = document.getElementById('custom-bg-dim-layer');
     const previewRow = document.getElementById('row-custom-bg-preview');
@@ -1841,9 +1396,11 @@ export function applyCustomBg(bgDataUrl, blurPx = 0, dimPct = 30) {
         if (bgLayer) bgLayer.style.display = 'none';
         if (dimLayer) dimLayer.style.display = 'none';
         if (previewRow) previewRow.style.display = 'none';
+        if (previewImg) previewImg.style.backgroundImage = '';
         try {
             localStorage.removeItem('nedotify_theme_custom_bg_image');
         } catch(e) {}
+        window.NeDotifyAppearance?.refresh();
         return;
     }
 
@@ -1851,7 +1408,6 @@ export function applyCustomBg(bgDataUrl, blurPx = 0, dimPct = 30) {
     document.body.classList.add('has-custom-bg');
     const appCont = document.getElementById('app-container');
     if (appCont) appCont.classList.add('has-custom-bg');
-    document.documentElement.classList.remove('resource-bg-disabled');
 
     try {
         localStorage.setItem('nedotify_theme_custom_bg_image', JSON.stringify(bgDataUrl));
@@ -1872,99 +1428,19 @@ export function applyCustomBg(bgDataUrl, blurPx = 0, dimPct = 30) {
     }
 
     bgLayer.style.display = 'block';
-    bgLayer.style.backgroundImage = `url("${bgDataUrl}")`;
+    bgLayer.style.backgroundImage = `url(${JSON.stringify(bgDataUrl)})`;
     bgLayer.style.filter = `blur(${blurPx || 0}px)`;
     bgLayer.style.transform = `scale(${blurPx > 0 ? 1.06 : 1})`;
 
-    const safeDim = Math.min(95, Math.max(0, Number(dimPct !== undefined ? dimPct : 30)));
     dimLayer.style.display = 'block';
-    dimLayer.style.backgroundColor = `rgba(0, 0, 0, ${safeDim / 100})`;
+    dimLayer.style.backgroundColor = `rgba(0, 0, 0, ${(dimPct !== undefined ? dimPct : 30) / 100})`;
 
     if (previewRow) previewRow.style.display = 'flex';
-    if (previewImg) previewImg.style.backgroundImage = `url("${bgDataUrl}")`;
+    if (previewImg) previewImg.style.backgroundImage = `url(${JSON.stringify(bgDataUrl)})`;
+    window.NeDotifyAppearance?.refresh();
 }
 
-function setupBackgroundPanel() {
-    const btnUpload = document.getElementById('btn-upload-bg-image');
-    const inputBgFile = document.getElementById('input-bg-file');
-    const btnRemove = document.getElementById('btn-remove-bg-image');
 
-    if (btnUpload && inputBgFile) {
-        btnUpload.addEventListener('click', () => inputBgFile.click());
-        inputBgFile.addEventListener('change', (e) => {
-            const file = e.target.files && e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const dataUrl = event.target.result;
-                    compressBackgroundImage(dataUrl, (compressed) => {
-                        saveSetting('custom_bg_image', compressed, 'theme');
-                        const blurVal = parseInt(document.getElementById('slider-bg-blur')?.value || 0);
-                        const dimVal = parseInt(document.getElementById('slider-bg-dim')?.value || 30);
-                        saveSetting('resource_bg', true, 'optimization');
-                        const btnBg = document.querySelector('#opt-active-resources [data-resource="bg"]');
-                        if (btnBg) btnBg.classList.add('active');
-                        applyResourceToggle('bg', true);
-                        applyCustomBg(compressed, blurVal, dimVal);
-                    });
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-    }
-
-    if (btnRemove) {
-        btnRemove.addEventListener('click', () => {
-            saveSetting('custom_bg_image', '', 'theme');
-            applyCustomBg(null);
-        });
-    }
-
-    setupSlider('slider-bg-blur', 'bg_blur', 'theme', (v) => {
-        const val = parseInt(v) || 0;
-        setElText('label-bg-blur', `${val}px`);
-        setElText('label-glass-blur', `${val}px`);
-        const glassSlider = document.getElementById('slider-glass-blur');
-        if (glassSlider) glassSlider.value = val;
-        document.documentElement.style.setProperty('--glass-blur', `${val}px`);
-        document.documentElement.style.setProperty('--blur-sm', `${Math.max(4, Math.round(val * 0.4))}px`);
-        const bgUrl = getLocalSetting('nedotify_theme_custom_bg_image', '') || window.settings?.theme?.custom_bg_image;
-        const dimVal = parseInt(document.getElementById('slider-bg-dim')?.value || 30);
-        if (bgUrl) {
-            applyCustomBg(bgUrl, val, dimVal);
-        }
-    });
-
-    setupSlider('slider-bg-dim', 'bg_dim', 'theme', (v) => {
-        const val = parseInt(v) || 0;
-        setElText('label-bg-dim', `${val}%`);
-        const bgUrl = getLocalSetting('nedotify_theme_custom_bg_image', '') || window.settings?.theme?.custom_bg_image;
-        const blurVal = parseInt(document.getElementById('slider-bg-blur')?.value || 0);
-        if (bgUrl) {
-            applyCustomBg(bgUrl, blurVal, val);
-        }
-    });
-
-    // Restore saved custom background image on setup
-    const savedBg = getLocalSetting('nedotify_theme_custom_bg_image', '') || window.settings?.theme?.custom_bg_image;
-    const savedBlur = getLocalSetting('nedotify_theme_bg_blur', 0);
-    const savedDim = getLocalSetting('nedotify_theme_bg_dim', 30);
-
-    const blurSlider = document.getElementById('slider-bg-blur');
-    if (blurSlider) {
-        blurSlider.value = savedBlur;
-        setElText('label-bg-blur', `${savedBlur}px`);
-    }
-    const dimSlider = document.getElementById('slider-bg-dim');
-    if (dimSlider) {
-        dimSlider.value = savedDim;
-        setElText('label-bg-dim', `${savedDim}%`);
-    }
-
-    if (savedBg) {
-        applyCustomBg(savedBg, savedBlur, savedDim);
-    }
-}
 
 const ICON_PACKS = [
     { id: 'aura_neon', name: 'AURA Neon', icon: 'music', desc: 'Классическая нота NeDotify в неоновом розовoм свечении', color: '#ff2d55' },
@@ -2157,10 +1633,15 @@ export function applyIconPack(packId) {
         }
     };
 
-    // Logo
+    // Logo. Write into the .sidebar-logo-icon slot only: the rail title is the
+    // collapse/expand toggle and owns two .sidebar-logo-text variants
+    // ("NeDotify" / the collapsed "N"). Replacing logoEl.innerHTML wholesale
+    // used to leave a bare text node here, which silently destroyed that
+    // structure the first time a user switched icon packs.
     const logoEl = document.querySelector('.sidebar-logo');
     if (logoEl) {
-        logoEl.innerHTML = `<i data-lucide="${map.logo}" style="width:24px;height:24px;filter:drop-shadow(0 0 10px ${pack.color});"></i> NeDotify`;
+        const iconSlot = logoEl.querySelector('.sidebar-logo-icon') || logoEl;
+        iconSlot.innerHTML = `<i data-lucide="${map.logo}" style="width:24px;height:24px;filter:drop-shadow(0 0 10px ${pack.color});"></i>`;
     }
 
     // Player bar transport controls
@@ -2207,44 +1688,11 @@ export function applyIconPack(packId) {
     document.querySelectorAll('#icon-packs-grid .opt-card').forEach(card => {
         const isActive = card.dataset.id === pack.id;
         card.classList.toggle('active', isActive);
-        if (isActive) {
-            card.style.setProperty('border-color', pack.color, 'important');
-            card.style.setProperty('box-shadow', `0 0 20px ${pack.color}66`, 'important');
-            card.style.setProperty('background', `rgba(255,255,255,0.12)`, 'important');
-        } else {
-            card.style.setProperty('border-color', 'rgba(255,255,255,0.14)', 'important');
-            card.style.setProperty('box-shadow', 'none', 'important');
-            card.style.setProperty('background', 'rgba(255,255,255,0.07)', 'important');
-        }
+        ['border-color','box-shadow','background'].forEach(property => card.style.removeProperty(property));
     });
 }
 
-function setupIconsPanel() {
-    const grid = document.getElementById('icon-packs-grid');
-    if (!grid) return;
 
-    if (!grid.dataset.bound) {
-        grid.dataset.bound = 'true';
-        grid.querySelectorAll('.opt-card').forEach(card => {
-            card.addEventListener('click', () => {
-                const packId = card.dataset.id;
-                saveSetting('icon_pack', packId, 'theme');
-                applyIconPack(packId);
-            });
-        });
-    }
-
-    const savedPack = localStorage.getItem('nedotify_theme_icon_pack');
-    if (savedPack) {
-        try {
-            const pid = JSON.parse(savedPack);
-            if (pid) applyIconPack(pid);
-        } catch(e) {}
-    } else {
-        const currentPack = document.documentElement.getAttribute('data-icon-pack') || 'aura_neon';
-        applyIconPack(currentPack);
-    }
-}
 
 
 // в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
@@ -2268,7 +1716,7 @@ export function syncAuraOrbsState() {
     if (!el || el.classList.contains('disabled')) return;
     const isPlaying = document.body.classList.contains('playback-playing');
     const isWindowFocused = !document.hidden && !document.body.classList.contains('unfocused-animations-disabled');
-    const shouldPause = !isPlaying || !isWindowFocused;
+    const shouldPause = !isPlaying || !isWindowFocused || document.documentElement.dataset.uiStyle === 'macos';
     el.classList.toggle('paused', shouldPause);
 }
 
@@ -2298,11 +1746,45 @@ document.addEventListener('nedotify:state_changed', (e) => {
 });
 document.addEventListener('nedotify:efficiency_state', syncAuraOrbsState);
 
+function normalizeProgressStyle(type) {
+    if (type === 'solid' || type === 'thin' || type === 'ios') return 'solid';
+    return 'panel';
+}
+
+function normalizeProgressColor(color) {
+    return typeof color === 'string' && /^#[\da-f]{6}$/i.test(color) ? color.toLowerCase() : '#10d6a3';
+}
+
 export function applySliderType(type) {
     const root = document.documentElement;
-    root.classList.remove('slider-type-default', 'slider-type-thin', 'slider-type-ios', 'slider-type-wave');
-    root.classList.add(`slider-type-${type}`);
-    document.dispatchEvent(new CustomEvent('nedotify:slider_type_changed', { detail: { type } }));
+    const style = normalizeProgressStyle(type);
+    root.classList.remove('slider-type-default', 'slider-type-thin', 'slider-type-ios', 'slider-type-wave', 'slider-type-bars', 'slider-type-solid', 'slider-type-hidden', 'slider-type-panel');
+    root.classList.add(`slider-type-${style}`);
+    root.dataset.progressStyle = style;
+    document.dispatchEvent(new CustomEvent('nedotify:slider_type_changed', { detail: { type: style } }));
+}
+
+function applyProgressColor(color) {
+    const normalized = normalizeProgressColor(color);
+    document.documentElement.style.setProperty('--player-progress-color', normalized);
+    document.dispatchEvent(new Event('nedotify:progress_appearance_changed'));
+    return normalized;
+}
+
+function applyProgressTransparency(value) {
+    const numeric = Number(value);
+    const transparency = Math.min(80, Math.max(0, Number.isFinite(numeric) ? numeric : 18));
+    document.documentElement.dataset.progressTransparency = String(transparency);
+    document.documentElement.style.setProperty('--player-progress-opacity', String(1 - transparency / 100));
+    document.dispatchEvent(new Event('nedotify:progress_appearance_changed'));
+    return transparency;
+}
+
+export function upgradeQueuePanelPreferences(player) {
+    if (Number(player.queue_panel_version || 0) >= 1) return false;
+    player.show_queue = true;
+    player.queue_panel_version = 1;
+    return true;
 }
 
 export function applyShowQueue(enabled) {
@@ -2368,79 +1850,16 @@ export function applyMpPos(pos) {
     }
 }
 
-function setupPlayerSettingsPanel() {
-    const setupCardGroup = (containerId, settingKey, onChange) => {
-        const container = document.getElementById(containerId);
-        if (!container) return;
-        container.querySelectorAll('.opt-card').forEach(card => {
-            card.addEventListener('click', () => {
-                container.querySelectorAll('.opt-card').forEach(c => c.classList.remove('active'));
-                card.classList.add('active');
-                saveSetting(settingKey, card.dataset.val, 'player');
-                if (onChange) onChange(card.dataset.val);
-            });
-        });
-    };
-
-    setupCardGroup('opt-title-align', 'title_align', applyTitleAlignment);
-    setupCardGroup('opt-player-style', 'player_style', applyPlayerStyle);
-    setupCardGroup('opt-slider-type', 'slider_type', applySliderType);
-    setupCardGroup('opt-queue-pos', 'queue_pos', applyQueuePosition);
-    setupCardGroup('opt-queue-view', 'queue_view', applyQueueViewMode);
-    setupCardGroup('opt-mp-progress', 'mp_progress', applyMpProgress);
-    setupCardGroup('opt-mp-cover-shape', 'mp_cover_shape', applyMpCoverShape);
-    setupCardGroup('opt-mp-shape', 'mp_shape', applyMpShape);
-
-    setupToggle('toggle-show-queue', 'show_queue', 'player', applyShowQueue);
-    setupToggle('toggle-compact-queue-btn', 'compact_queue_btn', 'player', applyCompactQueueBtn);
-    setupToggle('toggle-next-track-preview', 'next_track_preview', 'player', applyNextTrackPreview);
-    setupToggle('toggle-queue-autopilot', 'queue_autopilot', 'player');
-    setupToggle('toggle-player-prefetch', 'player_prefetch', 'player');
-    setupToggle('toggle-aura-orbs', 'aura_orbs_enabled', 'player', applyAuraOrbs);
-
-    // Mini-player position buttons
-    const mpPosGroup = document.getElementById('mp-pos-btn-group') || document.getElementById('opt-mp-pos');
-    if (mpPosGroup) {
-        mpPosGroup.querySelectorAll('.opt-card-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                mpPosGroup.querySelectorAll('.opt-card-btn').forEach(b => {
-                    b.classList.remove('active');
-                    b.style.background = 'var(--bg-card)';
-                    b.style.color = '';
-                    b.style.borderColor = 'rgba(255,255,255,0.1)';
-                });
-                btn.classList.add('active');
-                btn.style.background = 'var(--primary)';
-                btn.style.color = '#fff';
-                btn.style.borderColor = 'var(--primary)';
-
-                const pos = btn.dataset.pos;
-                saveSetting('mp_pos', pos, 'player');
-                applyMpPos(pos);
-            });
-        });
-    }
-
-    // Restore saved settings from localStorage
-    const saved = {
-        align: getLocalSetting('nedotify_player_title_align', 'left'),
-        style: getLocalSetting('nedotify_player_player_style', 'default'),
-        slider: getLocalSetting('nedotify_player_slider_type', 'default'),
-        showQueue: getLocalSetting('nedotify_player_show_queue', true),
-        queuePos: getLocalSetting('nedotify_player_queue_pos', 'bottom'),
-        compactQueue: getLocalSetting('nedotify_player_compact_queue_btn', true),
-        nextPreview: getLocalSetting('nedotify_player_next_track_preview', true),
-        autopilot: getLocalSetting('nedotify_player_queue_autopilot', getLocalSetting('nedotify_player_flow_enabled', true)),
-        prefetch: getLocalSetting('nedotify_player_player_prefetch', true),
-        auraOrbs: getLocalSetting('nedotify_player_aura_orbs_enabled', true),
-        queueView: getLocalSetting('nedotify_player_queue_view', 'normal'),
-        mpProg: getLocalSetting('nedotify_player_mp_progress', 'line'),
-        mpCover: getLocalSetting('nedotify_player_mp_cover_shape', 'default'),
-        mpShape: getLocalSetting('nedotify_player_mp_shape', 'default'),
-        mpPos: getLocalSetting('nedotify_player_mp_pos', 'bottom-right'),
-    };
-
-    // Update active UI cards according to saved state
+// Repaint the Player tab's cards and toggles from the saved values.
+//
+// This runs twice on a cold start: once from setupPlayerSettingsPanel() (before
+// the bridge has answered, so it can only see localStorage) and again from
+// applySettingsFromBackend() once the backend values are known. Without the
+// second call the toggles kept whatever the first pass guessed, so a cleared
+// localStorage left the Player tab showing "queue on" while the queue was
+// actually hidden. applyShowQueue() and friends change behaviour but not the
+// toggle markup, so the visual state has to be re-synced explicitly.
+function syncPlayerSettingsUI() {
     const syncActiveCard = (containerId, val) => {
         const c = document.getElementById(containerId);
         if (c) {
@@ -2449,706 +1868,158 @@ function setupPlayerSettingsPanel() {
             });
         }
     };
-
-    // Sync toggle visual states from saved values
     const syncToggleVisual = (id, val) => {
         const t = document.getElementById(id);
         if (t) t.classList.toggle('on', !!val);
     };
 
-    syncActiveCard('opt-title-align', saved.align);
-    syncActiveCard('opt-player-style', saved.style);
-    syncActiveCard('opt-slider-type', saved.slider);
-    syncActiveCard('opt-queue-pos', saved.queuePos);
-    syncActiveCard('opt-queue-view', saved.queueView);
-    syncActiveCard('opt-mp-progress', saved.mpProg);
-    syncActiveCard('opt-mp-cover-shape', saved.mpCover);
-    syncActiveCard('opt-mp-shape', saved.mpShape);
+    syncActiveCard('opt-title-align', savedSetting('player', 'title_align', 'left'));
+    syncActiveCard('opt-player-style', savedSetting('player', 'player_style', 'default'));
+    syncActiveCard('opt-slider-type', normalizeProgressStyle(savedSetting('player', 'slider_type', 'bars')));
+    syncActiveCard('opt-queue-pos', savedSetting('player', 'queue_pos', 'bottom'));
+    syncActiveCard('opt-queue-view', savedSetting('player', 'queue_view', 'normal'));
+    syncActiveCard('opt-mp-progress', savedSetting('player', 'mp_progress', 'line'));
+    syncActiveCard('opt-mp-cover-shape', savedSetting('player', 'mp_cover_shape', 'default'));
+    syncActiveCard('opt-mp-shape', savedSetting('player', 'mp_shape', 'default'));
+    document.querySelectorAll('#mp-pos-btn-group .opt-card-btn, #opt-mp-pos .opt-card-btn').forEach(button => {
+        const active = button.dataset.pos === savedSetting('player','mp_pos','bottom-right');
+        button.classList.toggle('active', active);
+        button.style.background = active ? 'var(--primary)' : 'var(--bg-card)';
+        button.style.color = active ? 'var(--primary-fg)' : 'var(--text-main)';
+        button.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
+    });
 
-    // Sync toggle visuals
-    syncToggleVisual('toggle-show-queue', saved.showQueue);
-    syncToggleVisual('toggle-compact-queue-btn', saved.compactQueue);
-    syncToggleVisual('toggle-next-track-preview', saved.nextPreview);
-    syncToggleVisual('toggle-queue-autopilot', saved.autopilot);
-    syncToggleVisual('toggle-player-prefetch', saved.prefetch);
-    syncToggleVisual('toggle-aura-orbs', saved.auraOrbs);
+    syncToggleVisual('toggle-show-queue', savedSetting('player', 'show_queue', true));
+    syncToggleVisual('toggle-compact-queue-btn', savedSetting('player', 'compact_queue_btn', true));
+    syncToggleVisual('toggle-next-track-preview', savedSetting('player', 'next_track_preview', true));
+    syncToggleVisual('toggle-player-prefetch', savedSetting('player', 'player_prefetch', true));
+    syncToggleVisual('toggle-auto-download-favorites', savedSetting('storage', 'auto_download_favorites', false));
+    syncToggleVisual('toggle-aura-orbs', savedSetting('player', 'aura_orbs_enabled', true));
 
-    if (mpPosGroup) {
-        mpPosGroup.querySelectorAll('.opt-card-btn').forEach(b => {
-            const isActive = b.dataset.pos === saved.mpPos;
-            b.classList.toggle('active', isActive);
-            b.style.background = isActive ? 'var(--primary)' : 'var(--bg-card)';
-            b.style.color = isActive ? '#fff' : '';
-            b.style.borderColor = isActive ? 'var(--primary)' : 'rgba(255,255,255,0.1)';
-        });
-    }
-
-    applyTitleAlignment(saved.align);
-    applyPlayerStyle(saved.style);
-    applySliderType(saved.slider);
-    applyShowQueue(saved.showQueue);
-    applyQueuePosition(saved.queuePos);
-    applyCompactQueueBtn(saved.compactQueue);
-    applyNextTrackPreview(saved.nextPreview);
-    applyAuraOrbs(saved.auraOrbs);
-    applyQueueViewMode(saved.queueView);
-    applyMpProgress(saved.mpProg);
-    applyMpCoverShape(saved.mpCover);
-    applyMpShape(saved.mpShape);
-
-    applyMpPos(saved.mpPos);
+    const progressColor = document.getElementById('player-progress-color');
+    if (progressColor) progressColor.value = normalizeProgressColor(savedSetting('player', 'progress_color', '#10d6a3'));
+    const progressTransparency = document.getElementById('player-progress-transparency');
+    const transparencyValue = Math.min(80, Math.max(0, Number(savedSetting('player', 'progress_transparency', 18)) || 0));
+    if (progressTransparency) progressTransparency.value = String(transparencyValue);
+    if (progressTransparency) progressTransparency.style.setProperty('--value-percent', `${transparencyValue / 80 * 100}%`);
+    const transparencyOutput = document.getElementById('player-progress-transparency-value');
+    if (transparencyOutput) transparencyOutput.value = `${transparencyValue}%`;
 }
+
+
 
 
 // ─── WORKSHOP (МАСТЕРСКАЯ) MODULE ───
-export const WORKSHOP_ITEMS = [
-    {
-        id: 'ws_nebula',
-        title: 'Cosmic Abyss Nebula',
-        author: 'Starlight',
-        likes: 1240,
-        downloads: 8540,
-        tag: 'atmosphere',
-        preview: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&auto=format&fit=crop&q=80',
-        badge: 'SPACE',
-        date: 1785000000
-    },
-    {
-        id: 'ws_aurora',
-        title: 'Nordic Aurora Night',
-        author: 'AuraNordic',
-        likes: 980,
-        downloads: 6420,
-        tag: 'atmosphere',
-        preview: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=1920&auto=format&fit=crop&q=80',
-        badge: 'AURORA',
-        date: 1784999000
-    },
-    {
-        id: 'ws_fluid_dark',
-        title: 'Fluid Dark Glassmorphism',
-        author: 'GlassLab',
-        likes: 1510,
-        downloads: 9830,
-        tag: 'minimal',
-        preview: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1920&auto=format&fit=crop&q=80',
-        badge: 'GLASS',
-        date: 1784998000
-    },
-    {
-        id: 'ws_dark_forest',
-        title: 'Emerald Dark Forest',
-        author: 'Evergreen',
-        likes: 1120,
-        downloads: 7310,
-        tag: 'atmosphere',
-        preview: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=1920&auto=format&fit=crop&q=80',
-        badge: 'DARK',
-        date: 1784997000
-    },
-    {
-        id: 'ws_1',
-        title: '11',
-        author: 'wqwqwq',
-        likes: 2,
-        downloads: 7,
-        tag: 'anime',
-        preview: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1920&auto=format&fit=crop&q=80',
-        badge: 'GIF',
-        date: 1784970000
-    },
-    {
-        id: 'ws_2',
-        title: 'forest black',
-        author: 'hijiel',
-        likes: 16,
-        downloads: 121,
-        tag: 'atmosphere',
-        preview: 'https://images.unsplash.com/photo-1511497584788-876761c1298b?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1511497584788-876761c1298b?w=1920&auto=format&fit=crop&q=80',
-        badge: 'LIVE',
-        date: 1784965000
-    },
-    {
-        id: 'ws_3',
-        title: 'Yuno Gasai',
-        author: 'kurashhh',
-        likes: 275,
-        downloads: 2433,
-        tag: 'anime',
-        preview: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1920&auto=format&fit=crop&q=80',
-        badge: 'POPULAR',
-        date: 1784980000
-    },
-    {
-        id: 'ws_4',
-        title: 'She <3',
-        author: 'NDD',
-        likes: 26,
-        downloads: 503,
-        tag: 'minimal',
-        preview: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1920&auto=format&fit=crop&q=80',
-        badge: '4K',
-        date: 1784950000
-    },
-    {
-        id: 'ws_5',
-        title: 'Stick your finger d...',
-        author: 'kurashhh',
-        likes: 571,
-        downloads: 4533,
-        tag: 'atmosphere',
-        preview: 'https://images.unsplash.com/photo-1509114397022-ed747cca3f65?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1509114397022-ed747cca3f65?w=1920&auto=format&fit=crop&q=80',
-        badge: 'HOT',
-        date: 1784990000
-    },
-    {
-        id: 'ws_6',
-        title: 'windows old',
-        author: 'alexG',
-        likes: 61,
-        downloads: 628,
-        tag: 'retro',
-        preview: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1920&auto=format&fit=crop&q=80',
-        badge: 'RETRO',
-        date: 1784940000
-    },
-    {
-        id: 'ws_7',
-        title: 'Cyberpunk Skyline',
-        author: 'V_NightCity',
-        likes: 412,
-        downloads: 3105,
-        tag: 'retro',
-        preview: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1920&auto=format&fit=crop&q=80',
-        badge: 'NEON',
-        date: 1784930000
-    },
-    {
-        id: 'ws_8',
-        title: 'Lofi Cozy Room',
-        author: 'ChilledCow',
-        likes: 890,
-        downloads: 6200,
-        tag: 'anime',
-        preview: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1920&auto=format&fit=crop&q=80',
-        badge: 'LOFI',
-        date: 1784995000
-    },
-    {
-        id: 'ws_9',
-        title: 'Cosmic Voyage',
-        author: 'Starlight',
-        likes: 189,
-        downloads: 1420,
-        tag: 'atmosphere',
-        preview: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&auto=format&fit=crop&q=80',
-        badge: 'SPACE',
-        date: 1784920000
-    },
-    {
-        id: 'ws_10',
-        title: 'Neon Waves 80s',
-        author: 'SynthRider',
-        likes: 310,
-        downloads: 2150,
-        tag: 'retro',
-        preview: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=1920&auto=format&fit=crop&q=80',
-        badge: 'RETRO',
-        date: 1784988000
-    },
-    {
-        id: 'ws_11',
-        title: 'Eldritch Moon',
-        author: 'DarkSoul',
-        likes: 540,
-        downloads: 3900,
-        tag: 'atmosphere',
-        preview: 'https://images.unsplash.com/photo-1532767153582-b1a0e5145009?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1532767153582-b1a0e5145009?w=1920&auto=format&fit=crop&q=80',
-        badge: 'DARK',
-        date: 1784987000
-    },
-    {
-        id: 'ws_12',
-        title: 'Sakura Rain',
-        author: 'Kawaiii',
-        likes: 720,
-        downloads: 5100,
-        tag: 'anime',
-        preview: 'https://images.unsplash.com/photo-1522383225653-ed111181a951?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1522383225653-ed111181a951?w=1920&auto=format&fit=crop&q=80',
-        badge: 'GIF',
-        date: 1784986000
-    },
-    {
-        id: 'ws_13',
-        title: 'Minecraft Sunset',
-        author: 'BlockCraft',
-        likes: 430,
-        downloads: 2900,
-        tag: 'games',
-        preview: 'https://images.unsplash.com/photo-1627856013091-fed6e4e30025?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1627856013091-fed6e4e30025?w=1920&auto=format&fit=crop&q=80',
-        badge: 'GAME',
-        date: 1784985000
-    },
-    {
-        id: 'ws_14',
-        title: 'Goth Velvet',
-        author: 'Vampress',
-        likes: 195,
-        downloads: 1120,
-        tag: 'minimal',
-        preview: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1920&auto=format&fit=crop&q=80',
-        badge: 'ART',
-        date: 1784984000
-    },
-    {
-        id: 'ws_15',
-        title: 'Pixel Cyberpunk Bar',
-        author: 'PixelArtist',
-        likes: 680,
-        downloads: 4800,
-        tag: 'games',
-        preview: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1920&auto=format&fit=crop&q=80',
-        badge: 'PIXEL',
-        date: 1784983000
-    },
-    {
-        id: 'ws_16',
-        title: 'Chainsaw Man Denji',
-        author: 'AnimeGuy',
-        likes: 810,
-        downloads: 6700,
-        tag: 'anime',
-        preview: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1563089145-599997674d42?w=1920&auto=format&fit=crop&q=80',
-        badge: 'HOT',
-        date: 1784982000
-    },
-    {
-        id: 'ws_17',
-        title: 'Tokyo Rain Night',
-        author: 'Kenji_99',
-        likes: 490,
-        downloads: 3400,
-        tag: 'atmosphere',
-        preview: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=1920&auto=format&fit=crop&q=80',
-        badge: '4K',
-        date: 1784981000
-    },
-    {
-        id: 'ws_18',
-        title: 'Elden Ring Tree',
-        author: 'Tarnished',
-        likes: 620,
-        downloads: 4200,
-        tag: 'games',
-        preview: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1920&auto=format&fit=crop&q=80',
-        badge: 'LIVE',
-        date: 1784979000
-    },
-    {
-        id: 'ws_19',
-        title: 'Synth Horizon',
-        author: 'OutrunGlow',
-        likes: 290,
-        downloads: 1850,
-        tag: 'retro',
-        preview: 'https://images.unsplash.com/photo-1509114397022-ed747cca3f65?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1509114397022-ed747cca3f65?w=1920&auto=format&fit=crop&q=80',
-        badge: 'NEON',
-        date: 1784978000
-    },
-    {
-        id: 'ws_20',
-        title: 'Zero Two Motion',
-        author: 'DarlingXx',
-        likes: 950,
-        downloads: 7300,
-        tag: 'anime',
-        preview: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=1920&auto=format&fit=crop&q=80',
-        badge: 'POPULAR',
-        date: 1784977000
-    },
-    {
-        id: 'ws_21',
-        title: 'Northern Lights',
-        author: 'AuroraHunter',
-        likes: 380,
-        downloads: 2500,
-        tag: 'atmosphere',
-        preview: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=1920&auto=format&fit=crop&q=80',
-        badge: '4K',
-        date: 1784976000
-    },
-    {
-        id: 'ws_22',
-        title: 'Matrix Rain Code',
-        author: 'Neo_Operator',
-        likes: 410,
-        downloads: 2980,
-        tag: 'retro',
-        preview: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=1920&auto=format&fit=crop&q=80',
-        badge: 'CODE',
-        date: 1784975000
-    },
-    {
-        id: 'ws_23',
-        title: 'Gothic Cathedral Mist',
-        author: 'DarkArchitect',
-        likes: 275,
-        downloads: 1940,
-        tag: 'atmosphere',
-        preview: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1920&auto=format&fit=crop&q=80',
-        badge: 'DARK',
-        date: 1784974000
-    },
-    {
-        id: 'ws_24',
-        title: 'Minimal Geometric Gold',
-        author: 'LuxDesign',
-        likes: 145,
-        downloads: 980,
-        tag: 'minimal',
-        preview: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
-        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1920&auto=format&fit=crop&q=80',
-        badge: 'LUX',
-        date: 1784973000
-    }
-];
 
-// Proxy Unsplash images to bypass regional blocks
-WORKSHOP_ITEMS.forEach(item => {
-    if (item.preview.includes('unsplash.com')) {
-        item.preview = `https://wsrv.nl/?url=${encodeURIComponent(item.preview)}`;
-    }
-    if (item.url.includes('unsplash.com')) {
-        item.url = `https://wsrv.nl/?url=${encodeURIComponent(item.url)}`;
-    }
-});
 
-export function setupWorkshopPanel() {
-    const grid = document.getElementById('workshop-cards-grid');
-    const searchInput = document.getElementById('workshop-search-input');
-    const sortSelect = document.getElementById('workshop-sort-select');
-    const tagsContainer = document.getElementById('workshop-tags-container');
 
-    if (!grid) return;
 
-    let activeTag = 'all';
-    let searchQuery = '';
-    let sortMode = 'newest';
 
-    const getLikedState = (id) => localStorage.getItem(`nedotify_ws_like_${id}`) === '1';
-
-    const render = () => {
-        let items = [...WORKSHOP_ITEMS];
-
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            items = items.filter(it => it.title.toLowerCase().includes(q) || it.author.toLowerCase().includes(q));
-        }
-
-        if (activeTag !== 'all') {
-            items = items.filter(it => it.tag === activeTag);
-        }
-
-        if (sortMode === 'newest') {
-            items.sort((a, b) => b.date - a.date);
-        } else if (sortMode === 'popular') {
-            items.sort((a, b) => b.likes - a.likes);
-        } else if (sortMode === 'downloads') {
-            items.sort((a, b) => b.downloads - a.downloads);
-        }
-
-        if (items.length === 0) {
-            grid.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-sec)">Ничего не найдено</div>';
-            return;
-        }
-
-        const activeBgUrl = getLocalSetting('nedotify_theme_custom_bg_image', '');
-
-        grid.innerHTML = items.map(it => {
-            const isApplied = activeBgUrl === it.url;
-            const isLiked = getLikedState(it.id);
-            const displayLikes = isLiked ? it.likes + 1 : it.likes;
-
-            const safeId = escapeHtml(String(it.id ?? ''));
-            const safePreview = escapeHtml(String(it.preview ?? ''));
-            const safeTitle = escapeHtml(String(it.title ?? ''));
-            const safeAuthor = escapeHtml(String(it.author ?? ''));
-            const safeBadge = it.badge ? escapeHtml(String(it.badge)) : '';
-
-            return `
-                <div class="workshop-card ${isApplied ? 'applied' : ''}" data-id="${safeId}">
-                    <div class="workshop-card-preview">
-                        <img src="${safePreview}" class="workshop-card-media" alt="${safeTitle}" loading="lazy">
-                        ${safeBadge ? `<div class="workshop-card-badge">${safeBadge}</div>` : ''}
-                        <div class="workshop-card-overlay">
-                            <button class="workshop-btn-apply" data-id="${safeId}">
-                                <i data-lucide="${isApplied ? 'check' : 'image'}" style="width:16px;height:16px"></i>
-                                <span>${isApplied ? 'Установлено' : 'Применить'}</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="workshop-card-info">
-                        <div>
-                            <div class="workshop-card-title" title="${safeTitle}">${safeTitle}</div>
-                            <div class="workshop-card-author">by ${safeAuthor}</div>
-                        </div>
-                        <div class="workshop-card-stats">
-                            <div class="workshop-stat-item ${isLiked ? 'liked' : ''}" data-like-id="${safeId}">
-                                <i data-lucide="heart" style="width:14px;height:14px;${isLiked ? 'fill:#ef4444' : ''}"></i>
-                                <span>${displayLikes}</span>
-                            </div>
-                            <div class="workshop-stat-item">
-                                <i data-lucide="download" style="width:14px;height:14px"></i>
-                                <span>${it.downloads}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        renderIcons();
-
-        grid.querySelectorAll('.workshop-btn-apply').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const item = WORKSHOP_ITEMS.find(it => it.id === btn.dataset.id);
-                if (!item) return;
-
-                const blurVal = document.getElementById('slider-bg-blur')?.value || 0;
-                const dimVal = document.getElementById('slider-bg-dim')?.value || 20;
-                saveSetting('custom_bg_image', item.url, 'theme');
-                saveSetting('bg_blur', blurVal, 'theme');
-                saveSetting('bg_dim', dimVal, 'theme');
-                saveSetting('resource_bg', true, 'optimization');
-                const btnBg = document.querySelector('#opt-active-resources [data-resource="bg"]');
-                if (btnBg) btnBg.classList.add('active');
-                applyResourceToggle('bg', true);
-                applyCustomBg(item.url, blurVal, dimVal);
-
-                showToast(`Обои "${item.title}" применены!`, 'success');
-                render();
-            });
-        });
-
-        grid.querySelectorAll('.workshop-stat-item[data-like-id]').forEach(likeBtn => {
-            likeBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const id = likeBtn.dataset.likeId || likeBtn.getAttribute('data-like-id');
-                const isCurrentlyLiked = getLikedState(id);
-                localStorage.setItem(`nedotify_ws_like_${id}`, isCurrentlyLiked ? '0' : '1');
-                render();
-            });
-        });
-    };
-
-    render();
-
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            searchQuery = e.target.value;
-            render();
-        });
-    }
-
-    if (sortSelect) {
-        sortSelect.addEventListener('change', (e) => {
-            sortMode = e.target.value;
-            render();
-        });
-    }
-
-    if (tagsContainer) {
-        tagsContainer.querySelectorAll('.tag-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                tagsContainer.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                activeTag = btn.dataset.tag;
-                render();
-            });
-        });
-    }
-}
-
-function renderDuplicateGroups(groups, container) {
-    if (!container) return;
-    if (!groups || groups.length === 0) {
-        container.innerHTML = '<div style="font-size:12px; color:rgba(255,255,255,0.7); background:rgba(255,255,255,0.04); padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.1);">✅ Дубликатов в вашей медиатеке не обнаружено!</div>';
-        return;
-    }
-
-    container.innerHTML = '';
-    groups.forEach((group, idx) => {
-        const groupEl = document.createElement('div');
-        groupEl.style.cssText = 'background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:12px; margin-bottom:10px; font-size:12px;';
-        
-        let tracksHtml = '';
-        group.tracks.forEach(track => {
-            tracksHtml += `
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px dashed rgba(255,255,255,0.08);">
-                    <div>
-                        <div style="font-weight:600; color:#fff;">${escapeHtml(track.title || 'Unknown')}</div>
-                        <div style="color:var(--text-sec); font-size:11px;">${escapeHtml(track.artist || 'Unknown')} • ${(track.file_size_bytes / (1024*1024)).toFixed(2)} MB</div>
-                    </div>
-                    <button class="btn-sm text-xs btn-delete-dup" data-id="${track.id}" style="padding:4px 8px; border-radius:6px; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.3); cursor:pointer;">Удалить</button>
-                </div>
-            `;
-        });
-
-        groupEl.innerHTML = `
-            <div style="font-weight:700; color:var(--primary); margin-bottom:6px;">Группа дубликатов #${idx + 1} (Совпадение ${group.match_confidence}%)</div>
-            ${tracksHtml}
-        `;
-
-        groupEl.querySelectorAll('.btn-delete-dup').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const trackId = parseInt(e.target.dataset.id);
-                if (trackId && window.pywebview?.api?.delete_duplicate_track) {
-                    await window.pywebview.api.delete_duplicate_track(trackId, true);
-                    e.target.closest('div').remove();
-                }
-            });
-        });
-
-        container.appendChild(groupEl);
-    });
-}
 
 // ==========================================================================
 // FEATURE 4: Settings Live Search Filter Engine
 // ==========================================================================
 
-export function initSettingsSearchFilter() {
-    const searchInput = document.getElementById('settings-search');
-    if (!searchInput) return;
 
-    searchInput.addEventListener('input', (e) => {
-        const query = (e.target.value || '').trim().toLowerCase();
 
-        const panels = document.querySelectorAll('.settings-panel');
-        const navBtns = document.querySelectorAll('.settings-nav-btn[data-panel]');
-        const allSections = document.querySelectorAll('.settings-section');
-        const allRows = document.querySelectorAll('.setting-row, .setting-card-group, .custom-theme-box, .setting-item');
-
-        // Сброс фильтрации при пустой строке
-        if (!query) {
-            allRows.forEach(row => {
-                row.style.display = '';
-                row.classList.remove('highlight-match');
-            });
-            allSections.forEach(sec => sec.style.display = '');
-            navBtns.forEach(btn => btn.style.display = '');
-
-            // Восстанавливаем отображение только активной панели
-            const activeBtn = document.querySelector('.settings-nav-btn.active');
-            const activePanelId = activeBtn ? `settings-${activeBtn.dataset.panel}` : 'settings-appearance';
-            panels.forEach(p => {
-                p.style.display = p.id === activePanelId ? 'block' : 'none';
-            });
-            return;
-        }
-
-        let firstMatchingPanelId = null;
-
-        // Поиск по каждой панели
-        panels.forEach(panel => {
-            const panelName = panel.id.replace('settings-', '');
-            const matchingNavBtn = document.querySelector(`.settings-nav-btn[data-panel="${panelName}"]`);
-            let panelHasMatches = false;
-
-            const sections = panel.querySelectorAll('.settings-section');
-
-            sections.forEach(section => {
-                const rows = section.querySelectorAll('.setting-row, .setting-card-group, .custom-theme-box, .setting-item');
-                let sectionHasMatches = false;
-
-                rows.forEach(row => {
-                    // Ищем текст в подписях, тултипах, инпутах и заголовках строки
-                    const rowText = (row.textContent || '').toLowerCase();
-                    const inputPlaceholders = Array.from(row.querySelectorAll('input, select'))
-                        .map(i => `${i.placeholder || ''} ${i.getAttribute('aria-label') || ''} ${i.title || ''}`)
-                        .join(' ')
-                        .toLowerCase();
-
-                    const isMatch = rowText.includes(query) || inputPlaceholders.includes(query);
-
-                    if (isMatch) {
-                        row.style.display = '';
-                        row.classList.remove('highlight-match');
-                        // Перезапуск анимации импульса через Reflow
-                        void row.offsetWidth;
-                        row.classList.add('highlight-match');
-                        sectionHasMatches = true;
-                        panelHasMatches = true;
-                    } else {
-                        row.style.display = 'none';
-                        row.classList.remove('highlight-match');
-                    }
-                });
-
-                // Скрываем пустую секцию
-                section.style.display = sectionHasMatches ? '' : 'none';
-            });
-
-            // Скрываем кнопку таба в левой колонке настроек, если в нем нет совпадений
-            if (matchingNavBtn) {
-                matchingNavBtn.style.display = panelHasMatches ? '' : 'none';
-            }
-
-            if (panelHasMatches && !firstMatchingPanelId) {
-                firstMatchingPanelId = panel.id;
-            }
+// The runtime restores appearance/audio immediately. Panel catalogues and controls
+// are fetched on intent or after app readiness, outside the bridge startup gate.
+let settingsPanelPromise = null;
+let settingsPanelReady = false;
+let settingsIntentBound = false;
+let settingsPanelDisposed = false;
+let settingsWarmHandle = null;
+let settingsWarmIsIdle = false;
+export function ensureSettingsPanel() {
+    if (settingsPanelDisposed) return Promise.resolve(null);
+    if (!settingsPanelPromise) {
+        settingsPanelPromise = import('./settings-panel.js').then(panel => {
+            if (settingsPanelDisposed) return null;
+            panel.initSettings();
+            applySettingsFromBackend(window.settings);
+            window.NeDotifyAppearance?.refresh();
+            settingsPanelReady = true;
+            return panel;
+        }).catch(error => {
+            settingsPanelPromise = null;
+            throw error;
         });
-
-        // Автоматически переключаем на первую панель с совпадениями, если в текущей ничего не найдено
-        const currentActivePanel = document.querySelector('.settings-panel.active');
-        const currentPanelHasVisibleRows = currentActivePanel?.querySelector('.setting-row:not([style*="display: none"]), .setting-card-group:not([style*="display: none"])');
-
-        if (!currentPanelHasVisibleRows && firstMatchingPanelId) {
-            const targetPanelName = firstMatchingPanelId.replace('settings-', '');
-            const targetBtn = document.querySelector(`.settings-nav-btn[data-panel="${targetPanelName}"]`);
-            if (targetBtn) targetBtn.click();
-        }
-    });
-
-    // Очистка поиска по Escape
-    searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && searchInput.value) {
-            e.stopPropagation();
-            searchInput.value = '';
-            searchInput.dispatchEvent(new Event('input'));
-        }
-    });
+    }
+    return settingsPanelPromise;
 }
 
+export function initSettings() {
+    if (settingsIntentBound) return;
+    settingsIntentBound = true;
+    // Remove legacy secret mirrors written by older versions.
+    try {
+        for (let index = localStorage.length - 1; index >= 0; index--) {
+            const key = localStorage.key(index);
+            if (key?.startsWith('nedotify_auth_') ||
+                key === 'nedotify_services_lastfm_api_key' || key === 'nedotify_services_lastfm_api_secret') {
+                localStorage.removeItem(key);
+            }
+        }
+    } catch {}
+    window.NeDotifyAppearance?.init(saveSetting, enableMacosGlass);
+    window.addEventListener('nedotify:appearance_changed', syncAuraOrbsState);
+    window.addEventListener('nedotify:appearance_changed', () => {
+        if (document.documentElement.dataset.uiStyle !== 'macos') {
+            applyGlassBlur(savedSetting('theme', 'glass_blur', 15));
+            applyFontSize(savedSetting('theme', 'font_size', 14));
+        }
+        renderFontCards(document.querySelector('.font-cat-btn.active')?.dataset.cat || 'system');
+    });
 
+    // Backend may push theme changes (theme string) at runtime — re-apply the active theme
+    window.addEventListener('nedotify:theme_changed', (e) => {
+        applyThemeMode?.(String(e.detail ?? getLocalSetting('theme_mode', 'system')));
+    });
 
+    const warm = () => ensureSettingsPanel().catch(error => console.error('Settings panel failed:', error));
+    document.querySelectorAll('[data-page="settings"]').forEach(button => {
+        button.addEventListener('pointerenter', warm, { once: true });
+        button.addEventListener('focus', warm, { once: true });
+    });
+    // Preserve the first interaction if the user opens settings before prewarm.
+    const view = document.getElementById('view-settings');
+    // Keep native typing, focus navigation and Escape intact while loading.
+    view?.addEventListener('keydown', warm, true);
+    for (const type of ['click', 'input', 'change']) {
+        view?.addEventListener(type, event => {
+            if (settingsPanelReady || settingsPanelDisposed || event.target === view) return;
+            event.stopImmediatePropagation();
+            if (type === 'click') event.preventDefault();
+            const target = event.target;
+            const value = target.value;
+            const checked = target.checked;
+            const replay = new event.constructor(event.type, event);
+            ensureSettingsPanel().then(() => {
+                if (settingsPanelDisposed || !settingsPanelReady || !target.isConnected) return;
+                if (type === 'input' || type === 'change') {
+                    target.value = value;
+                    if (typeof checked === 'boolean') target.checked = checked;
+                }
+                target.dispatchEvent(replay);
+            }).catch(error => console.error('Settings interaction failed:', error));
+        }, true);
+    }
+    window.addEventListener('nedotify:app_ready', () => {
+        if (settingsPanelDisposed || settingsPanelReady) return;
+        settingsWarmIsIdle = !!window.requestIdleCallback;
+        const run = () => { settingsWarmHandle = null; warm(); };
+        settingsWarmHandle = settingsWarmIsIdle
+            ? window.requestIdleCallback(run, { timeout: 1000 }) : setTimeout(run, 0);
+    }, { once: true });
+    window.addEventListener('pagehide', () => {
+        settingsPanelDisposed = true;
+        if (settingsWarmHandle !== null) {
+            if (settingsWarmIsIdle) window.cancelIdleCallback?.(settingsWarmHandle);
+            else clearTimeout(settingsWarmHandle);
+            settingsWarmHandle = null;
+        }
+    }, { once: true });
+}
 
-
+// Shared runtime helpers used by the deferred settings panel.
+export { PRESET_THEMES, activateCustomPalette, applyGlassBlur, applyProgressColor, applyProgressTransparency, applyThemeMode, enableMacosGlass, getLocalSetting, getSavedCustomThemes, normalizeProgressColor, normalizeProgressStyle, renderFontCards, renderSavedCustomThemes, renderThemeGrid, resetCustomPalette, restoreCustomPalette, saveSetting, savedSetting, setElText, setupSlider, setupToggle, syncPlayerSettingsUI, syncSwitch };

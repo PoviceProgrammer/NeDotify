@@ -1,0 +1,20 @@
+.recommendation-preferences { margin: 12px 0 20px; min-width: 0; }
+.recommendation-preferences-label { margin: 0 0 8px; color: var(--text-main); font-size: 13px; font-weight: 600; }
+.recommendation-mode-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.recommendation-mode-group button {
+    padding: 8px 14px; border: 1px solid var(--border);
+    border-radius: 999px; background: var(--bg-card);
+    color: var(--text-sec); font: inherit; font-size: 12px; cursor: pointer;
+}
+.recommendation-mode-group button[aria-pressed="true"] { color: var(--text-main); border-color: var(--primary); background: color-mix(in srgb, var(--primary) 18%, transparent); }
+.recommendation-mode-group button:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.recommendation-mode-group button:disabled { opacity: .6; cursor: wait; }
+.recommendation-preferences-hint { margin: 8px 0 0; max-width: 620px; color: var(--text-sec); font-size: 11px; line-height: 1.5; }
+.recommendation-reason { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-sec); font-size: 10px; line-height: 13px; }
+.track-item.has-recommendation-reason .track-title { line-height: 17px; }
+.track-item.has-recommendation-reason .track-artist { line-height: 15px; }
+.track-item.has-recommendation-reason .track-info { gap: 0; }
+.feed-card > .recommendation-reason { margin-top: 4px; max-width: 100%; }
+html[data-ui-style="macos"] .recommendation-mode-group button { border-radius: 8px; }
+html[data-ui-style="macos"] .recommendation-mode-group button[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 22%, var(--mac-raised)); }
+

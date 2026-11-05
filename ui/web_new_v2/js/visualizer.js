@@ -1,5 +1,7 @@
 // NeDotify — Audio-Reactive Visualizer (GPU-Optimized)
 import { getIsPlaying, getVolume, getCurrentTrack, getAudioFrequencyData } from './player.js';
+import { sizeCanvasForDpr, registerCanvasDprListener } from './utils.js';
+import { saveSetting } from './settings.js';
 
 let animFrameId = null;
 let bars = [];
@@ -10,6 +12,15 @@ let isEnabled = true;
 let beatInterval = 0.45;
 let currentVolumeSampled = 70;
 const freqData = new Uint8Array(64);
+const drawData = new Float64Array(BAR_COUNT);
+const gradientCache = new WeakMap();
+let initialized = false;
+let efficiencyPaused = false;
+let efficiencyFps = null;
+let resizeHandler = null;
+let visibilityObserver = null;
+let cachedTitle = null;
+let cachedSeed = 0;
 
 // FPS throttle
 let lastFrameTime = 0;
@@ -19,34 +30,69 @@ let hasDrawnIdle = false;
 
 export function setVisualizerFps(fps) {
     targetFps = Math.max(5, Math.min(60, parseInt(fps) || 24));
-    frameInterval = 1000 / targetFps;
+    frameInterval = 1000 / Math.min(targetFps, efficiencyFps || targetFps);
 }
+
+// Single source of truth for #toggle-visualizer (settings.js must NOT bind it).
+// options.silent skips persistence (used when restoring backend state).
+export function setVisualizerEnabled(enabled, options = {}) {
+    isEnabled = !!enabled;
+    const toggle = document.getElementById('toggle-visualizer');
+    if (toggle) toggle.classList.toggle('on', isEnabled);
+    document.querySelector('#opt-active-resources [data-resource="visualizers"]')?.classList.toggle('active', isEnabled);
+    const canvas = document.getElementById('visualizer-canvas');
+    if (canvas) canvas.style.display = isEnabled ? '' : 'none';
+    if (!isEnabled) {
+        if (animFrameId) {
+            cancelAnimationFrame(animFrameId);
+            animFrameId = null;
+        }
+        targets.forEach(t => {
+            if (t.ctx && t.canvas) t.ctx.clearRect(0, 0, t.canvas.width, t.canvas.height);
+        });
+    }
+    syncVisualizerAnimation();
+    if (!options.silent) persistVisualizerEnabled();
+}
+
+function persistVisualizerEnabled() {
+    return saveSetting('cover_visualizer', isEnabled, 'ui');
+}
+
+export function isVisualizerEnabled() { return isEnabled; }
 
 // Cached gradient colors
 let cachedPrimaryRgb = '255, 159, 28';
 let gradientCacheTime = 0;
 const GRADIENT_CACHE_DURATION = 5000;
 
+// cssW/cssH are the drawable size in CSS pixels; canvas.width/height are the
+// device-pixel backing store (cssW * devicePixelRatio). Every draw*() below
+// works in CSS pixels through the context's dpr scale, so no geometry, colour,
+// gradient or line width changes - only the resolution bookkeeping.
 const targets = [
-    { id: 'visualizer-canvas', canvas: null, ctx: null, primary: true },
-    { id: 'home-visualizer-canvas', canvas: null, ctx: null, primary: false }
+    { id: 'visualizer-canvas', canvas: null, ctx: null, primary: true, cssW: 0, cssH: 0 },
+    { id: 'home-visualizer-canvas', canvas: null, ctx: null, primary: false, cssW: 0, cssH: 0 }
 ];
 
-let documentVisible = !document.hidden;
-document.addEventListener('visibilitychange', () => {
-    documentVisible = !document.hidden;
-    if (documentVisible && isEnabled && !animFrameId) {
-        hasDrawnIdle = false;
-        animFrameId = requestAnimationFrame(draw);
-    }
-});
+let unsubscribeDpr = null;
+
+function isWindowHidden() {
+    return document.hidden || document.documentElement.classList.contains('window-hidden');
+}
+
+let documentVisible = !isWindowHidden();
+const onVisibilityChanged = () => {
+    documentVisible = !isWindowHidden();
+    syncVisualizerAnimation();
+};
+document.addEventListener('visibilitychange', onVisibilityChanged);
+document.addEventListener('nedotify:window_visibility_changed', onVisibilityChanged);
 
 export function notifyPlaybackState(playing) {
     if (playing) {
         hasDrawnIdle = false;
-        if (isEnabled && documentVisible && !animFrameId) {
-            animFrameId = requestAnimationFrame(draw);
-        }
+        startDrawLoop();
     }
 }
 
@@ -54,47 +100,56 @@ document.addEventListener('nedotify:state_changed', (e) => {
     notifyPlaybackState(e.detail === 'playing');
 });
 
-let activeTargets = [];
-export function updateVisualizerTargets() {
-    activeTargets = [];
-    targets.forEach(t => {
-        if (!t.canvas) {
-            t.canvas = document.getElementById(t.id);
-            if (t.canvas) t.ctx = t.canvas.getContext('2d', { alpha: true });
-        }
-        if (t.canvas && t.canvas.parentElement) {
-            t.canvas.width = t.canvas.parentElement.offsetWidth || 380;
-            t.canvas.height = t.canvas.parentElement.offsetHeight || 380;
-            const parentPage = t.canvas.closest('.view-page');
-            if (!parentPage || parentPage.classList.contains('active')) {
-                activeTargets.push(t);
-            }
-        }
-    });
-}
-
-function resizeCanvas() {
-    updateVisualizerTargets();
-}
-
-window.addEventListener('nedotify:page_changed', () => {
-    updateVisualizerTargets();
-    if (isEnabled && documentVisible && !animFrameId) {
-        hasDrawnIdle = false;
-        lastFrameTime = performance.now();
-        animFrameId = requestAnimationFrame(draw);
-    }
-});
+window.addEventListener('nedotify:page_changed', startDrawLoop);
 
 export function initVisualizer() {
+    if (initialized) {
+        startDrawLoop();
+        return;
+    }
+    initialized = true;
     targets.forEach(t => {
         t.canvas = document.getElementById(t.id);
-        if (t.canvas) t.ctx = t.canvas.getContext('2d', { alpha: true });
+        t.inViewport = true;
+        t.parentPage = t.canvas?.closest('.view-page') || null;
+        if (t.canvas) t.ctx = t.canvas.getContext('2d', { alpha: true, desynchronized: true });
     });
 
-    window.removeEventListener('resize', resizeCanvas);
+    if ('IntersectionObserver' in window) {
+        visibilityObserver = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                const target = targets.find(item => item.canvas === entry.target);
+                if (target) target.inViewport = entry.isIntersecting;
+            });
+            startDrawLoop();
+        });
+        targets.forEach(target => {
+            if (target.canvas) visibilityObserver.observe(target.canvas);
+        });
+    }
+
+    const resizeCanvas = () => {
+        targets.forEach(t => {
+            if (t.canvas && t.canvas.parentElement) {
+                const sized = sizeCanvasForDpr(
+                    t.canvas, t.ctx,
+                    t.canvas.parentElement.offsetWidth || 380,
+                    t.canvas.parentElement.offsetHeight || 380
+                );
+                t.cssW = sized.cssW;
+                t.cssH = sized.cssH;
+                gradientCache.delete(t.ctx);
+            }
+        });
+        startDrawLoop();
+    };
+    resizeCanvas();
+    resizeHandler = resizeCanvas;
     window.addEventListener('resize', resizeCanvas);
-    updateVisualizerTargets();
+    // Dragging the window between a 100% and a 150% monitor changes
+    // devicePixelRatio without firing resize, so re-run the same bookkeeping.
+    if (unsubscribeDpr) unsubscribeDpr();
+    unsubscribeDpr = registerCanvasDprListener(resizeCanvas);
 
     bars = [];
     for (let i = 0; i < BAR_COUNT; i++) {
@@ -108,54 +163,62 @@ export function initVisualizer() {
     }
 
     const styleSelect = document.getElementById('select-visualizer-style');
-    if (styleSelect) {
+    if (styleSelect && !styleSelect._boundVisualizerStyle) {
+        styleSelect._boundVisualizerStyle = true;
         styleSelect.addEventListener('change', (e) => {
             visualizerStyle = e.target.value;
-            if (window.pywebview?.api) {
-                window.pywebview.api.save_setting('visualizer_style', visualizerStyle, 'audio');
-            }
+            saveSetting('visualizer_style', visualizerStyle, 'audio');
         });
     }
 
     const toggleEnabled = document.getElementById('toggle-visualizer');
-    if (toggleEnabled) {
+    if (toggleEnabled && !toggleEnabled._boundVisualizerClick) {
+        toggleEnabled._boundVisualizerClick = true;
+        // Initial state: DOM toggle class wins if present, else stored setting.
+        try {
+            const stored = localStorage.getItem('nedotify_ui_cover_visualizer');
+            const fromStore = stored !== null ? JSON.parse(stored) : null;
+            const fromDom = toggleEnabled.classList.contains('on');
+            const initial = window.settings?.ui?.cover_visualizer ?? fromStore ?? (fromDom || isEnabled);
+            setVisualizerEnabled(initial, { silent: true });
+        } catch(e) {}
         toggleEnabled.addEventListener('click', () => {
-            isEnabled = !isEnabled;
-            toggleEnabled.classList.toggle('on', isEnabled);
-            if (!isEnabled) {
-                if (animFrameId) {
-                    cancelAnimationFrame(animFrameId);
-                    animFrameId = null;
-                }
-                targets.forEach(t => {
-                    if (t.ctx && t.canvas) t.ctx.clearRect(0, 0, t.canvas.width, t.canvas.height);
-                });
-            } else {
-                draw(0);
-            }
+            setVisualizerEnabled(!isEnabled);
         });
     }
 
     // Volume is dynamically fetched from player module (getVolume()) to avoid pywebview RPC polling
 
-    setTimeout(async () => {
-        if (window.pywebview?.api) {
-            const settings = await window.pywebview.api.get_settings();
-            if (settings?.audio?.visualizer_style) {
-                visualizerStyle = settings.audio.visualizer_style;
-                if (styleSelect) styleSelect.value = visualizerStyle;
-            }
-        }
-    }, 1000);
+    syncVisualizerStyle(window.settings);
 
     startDrawLoop();
 }
 
+function syncVisualizerStyle(settings) {
+    const style = settings?.audio?.visualizer_style;
+    if (!style) return;
+    const select = document.getElementById('select-visualizer-style');
+    if (select && [...select.options].some(option => option.value === style)) {
+        visualizerStyle = style;
+        select.value = style;
+    }
+}
+document.addEventListener('nedotify:settings_applied', event => syncVisualizerStyle(event.detail));
+
 function startDrawLoop() {
-    if (!animFrameId && isEnabled && documentVisible) {
+    if (initialized && !animFrameId && isEnabled && documentVisible && !efficiencyPaused) {
         hasDrawnIdle = false;
         animFrameId = requestAnimationFrame(draw);
     }
+}
+
+function syncVisualizerAnimation() {
+    if (!isEnabled || !documentVisible || efficiencyPaused || !initialized) {
+        if (animFrameId) cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+        return;
+    }
+    startDrawLoop();
 }
 
 function getCachedPrimaryRgb() {
@@ -171,13 +234,16 @@ function getCachedPrimaryRgb() {
 
 function updateSimulation(playing, now, volScale, track) {
     const title = track?.title || '';
-    let seed = 0;
-    for (let i = 0; i < title.length; i++) {
-        seed = (seed + title.charCodeAt(i)) % 100000;
+    if (title !== cachedTitle) {
+        cachedTitle = title;
+        cachedSeed = 0;
+        for (let i = 0; i < title.length; i++) {
+            cachedSeed = (cachedSeed + title.charCodeAt(i)) % 100000;
+        }
     }
     const effectiveVol = volScale;
 
-    const freqAdjust = 0.5 + (seed % 50) / 25.0;
+    const freqAdjust = 0.5 + (cachedSeed % 50) / 25.0;
     const beatPhase = (now % beatInterval) / beatInterval;
     const isBeat = beatPhase < 0.12;
 
@@ -219,7 +285,7 @@ function updateSimulation(playing, now, volScale, track) {
             }
             bar.target = Math.max(0.04, Math.min(1, target));
         } else {
-            bar.target = 0.015 + Math.sin(now * 0.4 + bar.phase) * 0.012;
+            bar.target = 0.05 + Math.sin(now * 0.4 + bar.phase) * 0.035;
         }
 
         const diff = bar.target - bar.current;
@@ -235,24 +301,32 @@ function updateSimulation(playing, now, volScale, track) {
 }
 
 function draw(timestamp) {
-    if (!isEnabled || !documentVisible) {
+    if (!initialized || !isEnabled || !documentVisible || efficiencyPaused) {
         animFrameId = null;
         return;
     }
 
     const playing = getIsPlaying();
 
-    if (activeTargets.length === 0) {
+    let hasVisibleCanvas = false;
+    targets.forEach(t => {
+        if (t.canvas && t.inViewport && t.canvas.offsetParent !== null && t.canvas.width > 0 && t.canvas.height > 0) {
+            const parentPage = t.parentPage;
+            if (!parentPage || parentPage.classList.contains('active')) {
+                hasVisibleCanvas = true;
+            }
+        }
+    });
+
+    if (!hasVisibleCanvas) {
         animFrameId = null;
         return;
     }
 
     if (!playing) {
-        if (hasDrawnIdle) {
-            animFrameId = null;
-            return;
-        }
+        if (hasDrawnIdle) { animFrameId = null; return; }
         hasDrawnIdle = true;
+        animFrameId = null;
     } else {
         hasDrawnIdle = false;
         animFrameId = requestAnimationFrame(draw);
@@ -269,38 +343,48 @@ function draw(timestamp) {
     updateSimulation(playing, now, volScale, track);
 
     const rgb = getCachedPrimaryRgb();
+    for (let i = 0; i < BAR_COUNT; i++) {
+        drawData[i] = playing ? bars[i].current * volScale : bars[i].current;
+    }
 
-    for (let tIdx = 0; tIdx < activeTargets.length; tIdx++) {
-        const target = activeTargets[tIdx];
-        if (!target.ctx || !target.canvas) continue;
-        const w = target.canvas.width;
-        const h = target.canvas.height;
-        if (w === 0 || h === 0) continue;
+    targets.forEach(target => {
+        if (!target.ctx || !target.canvas) return;
+        if (target.canvas.width === 0 || target.canvas.height === 0) return;
+        if (!target.inViewport || target.canvas.offsetParent === null) return;
+
+        // Optimization for laptops: skip drawing if parent view page is not active
+        const parentPage = target.parentPage;
+        if (parentPage && !parentPage.classList.contains('active')) return;
 
         const ctx = target.ctx;
+        // Draw in CSS pixels. The `|| canvas.width` fallback only kicks in for a
+        // canvas that never got a parentElement at init, where the old code
+        // used the backing store directly - identical at devicePixelRatio 1.
+        const w = target.cssW || target.canvas.width;
+        const h = target.cssH || target.canvas.height;
         ctx.clearRect(0, 0, w, h);
 
-        const data = new Array(BAR_COUNT);
-        for (let i = 0; i < BAR_COUNT; i++) {
-            data[i] = playing ? bars[i].current * volScale : bars[i].current;
-        }
-
         if (visualizerStyle === 'wave') {
-            drawWave(ctx, w, h, data, playing, target.primary, rgb);
+            drawWave(ctx, w, h, drawData, playing, target.primary, rgb);
         } else if (visualizerStyle === 'circle') {
-            drawCircle(ctx, w, h, data, playing, target.primary, rgb);
+            drawCircle(ctx, w, h, drawData, playing, target.primary, rgb);
         } else {
-            drawBars(ctx, w, h, data, playing, target.primary, rgb);
+            drawBars(ctx, w, h, drawData, playing, target.primary, rgb);
         }
-    }
+    });
 }
 
 function makeGradient(ctx, x1, y1, x2, y2, playing, primary, rgb) {
+    const alpha = playing ? (primary ? 0.7 : 0.55) : 0.34;
+    const cached = gradientCache.get(ctx);
+    if (cached && cached.x1 === x1 && cached.y1 === y1 && cached.x2 === x2 && cached.y2 === y2 && cached.alpha === alpha && cached.rgb === rgb) {
+        return cached.gradient;
+    }
     const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-    const alpha = playing ? (primary ? 0.7 : 0.4) : 0.15;
     grad.addColorStop(0, `rgba(${rgb}, ${alpha * 0.3})`);
     grad.addColorStop(0.5, `rgba(${rgb}, ${alpha * 0.6})`);
     grad.addColorStop(1, `rgba(${rgb}, ${alpha})`);
+    gradientCache.set(ctx, { x1, y1, x2, y2, alpha, rgb, gradient: grad });
     return grad;
 }
 
@@ -387,10 +471,24 @@ function drawCircle(ctx, w, h, data, playing, primary, rgb) {
 }
 
 export function destroyVisualizer() {
+    initialized = false;
     if (animFrameId) {
         cancelAnimationFrame(animFrameId);
         animFrameId = null;
     }
+    if (resizeHandler) window.removeEventListener('resize', resizeHandler);
+    resizeHandler = null;
+    if (unsubscribeDpr) unsubscribeDpr();
+    unsubscribeDpr = null;
+    if (visibilityObserver) visibilityObserver.disconnect();
+    visibilityObserver = null;
+    targets.forEach(target => {
+        if (target.ctx) gradientCache.delete(target.ctx);
+        target.canvas = null;
+        target.ctx = null;
+        target.parentPage = null;
+    });
+    bars = [];
 }
 
 
@@ -400,25 +498,8 @@ export function destroyVisualizer() {
 
 window.addEventListener('nedotify:efficiency_state', (e) => {
     const state = e.detail;
-    if (state.active && state.disable_visualizations) {
-        // Paused by efficiency manager
-        if (animFrameId) {
-            cancelAnimationFrame(animFrameId);
-            animFrameId = null;
-        }
-    } else {
-        // Resumed
-        if (isEnabled && documentVisible && !animFrameId) {
-            lastFrameTime = performance.now();
-            animFrameId = requestAnimationFrame(draw);
-        }
-    }
-    
-    if (state.active && !state.disable_visualizations) {
-        // Throttle FPS if not fully paused
-        frameInterval = 1000 / (state.fps_limit || 15);
-    } else {
-        // Restore standard FPS
-        frameInterval = 1000 / targetFps;
-    }
+    efficiencyPaused = !!(state.active && state.disable_visualizations);
+    efficiencyFps = state.active && !state.disable_visualizations ? (state.fps_limit || 15) : null;
+    frameInterval = 1000 / Math.min(targetFps, efficiencyFps || targetFps);
+    syncVisualizerAnimation();
 });

@@ -17,7 +17,11 @@
     height: 300px;
     z-index: 0;
     pointer-events: none;
-    opacity: 0.3;
+    opacity: 0.7;
+    /* Fade out toward the bottom so the band does not cut hard where the
+       quick-access grid starts. */
+    -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%);
 }
 
 #home-greeting {

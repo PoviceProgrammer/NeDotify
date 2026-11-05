@@ -1,13 +1,56 @@
 /* ==========================================================================
-   NeDotify v2 — Modular CSS Architecture Index
-   Original monolithic stylesheet has been partitioned into isolated components.
-   Backup of original monolithic file preserved at: css/styles.old.css
+   NeDotify v2 — CSS Architecture Reference
+
+   ── THIS FILE IS NOT LOADED BY THE APP. ────────────────────────────────────
+   index.html does not link it, and nothing else does either. It is a written
+   record of how the stylesheets are split and of the order they are meant to
+   be read in — a map for humans and for tooling, nothing more. Edit it
+   freely; no pixel depends on it.
+
+   DO NOT LINK IT FROM index.html.
+   Every file in the @import list below is *already* linked individually by
+   index.html. Adding this file on top would fetch the same ~194 KB of CSS a
+   second time and, worse, re-apply every rule in it after themes.css — so the
+   cascade would no longer end with the theme overrides. The individual <link>
+   tags are the single source of truth.
+
+   LOAD ORDER RECORD
+   index.html is authoritative; it loads fonts.css, tokens.css, the base and
+   player/view styles, themes.css, then the home/search/library/downloads,
+   smart-playlist, feature, settings, onboarding, profile, resize, visual
+   polish, UI-style-picker and macOS pack stylesheets. Several component
+   sheets after themes.css intentionally override earlier rules.
+
+   This import list is a tooling inventory used by tools/bench/css_inventory.py;
+   it is not loaded by the app. It mirrors the shared desktop component layers
+   through visual-polish.css. The onboarding, UI-style-picker and MACos_ui
+   sheets are linked directly by index.html and remain outside this inventory.
+   Keep both this import inventory and the index links in sync when adding or
+   reordering shared component styles.
+
+   The original monolithic stylesheet that these were split out of is not kept
+   in this directory; there is no css/styles.old.css here. Its history lives in
+   version control.
    ========================================================================== */
 
 @import "tokens.css";
 @import "components/base.css";
 @import "components/player-bar.css";
+@import "components/player-view.css";
 @import "components/lyrics.css";
 @import "components/home-view.css";
 @import "components/track-table.css";
+@import "components/recommendation-controls.css";
+@import "components/playlist-recommendations.css";
+@import "components/track-wave.css";
 @import "themes.css";
+@import "components/home-refresh.css";
+@import "components/search-refresh.css";
+@import "components/library-refresh.css";
+@import "components/downloads-view.css";
+
+@import "components/feature-tools.css";
+@import "components/settings-refresh.css";
+@import "components/profile-refresh.css";
+@import "components/window-resize.css";
+@import "components/visual-polish.css";

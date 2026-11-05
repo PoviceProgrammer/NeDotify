@@ -1,16 +1,50 @@
-import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, coverImgHtml, artistAvatarHtml, renderPlaylistCoverCollage } from './utils.js';
+import { refreshFavoritesCovers, initHomeAtmosphere, updateHomeCoverCollage } from './home-atmosphere.js';
+import { updateHomeCollections, openHomeLibrary, openHomeDialog } from './home-shell.js';
+import { getPlaylistCover } from './library-view.js';
+import { mountRecommendationControls } from './recommendation-controls.js';
+import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, coverImgHtml, artistAvatarHtml, renderPlaylistCoverCollage, sizeCanvasForDpr, registerCanvasDprListener, createTrackElement, showToast } from './utils.js';
 
 const feedTimeouts = new Map();
 let trackChangeCount = 0;
 let homeLoadGeneration = 0;
+let sectionRequestSequence = 0;
+const sectionRequests = new Map();
+export function isCurrentHomeEvent(sectionId, data) {
+    const expectedId = sectionRequests.get(sectionId);
+    // Legacy callers that did not start a tracked request may still deliver an
+    // untagged array. Once a request is active, only its tagged response can
+    // clear the loading state or replace the section.
+    if (!expectedId) return true;
+    const receivedId = data && typeof data === 'object' ? data.request_id : null;
+    return typeof receivedId === 'string' && receivedId === expectedId &&
+        expectedId.slice(0, expectedId.indexOf(':')) === String(homeLoadGeneration);
+}
+
+window.addEventListener('nedotify:recommendation_feedback_changed', () => loadHome());
+window.addEventListener('nedotify:recommendation_mode_changed', () => loadHome());
+let coverBackfillPromise = null;
+let lastCoverBackfillAt = 0;
 
 // Helper to stagger bridge calls and prevent backend burst / thread pool congestion
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+function applyCoverBackground(el, rawUrl) {
+    if (!el || !rawUrl) return;
+    try {
+        const u = new URL(String(rawUrl));
+        if (u.protocol !== 'https:' && u.protocol !== 'data:') return;
+        // u.href is already percent-encoded by the URL parser; encodeURI on top
+        // would double-encode it ("%20" -> "%2520").
+        el.style.backgroundImage = `url("${u.href}")`;
+    } catch (e) {}
+}
 
 function renderSkeletons(containerId, count = 4) {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
+    // Fragment: one insertion instead of one per skeleton card (search.js pattern).
+    const fragment = document.createDocumentFragment();
     for (let i = 0; i < count; i++) {
         const card = document.createElement('div');
         card.className = 'skeleton-card';
@@ -19,11 +53,16 @@ function renderSkeletons(containerId, count = 4) {
             <div class="skeleton-title"></div>
             <div class="skeleton-sub"></div>
         `;
-        container.appendChild(card);
+        fragment.appendChild(card);
     }
+    container.appendChild(fragment);
 }
 
 export function clearFeedTimeout(sectionId) {
+    if (sectionId === 'home-mixes') {
+        const button = document.getElementById('home-refresh-mixes');
+        if (button) { button.disabled = false; button.removeAttribute('aria-busy'); }
+    }
     if (feedTimeouts.has(sectionId)) {
         clearTimeout(feedTimeouts.get(sectionId));
         feedTimeouts.delete(sectionId);
@@ -40,9 +79,78 @@ function renderRetryButton(containerId, retryFn) {
     });
 }
 
+export function renderHomeRetry(containerId) {
+    renderRetryButton(containerId, () => loadHome());
+}
+
+function requestHomeSection(containerId, methodName, args = [], refresh = false) {
+    const generation = homeLoadGeneration;
+    const request = () => {
+        if (generation !== homeLoadGeneration) return;
+        const requestId = `${generation}:${++sectionRequestSequence}`;
+        sectionRequests.set(containerId, requestId);
+        clearFeedTimeout(containerId);
+        renderSkeletons(containerId);
+        if (containerId === 'home-mixes') {
+            const button = document.getElementById('home-refresh-mixes');
+            if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); }
+        }
+        if (containerId === 'home-recommended') {
+            const section = document.getElementById('home-recommended-section');
+            if (section) section.style.display = 'block';
+        }
+        feedTimeouts.set(containerId, setTimeout(() => {
+            if (generation !== homeLoadGeneration || sectionRequests.get(containerId) !== requestId) return;
+            feedTimeouts.delete(containerId);
+            clearFeedTimeout(containerId);
+            renderRetryButton(containerId, request);
+        }, 20000));
+        try {
+            const method = window.pywebview?.api?.[methodName];
+            if (typeof method !== 'function') throw new Error('Feed API unavailable');
+            Promise.resolve(refresh ? method(...args, requestId, true) : method(...args, requestId)).catch(() => {
+                if (sectionRequests.get(containerId) !== requestId || generation !== homeLoadGeneration) return;
+                clearFeedTimeout(containerId);
+                renderRetryButton(containerId, request);
+            });
+        } catch (err) {
+            clearFeedTimeout(containerId);
+            renderRetryButton(containerId, request);
+        }
+    };
+    request();
+}
+
+document.addEventListener('click', event => {
+    const button = event.target.closest?.('#home-refresh-mixes');
+    if (!button || button.disabled) return;
+    requestHomeSection('home-mixes', 'get_home_mixes', [6], true);
+});
+
+function backfillHomeCovers(currentGen) {
+    // Artwork may involve dozens of network lookups. Keep it outside the feed
+    // critical path and do not repeat a failed scan on every track change.
+    if (!window.pywebview?.api?.fetch_missing_covers || coverBackfillPromise ||
+        Date.now() - lastCoverBackfillAt < 5 * 60 * 1000) return;
+    lastCoverBackfillAt = Date.now();
+    coverBackfillPromise = Promise.resolve().then(() => window.pywebview.api.fetch_missing_covers(40))
+        .then(async res => {
+            if (!res?.updated || currentGen !== homeLoadGeneration) return;
+            const fresh = await window.pywebview.api.get_home_data() || {};
+            if (currentGen !== homeLoadGeneration) return;
+            renderHistory(fresh.history || []);
+            if (fresh.analytics) {
+                renderTopTracks(fresh.analytics.top_tracks || []);
+                renderTopArtists(fresh.analytics.top_artists || []);
+            }
+        }).catch(err => console.warn('Cover backfill failed:', err))
+        .finally(() => { coverBackfillPromise = null; });
+}
+
 export async function loadHome(isTrackChange = false) {
     await window.awaitBridge();
     if (!window.pywebview?.api) return;
+    mountRecommendationControls(document.getElementById('home-recommendation-controls'));
 
     const currentGen = ++homeLoadGeneration;
 
@@ -51,34 +159,33 @@ export async function loadHome(isTrackChange = false) {
         const data = await window.pywebview.api.get_home_data() || {};
         if (currentGen !== homeLoadGeneration) return;
 
-        // Render Quick Access Grid (2x3 modern Spotify-style grid)
+        document.getElementById('home-error')?.classList.add('hidden');
+        updateHomeCollections(data);
+        // Four collections, backed by real local data.
         renderQuickAccess(data, data.playlists || []);
 
         // History
-        if (data.history && data.history.length > 0) {
-            renderHistory(data.history);
-        } else {
-            const histSec = document.getElementById('section-home-history');
-            if (histSec) histSec.style.display = 'none';
-        }
+        renderHistory(data.history || []);
 
         // Analytics (Local Last.fm)
-        if (data.analytics && ((data.analytics.top_tracks && data.analytics.top_tracks.length > 0) || (data.analytics.top_artists && data.analytics.top_artists.length > 0))) {
+        data.analytics ||= {};
+        if (data.analytics) {
             renderTopTracks(data.analytics.top_tracks || []);
             renderTopArtists(data.analytics.top_artists || []);
-        } else {
-            const ttSec = document.getElementById('section-home-top-tracks');
-            if (ttSec) ttSec.style.display = 'none';
-            const taSec = document.getElementById('section-home-top-artists');
-            if (taSec) taSec.style.display = 'none';
         }
+
+        // Backfill artwork for rows stored before covers were persisted on
+        // playback. Without this those tiles stay empty placeholders forever,
+        // because the grid can only render what the row already holds.
+        backfillHomeCovers(currentGen);
 
         // Step 2: Playlists (fast local query)
         if (window.pywebview.api.get_playlists) {
             try {
                 const playlists = await window.pywebview.api.get_playlists();
                 if (currentGen !== homeLoadGeneration) return;
-                if (playlists && playlists.length > 0) {
+                if (Array.isArray(playlists)) {
+                    data.playlists = playlists;
                     renderHomePlaylists(playlists);
                     renderQuickAccess(data, playlists);
                 }
@@ -87,78 +194,22 @@ export async function loadHome(isTrackChange = false) {
             }
         }
 
-        // Decide whether to refresh recommendations/mixes/etc.
-        let shouldLoadFeeds = !isTrackChange;
-        if (isTrackChange) {
-            trackChangeCount++;
-            if (trackChangeCount >= 10) {
-                trackChangeCount = 0;
-                shouldLoadFeeds = true;
-            }
+        if (window.pywebview.api.get_downloaded_tracks) {
+            try {
+                const localTracks = await window.pywebview.api.get_downloaded_tracks();
+                if (currentGen !== homeLoadGeneration) return;
+                data.localTracks = Array.isArray(localTracks) ? localTracks : [];
+                renderQuickAccess(data, data.playlists || []);
+            } catch (error) { console.warn('Home local collection unavailable:', error); }
         }
 
-        // Step 3: Staggered external feeds to avoid slamming backend bridge
-        if (shouldLoadFeeds) {
-            renderSkeletons('home-popular');
-            renderSkeletons('home-recommended');
-            renderSkeletons('home-releases');
-            renderSkeletons('home-mixes');
-
-            if (window.pywebview.api.get_popular_tracks) {
-                window.pywebview.api.get_popular_tracks();
-            }
-
-            await delay(75);
-            if (currentGen !== homeLoadGeneration) return;
-
-            if (window.pywebview.api.get_feed) {
-                window.pywebview.api.get_feed(10);
-            }
-
-            await delay(75);
-            if (currentGen !== homeLoadGeneration) return;
-
-            if (window.pywebview.api.get_home_releases) {
-                window.pywebview.api.get_home_releases(10);
-            }
-
-            await delay(75);
-            if (currentGen !== homeLoadGeneration) return;
-
-            if (window.pywebview.api.get_home_mixes) {
-                window.pywebview.api.get_home_mixes(10);
-            }
-
-            await delay(75);
-            if (currentGen !== homeLoadGeneration) return;
-
-            if (window.pywebview.api.get_authentic_home_feed) {
-                window.pywebview.api.get_authentic_home_feed(5);
-            }
-        }
-
-        await delay(100);
-        if (currentGen !== homeLoadGeneration) return;
-
-        // Step 4: Artists feed
-        if (window.pywebview.api.get_home_artists) {
-            renderSkeletons('home-artists');
-            window.pywebview.api.get_home_artists(15);
-            feedTimeouts.set('home-artists', setTimeout(() => {
-                renderRetryButton('home-artists', () => {
-                    feedTimeouts.set('home-artists', setTimeout(() => renderRetryButton('home-artists', () => window.pywebview.api.get_home_artists(15)), 15000));
-                    window.pywebview.api.get_home_artists(15);
-                });
-            }, 15000));
-        }
-
-        await delay(100);
-        if (currentGen !== homeLoadGeneration) return;
-
-        // Step 5: Wrapped Stats
-        loadWrappedStats(currentWrappedPeriod);
+        if(!isTrackChange)requestHomeSection('home-mixes','get_home_mixes',[6]);
+        refreshFavoritesCovers();
+        initHomeAtmosphere();
     } catch (e) {
         console.error('Error loading home:', e);
+        document.getElementById('home-error')?.classList.remove('hidden');
+        document.getElementById('home-quick-access')?.setAttribute('aria-busy','false');
     }
 }
 // ─── Quick Access Grid (2x3 Modern Matrix) ───────────────────────────────────
@@ -175,258 +226,47 @@ function formatTracksCount(n) {
 export function renderQuickAccess(data = {}, playlists = []) {
     const container = document.getElementById('home-quick-access');
     if (!container) return;
-
-    const items = [];
-    const favCount = data?.favorites_count || 0;
-
-    // 1. Pinned Favorites Slot
-    items.push({
-        id: 'favorites',
-        type: 'favorites',
-        title: 'Любимые треки',
-        subtitle: formatTracksCount(favCount),
-        action: async () => {
-            if (window.pywebview?.api?.get_favorites) {
-                try {
-                    const favs = await window.pywebview.api.get_favorites();
-                    const tracks = Array.isArray(favs) ? favs : (favs?.tracks || []);
-                    if (tracks && tracks.length > 0 && window.pywebview.api.play_track) {
-                        window.pywebview.api.play_track(tracks[0], tracks, 0);
-                    } else if (window.showPage) {
-                        window.showPage('library');
-                    } else if (window.NeDotify?.showPage) {
-                        window.NeDotify.showPage('library');
-                    }
-                } catch (e) {
-                    if (window.showPage) window.showPage('library');
-                    else if (window.NeDotify?.showPage) window.NeDotify.showPage('library');
-                }
-            } else if (window.showPage) {
-                window.showPage('library');
-            } else if (window.NeDotify?.showPage) {
-                window.NeDotify.showPage('library');
-            }
-        }
-    });
-
-    // 2. Playlists (up to 2 recent/user playlists)
-    const effectivePlaylists = (playlists && playlists.length > 0)
-        ? playlists
-        : (data?.playlists && data.playlists.length > 0 ? data.playlists : []);
-
-    effectivePlaylists.slice(0, 2).forEach(pl => {
-        if (!pl) return;
-        const pid = pl.id !== undefined ? pl.id : pl.ID;
-        items.push({
-            id: `playlist-${pid}`,
-            type: 'playlist',
-            playlist: pl,
-            title: pl.name || 'Плейлист',
-            subtitle: formatTracksCount(pl.track_count || 0),
-            action: async () => {
-                if (window.pywebview?.api?.get_playlist_tracks) {
-                    try {
-                        const res = await window.pywebview.api.get_playlist_tracks(pid);
-                        const tracks = Array.isArray(res) ? res : (res && Array.isArray(res.tracks) ? res.tracks : []);
-                        if (tracks && tracks.length > 0 && window.pywebview.api.play_track) {
-                            window.pywebview.api.play_track(tracks[0], tracks, 0);
-                        } else if (window.showPage) {
-                            window.showPage('library');
-                        } else if (window.NeDotify?.showPage) {
-                            window.NeDotify.showPage('library');
-                        }
-                    } catch (e) {
-                        console.warn('Quick access playlist error:', e);
-                    }
-                }
-            }
-        });
-    });
-
-    // 3. History Tracks or Top Tracks to fill remaining slots
-    const historyList = (data?.history && data.history.length > 0)
-        ? data.history
-        : (data?.analytics?.top_tracks || []);
-
-    const seenTrackKeys = new Set();
-    historyList.forEach((track, idx) => {
-        if (items.length >= 6) return;
-        if (!track || !track.title) return;
-        const trackKey = `${track.source || 'src'}_${track.source_id || track.id || track.title}`;
-        if (!seenTrackKeys.has(trackKey)) {
-            seenTrackKeys.add(trackKey);
-            items.push({
-                id: `track-${trackKey}`,
-                type: 'track',
-                track: track,
-                title: track.title || 'Unknown',
-                subtitle: track.artist || 'Трек',
-                cover_url: getCoverUrl(track),
-                action: () => {
-                    if (window.pywebview?.api?.play_track) {
-                        const trackObj = { ...track };
-                        if (trackObj.track_id) trackObj.id = trackObj.track_id;
-                        const trackList = historyList.filter(x => x && (x.title || x.source_id));
-                        window.pywebview.api.play_track(trackObj, trackList.length > 0 ? trackList : [trackObj], idx);
-                    }
-                }
-            });
-        }
-    });
-
-    // 4. Cold-Start / Fallback Fillers if fewer than 6 items exist
-    const fallbacks = [
-        {
-            id: 'fallback-flow',
-            type: 'fallback',
-            icon: 'radio',
-            title: 'Бесконечная волна',
-            subtitle: 'Умный радиопоток',
-            gradient: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
-            action: () => {
-                const flowBtn = document.getElementById('pb-btn-flow');
-                if (flowBtn) flowBtn.click();
-            }
-        },
-        {
-            id: 'fallback-library',
-            type: 'fallback',
-            icon: 'library',
-            title: 'Моя медиатека',
-            subtitle: 'Все треки и коллекции',
-            gradient: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-            action: () => {
-                if (window.showPage) window.showPage('library');
-                else if (window.NeDotify?.showPage) window.NeDotify.showPage('library');
-            }
-        },
-        {
-            id: 'fallback-popular',
-            type: 'fallback',
-            icon: 'flame',
-            title: 'Популярное',
-            subtitle: 'Тренды и чарты',
-            gradient: 'linear-gradient(135deg, #f59e0b, #ef4444)',
-            action: () => {
-                const popSec = document.getElementById('section-home-popular') || document.getElementById('home-popular');
-                if (popSec) popSec.scrollIntoView({ behavior: 'smooth' });
-                else if (window.showPage) window.showPage('search');
-            }
-        },
-        {
-            id: 'fallback-search',
-            type: 'fallback',
-            icon: 'compass',
-            title: 'Обзор и поиск',
-            subtitle: 'Миллионы треков',
-            gradient: 'linear-gradient(135deg, #10b981, #06b6d4)',
-            action: () => {
-                if (window.showPage) window.showPage('search');
-                else if (window.NeDotify?.showPage) window.NeDotify.showPage('search');
-            }
-        },
-        {
-            id: 'fallback-releases',
-            type: 'fallback',
-            icon: 'sparkles',
-            title: 'Новые релизы',
-            subtitle: 'Свежая музыка недели',
-            gradient: 'linear-gradient(135deg, #ec4899, #f43f5e)',
-            action: () => {
-                const relSec = document.getElementById('section-home-releases') || document.getElementById('home-releases');
-                if (relSec) relSec.scrollIntoView({ behavior: 'smooth' });
-            }
-        }
-    ];
-
-    let fbIdx = 0;
-    while (items.length < 6 && fbIdx < fallbacks.length) {
-        items.push(fallbacks[fbIdx++]);
-    }
-
-    container.innerHTML = '';
-
-    items.slice(0, 6).forEach(item => {
-        const card = document.createElement('div');
-        card.className = 'quick-access-card';
-        card.setAttribute('data-qa-id', item.id);
-
-        let coverHtml = '';
-        if (item.type === 'favorites') {
-            coverHtml = `
-                <div class="qa-cover" style="background: linear-gradient(135deg, #f43f5e, #ec4899);">
-                    <i data-lucide="heart" class="qa-fav-icon" style="width:26px;height:26px;fill:currentColor"></i>
-                </div>
-            `;
-        } else if (item.type === 'playlist') {
-            const pid = item.playlist?.id !== undefined ? item.playlist.id : item.playlist?.ID;
-            card.setAttribute('data-pl-id', String(pid));
-            coverHtml = `
-                <div class="qa-cover">
-                    <i data-lucide="list-music" class="pl-cover-skeleton" style="width:24px;height:24px;color:var(--color-text-muted, rgba(255,255,255,0.5))"></i>
-                </div>
-            `;
-        } else if (item.type === 'track') {
-            coverHtml = `
-                <div class="qa-cover">
-                    ${coverImgHtml({ src: item.cover_url || '', coverUrl: item.cover_url || '', sourceId: item.track?.source_id || '', source: item.track?.source || 'youtube' })}
-                </div>
-            `;
-        } else if (item.type === 'fallback') {
-            coverHtml = `
-                <div class="qa-cover" style="background: ${item.gradient};">
-                    <i data-lucide="${item.icon}" style="width:24px;height:24px;color:#ffffff"></i>
-                </div>
-            `;
-        }
-
-        card.innerHTML = `
-            ${coverHtml}
-            <div class="qa-info">
-                <div class="qa-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</div>
-                <div class="qa-sub" title="${escapeHtml(item.subtitle)}">${escapeHtml(item.subtitle)}</div>
-            </div>
-            <button class="qa-play-btn" title="Воспроизвести" aria-label="Play">
-                <i data-lucide="play" style="width:16px;height:16px;fill:currentColor"></i>
-            </button>
-        `;
-
-        if (item.type === 'playlist' && item.playlist) {
-            attachPlaylistCollage(item.playlist, card.querySelector('.qa-cover'));
-        }
-
-        card.addEventListener('click', (e) => {
-            if (e.target.closest('.qa-play-btn')) return;
-            item.action();
-        });
-
-        const playBtn = card.querySelector('.qa-play-btn');
-        if (playBtn) {
-            playBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                item.action();
-            });
-        }
-
+    const play = async tracks => {
+        if (!tracks.length) return;
+        try { await window.pywebview.api.play_track({...tracks[0], id:tracks[0].track_id || tracks[0].id}, tracks, 0); }
+        catch { window.dispatchEvent(new CustomEvent('nedotify:toast', {detail:{msg:'Не удалось включить трек. Повторите попытку.',type:'error'}})); }
+    };
+    const favorites = {id:'favorites', type:'favorites', title:'Любимые треки', subtitle:formatTracksCount(data.favorites_count), icon:'heart', open:()=>openHomeLibrary('favorites'), play:async()=>{try {const tracks=await window.pywebview.api.get_favorites(); if (tracks?.length) play(tracks); else openHomeLibrary('favorites');} catch {openHomeLibrary('favorites');}}};
+    const local = {id:'local', type:'local', title:'Локальные', subtitle:data.localTracks ? formatTracksCount(data.localTracks.length) : 'На этом компьютере', icon:'list-music', open:()=>openHomeLibrary('offline'), play:async()=>{try {const tracks=await window.pywebview.api.get_downloaded_tracks(); if (tracks?.length) play(tracks); else openHomeLibrary('offline');} catch {openHomeLibrary('offline');}}};
+    const availablePlaylists = playlists.length ? playlists : data.playlists || [];
+    const selected = availablePlaylists.find(p => Number(p.track_count) > 0) || availablePlaylists[0];
+    const pl = selected ? {...selected, id:selected.id ?? selected.ID} : null;
+    const playlist = pl ? {id:`playlist-${pl.id}`,type:'playlist',playlist:pl,title:pl.name || 'Плейлист',subtitle:formatTracksCount(pl.track_count),icon:'list-music',open:()=>openHomeLibrary('playlist',pl),play:async()=>{try {const result=await window.pywebview.api.get_playlist_tracks(pl.id); const tracks=Array.isArray(result)?result:result?.tracks || []; if(tracks.length) await play(tracks); else openHomeLibrary('playlist',pl);}catch {openHomeLibrary('playlist',pl);}}} : {id:'create-playlist',type:'local',title:'Ваш первый плейлист',subtitle:'Соберите любимую музыку',icon:'plus',open:()=>window.NeDotify?.createPlaylist(),play:()=>window.NeDotify?.createPlaylist()};
+    const track = data.history?.[0];
+    const recent = track ? {id:'recent',type:'track',track,title:track.title,subtitle:track.artist || 'Недавно прослушано',open:()=>play(data.history),play:()=>play(data.history)} : {id:'library',type:'local',title:'Ваша библиотека',subtitle:'Выберите музыку',icon:'library',open:()=>openHomeLibrary('all'),play:()=>openHomeLibrary('all')};
+    container.replaceChildren();
+    container.setAttribute('aria-busy','false');
+    [favorites,local,playlist,recent].forEach(item => {
+        const card=document.createElement('div'); card.className=`quick-access-card qa-${item.type}`; card.dataset.qaId=item.id;
+        const cover=item.track ? coverImgHtml({src:getCoverUrl(item.track),coverUrl:item.track.cover_url || '',sourceId:item.track.source_id || '',source:item.track.source || '',alt:''}) : `<i data-lucide="${item.icon || 'list-music'}"></i>`;
+        card.innerHTML=`<button class="qa-open" aria-label="Открыть: ${escapeHtml(item.title)}"><span class="qa-cover">${cover}</span><span class="qa-info"><span class="qa-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</span><span class="qa-sub">${escapeHtml(item.subtitle)}</span></span></button><button class="qa-play-btn" aria-label="${item.id==='create-playlist'?'Создать плейлист':'Воспроизвести: '+escapeHtml(item.title)}"><i data-lucide="${item.id==='create-playlist'?'plus':'play'}"></i></button>`;
+        card.querySelector('.qa-open').onclick=item.open;
+        card.querySelector('.qa-play-btn').onclick=async e=>{const button=e.currentTarget;button.disabled=true;try{await item.play();}finally{if(button.isConnected)button.disabled=false;}};
+        if(item.playlist){card.dataset.plId=item.playlist.id;attachPlaylistCollage(item.playlist,card.querySelector('.qa-cover'));}
         container.appendChild(card);
     });
-
+    enhanceHomeCards(container);
     renderIcons(container);
+    refreshFavoritesCovers();
 }
 
 function renderHistory(tracks) {
+    updateHomeCoverCollage(tracks);
     const container = document.getElementById('home-history');
     if (!container) return;
-    const sec = document.getElementById('section-home-history') || container.closest('.feed-section');
-    if (!tracks || tracks.length === 0) {
-        if (sec) sec.style.display = 'none';
-        return;
-    }
-    if (sec) sec.style.display = 'block';
     container.innerHTML = '';
+    if (!tracks.length) { container.innerHTML = '<div class="home-empty"><i data-lucide="headphones"></i><h3>Слушайте то, что нравится</h3><p>Ваши недавние треки появятся здесь после первого прослушивания.</p></div>'; renderIcons(container); return; }
+    const fragment = document.createDocumentFragment();
     tracks.slice(0, 10).forEach((track, idx) => {
-        container.appendChild(createFeedCard(track, tracks, idx));
+        fragment.appendChild(createFeedCard(track, tracks, idx));
     });
+    container.appendChild(fragment);
+    enhanceHomeCards(container);
     renderIcons(container);
 }
 
@@ -462,12 +302,7 @@ export function renderAuthenticHome(sections) {
         ? sections 
         : (sections && Array.isArray(sections.sections) ? sections.sections : []);
         
-    if (!sectionList || sectionList.length === 0) {
-        container.style.display = 'none';
-        return;
-    }
-    
-    container.style.display = 'flex';
+    if (!sectionList || sectionList.length === 0) return;
     
     sectionList.forEach((section, index) => {
         if (!section) return;
@@ -489,10 +324,20 @@ export function renderAuthenticHome(sections) {
         scrollEl.id = sectionId;
         
         const items = Array.isArray(section.items) ? section.items : [];
+        const trackItems = items.filter(item => item?.type === 'track');
+        const allTracks = trackItems.map(item => ({
+            title: item.title, artist: item.artist, cover_url: item.cover_url,
+            source: item.source, source_id: item.source_id, source_url: item.source_url,
+            duration: item.duration || 0
+        }));
+        let nextTrackIndex = 0;
+        // Fragment: this section's cards land in one insertion (search.js pattern).
+        const cardsFragment = document.createDocumentFragment();
         items.forEach(item => {
             if (!item) return;
             if (item.type === 'track') {
                 const trackData = {
+                    ...item,
                     title: item.title,
                     artist: item.artist,
                     cover_url: item.cover_url,
@@ -501,51 +346,14 @@ export function renderAuthenticHome(sections) {
                     source_url: item.source_url,
                     duration: item.duration || 0
                 };
-                
-                const card = document.createElement('div');
-                card.className = 'feed-card';
-                card.innerHTML = `
-                    <div class="feed-card-cover">
-                        ${coverImgHtml({ src: item.cover_url || '', coverUrl: item.cover_url || '', sourceId: item.source_id || '', source: 'youtube' })}
-                        <div class="feed-card-overlay">
-                            <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px;fill:currentColor"></i></button>
-                        </div>
-                    </div>
-                    <div class="feed-card-title">${escapeHtml(item.title || 'Unknown')}</div>
-                    <div class="feed-card-sub">${escapeHtml(item.artist || '')}</div>
-                `;
-                
-                card.onclick = () => {
-                    const allTracks = items
-                        .filter(i => i && i.type === 'track')
-                        .map(i => ({
-                            title: i.title,
-                            artist: i.artist,
-                            cover_url: i.cover_url,
-                            source: i.source,
-                            source_id: i.source_id,
-                            source_url: i.source_url,
-                            duration: i.duration || 0
-                        }));
-                    window._userInitiatedPlay = true;
-                    if (window.pywebview && window.pywebview.api && window.pywebview.api.play_track) {
-                        window.pywebview.api.play_track(trackData, allTracks);
-                    }
-                };
-                scrollEl.appendChild(card);
+                const trackIndex = nextTrackIndex++;
+                cardsFragment.appendChild(createFeedCard(trackData, allTracks, trackIndex, {source: item.source || 'youtube'}));
             } else if (item.type === 'playlist' || item.type === 'album') {
-                const card = document.createElement('div');
-                card.className = 'feed-card';
-                card.innerHTML = `
-                    <div class="feed-card-cover" style="background-image: url('${escapeHtml(item.cover_url)}')">
-                        <div class="feed-card-overlay">
-                            <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px"></i></button>
-                        </div>
-                    </div>
-                    <div class="feed-card-title">${escapeHtml(item.title)}</div>
-                    <div class="feed-card-sub">${escapeHtml(item.artist || (item.type === 'album' ? 'Альбом' : 'Микс'))}</div>
-                `;
-                card.onclick = async () => {
+                const card = createFeedTile({
+                    title: item.title,
+                    subtitle: item.artist || (item.type === 'album' ? 'Альбом' : 'Микс'),
+                    coverUrl: item.cover_url,
+                    onActivate: async () => {
                     if (window.pywebview && window.pywebview.api && window.pywebview.api.get_playlist_tracks) {
                         window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Загрузка: ${item.title}...`, type: 'info' } }));
                         try {
@@ -562,20 +370,22 @@ export function renderAuthenticHome(sections) {
                             window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: String(err), type: 'error' } }));
                         }
                     }
-                };
-                scrollEl.appendChild(card);
+                    },
+                });
+                cardsFragment.appendChild(card);
             } else if (item.type === 'custom_playlist') {
                 const card = document.createElement('div');
                 card.className = 'feed-card';
                 card.innerHTML = `
-                    <div class="feed-card-cover" style="background-image: url('${escapeHtml(item.cover_url)}')">
+                    <div class="feed-card-cover">
                         <div class="feed-card-overlay">
-                            <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px"></i></button>
+                            <button class="feed-card-play" title="Слушать" aria-label="Слушать"><i data-lucide="play" style="width:14px;height:14px"></i></button>
                         </div>
                     </div>
                     <div class="feed-card-title">${escapeHtml(item.title)}</div>
                     <div class="feed-card-sub">${escapeHtml(item.artist || 'Специально для вас')}</div>
                 `;
+                applyCoverBackground(card.querySelector('.feed-card-cover'), item.cover_url);
                 card.onclick = () => {
                     if (window.pywebview && window.pywebview.api && window.pywebview.api.play_track) {
                         window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Включаю: ${item.title}...`, type: 'info' } }));
@@ -584,10 +394,11 @@ export function renderAuthenticHome(sections) {
                         }
                     }
                 };
-                scrollEl.appendChild(card);
+                cardsFragment.appendChild(card);
             }
         });
-        
+
+        scrollEl.appendChild(cardsFragment);
         sectionEl.appendChild(scrollEl);
         container.appendChild(sectionEl);
         renderIcons(sectionEl);
@@ -621,6 +432,12 @@ window.addEventListener('nedotify:app_ready', async () => {
 
 export async function attachPlaylistCollage(pl, coverEl) {
     if (!coverEl || !window.pywebview?.api?.get_playlist_tracks) return;
+    const savedCover=getPlaylistCover(pl.id ?? pl.ID);
+    if(savedCover){
+        coverEl.querySelectorAll('img,.pl-collage,.pl-cover-skeleton,svg.lucide-list-music').forEach(element=>element.remove());
+        coverEl.insertAdjacentHTML('afterbegin',coverImgHtml({src:savedCover,alt:''}));
+        return;
+    }
     // Bridge first: PROXY_PORT must be known before cover URLs are mapped,
     // otherwise local covers resolve to unusable URLs on cold start.
     await window.awaitBridge();
@@ -657,7 +474,7 @@ export async function attachPlaylistCollage(pl, coverEl) {
     // card by its playlist id - otherwise the collage is lost to a re-render.
     if (!coverEl.isConnected) {
         const fresh = document.querySelector(
-            `#home-playlists .feed-card[data-pl-id="${String(pid)}"] .feed-card-cover, #home-quick-access .quick-access-card[data-pl-id="${String(pid)}"] .qa-cover`);
+            `#home-playlists .feed-card[data-pl-id="${CSS.escape(String(pid))}"] .feed-card-cover, #home-quick-access .quick-access-card[data-pl-id="${CSS.escape(String(pid))}"] .qa-cover`);
         if (!fresh) return;
         coverEl = fresh;
     }
@@ -672,42 +489,43 @@ export async function attachPlaylistCollage(pl, coverEl) {
 export function renderHomePlaylists(playlists) {
     const container = document.getElementById('home-playlists');
     if (!container) return;
-    const sec = document.getElementById('section-home-playlists') || container.closest('.feed-section');
-    if (!playlists || playlists.length === 0) {
-        if (sec) sec.style.display = 'none';
-        return;
-    }
-    if (sec) sec.style.display = 'block';
     container.innerHTML = '';
 
+    // Fragment: all playlist cards land in one insertion (search.js pattern).
+    // attachPlaylistCollage() can only resume in a microtask, i.e. after this
+    // synchronous loop appended the fragment, so its isConnected re-resolve
+    // still finds the live card.
+    const playlistsFragment = document.createDocumentFragment();
+
+    if (!playlists?.length) {
+        container.innerHTML='<div class="home-empty"><i data-lucide="list-music"></i><h3>Место для вашей коллекции</h3><p>Соберите плейлист для любимого настроения.</p><button class="home-pill">Создать плейлист</button></div>';
+        container.querySelector('button').onclick=()=>window.NeDotify?.createPlaylist(); renderIcons(container); return;
+    }
     playlists.forEach(pl => {
-        const card = document.createElement('div');
-        card.className = 'feed-card';
+        const card = createFeedTile({
+            title: pl.name,
+            subtitle: `${pl.track_count || 0} треков`,
+            coverMarkup: '<i data-lucide="list-music" class="pl-cover-skeleton" style="width:32px;height:32px;color:var(--text-sec)"></i>',
+            coverStyle: 'display:flex;align-items:center;justify-content:center',
+            onActivate: async () => {
+                if (!window.pywebview?.api?.get_playlist_tracks) return;
+                try {
+                    const res = await window.pywebview.api.get_playlist_tracks(pl.id);
+                    const tracks = Array.isArray(res) ? res : (res && Array.isArray(res.tracks) ? res.tracks : []);
+                    if (tracks.length) window.pywebview.api.play_track(tracks[0], tracks);
+                } catch (err) {
+                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'Не удалось открыть плейлист', type: 'error' } }));
+                }
+            },
+        });
         card.setAttribute('data-pl-id', String(pl.id !== undefined ? pl.id : pl.ID));
-        card.innerHTML = `
-            <div class="feed-card-cover" style="display:flex;align-items:center;justify-content:center">
-                <i data-lucide="list-music" class="pl-cover-skeleton" style="width:32px;height:32px;color:var(--text-sec)"></i>
-                <div class="feed-card-overlay">
-                    <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px"></i></button>
-                </div>
-            </div>
-            <div class="feed-card-title">${escapeHtml(pl.name)}</div>
-            <div class="feed-card-sub">${pl.track_count || 0} треков</div>
-        `;
         // Collage of the first 4 track covers (skeleton stays until resolved;
         // with 0 covers the skeleton remains as-is).
         attachPlaylistCollage(pl, card.querySelector('.feed-card-cover'));
-        card.addEventListener('click', async () => {
-            if (window.pywebview?.api?.get_playlist_tracks) {
-                const res = await window.pywebview.api.get_playlist_tracks(pl.id);
-                const tracks = Array.isArray(res) ? res : (res && Array.isArray(res.tracks) ? res.tracks : []);
-                if (tracks && tracks.length > 0) {
-                    window.pywebview.api.play_track(tracks[0], tracks);
-                }
-            }
-        });
-        container.appendChild(card);
+        playlistsFragment.appendChild(card);
     });
+    container.appendChild(playlistsFragment);
+    enhanceHomeCards(container);
     renderIcons(container);
 }
 
@@ -716,7 +534,7 @@ export function renderHomePlaylists(playlists) {
 // letter disc; this block then swaps in the real channel photo resolved by
 // the backend (one YT Music search per unknown artist, cached a week in
 // localStorage so subsequent launches paint photos instantly).
-const AVATAR_LS_KEY = 'nedotify_artist_avatars_v1';
+const AVATAR_LS_KEY = 'nedotify_artist_avatars_v2';
 const AVATAR_TTL_MS = 7 * 24 * 3600 * 1000;
 const _avatarInflight = new Set();
 
@@ -733,14 +551,24 @@ function applyArtistAvatar(name, url) {
         const titleEl = card.querySelector('.feed-card-title');
         if (!titleEl || titleEl.textContent.trim() !== name) return;
         const coverEl = card.querySelector('.feed-card-cover');
-        if (!coverEl || coverEl.querySelector('img')) return;
+        if (!coverEl) return;
+        const previous = coverEl.querySelector('img');
+        const resolved = getCoverUrl({cover_url:url});
+        if (previous?.getAttribute('src') === resolved) return;
         const img = document.createElement('img');
         img.alt = name;
         img.loading = 'lazy';
-        img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+        img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;';
         // On failure the letter disc stays: just remove the broken img.
-        img.addEventListener('error', () => img.remove());
-        img.src = url;
+        img.addEventListener('error', () => {
+            img.remove();
+            const store = loadAvatarStore(); delete store[name]; saveAvatarStore(store);
+        });
+        img.addEventListener('load', () => {
+            previous?.remove();
+            coverEl.querySelector('.artist-avatar-fallback')?.remove();
+        }, {once:true});
+        img.src = resolved;
         coverEl.appendChild(img);
     });
 }
@@ -764,7 +592,7 @@ function requestArtistAvatars(names) {
     const bridgeWait = window.awaitBridge ? window.awaitBridge() : Promise.resolve();
     bridgeWait.then(() => {
         if (window.pywebview?.api?.get_artists_avatars) {
-            window.pywebview.api.get_artists_avatars(missing);
+            Promise.resolve(window.pywebview.api.get_artists_avatars(missing)).catch(()=>missing.forEach(n=>_avatarInflight.delete(n)));
         }
         // Allow a retry on the next render if the backend never answered.
         setTimeout(() => missing.forEach(n => _avatarInflight.delete(n)), 15000);
@@ -799,32 +627,26 @@ export function renderArtists(artists) {
         return;
     }
 
+    // Fragment: artist cards land in one insertion (search.js pattern).
+    const artistsFragment = document.createDocumentFragment();
+
     artists.forEach(artist => {
-        const card = document.createElement('div');
-        card.className = 'feed-card artist-card';
-        card.style.minWidth = '120px';
-        card.style.maxWidth = '120px';
         const cover = getCoverUrl(artist);
         const artistName = artist.artist || artist.name || 'Unknown';
-        // No artist-photo source exists locally (DB stores names only): show
-        // the gradient+letter avatar instead of a broken empty image.
-        const coverHtml = cover
-            ? `<div class="feed-card-cover">${coverImgHtml({ src: cover, coverUrl: artist.cover_url || '', alt: artistName })}</div>`
-            : `<div class="feed-card-cover">${artistAvatarHtml(artistName)}</div>`;
-        card.innerHTML = `
-            ${coverHtml}
-            <div class="feed-card-title" style="text-align:center">${escapeHtml(artistName)}</div>
-        `;
-        card.addEventListener('click', () => {
-            const input = document.getElementById('search-input');
-            if (input) {
-                input.value = artistName;
-                if (window.showPage) window.showPage('search');
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            }
+        const coverMarkup = cover
+            ? coverImgHtml({ src: cover, coverUrl: artist.cover_url || '', alt: artistName })
+            : artistAvatarHtml(artistName);
+        const card = createFeedTile({
+            title: artistName, subtitle: null, coverMarkup, className: 'feed-card artist-card',
+            titleStyle: 'text-align:center', showPlayButton: false,
+            onActivate: () => openArtistProfile(artistName),
         });
-        container.appendChild(card);
+        card.style.minWidth = '120px';
+        card.style.maxWidth = '120px';
+        artistsFragment.appendChild(card);
     });
+    container.appendChild(artistsFragment);
+    enhanceHomeCards(container);
     renderIcons(container);
     requestArtistAvatars(artists.map(a => a.artist || a.name));
 }
@@ -839,80 +661,83 @@ function renderFeedSection(containerId, tracks) {
         return;
     }
 
+    // Fragment: the section's cards land in one insertion (search.js pattern).
+    const feedFragment = document.createDocumentFragment();
     tracks.forEach((track, idx) => {
-        container.appendChild(createFeedCard(track, tracks, idx));
+        feedFragment.appendChild(createFeedCard(track, tracks, idx));
     });
+    container.appendChild(feedFragment);
+    enhanceHomeCards(container);
     renderIcons(container);
 }
 
-function createFeedCard(track, trackList = null, trackIndex = 0) {
+function openArtistProfile(artistName, track = null) {
+    if (!artistName || artistName === 'Unknown' || artistName === 'Микс') return;
+    if (window.searchArtistProfile) { window.searchArtistProfile(artistName, track); return; }
+    if (window.NeDotify?.searchArtistProfile) { window.NeDotify.searchArtistProfile(artistName, track); return; }
+    const input = document.getElementById('search-input');
+    if (!input) return;
+    input.value = artistName;
+    if (window.showPage) window.showPage('search');
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+}
+
+function createFeedTile({title, subtitle = '', coverMarkup = '', coverUrl = '', className = 'feed-card',
+    coverStyle = '', subtitleClass = '', titleStyle = '', subtitleStyle = '', showPlayButton = true,
+    onActivate = null, artistName = '', track = null}) {
     const card = document.createElement('div');
+    card.className = className;
+    card.innerHTML = `
+        <div class="feed-card-cover" style="${coverStyle}">${coverMarkup}${showPlayButton ? `<div class="feed-card-overlay"><button class="feed-card-play" type="button" aria-label="Воспроизвести: ${escapeHtml(title || 'Музыка')}"><i data-lucide="play" style="width:14px;height:14px;fill:currentColor"></i></button></div>` : ''}</div>
+        <div class="feed-card-title" style="${titleStyle}">${escapeHtml(title || 'Unknown')}</div>
+        ${subtitle !== null ? `<div class="feed-card-sub ${subtitleClass}" style="${subtitleStyle}">${escapeHtml(subtitle)}</div>` : ''}
+    `;
+    if (coverUrl) applyCoverBackground(card.querySelector('.feed-card-cover'), coverUrl);
+    const sub = card.querySelector('.feed-card-sub');
+    if (artistName && sub) {
+        sub.classList.add('clickable-artist');
+        sub.addEventListener('click', event => { event.stopPropagation(); openArtistProfile(artistName, track); });
+    }
+    if (onActivate) card.addEventListener('click', onActivate);
+    return card;
+}
+
+function createFeedCard(track, trackList = null, trackIndex = 0, options = {}) {
+    let card = document.createElement('div');
     card.className = 'feed-card';
 
     if (track.type === 'custom_playlist') {
-        // Generate consistent vibrant colors based on title
-        let hash = 0;
-        const safeTitle = track.title || '';
-        for (let i = 0; i < safeTitle.length; i++) hash = safeTitle.charCodeAt(i) + ((hash << 5) - hash);
-        const hue1 = Math.abs(hash % 360);
-        const hue2 = (hue1 + 40 + Math.abs((hash >> 2) % 60)) % 360;
-        
-        card.innerHTML = `
-            <div class="feed-card-cover" style="background: linear-gradient(135deg, hsl(${hue1}, 85%, 55%), hsl(${hue2}, 85%, 45%)); overflow: hidden; position: relative;">
-                <!-- Decorative wave pattern -->
-                <div style="position: absolute; bottom: -20%; right: -20%; width: 140%; height: 100%; background: linear-gradient(to top right, rgba(0,0,0,0.4), transparent); border-top-left-radius: 50%; transform: rotate(-15deg);"></div>
-                
-                <!-- If there's a cover_url, show it subtly or as a small badge. Otherwise just colors. -->
-                ${track.cover_url && !track.cover_url.includes('hqdefault') ? `<div style="position:absolute; bottom: -10px; right: -10px; width: 60%; height: 60%; border-radius: 12px; background-image: url('${escapeHtml(track.cover_url)}'); background-size: cover; box-shadow: 0 8px 16px rgba(0,0,0,0.4); transform: rotate(-10deg); opacity: 0.8;"></div>` : ''}
-                
-                <!-- YT Music style persistent play icon ring -->
-                <div style="position: absolute; top: 12px; left: 12px; width: 32px; height: 32px; border-radius: 50%; background: #000; border: 2px solid hsl(${hue1}, 80%, 70%); display:flex; align-items:center; justify-content:center; box-shadow: 0 4px 8px rgba(0,0,0,0.3);">
-                    <i data-lucide="play" style="width:12px;height:12px;fill:hsl(${hue1}, 80%, 70%); color:hsl(${hue1}, 80%, 70%); margin-left: 2px;"></i>
-                </div>
-                
-                <div class="feed-card-overlay">
-                    <button class="feed-card-play" style="background: rgba(0,0,0,0.6);"><i data-lucide="play" style="width:16px;height:16px;fill:#fff;color:#fff"></i></button>
-                </div>
-            </div>
-            <div class="feed-card-title">${escapeHtml(track.title)}</div>
-            <div class="feed-card-sub">${escapeHtml(track.artist || 'Микс')}</div>
-        `;
-        card.addEventListener('click', () => {
-            if (window.pywebview?.api?.play_track && track.tracks && track.tracks.length > 0) {
-                window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Включаю: ${track.title}...`, type: 'info' } }));
-                window.pywebview.api.play_track(track.tracks[0], track.tracks, 0);
-            }
-        });
+        const covers=(track.tracks||[]).slice(0,4).map(t=>({src:getCoverUrl(t),coverUrl:t.cover_url,sourceId:t.source_id,source:t.source}));
+        card.innerHTML=`<div class="feed-card-cover">${renderPlaylistCoverCollage(covers)}<div class="feed-card-overlay"><button class="feed-card-play" aria-label="Слушать микс"><i data-lucide="play"></i></button></div></div><div class="feed-card-title">${escapeHtml(track.title)}</div><div class="feed-card-sub">${escapeHtml(track.artist||'На ваш вкус')}</div>`;
+        const play=()=>window.pywebview.api.play_track(track.tracks[0],track.tracks,0);
+        card.querySelector('.feed-card-play').onclick=e=>{e.stopPropagation();play().catch(()=>showToast('Не удалось включить микс','error'));};
+        card.addEventListener('click',()=>openHomeDialog(track.title,content=>{
+            const save=document.createElement('button');save.className='home-pill';save.textContent='Сохранить плейлист';
+            save.onclick=async()=>{save.disabled=true;try{const tracks=track.tracks.map(t=>({...t,id:/^\d+$/.test(String(t.id||''))?t.id:undefined}));const id=await window.pywebview.api.create_local_playlist(track.title,tracks);if(!id||id?.success===false)throw Error();save.textContent='Сохранено';showToast('Плейлист сохранён','success');}catch{save.disabled=false;showToast('Не удалось сохранить плейлист','error');}};
+            content.append(save);
+            (track.tracks||[]).forEach((t,index)=>content.append(createTrackElement(t,index,track.tracks,null)));
+        }));
         return card;
     }
 
     const cover = getCoverUrl(track);
-    card.innerHTML = `
-        <div class="feed-card-cover">
-            ${coverImgHtml({ src: cover, coverUrl: track.cover_url || '', sourceId: track.source_id || '', source: track.source || '' })}
-            <div class="feed-card-overlay">
-                <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px;fill:currentColor"></i></button>
-            </div>
-        </div>
-        <div class="feed-card-title">${escapeHtml(track.title || 'Unknown')}</div>
-        <div class="feed-card-sub clickable-artist">${escapeHtml(track.artist || '')}</div>
-    `;
-    
-    const subEl = card.querySelector('.feed-card-sub');
-    if (subEl && track.artist && track.artist !== 'Unknown' && track.artist !== 'Микс') {
-        subEl.addEventListener('click', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            if (window.searchArtistProfile) {
-                window.searchArtistProfile(track.artist);
-            } else if (window.NeDotify?.searchArtistProfile) {
-                window.NeDotify.searchArtistProfile(track.artist);
-            }
-        });
+    const subtitle = options.subtitle ?? track.artist ?? '';
+    const artistLink = options.artistLink !== false && track.artist && track.artist !== 'Unknown' && track.artist !== 'Микс';
+    card = createFeedTile({
+        title: track.title || 'Unknown', subtitle,
+        coverMarkup: coverImgHtml({ src: cover, coverUrl: track.cover_url || '', sourceId: track.source_id || '', source: options.source || track.source || '' }),
+        artistName: artistLink ? track.artist : '',
+        track: track,
+    });
+    if (track.recommendation_reason) {
+        const reason = document.createElement('span');
+        reason.className = 'recommendation-reason';
+        reason.textContent = track.recommendation_reason;
+        reason.title = track.recommendation_reason;
+        card.append(reason);
     }
-
     card.addEventListener('click', (e) => {
-        if (e.target.closest('.clickable-artist') || e.target.closest('.feed-card-sub')) return;
+        if (e.target.closest('.feed-card-sub')) return;
         if (window.pywebview?.api) {
             const trackObj = { ...track };
             if (trackObj.track_id) trackObj.id = trackObj.track_id;
@@ -931,15 +756,10 @@ function setElText(id, text) {
     if (el) el.textContent = text;
 }
 
-window.addEventListener('app:mood_playlists_ready', (e) => {
-    const data = e.detail;
-    renderFeedSection('home-mood', data);
-});
+// BUG-U3-003: слушатель 'app:mood_playlists_ready' удалён — событие не
+// эмитится бэкендом, фича «Под настроение» снята (секция section-home-mood
+// удалена из index.html, case удалён из events.js).
 
-window.addEventListener('app:artists_ready', (e) => {
-    clearFeedTimeout('home-artists');
-    renderArtists(e.detail);
-});
 
 window.addEventListener('app:refresh_home', () => {
     loadHome(false);
@@ -948,86 +768,67 @@ window.addEventListener('app:refresh_home', () => {
 export function renderTopTracks(tracks) {
     const container = document.getElementById('home-top-tracks');
     if (!container) return;
-    const sec = document.getElementById('section-home-top-tracks') || container.closest('.feed-section');
+    container.innerHTML = '';
+    
     if (!tracks || tracks.length === 0) {
-        if (sec) sec.style.display = 'none';
+        container.innerHTML = '<div class="empty-state text-sm" style="padding:18px 24px; color:rgba(255,255,255,0.85); font-weight:600; background:rgba(255,255,255,0.04); border-radius:12px; border:1px dashed rgba(255,255,255,0.15); width:100%;">🎵 Слушайте любимую музыку, чтобы сформировать личный Топ!</div>';
         return;
     }
-    if (sec) sec.style.display = 'block';
-    container.innerHTML = '';
 
+    // Fragment: top-track cards land in one insertion (search.js pattern).
+    const topTracksFragment = document.createDocumentFragment();
     tracks.forEach((track, i) => {
-        const cover = getCoverUrl(track);
-        const card = document.createElement('div');
-        card.className = 'feed-card';
         const playCount = track.play_count || track.plays || track.total_plays || 0;
-        card.innerHTML = `
-            <div class="feed-card-cover">
-                ${coverImgHtml({ src: cover, coverUrl: track.cover_url || '', sourceId: track.source_id || '', source: track.source || '' })}
-                <div class="feed-card-overlay">
-                    <button class="feed-card-play"><i data-lucide="play" style="width:14px;height:14px;fill:currentColor"></i></button>
-                </div>
-            </div>
-            <div class="feed-card-title">${escapeHtml(track.title || 'Unknown Title')}</div>
-            <div class="feed-card-sub">${escapeHtml(track.artist || 'Unknown')} (${playCount})</div>
-        `;
-        card.onclick = () => {
-            if (window.pywebview?.api) window.pywebview.api.play_track(track, tracks, i);
-        };
-        container.appendChild(card);
+        const displayTrack = {...track, title: track.title || 'Unknown Title'};
+        topTracksFragment.appendChild(createFeedCard(displayTrack, tracks, i, {
+            subtitle: `${track.artist || 'Unknown'} (${playCount})`
+        }));
     });
+    container.appendChild(topTracksFragment);
+    enhanceHomeCards(container);
     renderIcons(container);
 }
 
 export function renderTopArtists(artists) {
     const container = document.getElementById('home-top-artists');
     if (!container) return;
-    const sec = document.getElementById('section-home-top-artists') || container.closest('.feed-section');
+    container.innerHTML = '';
+    
     if (!artists || artists.length === 0) {
-        if (sec) sec.style.display = 'none';
+        container.innerHTML = '<div class="empty-state text-sm" style="padding:16px;color:var(--text-sec)">Пока нет данных</div>';
         return;
     }
-    if (sec) sec.style.display = 'block';
-    container.innerHTML = '';
 
+    // Fragment: top-artist cards land in one insertion (search.js pattern).
+    const topArtistsFragment = document.createDocumentFragment();
     artists.forEach(artist => {
-        const card = document.createElement('div');
-        card.className = 'feed-card artist-card';
         const artistName = artist.artist || artist.name || 'Unknown';
         const playsCount = artist.total_plays || artist.play_count || artist.plays || 0;
-        card.innerHTML = `
-            <div class="feed-card-cover">${artistAvatarHtml(artistName)}</div>
-            <div class="feed-card-title" style="text-align: center;">${escapeHtml(artistName)}</div>
-            <div class="feed-card-sub" style="text-align: center;">${playsCount} раз</div>
-        `;
-        card.onclick = () => {
-            window.appConfig = window.appConfig || {};
-            window.appConfig.searchQuery = artistName;
-            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            const searchNav = document.querySelector('[data-page="search"]');
-            if (searchNav) searchNav.classList.add('active');
-            if (window.NeDotify && window.NeDotify.showPage) {
-                window.NeDotify.showPage('search');
-            } else {
-                const searchTab = document.getElementById('tab-search');
-                if (searchTab) searchTab.click();
-            }
-        };
-        container.appendChild(card);
+        const card = createFeedTile({
+            title: artistName, subtitle: `${playsCount} раз`, coverMarkup: artistAvatarHtml(artistName),
+            className: 'feed-card artist-card', titleStyle: 'text-align:center', subtitleStyle: 'text-align:center',
+            artistName, onActivate: () => openArtistProfile(artistName),
+        });
+        topArtistsFragment.appendChild(card);
     });
+    container.appendChild(topArtistsFragment);
+    enhanceHomeCards(container);
     renderIcons(container);
     requestArtistAvatars(artists.map(a => a.artist || a.name));
 }
 
 let currentWrappedPeriod = 'week';
+let wrappedLoadGeneration = 0;
 
 export async function loadWrappedStats(period = 'week') {
     currentWrappedPeriod = period;
+    const gen = ++wrappedLoadGeneration;
     await window.awaitBridge();
     if (!window.pywebview?.api || !window.pywebview.api.get_wrapped_stats) return;
 
     try {
         const stats = await window.pywebview.api.get_wrapped_stats(period);
+        if (gen !== wrappedLoadGeneration) return;
         renderWrappedUI(stats);
     } catch (e) {
         console.error("Error loading wrapped stats:", e);
@@ -1035,12 +836,7 @@ export async function loadWrappedStats(period = 'week') {
 }
 
 function renderWrappedUI(stats) {
-    const sec = document.getElementById('section-nedotify-wrapped');
-    if (!stats || ((!stats.total_plays || stats.total_plays === 0) && (!stats.total_minutes || stats.total_minutes === 0) && (!stats.top_tracks || stats.top_tracks.length === 0))) {
-        if (sec) sec.style.display = 'none';
-        return;
-    }
-    if (sec) sec.style.display = 'block';
+    if (!stats) return;
     const badge = document.getElementById('wrapped-total-time-badge');
     if (badge) badge.textContent = `${stats.total_minutes || 0} мин (${stats.total_plays || 0} треков)`;
 
@@ -1057,6 +853,7 @@ function renderWrappedUI(stats) {
     }
 
     list.innerHTML = '';
+    const topListFragment = document.createDocumentFragment();
     stats.top_tracks.forEach((track, i) => {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.05);';
@@ -1070,16 +867,33 @@ function renderWrappedUI(stats) {
             </div>
             <span style="color:var(--primary); font-size:11px; font-weight:600; white-space:nowrap;">${track.plays} прослушиваний</span>
         `;
-        list.appendChild(row);
+        topListFragment.appendChild(row);
     });
+    list.appendChild(topListFragment);
 }
+
+// Retained so a devicePixelRatio change can re-rasterise the chart without
+// another bridge round-trip for the same period's data.
+let lastActivityData = null;
 
 function renderActivityChart(activity) {
     const canvas = document.getElementById('wrapped-activity-canvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const w = canvas.width = canvas.parentElement.clientWidth || 300;
-    const h = canvas.height = 140;
+    // CSS-pixel geometry; the backing store is scaled by devicePixelRatio and
+    // the context carries the matching scale, so all the maths below - and
+    // therefore the rendered chart - is unchanged. At dpr === 1 the backing
+    // store is exactly w x h, identical to before.
+    // CSS owns the responsive box; only the backing store is resized here.
+    // A fixed inline width would retain the previous window's dimensions.
+    const sized = sizeCanvasForDpr(
+        canvas, ctx,
+        canvas.parentElement.clientWidth || 300,
+        140
+    );
+    const w = sized.cssW;
+    const h = sized.cssH;
+    lastActivityData = activity;
 
     ctx.clearRect(0, 0, w, h);
 
@@ -1116,6 +930,19 @@ function renderActivityChart(activity) {
     });
 }
 
+// A window drag between monitors changes devicePixelRatio without a resize
+// event; re-rasterise the activity chart at the new scale.
+registerCanvasDprListener(() => {
+    if (lastActivityData) renderActivityChart(lastActivityData);
+});
+let activityResizeFrame=0;
+const redrawActivity=()=>{
+    cancelAnimationFrame(activityResizeFrame);
+    activityResizeFrame=requestAnimationFrame(()=>{if(lastActivityData)renderActivityChart(lastActivityData);});
+};
+window.addEventListener('resize',redrawActivity);
+window.addEventListener('nedotify:page_changed',event=>{if(event.detail==='home')redrawActivity();});
+
 // Bind period buttons
 document.addEventListener('DOMContentLoaded', () => {
     const periodContainer = document.getElementById('wrapped-period-btns');
@@ -1139,3 +966,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+
+function enhanceHomeCards(container) {
+    container.querySelectorAll('.feed-card').forEach(card => {
+        const title=card.querySelector('.feed-card-title')?.textContent || 'Музыка';
+        card.querySelectorAll('.feed-card-play').forEach(button=>{button.type='button';button.setAttribute('aria-label',`Воспроизвести: ${title}`);});
+        const play=card.querySelector('.feed-card-play');
+        if(!play){card.tabIndex=0;card.setAttribute('role','button');card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.click();}};}
+        const artist=card.querySelector('.clickable-artist');
+        if(artist){artist.tabIndex=0;artist.setAttribute('role','button');artist.setAttribute('aria-label',`Исполнитель: ${artist.textContent}`);artist.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();artist.click();}};}
+    });
+}

@@ -1,6 +1,8 @@
 """
 Unit test suite for RecommendationEngine (core/services/recommendation.py)
-and RecommendationService (services/recommendation_service.py).
+and current RecommendationService wave/format contracts.
+Pre-port get_flow_tracks_sync and ALLOWED_RECOMMENDATION_SOURCES expectations
+remain in tests/legacy_pre_parity; current radio uses get_wave_for_track.
 """
 
 import sqlite3
@@ -9,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 from core.services.recommendation import RecommendationEngine, build_real_engine
 from services.recommendation_service import RecommendationService
+from tests.helpers import recommendations, track, fetch
 
 
 class TestRecommendationEngine(unittest.TestCase):
@@ -129,6 +132,10 @@ class TestRecommendationService(unittest.TestCase):
 
     def setUp(self):
         self.service = RecommendationService(settings=None, db=None)
+        self.service._collect_candidates = lambda *args, **kwargs: []
+
+    def tearDown(self):
+        self.service._candidate_executor.shutdown(wait=True, cancel_futures=True)
 
     def test_format_ui_track_with_sqlite_row(self):
         """_format_ui_track must correctly extract data from sqlite3.Row objects."""
@@ -158,41 +165,39 @@ class TestRecommendationService(unittest.TestCase):
         self.assertEqual(self.service._format_ui_track("invalid"), {})
         self.assertEqual(self.service._format_ui_track([]), {})
 
-    def test_get_flow_tracks_sync_returns_results(self):
-        """get_flow_tracks_sync must execute synchronously and return candidate tracks."""
-        seed = {
-            "id": "123",
-            "source": "youtube",
-            "source_id": "yt_123",
-            "title": "Starboy",
-            "artist": "The Weeknd",
-        }
 
-        mock_yt = MagicMock()
-        mock_yt.search_sync.return_value = [
-            {"source_id": "yt_cand1", "title": "Blinding Lights", "artist": "The Weeknd", "source": "youtube", "duration": 200},
-            {"source_id": "yt_cand2", "title": "Save Your Tears", "artist": "The Weeknd", "source": "youtube", "duration": 215},
-        ]
-        self.service.youtube_service = mock_yt
-
-        tracks = self.service.get_flow_tracks_sync(seed, limit=2)
-        self.assertIsInstance(tracks, list)
-        self.assertGreaterEqual(len(tracks), 1)
-        self.assertEqual(tracks[0]["artist"], "The Weeknd")
-
-    def test_allowed_sources_include_vk_and_spotify_and_yandex(self):
-        """RecommendationService must allow streaming from vk, spotify, yandex, sc, yt, and local."""
-        for src in ("soundcloud", "youtube", "local", "vk", "spotify", "yandex"):
-            self.assertIn(src, self.service.ALLOWED_RECOMMENDATION_SOURCES)
 
     def test_get_wave_for_track_with_none_seed(self):
         """get_wave_for_track must not crash with AttributeError when seed_track is None or empty."""
         results = self.service.get_wave_for_track(None, limit=5, callback=None)
         self.assertIsInstance(results, list)
 
-    def test_get_flow_tracks_sync_with_none_seed(self):
-        """get_flow_tracks_sync must return an empty list gracefully when seed is None."""
-        tracks = self.service.get_flow_tracks_sync(None, limit=5)
-        self.assertIsInstance(tracks, list)
-        self.assertEqual(tracks, [])
+
+def test_current_wave_returns_playable_related_tracks_and_excludes_seed(recommendations):
+    seed = track('dQw4w9WgXcQ', 'Seed', 'Seed Artist')
+    recommendations.youtube_service.get_related_tracks_sync = lambda *args, **kwargs: [
+        seed, track('new-song', 'New Song', 'Related Artist')]
+    rows = recommendations.get_wave_for_track(seed, limit=2)
+    assert [item['source_id'] for item in rows] == ['new-song']
+    assert rows[0]['recommendation_origin'] == 'wave'
+    assert rows[0]['recommendation_reason'] == 'По музыке Seed Artist'
+    assert fetch(recommendations.get_wave_for_track, seed, limit=2) == rows
+
+
+def test_current_wave_accepts_empty_seed_without_network_or_synthetic_candidates(recommendations):
+    recommendations._collect_candidates = lambda *args, **kwargs: []
+    assert recommendations.get_wave_for_track(None, limit=5) == []
+
+
+def test_current_recommendations_keep_downloaded_linux_tracks_usable_offline(recommendations):
+    from services.taste_profile import UserTasteProfile
+    profile = UserTasteProfile()
+    local = track('local-track', 'Offline Song', 'Offline Artist', source='local', id=12,
+                  is_downloaded=True, file_path='/home/user/Music/song.flac', cover_path='/home/user/Music/cover.jpg')
+    profile.favorite_tracks = [local]
+    rows = recommendations._rank_tracks([local], profile, 1)
+    assert len(rows) == 1
+    assert rows[0]['file_path'] == local['file_path']
+    assert rows[0]['cover_path'] == local['cover_path']
+
 

@@ -3,22 +3,63 @@ NeDotify - YouTube Service
 Search and stream audio from YouTube/YouTube Music via yt-dlp.
 """
 
+import os
 import time
 
 from typing import Callable, Optional
 import re
 import threading
 import logging
+import shutil
 from concurrent.futures import ThreadPoolExecutor
-from services.base_service import BaseMusicService
+from services.base_service import BaseMusicService, normalize_proxy_url
+from utils.requests_transport import PublicHTTPAdapter, prepare_ytdlp_transport
 
 logger = logging.getLogger(__name__)
 
-try:
-    import yt_dlp
-    HAS_YTDLP = True
-except ImportError:
-    HAS_YTDLP = False
+def _ytdlp():
+    """Return the yt-dlp module, importing it on first use.
+
+    Importing yt-dlp costs ~125ms and nothing on the startup path needs
+    it (this class only touches it inside extraction/download methods), so
+    the import is deferred until a provider actually runs. Tests
+    monkeypatch the module-level ``yt_dlp`` global; that override always
+    wins over the import.
+    """
+    module = globals().get('yt_dlp')
+    if module is None:
+        try:
+            import yt_dlp as module
+        except ImportError:
+            module = False
+        globals()['yt_dlp'] = module
+    return module or None
+
+
+def _has_ytdlp():
+    """Availability flag honouring a monkeypatched HAS_YTDLP global."""
+    flag = globals().get('HAS_YTDLP')
+    if flag is None:
+        flag = _ytdlp() is not None
+    return flag
+
+
+def _youtube_downloader(options):
+    """Use the SDK's normal extraction/format selection with resilient TLS."""
+    return prepare_ytdlp_transport(_ytdlp().YoutubeDL(options))
+
+
+def __getattr__(name):
+    # PEP 562: keep ``getattr(module, 'yt_dlp' / 'HAS_YTDLP')`` working
+    # before the lazy import has run, so monkeypatch.setattr targets
+    # (both direct and 'services.youtube_service.yt_dlp.YoutubeDL'
+    # string paths) resolve against a real attribute.
+    if name == 'yt_dlp':
+        return _ytdlp()
+    if name == 'HAS_YTDLP':
+        return _has_ytdlp()
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
 
 try:
     from ytmusicapi import YTMusic
@@ -30,29 +71,132 @@ except ImportError:
 
 
 
-_detected_working_browser = None
-_browser_detection_tried = False
+_YT_GATED_MSG = (
+    "YouTube не отдал аудиоформаты (anti-bot гейт: доступны только превью). "
+    "Попробуйте версию трека с SoundCloud или повторите позже."
+)
+_YT_GATING_MARKS = (
+    "requested format is not available",
+    "needs to be reloaded",
+    "sign in to confirm",
+    "confirm you're not a bot",
+    "confirm you are not a bot",
+    "this video is drm protected",
+    "only image formats are available",
+)
 
 
-def _detect_browser_cookies():
-    global _detected_working_browser, _browser_detection_tried
-    if _browser_detection_tried:
-        return _detected_working_browser
-    _browser_detection_tried = True
+def _yt_gating_error(exc):
+    """Map yt-dlp anti-bot failures to an actionable message."""
+    if any(m in str(exc).lower() for m in _YT_GATING_MARKS):
+        return Exception(_YT_GATED_MSG)
+    return exc
 
-    for b in ("firefox", "chrome", "edge", "brave", "opera"):
-        try:
-            import yt_dlp.cookies
-            cj = yt_dlp.cookies.extract_cookies_from_browser(b)
-            if cj is not None:
-                cookie_count = len(list(cj))
-                if cookie_count > 0:
-                    logger.info(f"Auto-detected working browser cookies from '{b}' ({cookie_count} cookies)")
-                    _detected_working_browser = b
-                    return b
-        except Exception:
-            continue
-    return None
+
+_YT_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+_YT_HOSTS = ("youtube.com", "www.youtube.com", "music.youtube.com", "m.youtube.com", "youtu.be")
+
+
+def _is_allowed_youtube_target(target) -> bool:
+    """Allow video targets and the bounded internal search used by Spotify."""
+    text = str(target or "").strip()
+    if text.startswith("ytsearch1:"):
+        return bool(text.partition(":")[2].strip())
+    if _YT_VIDEO_ID_RE.fullmatch(text):
+        return True
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(text)
+    except ValueError:
+        return False
+    return parsed.scheme in ("http", "https") and (parsed.hostname or "") in _YT_HOSTS
+
+
+def _yt_cache_key(video_url) -> str:
+    """Stream-cache key namespace.
+
+    BaseMusicService keeps one shared cache for every service, so an unprefixed
+    YouTube URL collides with the same string looked up by SoundCloud/Yandex.
+    """
+    from urllib.parse import urlparse, parse_qs
+    value = str(video_url).strip()
+    parsed = urlparse(value)
+    host = (parsed.hostname or '').lower()
+    candidate = None
+    if host in _YT_HOSTS:
+        if host in ('youtu.be', 'www.youtu.be'):
+            candidate = parsed.path.strip('/').split('/')[0]
+        else:
+            candidate = (parse_qs(parsed.query).get('v') or [None])[0]
+            if not candidate and parsed.path.startswith(('/shorts/', '/embed/')):
+                candidate = parsed.path.split('/')[2]
+    if candidate and re.fullmatch(r'[A-Za-z0-9_-]{11}', candidate):
+        value = candidate
+    return f"youtube:{value}"
+
+
+def _is_storyboards_only(info):
+    """True when YouTube returned formats but none is playable (gated)."""
+    if isinstance(info, dict) and info.get("_type") == "playlist":
+        entries = info.get("entries") or []
+        info = entries[0] if entries else {}
+    fmts = (info or {}).get("formats") or []
+    return bool(fmts) and all(f.get('ext') == 'mhtml' or f.get('protocol') == 'mhtml'
+                             or f.get('acodec') == 'none' and f.get('vcodec') == 'none' for f in fmts)
+
+
+# A downloaded file that is not one of these, or is suspiciously small, is not
+# audio. yt-dlp leaves such artefacts behind (a 0-byte file when the write is
+# cut short, or `sb0.mhtml` when it hits a consent/gate page) and the code that
+# follows assumed os.path.exists() was proof of a good download.
+_AUDIO_DOWNLOAD_EXTS = (".m4a", ".mp3", ".opus", ".webm", ".aac", ".ogg",
+                        ".mp4", ".flac", ".wav")
+_MIN_AUDIO_BYTES = 4 * 1024
+
+
+def _require_audio_file(path: str) -> str:
+    """Reject a downloaded file that is empty, partial or not audio at all.
+
+    yt-dlp can leave a 0-byte file behind (interrupted write), a `.part`
+    fragment, or a non-media artefact such as `sb0.mhtml` when it lands on a
+    consent/gate page. Without this check those files were accepted, the track
+    was marked is_downloaded=1 and download_complete fired - the user saw the
+    track in the library with no audio in it.
+    """
+    if not path or not os.path.isfile(path):
+        raise Exception("Файл не найден после загрузки")
+
+    name = os.path.basename(path)
+    if name.endswith(".part"):
+        raise Exception(f"Загрузка не завершена (незакрытый .part): {name}")
+    if os.path.splitext(name)[1].lower() not in _AUDIO_DOWNLOAD_EXTS:
+        raise Exception(f"Скачан не аудиофайл ({name}) — доступ к треку ограничен")
+
+    size = os.path.getsize(path)
+    if size < _MIN_AUDIO_BYTES:
+        raise Exception(f"Файл повреждён ({size} байт, минимум {_MIN_AUDIO_BYTES})")
+    return path
+
+
+
+def _has_playable_audio(info) -> bool:
+    """True when the payload actually contains a usable audio stream.
+
+    Needed to reject a response that parsed fine but carried only previews --
+    accepting it would cache a dead stream URL and fail silently at playback.
+    """
+    if isinstance(info, dict) and info.get("_type") == "playlist":
+        entries = info.get("entries") or []
+        info = entries[0] if entries else {}
+    if not isinstance(info, dict):
+        return False
+    if info.get("url") and info.get("acodec") not in (None, "none"):
+        return True
+    for key in ("requested_formats", "formats"):
+        for f in (info.get(key) or []):
+            if isinstance(f, dict) and f.get("url") and f.get("acodec") != "none":
+                return True
+    return False
 
 
 class YouTubeService(BaseMusicService):
@@ -63,26 +207,29 @@ class YouTubeService(BaseMusicService):
     def __init__(self, settings=None):
         super().__init__()
         self.settings = settings
-        self._executor = self.__class__._executor
+        self._executor = ThreadPoolExecutor(max_workers=10)
+        # Keep latency-sensitive stream extraction available during a burst
+        # of searches. AppCore's ordered shutdown discovers this attribute.
+        self._playback_executor = ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="YouTubePlayback"
+        )
         self._ytmusic = None
         if HAS_YTMUSIC:
             import requests
-            from requests.adapters import HTTPAdapter
 
             class TimeoutSession(requests.Session):
                 def request(self, *args, **kwargs):
-                    kwargs["timeout"] = 15
+                    # Must answer inside PROVIDER_SEARCH_TIMEOUT (6s bridge deadline)
+                    kwargs["timeout"] = 6
                     return super().request(*args, **kwargs)
 
             session = TimeoutSession()
-            adapter = HTTPAdapter(pool_connections=30, pool_maxsize=30, max_retries=2)
+            adapter = PublicHTTPAdapter(pool_connections=30, pool_maxsize=30, max_retries=0)
             session.mount("https://", adapter)
-            proxy = self.settings.get("auth", "proxy_url", "") if self.settings else ""
+            proxy = normalize_proxy_url(self.settings.get("auth", "proxy_url", "")) if self.settings else ""
             if proxy:
                 session.proxies = {"http": proxy, "https": proxy}
-            region = self.settings.get("general", "region", "US") if self.settings else "US"
-            loc = "US" if region == "RU" else region
-            self._ytmusic = YTMusic(language="en", location=loc, requests_session=session)
+            self._ytmusic = YTMusic(language="ru", location="RU", requests_session=session)
 
         # One YoutubeDL instance per thread: yt-dlp objects carry mutable shared
         # state (cookie jars, internal caches) and are NOT safe to use
@@ -90,35 +237,37 @@ class YouTubeService(BaseMusicService):
         # races under parallel stream resolution.
         self._ydl_tls = threading.local()
         self._ydl_lock = threading.Lock()
+        self._prefer_anonymous = False
+        self._pending_streams = {}
+        self._ytmusic_headers_flight = None
 
-        if HAS_YTDLP:
-            self._executor.submit(self._get_ydl, "high")
+        # Construct extractors lazily on the worker that will use them. Warming
+        # another thread's TLS instance only reads browser cookies twice.
 
     def reset_ydl(self):
         # Replacing the thread-local storage drops cached instances in every
         # thread at once; each thread rebuilds lazily on next use.
         self._ydl_tls = threading.local()
+        with self._ydl_lock:
+            self._prefer_anonymous = False
 
         if HAS_YTMUSIC:
             if self.settings:
-                proxy = self.settings.get("auth", "proxy_url", "")
+                proxy = normalize_proxy_url(self.settings.get("auth", "proxy_url", ""))
 
                 import requests
-                from requests.adapters import HTTPAdapter
 
                 class TimeoutSession(requests.Session):
                     def request(self, *args, **kwargs):
-                        kwargs["timeout"] = 15
+                        kwargs["timeout"] = 6
                         return super().request(*args, **kwargs)
 
                 session = TimeoutSession()
-                adapter = HTTPAdapter(pool_connections=30, pool_maxsize=30, max_retries=2)
+                adapter = PublicHTTPAdapter(pool_connections=30, pool_maxsize=30, max_retries=0)
                 session.mount("https://", adapter)
                 if proxy:
                     session.proxies = {"http": proxy, "https": proxy}
-                region = self.settings.get("general", "region", "US") if self.settings else "US"
-                loc = "US" if region == "RU" else region
-                self._ytmusic = YTMusic(language="en", location=loc, requests_session=session)
+                self._ytmusic = YTMusic(language="ru", location="RU", requests_session=session)
 
     def _get_ydl(self, quality="high", fallback=False):
         """Return this thread's YoutubeDL instance (created on first use)."""
@@ -128,17 +277,19 @@ class YouTubeService(BaseMusicService):
             self._ydl_tls.instances = store
 
         quality_map = {
-            "low": "bestaudio/best",
-            "medium": "bestaudio/best",
+            "low": "bestaudio[abr<=64]/worstaudio/best",
+            "medium": "bestaudio[abr<=128]/bestaudio/best",
             "high": "bestaudio/best",
             "lossless": "bestaudio/best",
         }
         fmt = quality_map.get(quality, "bestaudio/best")
-        key = ("fallback", "best") if fallback else ("main", fmt)
+        with self._ydl_lock:
+            anonymous = self._prefer_anonymous
+        key = ("fallback" if fallback else "main", fmt, anonymous, repr(self._get_ydl_opts(fmt, fallback=fallback)))
 
         ydl = store.get(key)
         if ydl is None:
-            ydl = yt_dlp.YoutubeDL(self._get_ydl_opts(fmt, fallback=fallback))
+            ydl = _youtube_downloader(self._get_ydl_opts(fmt, fallback=fallback))
             store[key] = ydl
         return ydl
 
@@ -152,7 +303,7 @@ class YouTubeService(BaseMusicService):
             try:
                 sid = trk.get("source_id")
                 surl = trk.get("source_url") or sid
-                if surl and not self.get_from_cache(surl):
+                if surl and not self.get_from_cache(_yt_cache_key(surl)):
                     self.get_stream_url(surl, quality="high")
             except Exception as e:
                 logger.debug(f"Prefetch skipped for {trk.get('source_id')}: {e}", exc_info=True)
@@ -161,73 +312,123 @@ class YouTubeService(BaseMusicService):
     def _get_ydl_opts(self, format_str, fallback=False):
         import os
 
+        # NB: do NOT pin `player_client`. Pinning restricts yt-dlp to exactly
+        # those clients, and the modern ones (ios / web_safari / web_embedded /
+        # tv_embedded) now need a PO token -- their formats get filtered out and
+        # every request dies with "Requested format is not available". Verified
+        # against yt-dlp 2026.08.19 on the very videos that failed: with the
+        # pinned list all of them errored, while letting yt-dlp pick its default
+        # (or android_music alone) returned 41-48 formats with 5 audio streams.
         opts = {
             "quiet": True,
             "no_warnings": True,
             "format": format_str or "bestaudio/best",
             "noplaylist": True,
-            "nocheckcertificate": True,
             "skip_download": True,
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["android", "android_music", "web"],
-                    "player_skip": ["configs"]
-                }
-            },
-            "socket_timeout": 6,
+            "socket_timeout": 8,
             "retries": 1,
             "extractor_retries": 1,
+            "fragment_retries": 3,
+            "file_access_retries": 3,
+            # Small bounded ranges avoid Googlevideo's throttling of long
+            # transfers. A 4.3 MiB sample took 124s unbounded, 4s in 1 MiB ranges.
+            "concurrent_fragment_downloads": 4,
+            "http_chunk_size": 1024 * 1024,
+            "buffersize": 1024 * 1024,
             "source_address": "0.0.0.0",
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
             },
         }
 
-        if fallback:
-            opts["extractor_args"] = {
-                "youtube": {
-                    "player_client": ["android", "web", "mweb"],
-                    "player_skip": ["configs"]
-                }
-            }
-            opts["format"] = "bestaudio/best/ba/b/worst"
-            opts["ignoreerrors"] = True
+        # yt-dlp enables only Deno by default. Also allow an installed Node
+        # runtime to run the packaged yt-dlp-ejs challenge solver.
+        opts["js_runtimes"] = {"deno": {}}
+        node_path = shutil.which("node")
+        if node_path:
+            opts["js_runtimes"]["node"] = {"path": node_path}
 
+        if fallback:
+            # A wider ladder for the odd track whose "bestaudio" is missing.
+            #
+            # NB: do NOT pin `player_client` here, and do NOT set
+            # `ignoreerrors`. Both were present until this was diagnosed, and
+            # together they made *every* download fail silently:
+            #   - the pinned `android_music` client answers "The page needs to
+            #     be reloaded" (PO token gate) and returns 0 formats, where
+            #     yt-dlp's own default returns 48 formats / 5 audio streams on
+            #     the same video;
+            #   - `ignoreerrors` then swallowed that error, so
+            #     extract_info() returned a partial/empty dict and the failure
+            #     surfaced as the useless "Не удалось извлечь информацию" instead
+            #     of the actionable gating message from _yt_gating_error().
+            # Letting the error propagate is what makes that mapping reachable.
+            opts["format"] = "bestaudio/best/ba/b/worst"
+
+        with self._ydl_lock:
+            anonymous = self._prefer_anonymous
         if self.settings:
             cookies_file_path = self.settings.get("auth", "cookies_file_path", "")
-            if cookies_file_path and os.path.exists(cookies_file_path):
+            if not anonymous and cookies_file_path and os.path.exists(cookies_file_path):
                 opts["cookiefile"] = cookies_file_path
             configured_browser = self.settings.get("auth", "browser_cookies", "none")
-            if configured_browser and configured_browser != "none":
+            if not anonymous and configured_browser and configured_browser != "none":
+                opts.pop("cookiefile", None)
                 opts["cookiesfrombrowser"] = (configured_browser,)
-            proxy = self.settings.get("auth", "proxy_url", "")
+            proxy = normalize_proxy_url(self.settings.get("auth", "proxy_url", ""))
             if proxy:
                 opts["proxy"] = proxy
-
-        if "cookiefile" not in opts and "cookiesfrombrowser" not in opts:
-            auto_b = _detect_browser_cookies()
-            if auto_b:
-                opts["cookiesfrombrowser"] = (auto_b,)
 
         return opts
 
 
-    @staticmethod
-    def _extract_artists_string(artists_list, fallback: str = "Unknown Artist") -> str:
-        """Safely extract and join artist names from an artists list."""
-        if not isinstance(artists_list, (list, tuple)):
-            return fallback
-        names = []
-        for a in artists_list:
-            if isinstance(a, dict):
-                name = a.get("name")
-                if isinstance(name, str) and name.strip():
-                    names.append(name.strip())
-        return ", ".join(names) or fallback
-
     @property
     def available(self) -> bool:
-        return HAS_YTDLP
+        return _has_ytdlp()
+
+    def _prepare_search_headers(self):
+        """Single-flight the SDK's first-use public visitor-header request.
+
+        ytmusicapi.base_headers is a cached_property, whose initializer is
+        not locked on Python 3.14. Startup and simultaneous searches otherwise
+        each download the homepage before their actual search can begin.
+        """
+        client = self._ytmusic
+        if client is None:
+            return None
+        with self._cache_lock:
+            cached = getattr(client, '__dict__', {}).get('base_headers')
+            if cached is not None:
+                return cached
+            flight = getattr(self, '_ytmusic_headers_flight', None)
+            owner = flight is None or flight['client'] is not client
+            if owner:
+                flight = {'client': client, 'done': threading.Event(), 'error': None, 'headers': None}
+                self._ytmusic_headers_flight = flight
+        if owner:
+            try:
+                flight['headers'] = getattr(client, 'base_headers', None)
+            except Exception as exc:
+                flight['error'] = exc
+            finally:
+                with self._cache_lock:
+                    if self._ytmusic_headers_flight is flight:
+                        self._ytmusic_headers_flight = None
+                    flight['done'].set()
+        elif not flight['done'].wait(6.5):
+            raise TimeoutError('YouTube Music visitor headers timed out')
+        if flight['error'] is not None:
+            raise flight['error']
+        return flight['headers']
+
+    def warm_search(self):
+        """Prepare SDK headers on its existing pool, without searching tracks."""
+        def warm():
+            try:
+                self._prepare_search_headers()
+            except Exception:
+                logger.debug('YouTube Music header warmup deferred until search')
+        return self._executor.submit(warm)
 
     def search(self, query: str, max_results: int = 20, result_type: str = None, callback: Callable = None, error_callback: Callable = None, prefetch: bool = False):
         """Search YouTube for tracks or albums. Runs in background thread.
@@ -240,43 +441,71 @@ class YouTubeService(BaseMusicService):
                 callback([])
             return None
 
-        if not HAS_YTDLP or not HAS_YTMUSIC:
+        if not _has_ytdlp() or not HAS_YTMUSIC:
             if error_callback:
                 error_callback("yt-dlp или ytmusicapi не установлены")
+            return None
+
+        is_artist_search = result_type in ('artists', 'artist')
+        yt_filter = 'artists' if is_artist_search else ('playlists' if result_type in ('playlists', 'playlist') else ('albums' if result_type in ('albums', 'album') else None))
+        cache_key = f'yt_search:{query}:{yt_filter}:{max_results}'
+        cached = self.get_search_cache(cache_key)
+        if cached is not None:
+            if callback:
+                callback(cached)
+            return None
+        leader, callback, error_callback = self._join_request(cache_key, callback, error_callback)
+        if not leader:
             return None
 
         def _search():
             try:
                 is_album_search = result_type in ("albums", "album")
                 is_playlist_search = result_type in ("playlists", "playlist")
-                is_track_search = result_type in ("tracks", "track", "songs", "song")
-                yt_filter = "playlists" if is_playlist_search else ("albums" if is_album_search else ("songs" if is_track_search else None))
-                cache_key = f"yt_search:{query}:{yt_filter}"
+                is_artist_search = result_type in ("artists", "artist")
+                yt_filter = "artists" if is_artist_search else ("playlists" if is_playlist_search else ("albums" if is_album_search else None))
                 cached = self.get_search_cache(cache_key)
                 if cached is not None:
                     if callback:
                         callback(cached)
                     return None
 
+                self._prepare_search_headers()
                 results = self._ytmusic.search(query, filter=yt_filter, limit=max_results)
 
                 tracks = []
                 seen_ids = set()
-                for idx, item in enumerate(results or []):
-                    if not isinstance(item, dict):
-                        continue
-                    if is_playlist_search:
+                for idx, item in enumerate(results):
+                    if is_artist_search:
+                        browse_id = item.get("browseId")
+                        if not browse_id or browse_id in seen_ids:
+                            continue
+                        seen_ids.add(browse_id)
+                        name = item.get("artist") or item.get("name") or "Unknown Artist"
+                        thumbnails = item.get("thumbnails", []) or []
+                        cover_url = thumbnails[-1]["url"] if thumbnails else ""
+                        subscribers = item.get("subscribers") or ""
+                        tracks.append({
+                            "id": f"yt_artist_{browse_id}",
+                            "source": "youtube",
+                            "source_id": browse_id,
+                            "title": name,
+                            "artist": name,
+                            "name": name,
+                            "cover_url": cover_url,
+                            "avatar_url": cover_url,
+                            "type": "artist",
+                            "subscribers": subscribers,
+                        })
+                    elif is_playlist_search:
                         browse_id = item.get("browseId") or item.get("playlistId")
                         if not browse_id or browse_id in seen_ids:
                             continue
                         seen_ids.add(browse_id)
-                        title = item.get("title") or "Unknown Playlist"
-                        author = self._extract_artists_string(item.get("artists", []), fallback="") or (item.get("author") or "YouTube Music")
+                        title = item.get("title", "Unknown Playlist")
+                        author = ", ".join([a.get("name", "") for a in item.get("artists", []) or [] if a.get("name")]) or (item.get("author") or "YouTube Music")
                         thumbnails = item.get("thumbnails", []) or []
-                        cover_url = ""
-                        if isinstance(thumbnails, list) and thumbnails:
-                            last = thumbnails[-1]
-                            cover_url = last.get("url", "") if isinstance(last, dict) else (last if isinstance(last, str) else "")
+                        cover_url = thumbnails[-1]["url"] if thumbnails else ""
                         tracks.append({
                             "source": "youtube",
                             "source_id": browse_id,
@@ -288,22 +517,23 @@ class YouTubeService(BaseMusicService):
                             "track_count": item.get("track_count") or item.get("itemCount") or 0
                         })
                     elif is_album_search:
-                        bid = item.get("browseId") or item.get("playlistId") or f"yt_album_{idx}"
+                        bid = item.get("browseId") or item.get("playlistId")
+                        if not bid:
+                            continue
                         if bid in seen_ids:
                             continue
                         seen_ids.add(bid)
 
-                        title = item.get("title") or "Unknown Album"
-                        artist = self._extract_artists_string(item.get("artists", []), "Unknown Artist")
+                        title = item.get("title", "Unknown Album")
+                        artists_list = item.get("artists", []) or []
+                        artist = ", ".join([a["name"] for a in artists_list if "name" in a]) or "Unknown Artist"
                         thumbnails = item.get("thumbnails", []) or []
-                        cover_url = ""
-                        if isinstance(thumbnails, list) and thumbnails:
-                            last = thumbnails[-1]
-                            cover_url = last.get("url", "") if isinstance(last, dict) else (last if isinstance(last, str) else "")
+                        cover_url = thumbnails[-1]["url"] if thumbnails else ""
                         year = item.get("year") or ""
 
                         tracks.append({
                             "id": f"yt_album_{bid}",
+                            "artists": artists_list,
                             "source": "youtube",
                             "source_id": bid,
                             "title": title,
@@ -326,7 +556,10 @@ class YouTubeService(BaseMusicService):
 
                         source_id = vid
                         title = item.get("title") or "Unknown Title"
-                        artist = self._extract_artists_string(item.get("artists", []), "Unknown Artist")
+
+                        artists_list = item.get("artists") or []
+                        names = [str(a["name"]) for a in artists_list if isinstance(a, dict) and a.get("name")]
+                        artist = ", ".join(names) if names else "Unknown Artist"
 
                         duration_val = item.get("duration", "0:00")
                         duration = 0
@@ -339,32 +572,31 @@ class YouTubeService(BaseMusicService):
                                     duration = int(parts[0]) * 60 + int(parts[1])
                                 elif len(parts) == 3:
                                     duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-                                else:
-                                    duration = int(duration_val)
+                                elif len(parts) == 1 and parts[0].isdigit():
+                                    duration = int(parts[0])
                             except (ValueError, TypeError):
                                 duration = 0
 
                         thumbnails = item.get("thumbnails", []) or []
-                        cover_url = ""
-                        if isinstance(thumbnails, list) and thumbnails:
-                            last = thumbnails[-1]
-                            cover_url = last.get("url", "") if isinstance(last, dict) else (last if isinstance(last, str) else "")
+                        cover_url = thumbnails[-1]["url"] if thumbnails else ""
 
                         tracks.append({
                             "source": "youtube",
                             "source_id": source_id,
+                            "source_url": f"https://www.youtube.com/watch?v={source_id}",
                             "title": title,
                             "artist": artist,
                             "duration": duration,
                             "cover_url": cover_url,
                             "album": item.get("album", {}).get("name", "") if isinstance(item.get("album"), dict) else "",
+                            "artists": artists_list,
                         })
 
                 self.set_search_cache(cache_key, tracks)
                 if callback:
                     callback(tracks)
 
-                if prefetch and not is_album_search and not is_playlist_search:
+                if prefetch and not is_album_search and not is_playlist_search and not is_artist_search:
                     self._executor.submit(self._prefetch_top_tracks, tracks)
 
             except Exception as e:
@@ -379,8 +611,6 @@ class YouTubeService(BaseMusicService):
         """Synchronous search wrapper over YouTube search with timeout <= 6s.
         Returns list of track dictionaries, or [] on any error/timeout (never raises).
         """
-        if not query or not str(query).strip():
-            return []
         import threading
         result = []
         event = threading.Event()
@@ -408,14 +638,118 @@ class YouTubeService(BaseMusicService):
             logger.debug(f"YouTube search_sync failed: {e}")
         return result or []
 
+    def get_related_tracks_sync(self, video_id: str, limit: int = 15) -> list:
+        """Return YouTube Music radio metadata for a video, without resolving audio.
+
+        The caller runs this synchronous provider request on a worker. The
+        existing session bounds network calls to six seconds; successful results
+        share the five-minute, size-capped search cache.
+        """
+        seed = str(video_id or "").strip()
+        if not _YT_VIDEO_ID_RE.fullmatch(seed) or self._ytmusic is None:
+            return []
+        try:
+            count = min(int(limit), 50)
+        except (TypeError, ValueError, OverflowError):
+            return []
+        if count <= 0:
+            return []
+
+        cache_key = f"yt_related:{seed}:{count}"
+        cached = self.get_search_cache(cache_key)
+        if cached is not None:
+            return [dict(track) for track in cached]
+
+        def duration_seconds(value):
+            try:
+                if isinstance(value, bool):
+                    return 0
+                if isinstance(value, (int, float)):
+                    return max(0, int(value))
+                if isinstance(value, str):
+                    parts = value.strip().split(":")
+                    if 1 <= len(parts) <= 3 and all(part.isdecimal() for part in parts):
+                        numbers = [int(part) for part in parts]
+                        if len(numbers) > 1 and any(part >= 60 for part in numbers[1:]):
+                            return 0
+                        seconds = 0
+                        for part in numbers:
+                            seconds = seconds * 60 + part
+                        return seconds
+            except (ValueError, OverflowError):
+                pass
+            return 0
+
+        try:
+            data = self._ytmusic.get_watch_playlist(
+                videoId=seed, limit=count + 1, radio=True
+            )
+            entries = data.get("tracks", []) if isinstance(data, dict) else []
+            if not isinstance(entries, list):
+                return []
+            tracks = []
+            seen_ids = {seed}
+            for item in entries:
+                if not isinstance(item, dict):
+                    continue
+                vid = item.get("videoId")
+                title = item.get("title")
+                if (not isinstance(vid, str) or not _YT_VIDEO_ID_RE.fullmatch(vid)
+                        or vid in seen_ids or not isinstance(title, str) or not title.strip()
+                        or item.get("isAvailable") is False
+                        or item.get("isPlayable") is False
+                        or "unplayableText" in item):
+                    continue
+                seen_ids.add(vid)
+                artists = item.get("artists") or []
+                artist = ", ".join(
+                    person["name"].strip() for person in artists
+                    if isinstance(person, dict) and isinstance(person.get("name"), str)
+                    and person["name"].strip()
+                    # Some watch-radio subtitles are parsed by ytmusicapi as
+                    # artist rows even though they are engagement counters.
+                    # An actual channel ID remains authoritative.
+                    and (person.get('id') or not re.fullmatch(
+                        r'(?:Отметок\s+["«]?Нравится["»]?\s*:\s*[\d.,\s]+(?:тыс\.?|млн\.?)?'
+                        r'|[\d.,\s]+[KMBКМ]?\s*(?:likes|views|просмотров|просмотры))',
+                        person['name'].strip(), re.I))
+                ) if isinstance(artists, list) else ""
+                thumbnails = item.get("thumbnail") or item.get("thumbnails") or []
+                cover_url = ""
+                if isinstance(thumbnails, list):
+                    for thumb in reversed(thumbnails):
+                        if isinstance(thumb, dict) and isinstance(thumb.get("url"), str):
+                            cover_url = thumb["url"]
+                            break
+                album = item.get("album")
+                tracks.append({
+                    "source": "youtube",
+                    "source_id": vid,
+                    "title": title.strip(),
+                    "artist": artist or "Unknown Artist",
+                    "duration": duration_seconds(
+                        item.get("duration_seconds") if item.get("duration_seconds") is not None
+                        else item.get("length") or item.get("duration")
+                    ),
+                    "cover_url": cover_url,
+                    "album": album.get("name", "") if isinstance(album, dict) else "",
+                })
+                if len(tracks) >= count:
+                    break
+            self.set_search_cache(cache_key, tracks)
+            return [dict(track) for track in tracks]
+        except Exception as e:
+            logger.debug("YouTube related tracks failed for %s: %s", seed, e)
+            return []
+
     def get_album_tracks(self, browse_id: str, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
         """Fetch YouTube Music album tracks via ytmusicapi. Runs in background thread."""
         if not browse_id or not str(browse_id).strip():
-            if error_callback:
-                error_callback("Неверный ID альбома")
+            if callback:
+                callback([])
             return None
 
-        if not HAS_YTDLP or not HAS_YTMUSIC:
+        if not _has_ytdlp() or not HAS_YTMUSIC:
             if error_callback:
                 error_callback("yt-dlp или ytmusicapi не установлены")
             return None
@@ -424,40 +758,44 @@ class YouTubeService(BaseMusicService):
             try:
                 data = self._ytmusic.get_album(browse_id)
                 entries = data.get("tracks", []) if isinstance(data, dict) else []
-                album_title = data.get("title") or "Album" if isinstance(data, dict) else "Album"
-                album_artist = self._extract_artists_string(data.get("artists", []), "Unknown Artist") if isinstance(data, dict) else "Unknown Artist"
-                thumbnails = data.get("thumbnails", []) if isinstance(data, dict) else []
+                album_title = data.get("title") or "Album"
+                names = [str(a["name"]) for a in data.get("artists") or [] if isinstance(a, dict) and a.get("name")]
+                album_artist = ", ".join(names) if names else "Unknown Artist"
+                thumbnails = data.get("thumbnails") or []
                 album_cover = ""
-                if isinstance(thumbnails, list) and thumbnails:
-                    last = thumbnails[-1]
-                    album_cover = last.get("url", "") if isinstance(last, dict) else (last if isinstance(last, str) else "")
+                if thumbnails and isinstance(thumbnails, list):
+                    last_th = thumbnails[-1]
+                    if isinstance(last_th, dict):
+                        album_cover = last_th.get("url", "")
+                    elif isinstance(last_th, str):
+                        album_cover = last_th
 
                 tracks = []
                 seen_ids = set()
-                for item in (entries or []):
-                    if not isinstance(item, dict):
-                        continue
+                for item in entries:
                     vid = item.get("videoId")
                     if not vid or vid in seen_ids:
                         continue
                     seen_ids.add(vid)
 
                     title = item.get("title") or "Unknown Title"
-                    artist = self._extract_artists_string(item.get("artists", []), album_artist)
+                    artists_list = item.get("artists") or []
+                    names = [str(a["name"]) for a in artists_list if isinstance(a, dict) and a.get("name")]
+                    artist = ", ".join(names) if names else album_artist
 
-                    duration_raw = item.get("duration_seconds", 0) or 0
+                    duration_val = item.get("duration_seconds", 0) or 0
                     duration = 0
-                    if isinstance(duration_raw, (int, float)):
-                        duration = int(duration_raw)
-                    elif isinstance(duration_raw, str) and duration_raw:
+                    if isinstance(duration_val, (int, float)):
+                        duration = int(duration_val)
+                    elif isinstance(duration_val, str):
                         try:
-                            parts = duration_raw.split(":")
+                            parts = duration_val.split(":")
                             if len(parts) == 2:
                                 duration = int(parts[0]) * 60 + int(parts[1])
                             elif len(parts) == 3:
                                 duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-                            else:
-                                duration = int(duration_raw)
+                            elif len(parts) == 1 and parts[0].isdigit():
+                                duration = int(parts[0])
                         except (ValueError, TypeError):
                             duration = 0
 
@@ -469,6 +807,7 @@ class YouTubeService(BaseMusicService):
                         "album": album_title,
                         "duration": duration,
                         "cover_url": album_cover,
+                        "artists": artists_list,
                     })
                     if limit and len(tracks) >= limit:
                         break
@@ -485,67 +824,54 @@ class YouTubeService(BaseMusicService):
 
     def get_playlist_tracks(self, playlist_id: str, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
         """Fetch YouTube Music playlist tracks via ytmusicapi. Runs in background thread."""
-        if not playlist_id or not str(playlist_id).strip():
-            if error_callback:
-                error_callback("Неверный ID плейлиста")
+        if not query or not str(query).strip():
+            if callback:
+                callback([])
             return None
 
-        if not HAS_YTDLP or not HAS_YTMUSIC:
+        if not _has_ytdlp() or not HAS_YTMUSIC:
             if error_callback:
                 error_callback("yt-dlp или ytmusicapi не установлены")
             return None
 
         def _fetch():
             try:
-                data = self._ytmusic.get_playlist(playlist_id)
+                data = self._ytmusic.get_playlist(playlist_id, limit=max(1, min(int(limit), 5000)))
                 entries = data.get("tracks", []) if isinstance(data, dict) else []
 
                 tracks = []
                 seen_ids = set()
-                for item in (entries or []):
-                    if not isinstance(item, dict):
-                        continue
+                for item in entries:
                     vid = item.get("videoId")
                     if not vid or vid in seen_ids:
                         continue
                     seen_ids.add(vid)
 
-                    title = item.get("title") or "Unknown Title"
-                    artist = self._extract_artists_string(item.get("artists", []), "Unknown Artist")
+                    title = item.get("title", "Unknown Title")
 
-                    duration_raw = item.get("duration_seconds", 0) or 0
-                    duration = 0
-                    if isinstance(duration_raw, (int, float)):
-                        duration = int(duration_raw)
-                    elif isinstance(duration_raw, str) and duration_raw:
-                        try:
-                            parts = duration_raw.split(":")
-                            if len(parts) == 2:
-                                duration = int(parts[0]) * 60 + int(parts[1])
-                            elif len(parts) == 3:
-                                duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
-                            else:
-                                duration = int(duration_raw)
-                        except (ValueError, TypeError):
+                    artists_list = item.get("artists", []) or []
+                    artist = ", ".join([a["name"] for a in artists_list if "name" in a])
+                    if not artist:
+                        artist = "Unknown Artist"
+
+                    duration = item.get("duration_seconds", 0) or 0
+                    if isinstance(duration, str):
+                        parts = duration.split(":")
+                        if len(parts) == 2:
+                            duration = int(parts[0]) * 60 + int(parts[1])
+                        elif len(parts) == 3:
+                            duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                        else:
                             duration = 0
 
                     thumbnails = item.get("thumbnails", []) or []
                     cover_url = ""
-                    if isinstance(thumbnails, list) and thumbnails:
-                        best_url = ""
-                        best_area = -1
+                    if thumbnails:
+                        best = thumbnails[-1]
                         for t in thumbnails:
-                            if isinstance(t, dict):
-                                w = t.get("width") if isinstance(t.get("width"), (int, float)) else 0
-                                h = t.get("height") if isinstance(t.get("height"), (int, float)) else 0
-                                area = w * h
-                                if area >= best_area and t.get("url"):
-                                    best_area = area
-                                    best_url = t.get("url")
-                            elif isinstance(t, str):
-                                if not best_url:
-                                    best_url = t
-                        cover_url = best_url
+                            if (t.get("width") or 0) * (t.get("height") or 0) > (best.get("width") or 0) * (best.get("height") or 0):
+                                best = t
+                        cover_url = best.get("url", "")
 
                     tracks.append({
                         "source": "youtube",
@@ -555,6 +881,7 @@ class YouTubeService(BaseMusicService):
                         "duration": duration,
                         "cover_url": cover_url,
                         "album": item.get("album", {}).get("name", "") if isinstance(item.get("album"), dict) else "",
+                        "artists": artists_list,
                     })
                     if limit and len(tracks) >= limit:
                         break
@@ -571,8 +898,26 @@ class YouTubeService(BaseMusicService):
         return None
 
     def _extract_info_safe(self, video_url: str, quality: str, fallback: bool = False):
-        ydl = self._get_ydl(quality, fallback=fallback)
         opts = self._get_ydl_opts("bestaudio/best", fallback=fallback)
+        anonymous_attempted = False
+        if 'cookiesfrombrowser' in opts or 'cookiefile' in opts:
+            # Public tracks need no profile. Avoid its disk/decryption cost
+            # and stale-cookie rejection before trying authenticated access.
+            anonymous_attempted = True
+            clean_opts = opts.copy()
+            clean_opts.pop('cookiesfrombrowser', None)
+            clean_opts.pop('cookiefile', None)
+            try:
+                with _youtube_downloader(clean_opts) as clean_ydl:
+                    info = clean_ydl.extract_info(video_url, download=False)
+                if info and _has_playable_audio(info):
+                    with self._ydl_lock:
+                        pass  # Anonymous preference applies only to this request
+                    return info
+            except Exception:
+                logger.debug('Public YouTube extraction needs authenticated fallback', exc_info=True)
+
+        ydl = self._get_ydl(quality, fallback=fallback)
 
         try:
             return ydl.extract_info(video_url, download=False)
@@ -587,59 +932,135 @@ class YouTubeService(BaseMusicService):
                 clean_opts.pop("cookiefile", None)
 
                 try:
-                    with yt_dlp.YoutubeDL(clean_opts) as ydl_clean:
+                    with _youtube_downloader(clean_opts) as ydl_clean:
                         return ydl_clean.extract_info(video_url, download=False)
                 except Exception as e_clean:
                     err_msg = str(e_clean)
-            if any(k in err_lower for k in ("confirm your age", "sign in", "inappropriate", "bot", "confirm you")):
-                configured_browser = "none"
-                if self.settings:
-                    configured_browser = self.settings.get("auth", "browser_cookies", "none")
+            if (not anonymous_attempted
+                    and ('cookiesfrombrowser' in opts or 'cookiefile' in opts)
+                    and any(k in err_lower for k in _YT_GATING_MARKS)):
+                # Retry anonymously. A stale configured profile makes
+                # YouTube answer "The page needs to be reloaded" for a video
+                # that plays fine unsigned. It is also far quicker than the
+                # browser sweep below, so the common case no longer stalls.
+                try:
+                    anon_opts = opts.copy()
+                    anon_opts.pop("cookiesfrombrowser", None)
+                    anon_opts.pop("cookiefile", None)
+                    with _youtube_downloader(anon_opts) as ydl_anon:
+                        res = ydl_anon.extract_info(video_url, download=False)
+                    if res and _has_playable_audio(res):
+                        with self._ydl_lock:
+                            pass  # Anonymous preference applies only to this request
+                        logger.info("YouTube extraction succeeded without cookies")
+                        return res
+                except Exception as anon_err:
+                    logger.debug("Anonymous YouTube extraction failed: %s", anon_err)
 
-                browsers_to_try = []
-                if configured_browser and configured_browser != "none":
-                    browsers_to_try.append(configured_browser)
-                for b_cand in ("firefox", "edge", "chrome", "brave", "opera", "vivaldi", "yandex"):
-                    if b_cand not in browsers_to_try:
-                        browsers_to_try.append(b_cand)
-
-                for b_name in browsers_to_try:
-                    try:
-                        logger.info(f"Trying YouTube cookies from browser: {b_name}")
-                        cookie_opts = opts.copy()
-                        cookie_opts["cookiesfrombrowser"] = (b_name,)
-                        with yt_dlp.YoutubeDL(cookie_opts) as ydl_cookie:
-                            res = ydl_cookie.extract_info(video_url, download=False)
-                            if res:
-                                if self.settings and (configured_browser == "none" or not configured_browser):
-                                    try:
-                                        self.settings.set("auth", "browser_cookies", b_name)
-                                    except Exception:
-                                        pass
-                                return res
-                    except Exception as cookie_err:
-                        logger.debug(f"Browser cookies extraction from {b_name} failed: {cookie_err}")
             raise e
+
+    def get_artist_avatar_metadata(self, track_id: str) -> dict:
+        """Resolve the actual uploading channel, rather than a music-name match."""
+        if not self._ytmusic or not re.fullmatch(r'[A-Za-z0-9_-]{11}', str(track_id or '')):
+            return {}
+        song = self._ytmusic.get_song(str(track_id)) or {}
+        details = song.get('videoDetails') or {}
+        channel = details.get('channelId') or ''
+        if not re.fullmatch(r'UC[A-Za-z0-9_-]+', channel):
+            return {}
+        response = self._ytmusic._send_request('browse', {'browseId': channel}) or {}
+        header = response.get('header') or {}
+        visual = header.get('musicVisualHeaderRenderer') or {}
+        immersive = header.get('musicImmersiveHeaderRenderer') or {}
+        # Visual headers contain a wide banner AND a foreground channel photo.
+        # Never substitute the banner for the avatar.
+        thumbnail = visual.get('foregroundThumbnail') or immersive.get('thumbnail') or {}
+        thumbs = (thumbnail.get('musicThumbnailRenderer') or {}).get('thumbnail', {}).get('thumbnails') or []
+        photo = max(thumbs, key=lambda t: (t.get('width') or 0) * (t.get('height') or 0), default={})
+        return {'title': details.get('title') or '', 'artist': details.get('author') or '',
+                'artist_avatar_url': photo.get('url') or ''}
+
+    def get_track_metadata(self, track_id: str) -> dict:
+        """Fetch a single video's metadata (thumbnail included) by video id.
+
+        Used by fetch_missing_covers() to backfill rows that never got artwork.
+        """
+        if not _has_ytdlp() or not track_id:
+            return {}
+        video_id = str(track_id).strip()
+        if "youtube.com/watch" in video_id or "youtu.be" in video_id:
+            from urllib.parse import parse_qs, urlparse
+            q = parse_qs(urlparse(video_id).query)
+            video_id = (q.get("v") or [video_id])[0]
+        video_id = video_id.split("&")[0].split("=")[-1]
+        if not re.fullmatch(r"[A-Za-z0-9_-]{6,20}", video_id):
+            return {}
+        try:
+            with _youtube_downloader(self._get_ydl_opts("bestaudio/best")) as ydl:
+                info = ydl.extract_info(
+                    f"https://www.youtube.com/watch?v={video_id}", download=False
+                )
+        except Exception:
+            logger.debug("get_track_metadata(%s) failed", track_id, exc_info=True)
+            return {}
+        if not isinstance(info, dict):
+            return {}
+        return {
+            "title": info.get("title") or "",
+            "artist": info.get("uploader") or info.get("channel") or "",
+            "cover_url": info.get("thumbnail") or "",
+            "source_id": video_id,
+        }
 
     def get_stream_url(self, video_url: str, callback: Callable = None, error_callback: Callable = None, quality: str = "high"):
         """Extract direct audio stream URL from a YouTube video."""
-        if not video_url or not str(video_url).strip():
-            if error_callback:
-                error_callback("Неверный URL или ID видео")
-            return None
-
-        if not HAS_YTDLP:
+        if not _has_ytdlp():
             if error_callback:
                 error_callback("yt-dlp не установлен")
             return None
 
-        info = self.get_from_cache(video_url)
+        if not _is_allowed_youtube_target(video_url):
+            if error_callback:
+                error_callback("Недопустимый адрес YouTube")
+            return None
+
+        info = self.get_from_cache(_yt_cache_key(video_url))
         if info:
             if callback:
                 callback(info.get("stream_url"), info)
             return None
 
+        cache_key = _yt_cache_key(video_url)
+        with self._ydl_lock:
+            if cache_key in self._pending_streams:
+                self._pending_streams[cache_key].append((callback, error_callback))
+                return None
+            self._pending_streams[cache_key] = [(callback, error_callback)]
+
+        def finish(stream_url=None, metadata=None, error=None):
+            with self._ydl_lock:
+                listeners = self._pending_streams.pop(cache_key, [])
+            for on_stream, on_error in listeners:
+                try:
+                    if error is not None:
+                        if on_error:
+                            on_error(error)
+                    elif on_stream:
+                        on_stream(stream_url, metadata)
+                except Exception:
+                    logger.exception("YouTube stream callback failed")
+
+        callback = lambda stream_url, metadata: finish(stream_url, metadata)
+        error_callback = lambda error: finish(error=error)
+
         def _extract():
+            # A preceding owner can complete after the caller's cache lookup
+            # but before it joins _pending_streams. Avoid a second extraction
+            # in that gap (prefetch and Play commonly overlap here).
+            cached = self.get_from_cache(cache_key)
+            if cached and cached.get("stream_url"):
+                callback(cached["stream_url"], cached)
+                return
             max_attempts = 1
             for attempt in range(max_attempts):
                 try:
@@ -655,14 +1076,14 @@ class YouTubeService(BaseMusicService):
                                 error_callback("Не удалось прочитать куки браузера. Закройте браузер или используйте cookies.txt")
                             return None
 
-                        if any(k in err_lower for k in ("bot", "sign in", "confirm you", "drm")):
+                        if any(k in err_lower for k in _YT_GATING_MARKS):
                             logger.info("YouTube bot/auth challenge detected, triggering fast fallback.")
                             try:
                                 info = self._extract_info_safe(video_url, quality, fallback=True)
                             except Exception as exc_fb:
                                 logger.warning(f"YouTube bot challenge fallback failed: {exc_fb}")
                                 if error_callback:
-                                    error_callback(str(exc_fb))
+                                    error_callback(str(_yt_gating_error(exc_fb)))
                                 return None
 
                         if not info:
@@ -678,65 +1099,84 @@ class YouTubeService(BaseMusicService):
                                     return None
 
                                 if error_callback:
-                                    error_callback(err_msg2)
+                                    error_callback(str(_yt_gating_error(exc2)))
                                 return None
 
                     if info:
-                        if info.get("_type") == "playlist":
-                            entries = info.get("entries")
-                            if entries is not None:
-                                if not isinstance(entries, (list, tuple)):
-                                    try:
-                                        entries = list(entries)
-                                    except Exception:
-                                        entries = []
-                                if entries:
-                                    info = entries[0]
+                        if info.get("entries") is not None and hasattr(info["entries"], "__iter__") and not isinstance(info["entries"], (list, tuple)):
+                            info["entries"] = list(info["entries"])
+                        if info.get("_type") == "playlist" and "entries" in info and len(info["entries"]) > 0:
+                            first_entry = info["entries"][0]
+                            # yt-dlp leaves None in `entries` for videos it could
+                            # not resolve (unavailable/removed). Reassigning
+                            # unconditionally made `info` None and the next line
+                            # then raised AttributeError: 'NoneType' object has
+                            # no attribute 'get', which surfaced as a generic
+                            # "Ошибка при извлечении потока YouTube".
+                            if first_entry is None:
+                                logger.warning(
+                                    "Playlist %s resolved but its first entry is unavailable",
+                                    video_url,
+                                )
+                                if error_callback:
+                                    error_callback("Трек недоступен для извлечения")
+                                return None
+                            info = first_entry
 
-                        stream_url = info.get("url")
+                        # A non-dict mapping here would fail the same way.
+                        if not isinstance(info, dict):
+                            logger.warning("Unexpected info payload for %s: %r", video_url, type(info))
+                            if error_callback:
+                                error_callback("Трек недоступен для извлечения")
+                            return None
+
+                        stream_url = info.get("url") if info.get('acodec') != 'none' else None
                         if not stream_url and info.get("requested_formats"):
                             for fmt in info["requested_formats"]:
-                                if fmt.get("acodec") != "none" and fmt.get("url"):
+                                if fmt.get("acodec") not in (None, "none") and fmt.get("url"):
                                     stream_url = fmt.get("url")
                                     break
                         if not stream_url and info.get("formats"):
-                            audio_fmts = [f for f in info["formats"] if f.get("acodec") != "none" and f.get("url")]
+                            audio_fmts = [f for f in info["formats"] if f.get("acodec") not in (None, "none") and f.get("url")]
                             if audio_fmts:
-                                def _fmt_br(f):
-                                    b = f.get("abr") or f.get("tbr") or 0
-                                    try:
-                                        return float(b)
-                                    except (ValueError, TypeError):
-                                        return 0.0
-                                audio_fmts.sort(key=_fmt_br, reverse=True)
+                                audio_fmts.sort(key=lambda f: f.get("abr") or f.get("tbr") or 0, reverse=True)
                                 stream_url = audio_fmts[0].get("url")
-                            elif len(info["formats"]) > 0:
-                                stream_url = info["formats"][-1].get("url")
 
                         if not stream_url:
                             logger.warning(f"No stream_url found in info for {video_url}")
                             if error_callback:
-                                error_callback("Не удалось извлечь аудио поток")
+                                if _is_storyboards_only(info):
+                                    error_callback(_YT_GATED_MSG)
+                                else:
+                                    error_callback("Не удалось извлечь аудио поток")
                             return None
 
                         metadata = {
-                            "title": info.get("title") or "Unknown",
-                            "artist": info.get("uploader") or info.get("channel") or "Unknown",
-                            "duration": info.get("duration") or 0,
-                            "cover_url": info.get("thumbnail") or "",
-                            "source_id": info.get("id") or "",
+                            "title": info.get("title", "Unknown"),
+                            "artist": info.get("artist") or info.get("uploader") or info.get("channel") or "Unknown",
+                            "duration": info.get("duration", 0),
+                            "cover_url": info.get("thumbnail", ""),
+                            "source_id": info.get("id", ""),
                             "stream_url": stream_url,
-                            "format": info.get("ext") or "unknown",
-                            "bitrate": info.get("abr") or 0,
+                            "format": info.get("ext", "unknown"),
+                            "bitrate": info.get("abr", 0),
                         }
 
+                        self.set_to_cache(_yt_cache_key(video_url), metadata)
                         self.set_to_cache(video_url, metadata)
-                        sid = info.get("id")
-                        if sid and sid != video_url:
-                            self.set_to_cache(sid, metadata)
+                        # Spotify resolves a search expression; queue/prefetch
+                        # may subsequently address that same video by its ID.
+                        resolved_id = str(info.get("id") or "")
+                        if resolved_id:
+                            self.set_to_cache(resolved_id, metadata)
+                            self.set_to_cache(_yt_cache_key(resolved_id), metadata)
 
                         if callback:
                             callback(stream_url, metadata)
+                        return None
+                    else:
+                        if error_callback:
+                            error_callback("Не удалось извлечь аудио поток")
                         return None
 
                 except Exception as e:
@@ -746,140 +1186,172 @@ class YouTubeService(BaseMusicService):
                         continue
                     self.logger.exception("Ошибка при извлечении потока YouTube")
                     if error_callback:
-                        error_callback(f"Произошла ошибка: {type(e).__name__} - {str(e)}")
+                        error_callback(str(_yt_gating_error(e)))
                     return None
 
-        self._executor.submit(_extract)
+        self._playback_executor.submit(_extract)
         return None
 
-    def download_audio(self, video_url: str, output_path: str, callback: Callable = None, progress_callback: Callable = None, error_callback: Callable = None, quality: str = "high"):
-        """Download audio from YouTube to a local file."""
-        if not video_url or not str(video_url).strip():
-            if error_callback:
-                error_callback("Неверный URL или ID видео")
-            return None
+    def invalidate_stream_url(self, video_url):
+        """Forget a rejected CDN URL and any aliased resolved-video cache key."""
+        value = str(video_url or '').strip()
+        if not value:
+            return
+        cache_key = _yt_cache_key(value)
+        keys = {cache_key}
+        cached = self.get_from_cache(cache_key)
+        resolved_id = str((cached or {}).get('source_id') or '')
+        if re.fullmatch(r'[A-Za-z0-9_-]{11}', resolved_id):
+            keys.add(_yt_cache_key(resolved_id))
+        if re.fullmatch(r'[A-Za-z0-9_-]{11}', value):
+            keys.add(_yt_cache_key(f'https://www.youtube.com/watch?v={value}'))
+        self.invalidate_stream_cache_keys(*keys)
 
-        if not HAS_YTDLP:
-            if error_callback:
-                error_callback("yt-dlp не установлен")
-            return None
-
-        def _download():
-            try:
-                out_dir = os.path.dirname(output_path)
-                if out_dir:
-                    os.makedirs(out_dir, exist_ok=True)
-
-                quality_map = {
-                    "low": "192",
-                    "medium": "256",
-                    "high": "320",
-                    "lossless": "best",
-                }
-
-                def _progress_hook(d):
-                    if progress_callback and d.get("status") == "downloading":
-                        total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
-                        downloaded = d.get("downloaded_bytes", 0)
-                        if total > 0:
-                            progress_callback(downloaded / total)
-
-                ydl_opts = {
-                    "quiet": True,
-                    "no_warnings": True,
-                    "format": "bestaudio/best",
-                    "outtmpl": output_path,
-                    "postprocessors": [
-                        {
-                            "key": "FFmpegExtractAudio",
-                            "preferredcodec": "mp3",
-                            "preferredquality": quality_map.get(quality, "320"),
-                        }
-                    ],
-                    "progress_hooks": [_progress_hook],
-                }
-
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([video_url])
-
-                if callback:
-                    callback(output_path)
-                return None
-            except Exception as e:
-                self.logger.exception("Ошибка при загрузке аудио с YouTube")
-                if error_callback:
-                    error_callback(f"Произошла ошибка: {type(e).__name__} - {str(e)}")
-                return None
-
-        self._executor.submit(_download)
-        return None
-
-    def download_audio_sync(self, source_id: str, output_dir: str) -> str:
+    def download_audio_sync(self, source_id: str, output_dir: str, download_context=None) -> str:
         """Download audio synchronously from YouTube via yt-dlp."""
         import os
         import time
         if not source_id or not str(source_id).strip():
-            raise ValueError("source_id не может быть пустым")
-
-        if not HAS_YTDLP:
+            raise ValueError("Пустой ID трека YouTube")
+        if not _has_ytdlp():
             raise Exception("yt-dlp не установлен")
 
-        os.makedirs(output_dir, exist_ok=True)
-
-        raw_token = str(source_id).strip().split('/')[-1].split('?')[0]
-        clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', raw_token) or "track"
+        clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id))
         ts = int(time.time())
         out_template = os.path.join(output_dir, f"yt_{clean_id}_{ts}.%(ext)s")
 
+        if str(source_id).startswith("http") and not _is_allowed_youtube_target(source_id):
+            raise Exception("Недопустимый адрес YouTube")
         url = source_id if str(source_id).startswith("http") or str(source_id).startswith("ytsearch") else f"https://www.youtube.com/watch?v={source_id}"
 
+        # Playback already resolved this catalogue query to a recording. Reuse
+        # its identity, but extract fresh formats for a full-quality download.
+        if str(source_id).startswith('ytsearch'):
+            cached = self.get_from_cache(_yt_cache_key(source_id)) or {}
+            resolved_id = str(cached.get('source_id') or '')
+            if _YT_VIDEO_ID_RE.fullmatch(resolved_id):
+                url = f'https://www.youtube.com/watch?v={resolved_id}'
+
         ydl_opts = self._get_ydl_opts("bestaudio/best", fallback=True)
+        from utils.audio_validation import ffprobe_path
+        if not ffprobe_path():
+            # Standalone installs need a container that the bundled Mutagen
+            # can validate. Preserve the best available bitrate within it.
+            ydl_opts['format'] = 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio[ext=opus]/bestaudio[ext=ogg]/bestaudio/best'
         ydl_opts.update({
             "outtmpl": out_template,
             "skip_download": False,
+            # File transfers can take longer than stream URL resolution.
+            "socket_timeout": 30,
+            "retries": 5,
+            "fragment_retries": 5,
             "quiet": True,
-            "no_warnings": True,
+            # Keep yt-dlp's own warnings off the console but let the logger see
+            # them. With no_warnings alone the "Unable to fetch GVS PO Token"
+            # and "no PO token extracted" messages that explain
+            # "The page needs to be reloaded" never appear anywhere.
+            "no_warnings": False,
+            "logger": self.logger,
+            # A previous partial download of the same id must not be reused:
+            # yt-dlp skips an existing file by default, so a 0-byte or
+            # truncated leftover silently became "the download".
+            "overwrites": True,
         })
+        if download_context:
+            ydl_opts.update(download_context.ydl_options(output_dir))
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        # Anonymous access is the fastest path for public downloads too.
+        # Retain configured credentials for content that actually needs them.
+        authenticated_opts = ydl_opts.copy()
+        if self.settings:
+            browser = self.settings.get('auth', 'browser_cookies', 'none')
+            cookie_file = self.settings.get('auth', 'cookies_file_path', '')
+            if browser and browser != 'none':
+                authenticated_opts['cookiesfrombrowser'] = (browser,)
+            if cookie_file and os.path.exists(cookie_file):
+                authenticated_opts['cookiefile'] = cookie_file
+        ydl_opts.pop('cookiesfrombrowser', None)
+        ydl_opts.pop('cookiefile', None)
+
+        with _youtube_downloader(ydl_opts) as ydl:
+            try:
                 info = ydl.extract_info(url, download=True)
+                if info:
+                    with self._ydl_lock:
+                        pass  # Anonymous preference applies only to this request
+            except Exception as exc:
+                try:
+                    for f in os.listdir(output_dir):
+                        if f.startswith(f"yt_{clean_id}_") and f.endswith(".part"):
+                            try:
+                                os.remove(os.path.join(output_dir, f))
+                            except OSError:
+                                pass
+                except Exception:
+                    pass
+                has_cookies = 'cookiesfrombrowser' in authenticated_opts or 'cookiefile' in authenticated_opts
+                retryable = any(mark in str(exc).lower() for mark in
+                                (*_YT_GATING_MARKS, 'database', 'locked', 'sqlite', 'profile'))
+                if not has_cookies or not retryable:
+                    raise _yt_gating_error(exc) from exc
+                try:
+                    with _youtube_downloader(authenticated_opts) as clean_ydl:
+                        info = clean_ydl.extract_info(url, download=True)
+                except Exception as clean_exc:
+                    raise _yt_gating_error(clean_exc) from clean_exc
+            if not info:
+                raise Exception("Не удалось извлечь информацию о треке YouTube")
+            if download_context:
+                download_context.checkpoint()
+            if info.get('entries'):
+                raw_e = list(info['entries']) if hasattr(info['entries'], '__iter__') and not isinstance(info['entries'], (list, tuple)) else info['entries']; info = next((entry for entry in raw_e if entry), None)
                 if not info:
-                    raise Exception("Не удалось извлечь информацию о треке YouTube")
+                    raise Exception("Не удалось найти запись YouTube")
+            if _is_storyboards_only(info):
+                raise Exception(_YT_GATED_MSG)
 
-                # 1. Check prepare_filename
-                downloaded_file = ydl.prepare_filename(info)
-                if os.path.exists(downloaded_file):
-                    return downloaded_file
+            # 1. Check prepare_filename
+            downloaded_file = ydl.prepare_filename(info)
+            if os.path.exists(downloaded_file):
+                # Uniform validation on every file-return path (BUG-A1-018):
+                # steps 1-3 used to hand back whatever matched the name.
+                _require_audio_file(downloaded_file)
+                return downloaded_file
 
-                # 2. Check info ext
-                ext = info.get('ext', 'm4a')
-                cand = os.path.join(output_dir, f"yt_{clean_id}_{ts}.{ext}")
+            # 2. Check info ext
+            ext = info.get('ext', 'm4a')
+            cand = os.path.join(output_dir, f"yt_{clean_id}_{ts}.{ext}")
+            if os.path.exists(cand):
+                _require_audio_file(cand)
+                return cand
+
+            # 3. Check common audio extensions
+            for e in (".mp3", ".m4a", ".webm", ".opus", ".aac", ".ogg"):
+                cand = os.path.join(output_dir, f"yt_{clean_id}_{ts}{e}")
                 if os.path.exists(cand):
+                    _require_audio_file(cand)
                     return cand
 
-                # 3. Check common audio extensions
-                for e in (".mp3", ".m4a", ".webm", ".opus", ".aac", ".ogg"):
-                    cand = os.path.join(output_dir, f"yt_{clean_id}_{ts}{e}")
-                    if os.path.exists(cand):
-                        return cand
+            # 4. Check directory for file starting with prefix
+            prefix = download_context.stem if download_context else f"yt_{clean_id}_{ts}"
+            for fname in os.listdir(output_dir):
+                if fname.startswith(prefix) and not fname.endswith('.part'):
+                    found = os.path.join(output_dir, fname)
+                    _require_audio_file(found)
+                    return found
 
-                # 4. Check directory for file starting with prefix
-                prefix = f"yt_{clean_id}_{ts}"
-                for fname in os.listdir(output_dir):
-                    if fname.startswith(prefix) and not (fname.endswith('.part') or fname.endswith('.ytdl')):
-                        return os.path.join(output_dir, fname)
+            raise Exception("Файл не был найден после загрузки с YouTube")
 
-                raise Exception("Файл не был найден после загрузки с YouTube")
-        except Exception:
-            try:
-                prefix = f"yt_{clean_id}_{ts}"
-                for fname in os.listdir(output_dir):
-                    if fname.startswith(prefix) and (fname.endswith('.part') or fname.endswith('.ytdl')):
-                        try:
-                            os.remove(os.path.join(output_dir, fname))
-                        except OSError:
-                            pass
-            except Exception:
-                pass
-            raise
+    def download_audio(self, *args, **kwargs):
+        """Deprecated. Kept for API compatibility; see download_audio_sync.
+
+        The old implementation passed its own options (no cookies, no proxy,
+        no clients) and called the callback unconditionally, so a failed
+        download looked like a success. Route everything through
+        download_audio_sync instead.
+        """
+        raise NotImplementedError(
+            "download_audio() is deprecated: use download_audio_sync(), which "
+            "shares _get_ydl_opts() with the streaming path and verifies the "
+            "downloaded file."
+        )

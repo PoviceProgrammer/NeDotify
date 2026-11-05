@@ -1,5 +1,5 @@
 """
-NeDotify / AURA Music - Rich System Tray Context Menu
+NeDotify - Rich System Tray Context Menu
 Provides dynamic playback controls, track title display, and thread-safe pystray integration.
 """
 
@@ -14,7 +14,6 @@ try:
     from PIL import Image
     import pystray
     from pystray import MenuItem as item, Menu
-    Separator = lambda: Menu.SEPARATOR
     HAS_PYSTRAY = True
 except (ImportError, Exception):
     HAS_PYSTRAY = False
@@ -25,6 +24,12 @@ logger = logging.getLogger(__name__)
 class TrayIcon:
     """Manages the Windows system tray icon and its interactive context menu."""
 
+    def __new__(cls, api=None, icon_path=None):
+        if sys.platform == "linux":
+            from core.linux_tray import LinuxTrayIcon
+            return LinuxTrayIcon(api, icon_path)
+        return super().__new__(cls)
+
     def __init__(self, api, icon_path: Optional[str] = None):
         self.api = api
         self.icon_path = icon_path or self._resolve_default_icon_path()
@@ -34,13 +39,16 @@ class TrayIcon:
         self._last_update_time: float = 0.0
         self._lock = threading.Lock()
         self._is_running: bool = False
+        self._stop_requested = threading.Event()
+        self._ready = threading.Event()
+        self._thread = None
 
     def _resolve_default_icon_path(self) -> str:
         base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         ico_path = os.path.join(base, "icon.ico")
         if os.path.exists(ico_path):
             return ico_path
-        png_path = os.path.join(base, "ui", "web_new", "assets", "logo.png")
+        png_path = os.path.join(base, "ui", "web_new_v2", "assets", "logo.png")
         if os.path.exists(png_path):
             return png_path
         return ico_path
@@ -67,10 +75,7 @@ class TrayIcon:
                     window.dispatchEvent(new CustomEvent('nedotify:tray_action', {{ detail: {{ action: '{action}' }} }}));
                 }}
             """
-            if hasattr(self.api._window, 'run_js'):
-                self.api._window.run_js(js_code)
-            else:
-                self.api._window.evaluate_js(js_code)
+            self.api._window.evaluate_js(js_code)
         except Exception as e:
             logger.debug(f"Tray JS dispatch '{action}' error: {e}")
 
@@ -80,6 +85,7 @@ class TrayIcon:
             if self.api and self.api._window:
                 self.api._window.restore()
                 self.api._window.show()
+                self.api._on_restored()
         except Exception as e:
             logger.debug(f"Failed to restore window: {e}")
 
@@ -113,89 +119,93 @@ class TrayIcon:
         if not HAS_PYSTRAY:
             return None
 
+        with self._lock:
+            current_track = dict(self._current_track) if self._current_track else None
+            is_playing = self._is_playing
+
         # Track status title
-        if self._current_track:
-            title = self._current_track.get('title') or 'Неизвестный трек'
-            artist = self._current_track.get('artist') or 'Неизвестный артист'
-            play_indicator = "▶" if self._is_playing else "⏸"
+        if current_track:
+            title = current_track.get('title') or 'Неизвестный трек'
+            artist = current_track.get('artist') or 'Неизвестный артист'
+            play_indicator = "▶" if is_playing else "⏸"
             status_text = f"{play_indicator} {title} — {artist}"
-            is_fav = bool(self._current_track.get('is_favorite', False))
+            is_fav = bool(current_track.get('is_favorite', False))
             fav_text = "💔 Удалить из любимых" if is_fav else "❤️ В любимые"
         else:
-            status_text = "AURA Music (Остановлено)"
+            status_text = "NeDotify (Остановлено)"
             fav_text = "❤️ В любимые"
 
-        play_pause_label = "⏸ Пауза" if self._is_playing else "▶ Воспроизведение"
+        play_pause_label = "⏸ Пауза" if is_playing else "▶ Воспроизведение"
 
         menu_items = [
             item(status_text, self.on_show, default=True),
-            Separator(),
+            Menu.SEPARATOR,
             item(play_pause_label, self.on_play_pause),
             item("⏭ Следующий трек", self.on_next),
             item("⏮ Предыдущий трек", self.on_prev),
             item(fav_text, self.on_toggle_favorite),
-            Separator(),
-            item("🗔 Открыть AURA Music", self.on_show),
+            Menu.SEPARATOR,
+            item("🗔 Открыть NeDotify", self.on_show),
             item("❌ Выход", self.on_exit)
         ]
         return Menu(*menu_items)
 
-    def update_state(self, track: Optional[Dict[str, Any]] = None, is_playing: Optional[bool] = None, force: bool = False):
-        """
-        Update dynamic tray menu with throttling (Decision 4: <= 1 update per second).
-        """
-        if not HAS_PYSTRAY or not self._is_running or not self.icon:
-            return
-
-        now = time.time()
-        if not force and (now - self._last_update_time < 1.0):
-            return
-
+    def update_state(self, track=None, is_playing=None, force=False):
+        """Keep the latest state; the tray thread rebuilds native menus when opened."""
         with self._lock:
             if track is not None:
-                self._current_track = track
+                self._current_track = dict(track)
             if is_playing is not None:
                 self._is_playing = bool(is_playing)
-            self._last_update_time = now
-
-            try:
-                new_menu = self._build_menu()
-                if new_menu and self.icon:
-                    self.icon.menu = new_menu
-            except Exception as e:
-                logger.debug(f"Failed to update tray menu: {e}")
 
     def start(self):
-        """Start the system tray in a background daemon thread."""
+        """Own one tray thread and defer stop requests until pystray is ready."""
         if not HAS_PYSTRAY:
-            logger.info("pystray not available; tray disabled.")
+            logger.info('pystray not available; tray disabled.')
             return
-
-        def _run_tray():
-            try:
-                img = self.create_image()
-                if not img:
-                    return
-                menu = self._build_menu()
-                self.icon = pystray.Icon("AURA Music", img, "AURA Music", menu)
-                self._is_running = True
-                if sys.platform != "win32":
-                    self.icon.run_detached()
+        with self._lock:
+            if self._thread is not None or self._stop_requested.is_set():
+                return
+            owner = self
+            class OwnedIcon(pystray.Icon):
+                def _on_notify(self, wparam, lparam):
+                    # Win32 context menus are allocated/destroyed only by this
+                    # icon's message-loop thread, never a playback callback.
+                    if lparam == 0x0205:  # WM_RBUTTONUP
+                        self.menu = owner._build_menu()
+                    return super()._on_notify(wparam, lparam)
+            def setup(icon):
+                self._ready.set()
+                if self._stop_requested.is_set():
+                    icon.stop()
                 else:
-                    self.icon.run()
-            except Exception as e:
-                logger.warning(f"System tray icon failed to run: {e}")
-            finally:
-                if sys.platform == "win32":
+                    self._is_running = True
+                    icon.visible = True
+            def run():
+                try:
+                    image = self.create_image()
+                    if image is None or self._stop_requested.is_set():
+                        return
+                    self.icon = OwnedIcon('NeDotify', image, 'NeDotify', self._build_menu())
+                    self.icon.run(setup=setup)
+                except Exception:
+                    logger.warning('System tray failed', exc_info=True)
+                finally:
                     self._is_running = False
-
-        threading.Thread(target=_run_tray, name="TrayThread", daemon=True).start()
+                    self._ready.set()
+            self._thread = threading.Thread(target=run, name='TrayThread', daemon=True)
+            self._thread.start()
 
     def stop(self):
-        """Stop system tray icon."""
-        if self.icon and self._is_running:
+        """A stop before native readiness is applied by the setup callback."""
+        self._stop_requested.set()
+        icon = self.icon
+        if icon is not None and self._ready.is_set():
             try:
-                self.icon.stop()
+                icon.stop()
             except Exception:
-                pass
-            self._is_running = False
+                logger.warning('Tray stop failed', exc_info=True)
+        thread = self._thread
+        if thread and thread is not threading.current_thread():
+            thread.join(2)
+        self._is_running = False

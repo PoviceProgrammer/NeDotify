@@ -1,179 +1,90 @@
-import os
-import re
-import unittest
+"""Linux transport regressions; shared layouts live in the desktop suites."""
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+from tests.jsdom import run_node, source
 
 
-class TestPlayerTabM3(unittest.TestCase):
-    """Milestone 3 Verification: Player Tab Layout & Functionality Fixes."""
-
-    def setUp(self):
-        self.html_path = os.path.join(PROJECT_ROOT, "ui/web_new_v2/index.html")
-        self.player_view_css = os.path.join(PROJECT_ROOT, "ui/web_new_v2/css/components/player-view.css")
-        self.player_bar_css = os.path.join(PROJECT_ROOT, "ui/web_new_v2/css/components/player-bar.css")
-        self.player_js = os.path.join(PROJECT_ROOT, "ui/web_new_v2/js/player.js")
-        self.pages_js = os.path.join(PROJECT_ROOT, "ui/web_new_v2/js/pages.js")
-
-        with open(self.html_path, "r", encoding="utf-8") as f:
-            self.html_content = f.read()
-        with open(self.player_view_css, "r", encoding="utf-8") as f:
-            self.view_css_content = f.read()
-        with open(self.player_bar_css, "r", encoding="utf-8") as f:
-            self.bar_css_content = f.read()
-        with open(self.player_js, "r", encoding="utf-8") as f:
-            self.player_js_content = f.read()
-        with open(self.pages_js, "r", encoding="utf-8") as f:
-            self.pages_js_content = f.read()
-
-    # ----------------------------------------------------------------------
-    # Fix 1: Title/Artist Spans Preservation
-    # ----------------------------------------------------------------------
-    def test_fix1_dom_spans_in_html(self):
-        """Verify #pp-header-title contains <span id='pp-title'> and <span id='pp-artist'>."""
-        self.assertIn('id="pp-header-title"', self.html_content)
-        self.assertIn('id="pp-title"', self.html_content)
-        self.assertIn('id="pp-artist"', self.html_content)
-        span_pattern = r'<div class="player-header-title" id="pp-header-title">\s*<span id="pp-title">.*?</span>\s*—\s*<span id="pp-artist">.*?</span>\s*</div>'
-        self.assertIsNotNone(re.search(span_pattern, self.html_content, re.DOTALL))
-
-    def test_fix1_player_js_preserves_spans(self):
-        """Verify updateTrackUI does NOT wipe headerEl.textContent with a raw string."""
-        # Ensure headerEl.textContent = headerTitle is NOT present
-        self.assertNotIn("headerEl.textContent = headerTitle", self.player_js_content)
-        # Ensure it updates pp-title and pp-artist directly
-        self.assertIn("let ppTitle = document.getElementById('pp-title');", self.player_js_content)
-        self.assertIn("let ppArtist = document.getElementById('pp-artist');", self.player_js_content)
-        self.assertIn("ppTitle.textContent = track?.title || 'Трек не выбран';", self.player_js_content)
-
-    # ----------------------------------------------------------------------
-    # Fix 2: Player Tab 2-Column Layout & 300px Void Elimination
-    # ----------------------------------------------------------------------
-    def test_fix2_player_left_col_layout(self):
-        """Verify .player-left-col uses space-between and height: 100% to eliminate bottom void."""
-        self.assertIn(".player-left-col {", self.view_css_content)
-        left_col_match = re.search(r"\.player-left-col\s*\{([^}]+)\}", self.view_css_content)
-        self.assertIsNotNone(left_col_match)
-        block = left_col_match.group(1)
-        self.assertIn("justify-content: space-between;", block)
-        self.assertIn("height: 100%;", block)
-
-    def test_fix2_player_cover_section_flex(self):
-        """Verify .player-cover-section uses flex: 1 and min-height: 0 to scale dynamically."""
-        cover_sec_match = re.search(r"\.player-cover-section\s*\{([^}]+)\}", self.view_css_content)
-        self.assertIsNotNone(cover_sec_match)
-        block = cover_sec_match.group(1)
-        self.assertIn("flex: 1;", block)
-        self.assertIn("min-height: 0;", block)
-
-    def test_fix2_player_card_controls_no_wrap(self):
-        """Verify .player-card-controls uses flex-wrap: nowrap and wider grid columns."""
-        controls_match = re.search(r"\.player-card-controls\s*\{([^}]+)\}", self.view_css_content)
-        self.assertIsNotNone(controls_match)
-        block = controls_match.group(1)
-        self.assertIn("flex-wrap: nowrap;", block)
-
-        layout_match = re.search(r"\.player-2col-layout\s*\{([^}]+)\}", self.view_css_content)
-        self.assertIsNotNone(layout_match)
-        layout_block = layout_match.group(1)
-        self.assertIn("grid-template-columns: minmax(390px, 440px) 1fr;", layout_block)
-
-    # ----------------------------------------------------------------------
-    # Fix 3: Dedicated Volume Controls on Player Tab
-    # ----------------------------------------------------------------------
-    def test_fix3_volume_controls_html(self):
-        """Verify dedicated volume controls exist in the Player view of index.html."""
-        self.assertIn('id="pp-volume-wrap"', self.html_content)
-        self.assertIn('id="pp-volume-btn"', self.html_content)
-        self.assertIn('id="pp-volume-track"', self.html_content)
-        self.assertIn('id="pp-volume-fill"', self.html_content)
-
-    def test_fix3_volume_controls_css(self):
-        """Verify .player-card-volume is styled in player-view.css."""
-        self.assertIn(".player-card-volume {", self.view_css_content)
-        self.assertIn(".player-card-volume .volume-track {", self.view_css_content)
-
-    def test_fix3_volume_controls_js_binding(self):
-        """Verify player.js binds drag and mute events for pp-volume controls."""
-        self.assertIn("setupDragBar('pp-volume-track'", self.player_js_content)
-        self.assertIn("const ppVolBtn = document.getElementById('pp-volume-btn');", self.player_js_content)
-        self.assertIn("setEl('pp-volume-fill', 'width',", self.player_js_content)
-        self.assertIn("'pp-volume-btn'", self.player_js_content)
-
-    # ----------------------------------------------------------------------
-    # Fix 4: Viewport Height Overrun & Scrollbar Elimination
-    # ----------------------------------------------------------------------
-    def test_fix4_view_player_height_constraints(self):
-        """Verify #view-player sets min-height: 0, height: 100%, and box-sizing: border-box."""
-        for css_content, source in [(self.view_css_content, "player-view.css"), (self.bar_css_content, "player-bar.css")]:
-            match = re.search(r"#view-player\s*\{([^}]+)\}", css_content)
-            self.assertIsNotNone(match, f"#view-player rule not found in {source}")
-            block = match.group(1)
-            self.assertIn("min-height: 0;", block, f"min-height: 0 missing in {source}")
-            self.assertIn("height: 100%;", block, f"height: 100% missing in {source}")
-            self.assertIn("box-sizing: border-box;", block, f"box-sizing: border-box missing in {source}")
-            self.assertIn("overflow: hidden;", block, f"overflow: hidden missing in {source}")
-
-    # ----------------------------------------------------------------------
-    # Fix 5: Responsive Media Query Targeting .player-2col-layout
-    # ----------------------------------------------------------------------
-    def _extract_media_query_body(self, css_content, query_str):
-        idx = css_content.find(query_str)
-        if idx == -1:
-            return None
-        start_brace = css_content.find("{", idx)
-        if start_brace == -1:
-            return None
-        depth = 1
-        pos = start_brace + 1
-        while pos < len(css_content) and depth > 0:
-            if css_content[pos] == "{":
-                depth += 1
-            elif css_content[pos] == "}":
-                depth -= 1
-            pos += 1
-        return css_content[start_brace + 1:pos - 1]
-
-    def test_fix5_media_query_player_bar_css(self):
-        """Verify @media (max-width: 900px) in player-bar.css targets .player-2col-layout."""
-        self.assertNotIn(".player-page-container {\n        grid-template-columns: 1fr;", self.bar_css_content)
-        mq_body = self._extract_media_query_body(self.bar_css_content, "@media (max-width: 900px)")
-        self.assertIsNotNone(mq_body, "Media query @media (max-width: 900px) not found in player-bar.css")
-        self.assertIn(".player-2col-layout", mq_body)
-        self.assertIn("grid-template-columns: 1fr;", mq_body)
-
-    def test_fix5_media_query_player_view_css(self):
-        """Verify @media (max-width: 900px) in player-view.css targets .player-2col-layout."""
-        mq_body = self._extract_media_query_body(self.view_css_content, "@media (max-width: 900px)")
-        self.assertIsNotNone(mq_body, "Media query @media (max-width: 900px) not found in player-view.css")
-        self.assertIn(".player-2col-layout", mq_body)
-        self.assertIn("grid-template-columns: 1fr;", mq_body)
-        self.assertIn("overflow-y: auto;", mq_body)
-
-    # ----------------------------------------------------------------------
-    # Fix 6: Waveform & Canvas Resize on Tab Switch
-    # ----------------------------------------------------------------------
-    def test_fix6_pages_js_player_tab_hook(self):
-        """Verify showPage('player') in pages.js resets waveform cache and triggers resize."""
-        self.assertIn("if (pageId === 'player')", self.pages_js_content)
-        self.assertIn("document.querySelectorAll('.waveform-canvas')", self.pages_js_content)
-        self.assertIn("cv._wfW = undefined;", self.pages_js_content)
-        self.assertIn("cv._wfH = undefined;", self.pages_js_content)
-        self.assertIn("window.dispatchEvent(new Event('resize'));", self.pages_js_content)
-        self.assertIn("window.NeDotify.renderWaveforms()", self.pages_js_content)
-
-    def test_fix6_player_js_exposes_render_waveforms(self):
-        """Verify player.js exposes window.NeDotify.renderWaveforms."""
-        self.assertIn("window.NeDotify.renderWaveforms = renderWaveforms;", self.player_js_content)
-
-    # ----------------------------------------------------------------------
-    # Fix 7: Deduplicate Queue Click Handler
-    # ----------------------------------------------------------------------
-    def test_fix7_no_duplicate_queue_listener(self):
-        """Verify player.js does not attach a competing click listener to #pp-btn-queue."""
-        self.assertNotIn("ppQueue.addEventListener('click'", self.player_js_content)
-        self.assertNotIn("document.getElementById('pp-btn-queue').addEventListener", self.player_js_content)
+def test_posix_downloads_are_played_through_authorized_loopback_proxy():
+    run_node(f"""
+        import assert from 'node:assert/strict';
+        const src = {source('player.js')};
+        const fn = src.slice(src.indexOf('function normalizeAudioSourceUrl('),src.indexOf('function loadAudioSource('));
+        globalThis.window = {{PROXY_PORT:54321,PROXY_TOKEN:'key with spaces'}};
+        const normalize = new Function(`${{fn}};return normalizeAudioSourceUrl;`)();
+        for (const file of ['/home/Музыка/песня #1.opus','file:///home/Music/a.ogg','C:\\\\Music\\\\a.mp3']) {{
+            const url = new URL(normalize(file));
+            assert.equal(url.origin,'http://127.0.0.1:54321');
+            assert.equal(url.pathname,'/api/stream');
+            assert.equal(url.searchParams.get('url'),file);
+            assert.equal(url.searchParams.get('k'),'key with spaces');
+        }}
+        assert.equal(normalize('//network/track.mp3'),'');
+        assert.equal(normalize('https://cdn.example/a.mp3'),'https://cdn.example/a.mp3');
+    """)
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_linux_system_media_controls_drive_real_transport_and_volume():
+    run_node(f"""
+        import assert from 'node:assert/strict';
+        const src = {source('player.js')};
+        const fn = src.slice(src.indexOf('export function handleSystemMedia('),src.indexOf('export function initPlayer(')).replace('export ','');
+        globalThis.calls=[]; globalThis.fills=[]; const attributes=[];
+        globalThis.document={{getElementById:()=>({{setAttribute:(...args)=>attributes.push(args)}})}};
+        const {{handle,audioA,audioB,state}}=new Function(`
+            const activeAudio={{paused:true,volume:.7}},audioA=activeAudio,audioB={{volume:.7}};
+            let currentVolume=70,isMuted=true;
+            const togglePlayPause=()=>{{activeAudio.paused=!activeAudio.paused;calls.push('toggle');}};
+            const stopPlaybackForQueueEnd=()=>calls.push('stop'),onStateChanged=value=>calls.push(value);
+            const seekTo=value=>calls.push(['seek',value]),playbackVolume=()=>isMuted?0:currentVolume/100;
+            const setVolumeFill=(...args)=>fills.push(args),updateVolumeIcon=()=>{{}},scheduleVolumeRpc=(...args)=>calls.push(['volume',...args]);
+            ${{fn}};
+            return {{handle:handleSystemMedia,audioA,audioB,state:()=>({{currentVolume,isMuted}})}};` )();
+        handle({{detail:{{action:'play'}}}}); handle({{detail:{{action:'play'}}}});
+        assert.deepEqual(calls,['toggle']);
+        handle({{detail:{{action:'pause'}}}}); handle({{detail:{{action:'pause'}}}});
+        assert.deepEqual(calls,['toggle','toggle']);
+        handle({{detail:{{action:'seek',value:12345}}}});
+        assert.deepEqual(calls.at(-1),['seek',12345]);
+        handle({{detail:{{action:'volume',value:150}}}});
+        assert.equal(audioA.volume,1); assert.equal(audioB.volume,1); assert.equal(state().isMuted,false);
+        assert.deepEqual(calls.at(-1),['volume',100,true]); assert.equal(fills.length,2);
+        handle({{detail:{{action:'volume',value:NaN}}}}); assert.equal(state().currentVolume,100);
+        handle({{detail:{{action:'stop'}}}}); assert.deepEqual(calls.slice(-2),['stop','stopped']);
+    """)
+
+
+def test_queue_button_has_one_owner_and_cover_preview_uses_http_route():
+    run_node(f"""
+        import assert from 'node:assert/strict';
+        const player = {source('player.js')}; const queue = {source('queue.js')}; const utils = {source('utils.js')};
+        assert.ok(!player.includes("const ppQueue = document.getElementById('pp-btn-queue')"));
+        assert.ok(queue.includes("btnPP.addEventListener('click'"));
+        assert.ok(player.includes("removeEventListener('nedotify:system_media', handleSystemMedia)"));
+        assert.ok(utils.includes('coverImg.src = `./api/cover?path=${{encodeURIComponent(res.path)}}`'));
+    """)
+
+
+def test_titlebar_uses_native_compositor_drag_and_resize_failures_are_visible():
+    run_node(f"""
+        import assert from 'node:assert/strict';
+        const src = {source('window-resize.js')};
+        const events = new Map(), classes = new Set(['pywebview-drag-region']);
+        const region = {{classList:{{remove:key=>classes.delete(key),add:key=>classes.add(key)}},addEventListener:(key,fn)=>events.set(key,fn)}};
+        const handles=[]; const calls=[]; const errors=[];
+        globalThis.document={{
+            querySelectorAll:()=>[region],body:{{classList:{{contains:()=>false,add(){{}},remove(){{}}}},append(){{}}}},
+            createElement:()=>{{const node={{setAttribute(){{}},dataset:{{}},append(handle){{handles.push(handle)}},addEventListener(key,fn){{this[key]=fn}},hasPointerCapture:()=>false}};return node;}},
+        }};
+        globalThis.window={{pywebview:{{api:{{}}}}}};
+        window.pywebview.api.begin_window_drag=async()=>{{calls.push('drag');return {{success:true}}}};
+        window.pywebview.api.maximize=()=>calls.push('maximize');
+        window.pywebview.api.begin_window_resize=async direction=>{{calls.push(direction);return {{success:false}}}};
+        const body=src.slice(src.indexOf('let initialized')).replace('export function','function');
+        new Function('showToast', body+';initWindowResize();initWindowResize();')((...args)=>errors.push(args));
+        assert.ok(!classes.has('pywebview-drag-region'));assert.ok(classes.has('linux-window-drag-region'));
+        const pointer={{button:0,isPrimary:true,detail:1,target:{{closest:()=>null}},preventDefault(){{}},stopPropagation(){{}}}};
+        await events.get('pointerdown')(pointer);assert.deepEqual(calls,['drag']);
+        await events.get('pointerdown')({{...pointer,target:{{closest:()=>({{}})}}}});assert.deepEqual(calls,['drag']);
+        events.get('dblclick')(pointer);assert.deepEqual(calls,['drag','maximize']);
+        assert.equal(handles.length,8);
+        await handles[0].pointerdown(pointer);assert.equal(calls.at(-1),'n');assert.equal(errors.length,1);
+    """)

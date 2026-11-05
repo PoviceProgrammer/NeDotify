@@ -166,7 +166,9 @@ class TestSoundCloudServiceUnit(unittest.TestCase):
             return MagicMock(status_code=404)
 
         with patch.object(self.sc, "_get_client_id", return_value="fake_cid"), \
-             patch.object(self.sc._session, "get", side_effect=mock_get):
+             patch.object(self.sc, "_api_get", side_effect=mock_get), \
+             patch.object(self.sc, "_public_json", return_value={"url": "https://cf-media.sndcdn.com/audio.mp3"}), \
+             patch.object(self.sc, "_media_url_is_servable", return_value=True):
             event = threading.Event()
             resolved = {}
 
@@ -203,7 +205,7 @@ class TestSoundCloudServiceUnit(unittest.TestCase):
             "height": 100,
             "samples": [i for i in range(200)]
         }
-        with patch.object(self.sc._session, "get", return_value=mock_resp):
+        with patch.object(self.sc, "_public_json", return_value={"height": 100, "samples": [i for i in range(200)]}):
             wave = self.sc.get_waveform_data_sync("https://wave.sndcdn.com/test.json")
             self.assertEqual(len(wave), 100)
             self.assertTrue(all(0.0 <= v <= 1.0 for v in wave))

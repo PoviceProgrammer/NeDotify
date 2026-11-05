@@ -1,1023 +1,829 @@
 // NeDotify — Artist Profile Module
-import { createTrackElement, renderIcons, formatTime, filterVisibleTracks, escapeHtml, getCoverFallbackGradient, SVG_NOTE_FALLBACK } from './utils.js';
+import { createTrackElement, renderIcons, formatTime, filterVisibleTracks, escapeHtml, getCoverFallbackGradient, SVG_NOTE_FALLBACK, extractDominantColor, openModalFocusTrap, closeModalFocusTrap, showToast } from './utils.js';
 import { getCurrentTrack } from './player.js';
 
-// High Quality, Active Unsplash covers to guarantee loading on albums and tracks
-const covers = [
-    'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300', // Concert stage
-    'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300', // DJ console
-    'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=300', // Neon performance
-    'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300', // Studio Mic
-    'https://images.unsplash.com/photo-1511735111819-9a3f7709049c?w=300', // Neon crowd
-    'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=300', // Band
-    'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=300', // Concert fans
-    'https://images.unsplash.com/photo-1487180142328-054b783fc471?w=300', // Vinyl spinner
-    'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=300', // Acoustic guitar
-    'https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=300'  // Headphones
-];
-
-// ─── Massive Predefined Mock Database (strictly YouTube & SoundCloud) ───
-
 let profileGenerationId = 0;
+let artistBioResizeObserver = null;
+let artistCandidateView = null;
+let currentArtistData = null;
+let currentArtistTracks = [];
+let artistTracksExpanded = false;
+let activeBridgeCleanups = [];
 
-function generateFallbackArtist(name) {
-    return {
-        name: name,
-        genres: 'Исполнитель',
-        avatarUrl: null,
-        bio: `Исполнитель ${name} — музыкальный артист.`,
-        albums: [],
-        tracks: []
-    };
-}
+const artistBioCache = new Map();
 
-function transliterateText(text) {
-    if (!text) return '';
-    const ru_en = {
-        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo',
-        'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
-        'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
-        'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch',
-        'ы': 'y', 'э': 'e', 'ю': 'yu', 'я': 'ya', 'ь': '', 'ъ': ''
-    };
-    return text.toLowerCase().split('').map(c => ru_en[c] || c).join('');
-}
-
-function isTrackByArtist(track, targetArtist) {
-    if (!track || !targetArtist) return false;
-    const targetNorm = targetArtist.toLowerCase().trim();
-    const artistNorm = (track.artist || '').toLowerCase().trim();
-    const titleNorm = (track.title || '').toLowerCase().trim();
-
-    if (!targetNorm) return false;
-
-    const targetTrans = transliterateText(targetNorm);
-    const artistTrans = transliterateText(artistNorm);
-
-    // Direct artist field match
-    if (artistNorm && (artistNorm.includes(targetNorm) || targetNorm.includes(artistNorm))) return true;
-    if (artistTrans && (artistTrans.includes(targetTrans) || targetTrans.includes(artistTrans))) return true;
-
-    // Title feat / artist prefix match (e.g. "Artist - Song Title" or "Song (feat. Artist)")
-    if (titleNorm.startsWith(targetNorm + ' -') || titleNorm.startsWith(targetNorm + ' –')) return true;
-    if (titleNorm.includes('feat. ' + targetNorm) || titleNorm.includes('ft. ' + targetNorm) || titleNorm.includes('x ' + targetNorm)) return true;
-
-    return false;
-}
-
-export async function fetchArtistTracks(artistName) {
-    if (window.pywebview?.api?.search) {
-        return new Promise((resolve) => {
-            let collectedTracks = [];
-            let isResolved = false;
-            let timerId = null;
-
-            const cleanup = () => {
-                window.removeEventListener('app:search_results', handleSearch);
-                window.removeEventListener('python:search_results', handleSearch);
-                if (timerId) {
-                    clearTimeout(timerId);
-                    timerId = null;
-                }
-            };
-
-            const finish = () => {
-                if (isResolved) return;
-                isResolved = true;
-                cleanup();
-
-                if (collectedTracks.length > 0) {
-                    collectedTracks.sort((a, b) => (b.views || b.play_count || 0) - (a.views || a.play_count || 0));
-                    const uniqueTracks = [];
-                    const seen = new Set();
-                    for (const t of collectedTracks) {
-                        const key = `${(t.title || '').toLowerCase()}_${(t.artist || '').toLowerCase()}`;
-                        if (!seen.has(key)) {
-                            seen.add(key);
-                            uniqueTracks.push(t);
-                        }
-                    }
-                    resolve(uniqueTracks);
-                } else {
-                    let artistData = generateFallbackArtist(artistName);
-                    resolve(artistData.tracks || []);
-                }
-            };
-
-            const handleSearch = (e) => {
-                const data = e.detail;
-                if (data) {
-                    const raw = Array.isArray(data) ? data : (data.tracks || []);
-                    const filtered = filterVisibleTracks(raw).filter(t => 
-                        (t.title || '').length > 0 && 
-                        isTrackByArtist(t, artistName)
-                    );
-                    if (filtered.length > 0) {
-                        collectedTracks = collectedTracks.concat(filtered);
-                    }
-                }
-            };
-
-            window.addEventListener('app:search_results', handleSearch);
-            window.addEventListener('python:search_results', handleSearch);
-
-            try {
-                window.pywebview.api.search(artistName, 'all');
-            } catch (err) {
-                console.warn('Failed to call api.search for artist tracks:', err);
-                finish();
-                return;
-            }
-
-            timerId = setTimeout(finish, 5000);
-        });
+export function cancelActiveArtistRequests() {
+    artistBioResizeObserver?.disconnect();
+    artistBioResizeObserver = null;
+    profileGenerationId++;
+    artistCandidateView = null;
+    while (activeBridgeCleanups.length > 0) {
+        const cleanup = activeBridgeCleanups.pop();
+        try { cleanup(); } catch (_) {}
     }
-
-    return new Promise((resolve) => {
-        let artistData = generateFallbackArtist(artistName);
-        resolve(artistData.tracks || []);
-    });
 }
+export const cancelArtistProfileRequests = cancelActiveArtistRequests;
+
+const KNOWN_UNSPLITTABLE_ARTISTS = new Set([
+    'tyler, the creator',
+    'earth, wind & fire',
+    'crosby, stills, nash & young',
+    'crosby, stills & nash',
+    'simon & garfunkel',
+    'hall & oates',
+    'daryl hall & john oates',
+    'emerson, lake & palmer',
+    'kool & the gang',
+    'kc & the sunshine band',
+    'blood, sweat & tears',
+    'above & beyond',
+    'florence + the machine',
+    'florence and the machine',
+    'huey lewis & the news',
+    'tom petty and the heartbreakers',
+    'bob marley & the wailers',
+    'joan jett & the blackhearts',
+    'marina and the diamonds'
+]);
+
+function splitArtistCredit(value, targetArtist = null) {
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+    if (targetArtist && raw.toLowerCase() === String(targetArtist).trim().toLowerCase()) {
+        return [raw];
+    }
+    if (KNOWN_UNSPLITTABLE_ARTISTS.has(raw.toLowerCase())) {
+        return [raw];
+    }
+    return raw.split(/\s*(?:,|&|\+|;|\bx\b|\bfeat\.?|\bft\.?|\bfeaturing\b)\s*/i)
+        .map(name => name.trim()).filter(Boolean);
+}
+
+async function canonicalNames(names) {
+    const api = window.pywebview?.api;
+    if (!api?.get_canonical_artist_names) return [];
+    const values = names.filter(name => typeof name === 'string' && name.trim()).map(name => name.trim()).slice(0, 500);
+    if (!values.length) return [];
+    try {
+        const result = await api.get_canonical_artist_names(values);
+        return Array.isArray(result) ? result : [];
+    } catch (_) { return []; }
+}
+
+async function filterTracksByArtist(tracks, targetArtist) {
+    const target = String(targetArtist || '').trim();
+    const credits = tracks.map(track => splitArtistCredit(track?.artist, target));
+    const names = [target, ...credits.flat()];
+    const canonical = await canonicalNames(names);
+    if (canonical.length < 1) return [];
+    const targetKey = canonical[0];
+    if (!targetKey) return [];
+    let cursor = 1;
+    const matches = credits.map(namesForTrack => {
+        const identityKeys = canonical.slice(cursor, cursor + namesForTrack.length);
+        cursor += namesForTrack.length;
+        return identityKeys.includes(targetKey);
+    });
+    return tracks.filter((_, index) => matches[index]);
+}
+
+// export async function fetchArtistTracks( - removed dead code (ART-016)
 
 // ─── Backend Bridge Artist Profile Fetcher ───
-export async function fetchArtistProfileFromBridge(artistName, timeoutMs = 6000) {
-    if (!window.pywebview?.api?.get_artist_profile) {
-        return null;
-    }
-    return new Promise((resolve) => {
-        let isResolved = false;
+export async function fetchArtistProfileFromBridge(artistName, timeoutMs = 10000, artistRef = null) {
+    if (!window.pywebview?.api?.get_artist_profile) return { status: 'unavailable' };
+    const requestId = `artist-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return new Promise(resolve => {
         let timer = null;
+        let isResolved = false;
 
         const cleanup = () => {
-            document.removeEventListener('nedotify:artist_profile_ready', onReady);
-            document.removeEventListener('nedotify:artist_profile_error', onError);
-            window.removeEventListener('app:artist_profile_ready', onReady);
-            window.removeEventListener('app:artist_profile_error', onError);
-            if (timer) clearTimeout(timer);
+            if (timer) {
+                clearTimeout(timer);
+                timer = null;
+            }
+            document.removeEventListener('nedotify:artist_profile_ready', receive);
+            document.removeEventListener('nedotify:artist_profile_error', receive);
+            const idx = activeBridgeCleanups.indexOf(cancel);
+            if (idx !== -1) activeBridgeCleanups.splice(idx, 1);
         };
 
-        const onReady = (e) => {
-            const data = e.detail;
-            if (!data) return;
-            if (data.name && artistName) {
-                const a = data.name.toLowerCase().trim();
-                const b = artistName.toLowerCase().trim();
-                if (!a.includes(b) && !b.includes(a)) return;
-            }
+        const cancel = () => {
+            if (isResolved) return;
+            isResolved = true;
+            cleanup();
+            resolve({ status: 'cancelled', request_id: requestId });
+        };
+
+        const finish = data => {
             if (isResolved) return;
             isResolved = true;
             cleanup();
             resolve(data);
         };
 
-        const onError = (e) => {
-            const data = e.detail;
-            if (data?.artist && artistName) {
-                const a = data.artist.toLowerCase().trim();
-                const b = artistName.toLowerCase().trim();
-                if (!a.includes(b) && !b.includes(a)) return;
-            }
-            if (isResolved) return;
-            isResolved = true;
-            cleanup();
-            resolve(null);
+        const receive = event => {
+            if (event.detail?.request_id !== requestId) return;
+            finish(event.detail);
         };
 
-        document.addEventListener('nedotify:artist_profile_ready', onReady);
-        document.addEventListener('nedotify:artist_profile_error', onError);
-        window.addEventListener('app:artist_profile_ready', onReady);
-        window.addEventListener('app:artist_profile_error', onError);
+        activeBridgeCleanups.push(cancel);
+        document.addEventListener('nedotify:artist_profile_ready', receive);
+        document.addEventListener('nedotify:artist_profile_error', receive);
 
         timer = setTimeout(() => {
-            if (isResolved) return;
-            isResolved = true;
-            cleanup();
-            resolve(null);
+            finish({ status: 'unavailable', request_id: requestId });
         }, timeoutMs);
 
         try {
-            const res = window.pywebview.api.get_artist_profile(artistName);
-            if (res && typeof res.then === 'function') {
-                res.then(val => {
-                    if (val && val.status !== 'loading' && val.status !== 'error') {
-                        if (isResolved) return;
-                        isResolved = true;
-                        cleanup();
-                        resolve(val);
-                    } else if (val && val.status === 'error') {
-                        if (isResolved) return;
-                        isResolved = true;
-                        cleanup();
-                        resolve(null);
-                    }
-                }).catch(() => {
-                    if (isResolved) return;
-                    isResolved = true;
-                    cleanup();
-                    resolve(null);
-                });
-            } else if (res && typeof res === 'object' && res.status !== 'loading' && res.status !== 'error' && (res.name || res.tracks || res.albums)) {
-                isResolved = true;
-                cleanup();
-                resolve(res);
-            }
-        } catch (err) {
-            console.warn('Failed to call get_artist_profile bridge:', err);
-            if (isResolved) return;
-            isResolved = true;
-            cleanup();
-            resolve(null);
+            Promise.resolve(window.pywebview.api.get_artist_profile(artistName, artistRef, requestId))
+                .then(data => {
+                    if (data?.status !== 'loading') finish(data || { status: 'unavailable' });
+                })
+                .catch(() => finish({ status: 'unavailable', request_id: requestId }));
+        } catch (_) {
+            finish({ status: 'unavailable', request_id: requestId });
         }
     });
 }
 
-// ─── API Avatar Fetcher (YouTube/SoundCloud logic simulation) ───
-export async function fetchArtistAvatarFromApi(artistName, source = 'youtube') {
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            const normalized = artistName.toLowerCase();
-            if (normalized.includes('pharaoh') || normalized.includes('pharaon')) {
-                resolve('https://i.ytimg.com/vi/g0XKrUoI5XA/hqdefault.jpg');
-            } else if (normalized.includes('del rey') || normalized.includes('lana')) {
-                resolve('https://i.ytimg.com/vi/TdrL3QxjyVw/hqdefault.jpg');
-            } else if (normalized.includes('weeknd')) {
-                resolve('https://i.ytimg.com/vi/4NRXx6U8ABQ/hqdefault.jpg');
-            } else {
-                resolve('https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=600&auto=format&fit=crop');
-            }
-        }, 300);
-    });
+function renderArtistCandidates(name, data, container, generation) {
+    const candidates = data.candidates || [];
+    artistCandidateView = { name, data, container, generation };
+    container.innerHTML = `
+        <div class="catalog-message" style="text-align:center; padding: 32px 16px;">
+            <h2 style="font-size:24px; font-weight:700; margin-bottom:8px; color:var(--text-main);">Выберите исполнителя</h2>
+            <p style="font-size:14px; color:var(--text-sec); margin-bottom:24px;">Найдено несколько вариантов. Ваш выбор будет сохранён.</p>
+            <div class="catalog-candidates" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:16px; max-width:800px; margin:0 auto;"></div>
+        </div>
+    `;
+    const grid = container.querySelector('.catalog-candidates');
+    for (const candidate of candidates) {
+        const card = document.createElement('button');
+        card.className = 'catalog-candidate';
+        card.style.cssText = 'display:flex; flex-direction:column; align-items:center; gap:10px; padding:16px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#fff; cursor:pointer; transition:transform 0.2s, background-color 0.2s;';
+        const source = ({youtube: 'YouTube Music', deezer: 'Deezer', itunes: 'iTunes'})[candidate.source] || candidate.source || '';
+        card.innerHTML = `
+            ${candidate.avatar_url ? `<img src="${escapeHtml(candidate.avatar_url)}" alt="" style="width:80px;height:80px;border-radius:50%;object-fit:cover;">` : '<span class="catalog-candidate-avatar" style="width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:24px;">♪</span>'}
+            <strong style="font-size:15px; text-align:center;">${escapeHtml(candidate.name)}</strong>
+            <span style="font-size:12px; color:var(--text-sec);">${source}</span>
+            ${candidate.preview_track ? `<span style="font-size:12px; color:var(--text-sec);">Трек: ${escapeHtml(candidate.preview_track)}</span>` : ''}
+            ${candidate.matching_track ? `<span style="font-size:12px; color:var(--text-main);">Совпадает трек: ${escapeHtml(candidate.matching_track)}</span>` : ''}
+            ${candidate.subscribers || candidate.genres ? `<span style="font-size:12px; color:var(--text-sec);">${escapeHtml(candidate.subscribers || candidate.genres)}</span>` : ''}
+        `;
+        card.addEventListener('click', () => {
+            loadArtistProfile(name, container, {...candidate, context: data.context || null});
+        });
+        grid.appendChild(card);
+    }
+    if (data.require_candidates) {
+        appendRealSearchResults(name, container, generation);
+    }
 }
 
-// ─── Component 1: Artist Photo (Block 1) with Silhouette Fallback ───
-export class ArtistPhotoComponent {
-    constructor(artistData) {
-        this.artistData = artistData;
+document.addEventListener('nedotify:artist_candidates_ready', event => {
+    const current = artistCandidateView;
+    if (!current || current.generation !== profileGenerationId || event.detail?.request_id !== current.data.request_id) return;
+    renderArtistCandidates(current.name, {...current.data, candidates: event.detail.candidates}, current.container, current.generation);
+});
+
+// S4-001: a free-text query is not an artist. Under the candidate list (and the
+// "not found" status) show the REAL search results for the same text.
+const REAL_SEARCH_WINDOW_MS = 8000;
+function appendRealSearchResults(query, container, generation) {
+    if (!query || generation !== profileGenerationId) return;
+    if (!window.pywebview?.api?.search) return; // browser preview: no bridge
+
+    let section = container.querySelector('.artist-real-search');
+    if (section) return;
+    section = document.createElement('div');
+    section.className = 'artist-real-search';
+    const heading = document.createElement('h3');
+    heading.textContent = `Результаты поиска «${query}»`;
+    section.appendChild(heading);
+    container.appendChild(section);
+
+    const collected = [];
+    let closed = false;
+    const render = () => {
+        if (closed || generation !== profileGenerationId) return;
+        if (!collected.length) return;
+        if (!container.contains(section)) { cleanup(); return; } // view replaced
+
+        // ART-012: remove blocking _rendered flag so tracks display from all incoming sources
+        if (typeof section.querySelectorAll === 'function') {
+            const oldTracks = section.querySelectorAll('.track-row, .track-item');
+            oldTracks.forEach(el => el.remove());
+        } else if (Array.isArray(section.children)) {
+            section.children = section.children.filter(c => c.tagName === 'h3');
+        }
+
+        collected.forEach((track, index) => section.appendChild(createTrackElement(track, index, collected, getCurrentTrack())));
+        renderIcons();
+    };
+
+    const handleResults = (event) => {
+        if (closed || generation !== profileGenerationId) { cleanup(); return; }
+        const data = event.detail || {};
+        if (data.query && data.query !== query) return;
+        const incoming = Array.isArray(data) ? data : (data.tracks || []);
+        for (const track of incoming) {
+            const key = `${track.source || ''}::${track.source_id || track.id || ''}`;
+            if (collected.some(t => `${t.source || ''}::${t.source_id || t.id || ''}` === key)) continue;
+            collected.push(track);
+        }
+        render();
+    };
+
+    const cleanup = () => {
+        closed = true;
+        window.removeEventListener('app:search_results', handleResults);
+        window.removeEventListener('python:search_results', handleResults);
+        if (timer) { clearTimeout(timer); timer = null; }
+    };
+
+    const timer = setTimeout(cleanup, REAL_SEARCH_WINDOW_MS);
+    window.addEventListener('app:search_results', handleResults);
+    window.addEventListener('python:search_results', handleResults);
+    try {
+        window.pywebview.api.search(query, 'all');
+    } catch (_) {
+        cleanup();
+    }
+}
+
+async function renderArtistStatus(name, data, container, generation) {
+    const unavailable = data?.status === 'unavailable';
+    container.innerHTML = `
+        <div class="catalog-message" style="text-align:center; padding: 48px 16px;">
+            <h2 style="font-size:22px; font-weight:700; margin-bottom:8px; color:var(--text-main);">${unavailable ? 'Не удалось проверить исполнителя' : 'Исполнитель не найден в каталоге'}</h2>
+            <p style="font-size:14px; color:var(--text-sec); margin-bottom:20px;">${unavailable ? 'Каталог временно недоступен. Попробуйте ещё раз.' : 'Проверьте имя или выберите другое название.'}</p>
+            <button class="btn btn-secondary" style="padding:8px 20px; border-radius:9999px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#fff; cursor:pointer;">Повторить поиск</button>
+        </div>
+    `;
+    container.querySelector('button')?.addEventListener('click', () => loadArtistProfile(name, container));
+    appendRealSearchResults(name, container, generation);
+    if (window.pywebview?.api?.get_library) {
+        try {
+            const library = await window.pywebview.api.get_library();
+            if (generation !== profileGenerationId) return;
+            const tracks = await filterTracksByArtist(library || [], name);
+            if (tracks.length) {
+                const title = document.createElement('h3');
+                title.textContent = 'Треки из вашей библиотеки';
+                container.appendChild(title);
+                tracks.forEach((track, index) => container.appendChild(createTrackElement(track, index, tracks, getCurrentTrack())));
+            }
+        } catch (_) {}
+    }
+}
+
+// ─── Primary Loader: Mounts inside #view-artist (Riff v44.0.0 Architecture) ───
+export async function loadArtistProfile(artistName, targetContainer = null, artistRef = null) {
+    const viewArtist = document.getElementById('view-artist');
+    const container = viewArtist || targetContainer;
+    if (!container) return;
+
+    cancelActiveArtistRequests();
+    const currentGen = ++profileGenerationId;
+    artistCandidateView = null;
+    artistTracksExpanded = false;
+
+    // Riff elements inside #view-artist
+    const hero = document.getElementById('artist-hero');
+    const heroImg = document.getElementById('artist-hero-img');
+    const nameEl = document.getElementById('artist-profile-name');
+    const verifiedBadge = document.getElementById('artist-verified-badge');
+    const btnPlayAll = document.getElementById('btn-artist-play-all');
+    const btnShuffle = document.getElementById('btn-artist-shuffle');
+    const fansLine = document.getElementById('artist-fans-line');
+    const aboutCard = document.getElementById('artist-about-card');
+    const bioEl = document.getElementById('artist-profile-bio');
+    const btnBioMore = document.getElementById('btn-artist-bio-more');
+    const horizTabs = document.getElementById('artist-horiz-tabs');
+    const tabTracks = document.getElementById('artist-tab-tracks');
+    const tabAlbums = document.getElementById('artist-tab-albums');
+    const paneTracks = document.getElementById('artist-pane-tracks');
+    const paneAlbums = document.getElementById('artist-pane-albums');
+    const btnTracksToggle = document.getElementById('btn-artist-tracks-toggle');
+    const tracksList = document.getElementById('artist-tracks-list');
+    const albumsGrid = document.getElementById('artist-albums-grid');
+    const fallbackContainer = document.getElementById('artist-fallback-container');
+    const heroWrap = container.querySelector('.artist-hero-wrap');
+    const contentSection = container.querySelector('.artist-content-section');
+    const syncBioOverflow = () => {
+        if (currentGen !== profileGenerationId || !bioEl?.getClientRects().length) return;
+        const overflowing = bioEl.scrollHeight > bioEl.clientHeight + 1;
+        bioEl.classList.toggle('fade-end', overflowing);
+        btnBioMore?.classList.toggle('hidden', !overflowing);
+    };
+    if (bioEl && typeof ResizeObserver === 'function') {
+        artistBioResizeObserver = new ResizeObserver(syncBioOverflow);
+        artistBioResizeObserver.observe(bioEl);
     }
 
-    render() {
-        const container = document.createElement('div');
-        container.className = 'artist-photo-card';
-        
-        const avatarUrl = this.artistData.avatarUrl || 'https://i.ytimg.com/vi/g0XKrUoI5XA/hqdefault.jpg';
-        const img = document.createElement('img');
-        img.src = avatarUrl;
-        img.alt = this.artistData.name;
-        img.style.width = '100%';
-        img.style.height = '100%';
-        img.style.objectFit = 'cover';
-        
-        img.onerror = () => {
-            img.style.display = 'none';
-            const silhouette = document.createElement('div');
-            silhouette.className = 'fallback-silhouette';
-            silhouette.style.cssText = 'position:absolute;inset:0;background:linear-gradient(135deg,#2a1b4e,#0f0c1b);display:flex;align-items:center;justify-content:center;';
-            silhouette.innerHTML = `
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;color:white;">
-                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                </svg>`;
-            container.appendChild(silhouette);
-        };
-        
-        container.appendChild(img);
-        
-        const overlay = document.createElement('div');
-        overlay.className = 'artist-photo-overlay';
-        const isMock = this.artistData.isMock !== false;
-        const isDebug = window.APP_DEBUG || document.body.classList.contains('debug');
-        const mockBadge = (isMock && isDebug) ? `<span style="background:rgba(239, 68, 68, 0.8);color:white;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:6px;vertical-align:middle;text-transform:uppercase;letter-spacing:1px;font-weight:bold;" title="Данные артиста пока загружены из заглушки">MOCK (DEV)</span>` : '';
-        
-        overlay.innerHTML = `
-            <div style="display:flex;align-items:center;">
-                <span class="artist-genres-badge">${escapeHtml(this.artistData.genres)}</span>
-                ${mockBadge}
-            </div>
-            <h2 class="artist-name-title">${escapeHtml(this.artistData.name)}</h2>
-            <div class="artist-hero-actions" style="margin-top:12px; display:flex; align-items:center; gap:10px; pointer-events:auto;">
-                <button class="artist-btn-play-all" title="Слушать всё" style="display:inline-flex; align-items:center; gap:6px; padding:7px 16px; border-radius:20px; background:var(--primary); color:#ffffff; font-size:12px; font-weight:700; border:none; cursor:pointer; box-shadow:0 4px 14px rgba(0,0,0,0.3); transition:transform 0.15s, opacity 0.15s; pointer-events:auto;">
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="none"><polygon points="6 4 18 12 6 20 6 4"></polygon></svg>
-                    <span>Слушать</span>
-                </button>
-                <button class="artist-btn-shuffle" title="Перемешать" style="display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:20px; background:rgba(255,255,255,0.15); backdrop-filter:blur(8px); color:#ffffff; font-size:12px; font-weight:600; border:1px solid rgba(255,255,255,0.2); cursor:pointer; transition:transform 0.15s, opacity 0.15s; pointer-events:auto;">
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"></path><path d="m18 2 4 4-4 4"></path><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"></path><path d="M22 18h-5.9c-1.3 0-2.5-.7-3.3-1.8l-.5-.8"></path><path d="m18 14 4 4-4 4"></path></svg>
-                    <span>Перемешать</span>
-                </button>
-            </div>
-        `;
-        container.appendChild(overlay);
+    // 1. Reset state and styles
+    if (hero) {
+        hero.style.removeProperty('--artist-accent-color');
+        document.documentElement.style.removeProperty('--artist-accent-color');
+    }
+    if (heroWrap) heroWrap.style.display = '';
+    if (contentSection) contentSection.style.display = '';
+    if (fallbackContainer) {
+        fallbackContainer.style.display = 'none';
+        fallbackContainer.innerHTML = '';
+    }
 
-        const btnPlayAll = overlay.querySelector('.artist-btn-play-all');
-        if (btnPlayAll) {
-            btnPlayAll.addEventListener('click', (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                const tracks = this.artistData.tracks || [];
-                if (tracks.length === 0) {
-                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'У исполнителя нет доступных треков', type: 'warning' } }));
-                    return;
+    if (nameEl) nameEl.textContent = artistName;
+    if (verifiedBadge) verifiedBadge.classList.add('hidden');
+    if (fansLine) {
+        fansLine.textContent = '';
+        fansLine.style.display = 'none';
+    }
+    if (heroImg) {
+        heroImg.src = '';
+        heroImg.style.display = 'none';
+    }
+    if (aboutCard) aboutCard.classList.add('hidden');
+    if (bioEl) {
+        bioEl.textContent = '';
+        bioEl.classList.remove('fade-end');
+    }
+    if (btnBioMore) btnBioMore.classList.add('hidden');
+    if (horizTabs) horizTabs.style.display = 'none';
+
+    // Tabs reset
+    if (tabTracks && tabAlbums && paneTracks && paneAlbums) {
+        tabTracks.classList.add('active');
+        tabAlbums.classList.remove('active');
+        paneTracks.classList.remove('hidden');
+        paneTracks.classList.add('active');
+        paneAlbums.classList.add('hidden');
+        paneAlbums.classList.remove('active');
+
+        tabTracks.onclick = () => {
+            const change = () => {
+            tabTracks.classList.add('active');
+            tabAlbums.classList.remove('active');
+            paneTracks.classList.remove('hidden');
+            paneTracks.classList.add('active');
+            paneAlbums.classList.add('hidden');
+            paneAlbums.classList.remove('active');
+            };
+            if (window.NeDotifyMotion) window.NeDotifyMotion.swap(paneTracks.parentElement, change); else change();
+        };
+        tabAlbums.onclick = () => {
+            const change = () => {
+            tabAlbums.classList.add('active');
+            tabTracks.classList.remove('active');
+            paneAlbums.classList.remove('hidden');
+            paneAlbums.classList.add('active');
+            paneTracks.classList.add('hidden');
+            paneTracks.classList.remove('active');
+            };
+            if (window.NeDotifyMotion) window.NeDotifyMotion.swap(paneTracks.parentElement, change); else change();
+        };
+    }
+
+    if (btnTracksToggle) {
+        btnTracksToggle.disabled=false;
+        btnTracksToggle.classList.add('hidden');
+        btnTracksToggle.textContent = 'Показать все';
+    }
+
+    // 2. Render track skeletons
+    if (tracksList) {
+        tracksList.innerHTML = Array.from({ length: 5 }, () => `
+            <div style="display:flex; align-items:center; gap:12px; padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,0.03); border-radius:10px;">
+                <div class="shimmer-bg" style="width:48px; height:48px; border-radius:8px; flex-shrink:0;"></div>
+                <div style="flex:1">
+                    <div class="skeleton-text medium shimmer-bg" style="height:12px; margin-bottom:6px"></div>
+                    <div class="skeleton-text short shimmer-bg" style="height:10px; margin-bottom:0"></div>
+                </div>
+                <div class="shimmer-bg" style="width:40px; height:12px; border-radius:4px"></div>
+            </div>
+        `).join('');
+    }
+    if (albumsGrid) albumsGrid.innerHTML = '';
+
+    // 3. Bio from cache check
+    const bioCacheKey = (artistName || '').toLowerCase();
+    let bioFromCache = false;
+    if (artistBioCache.has(bioCacheKey)) {
+        const cachedBio = artistBioCache.get(bioCacheKey);
+        if (cachedBio && bioEl) {
+            bioFromCache = true;
+            bioEl.textContent = cachedBio;
+            if (aboutCard) aboutCard.classList.remove('hidden');
+            requestAnimationFrame(syncBioOverflow);
+        }
+    }
+
+    // Allow delivery after the backend's 8s catalogue budget expires.
+    try {
+        const bridgeProfile = await fetchArtistProfileFromBridge(artistName, 10000, artistRef);
+        if (currentGen !== profileGenerationId) return;
+
+        if (bridgeProfile?.status === 'ambiguous') {
+            if (fallbackContainer) {
+                renderArtistCandidates(artistName, bridgeProfile, fallbackContainer, currentGen);
+                if (heroWrap) heroWrap.style.display = 'none';
+                if (contentSection) contentSection.style.display = 'none';
+                fallbackContainer.style.display = 'block';
+            }
+            return;
+        }
+
+        if (bridgeProfile?.status !== 'found') {
+            if (fallbackContainer) {
+                await renderArtistStatus(artistName, bridgeProfile, fallbackContainer, currentGen);
+                if (heroWrap) heroWrap.style.display = 'none';
+                if (contentSection) contentSection.style.display = 'none';
+                fallbackContainer.style.display = 'block';
+            }
+            return;
+        }
+
+        currentArtistData = bridgeProfile;
+        if (nameEl) nameEl.textContent = bridgeProfile.name || artistName;
+
+        // Verified badge (ART-001)
+        const isVerified = Boolean(bridgeProfile.verified === true || bridgeProfile.isVerified === true);
+        if (verifiedBadge) verifiedBadge.classList.toggle('hidden', !isVerified);
+
+        // Fans / listeners line (ART-001)
+        const fans = bridgeProfile.fans || bridgeProfile.nb_fan || bridgeProfile.subscribers || 0;
+        const listenersText = bridgeProfile.monthlyListeners || (fans > 0 ? `${Number(fans).toLocaleString()} слушателей` : '');
+        if (fansLine) {
+            if (listenersText) {
+                fansLine.textContent = listenersText;
+                fansLine.style.display = 'block';
+            } else {
+                fansLine.textContent = '';
+                fansLine.style.display = 'none';
+            }
+        }
+
+        // Avatar & Banner + dominant color (ART-001)
+        const banner = bridgeProfile.banner || bridgeProfile.banner_url || bridgeProfile.avatar || bridgeProfile.avatar_url || '';
+        const avatar = bridgeProfile.avatar || bridgeProfile.avatar_url || '';
+        if (heroImg) {
+            if (banner || avatar) {
+                heroImg.src = banner || avatar;
+                heroImg.style.display = 'block';
+                heroImg.onload = () => {
+                    try {
+                        const rgb = extractDominantColor(heroImg);
+                        if (rgb && hero) {
+                            const c = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+                            hero.style.setProperty('--artist-accent-color', c);
+                            document.documentElement.style.setProperty('--artist-accent-color', c);
+                        }
+                    } catch (_) {}
+                };
+                heroImg.onerror = () => {
+                    if (avatar && heroImg.src !== avatar) {
+                        heroImg.src = avatar;
+                    } else {
+                        heroImg.style.display = 'none';
+                    }
+                };
+            } else {
+                heroImg.src = '';
+                heroImg.style.display = 'none';
+            }
+        }
+
+        // Bio handling
+        if (!bioFromCache) {
+            const rawBio = bridgeProfile.bio_ru || bridgeProfile.bio || bridgeProfile.bio_original || '';
+            const cleanBio = rawBio.replace(/<[^>]*>/g, '').trim();
+            if (cleanBio) {
+                artistBioCache.set(bioCacheKey, cleanBio);
+                if (bioEl) {
+                    bioEl.textContent = cleanBio;
+                    if (aboutCard) aboutCard.classList.remove('hidden');
+                    requestAnimationFrame(syncBioOverflow);
                 }
-                if (window.pywebview?.api?.play_track) {
-                    window.pywebview.api.play_track(tracks[0], tracks, 0);
-                } else if (window.NeDotify?.playTrack) {
-                    window.NeDotify.playTrack(tracks[0], tracks);
+            } else {
+                artistBioCache.set(bioCacheKey, '');
+                if (aboutCard) aboutCard.classList.add('hidden');
+                if (bioEl) {
+                    bioEl.textContent = '';
+                    bioEl.classList.remove('fade-end');
                 }
+            }
+        }
+
+        // Bio Modal wiring
+        const bioModal = document.getElementById('artist-bio-modal');
+        const btnCloseBio = document.getElementById('btn-close-artist-bio');
+        const btnDismissBio = document.getElementById('btn-dismiss-artist-bio');
+        if (bioModal && !bioModal._hasCloseWired) {
+            bioModal._hasCloseWired = true;
+            const closeBio = () => {
+                bioModal.style.display = 'none';
+                closeModalFocusTrap(bioModal);
+            };
+            if (btnCloseBio) btnCloseBio.onclick = closeBio;
+            if (btnDismissBio) btnDismissBio.onclick = closeBio;
+            bioModal.addEventListener('click', (e) => {
+                if (e.target === bioModal) closeBio();
             });
         }
 
-        const btnShuffle = overlay.querySelector('.artist-btn-shuffle');
-        if (btnShuffle) {
-            btnShuffle.addEventListener('click', (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                const tracks = this.artistData.tracks || [];
-                if (tracks.length === 0) {
-                    window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: 'У исполнителя нет доступных треков', type: 'warning' } }));
+        if (btnBioMore) {
+            btnBioMore.onclick = () => {
+                if (!bioModal) return;
+                const modalTitle = document.getElementById('artist-bio-modal-title');
+                const modalBody = document.getElementById('artist-bio-modal-body');
+                if (modalTitle) modalTitle.textContent = bridgeProfile.name || artistName;
+                if (modalBody) modalBody.textContent = bioEl ? bioEl.textContent : '';
+                bioModal.style.display = 'flex';
+                openModalFocusTrap(bioModal, {
+                    onClose: () => {
+                        bioModal.style.display = 'none';
+                        closeModalFocusTrap(bioModal);
+                    }
+                });
+            };
+        }
+
+        // Popular tracks (Top 5 default with Show all / Show less toggle)
+        const trackKey = track => `${track.source}:${track.id || track.source_id}`;
+        const allTracks = [...new Map((bridgeProfile.tracks || []).map(track => [trackKey(track), track])).values()];
+        allTracks.sort((a, b) => (b.playCount || b.views || b.play_count || 0) - (a.playCount || a.views || a.play_count || 0));
+        currentArtistTracks = allTracks;
+
+        let visibleArtistCount = 5;
+        let albumOffset = 0;
+        let hasCatalogPages = bridgeProfile.tracks_has_more === true && Boolean(window.pywebview?.api?.get_artist_tracks_page);
+        let catalogPartial = bridgeProfile.catalog_partial === true;
+        let catalogLimited = bridgeProfile.catalog_source_limited === true;
+        function renderArtistTracks() {
+            if (!tracksList) return;
+            if (tracksList.parentElement) {
+                let note = tracksList.parentElement.querySelector('.artist-catalog-status');
+                if (!note) {
+                    note = document.createElement('p');
+                    note.className = 'artist-catalog-status';
+                    note.setAttribute('role', 'status');
+                    tracksList.parentElement.insertBefore(note, tracksList);
+                }
+                note.textContent = catalogPartial ? 'Каталог загружен частично. «Показать больше» продолжит загрузку.'
+                    : catalogLimited ? 'iTunes вернул предельное число релизов. Полнота каталога не подтверждена.' : '';
+                note.hidden = !note.textContent;
+            }
+            if (allTracks.length === 0) {
+                tracksList.innerHTML = '<div class="empty-state" style="padding:24px;">Нет доступных треков</div>';
+                return;
+            }
+            const count = Math.min(visibleArtistCount, allTracks.length);
+            const visibleTracks = allTracks.slice(0, count);
+            tracksList.innerHTML = '';
+            visibleTracks.forEach((track, idx) => {
+                tracksList.appendChild(createTrackElement(track, idx, allTracks, getCurrentTrack()));
+            });
+            renderIcons();
+        }
+
+        if (btnTracksToggle) {
+            const syncMore = () => {
+                btnTracksToggle.textContent = visibleArtistCount >= allTracks.length && !hasCatalogPages ? 'Свернуть' : 'Показать больше';
+                btnTracksToggle.classList.toggle('hidden', allTracks.length <= 5 && !hasCatalogPages);
+            };
+            syncMore();
+            btnTracksToggle.onclick = async () => {
+                if (btnTracksToggle.disabled) return;
+                if (visibleArtistCount >= allTracks.length && hasCatalogPages) {
+                    btnTracksToggle.disabled = true;
+                    btnTracksToggle.textContent = 'Загрузка каталога…';
+                    try {
+                        const page = await window.pywebview.api.get_artist_tracks_page({source:bridgeProfile.source,source_id:bridgeProfile.source_id,name:bridgeProfile.name},albumOffset);
+                        if (currentGen !== profileGenerationId || page?.cancelled) return;
+                        if (!page || page.success === false) throw new Error('Catalogue unavailable');
+                        const seen = new Set(allTracks.map(trackKey));
+                        for (const track of page.tracks || []) {
+                            const key=trackKey(track);
+                            if (!seen.has(key)) {seen.add(key);allTracks.push(track);}
+                        }
+                        if (Number.isInteger(page.next_offset) && page.next_offset >= albumOffset) albumOffset=page.next_offset;
+                        hasCatalogPages = page.has_more === true;
+                        catalogPartial = page.catalog_partial === true;
+                        catalogLimited = page.catalog_source_limited === true;
+                        if (Array.isArray(page.albums)) {
+                            bridgeProfile.albums = page.albums;
+                            renderArtistAlbums();
+                        }
+                        visibleArtistCount = Math.min(visibleArtistCount+30,allTracks.length);
+                        if (page.retryable) showToast('Часть каталога недоступна. Повторите загрузку.', 'warning');
+                    } catch {
+                        if (currentGen === profileGenerationId) showToast('Не удалось загрузить каталог. Повторите попытку.', 'error');
+                    } finally {
+                        if (currentGen === profileGenerationId) {btnTracksToggle.disabled=false;syncMore();renderArtistTracks();}
+                    }
                     return;
                 }
-                const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+                visibleArtistCount = visibleArtistCount >= allTracks.length ? 5 : visibleArtistCount + 30;
+                artistTracksExpanded = visibleArtistCount > 5;
+                syncMore();renderArtistTracks();
+            };
+        }
+
+        renderArtistTracks();
+
+        // Play All and Shuffle actions
+        if (btnPlayAll) {
+            btnPlayAll.onclick = () => {
+                if (!allTracks.length) return;
+                if (window.pywebview?.api?.play_track) {
+                    window.pywebview.api.play_track(allTracks[0], allTracks, 0);
+                } else if (window.NeDotify?.playTrack) {
+                    window.NeDotify.playTrack(allTracks[0], allTracks);
+                }
+            };
+        }
+        if (btnShuffle) {
+            btnShuffle.onclick = () => {
+                if (!allTracks.length) return;
+                const shuffled = [...allTracks].sort(() => Math.random() - 0.5);
                 if (window.pywebview?.api?.play_track) {
                     window.pywebview.api.play_track(shuffled[0], shuffled, 0);
                 } else if (window.NeDotify?.playTrack) {
                     window.NeDotify.playTrack(shuffled[0], shuffled);
                 }
-            });
-        }
-        
-        return container;
-    }
-
-    static renderSkeleton() {
-        const container = document.createElement('div');
-        container.className = 'artist-photo-card shimmer-bg';
-        container.innerHTML = `
-            <div class="artist-photo-overlay" style="background:none;">
-                <div class="skeleton-text" style="width: 100px; height: 10px; background: rgba(255,255,255,0.15)"></div>
-                <div class="skeleton-text" style="width: 180px; height: 24px; background: rgba(255,255,255,0.15)"></div>
-            </div>
-        `;
-        return container;
-    }
-}
-
-// ─── Component 2: Biography (Block 2) ───
-export class ArtistBioComponent {
-    constructor(artistData) {
-        this.artistData = artistData;
-        this.currentLang = 'ru';
-    }
-
-    render() {
-        const container = document.createElement('div');
-        container.className = 'artist-bio-card';
-
-        const artistKey = (this.artistData.name || '').toLowerCase().trim();
-        const cachedBioRu = localStorage.getItem(`artist_bio_${artistKey}_ru`);
-        const bioRu = cachedBioRu || this.artistData.bio_ru || this.artistData.bio || '';
-        const bioEn = this.artistData.bio_original || this.artistData.bio_en || this.artistData.bio || '';
-
-        if (this.artistData.bio_ru && !cachedBioRu) {
-            try {
-                localStorage.setItem(`artist_bio_${artistKey}_ru`, this.artistData.bio_ru);
-            } catch (e) {}
-        }
-
-        const hasDifferentLang = Boolean(bioRu && bioEn && bioRu.trim() !== bioEn.trim());
-
-        container.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <h3 class="artist-card-title" style="margin-bottom:0;">
-                    <i data-lucide="info" style="width:16px;height:16px;color:var(--primary)"></i>
-                    Биография
-                </h3>
-                ${hasDifferentLang ? `
-                <div class="bio-lang-toggle" style="display:flex; background:rgba(255,255,255,0.06); border-radius:12px; padding:2px; font-size:11px; font-weight:700;">
-                    <button class="bio-lang-btn active" data-lang="ru" style="padding:3px 8px; border:none; border-radius:10px; background:var(--primary); color:#fff; cursor:pointer;">RU</button>
-                    <button class="bio-lang-btn" data-lang="en" style="padding:3px 8px; border:none; border-radius:10px; background:transparent; color:var(--text-sec); cursor:pointer;">EN</button>
-                </div>` : ''}
-            </div>
-            <div class="artist-bio-content">
-                <p id="artist-bio-text">${escapeHtml((this.currentLang === 'ru' ? bioRu : bioEn) || 'Информация об исполнителе отсутствует.')}</p>
-            </div>
-        `;
-
-        if (hasDifferentLang) {
-            container.querySelectorAll('.bio-lang-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    const lang = btn.dataset.lang;
-                    if (lang === this.currentLang) return;
-                    this.currentLang = lang;
-
-                    container.querySelectorAll('.bio-lang-btn').forEach(b => {
-                        const isActive = b.dataset.lang === lang;
-                        b.classList.toggle('active', isActive);
-                        b.style.background = isActive ? 'var(--primary)' : 'transparent';
-                        b.style.color = isActive ? '#fff' : 'var(--text-sec)';
-                    });
-
-                    const textEl = container.querySelector('#artist-bio-text');
-                    if (textEl) {
-                        const chosen = lang === 'ru' ? bioRu : bioEn;
-                        textEl.textContent = chosen || 'Информация об исполнителе отсутствует.';
-                    }
-                });
-            });
-        }
-
-        return container;
-    }
-
-    static renderSkeleton() {
-        const container = document.createElement('div');
-        container.className = 'artist-bio-card';
-        container.innerHTML = `
-            <div class="skeleton-text heading shimmer-bg"></div>
-            <div class="artist-bio-content" style="overflow:hidden">
-                <div class="skeleton-text medium shimmer-bg"></div>
-                <div class="skeleton-text shimmer-bg"></div>
-                <div class="skeleton-text medium shimmer-bg"></div>
-                <div class="skeleton-text short shimmer-bg"></div>
-            </div>
-        `;
-        return container;
-    }
-}
-
-// ─── Component 3: Discography Carousel (Block 3: Albums, Singles, EPs) ───
-export class ArtistAlbumsComponent {
-    constructor(albumsOrData, onPlayAlbum, onOpenAlbum) {
-        this.onPlayAlbum = onPlayAlbum;
-        this.onOpenAlbum = onOpenAlbum || ((album) => {
-            if (typeof window.openAlbumModal === 'function') {
-                window.openAlbumModal(album);
-            } else if (this.onPlayAlbum) {
-                this.onPlayAlbum(album);
-            }
-        });
-
-        // Normalize data: can be an Array of albums or an ArtistData / Discography object
-        let rawAlbums = [];
-        let rawSingles = [];
-        let rawEps = [];
-        let rawCompilations = [];
-
-        if (Array.isArray(albumsOrData)) {
-            albumsOrData.forEach(item => {
-                const t = (item.type || item.album_type || 'album').toLowerCase();
-                if (t === 'single') rawSingles.push(item);
-                else if (t === 'ep') rawEps.push(item);
-                else if (t === 'compilation') rawCompilations.push(item);
-                else rawAlbums.push(item);
-            });
-            if (rawAlbums.length === 0 && (rawSingles.length > 0 || rawEps.length > 0)) {
-                // Keep rawAlbums as fallback if all were singles/eps
-            } else if (rawSingles.length === 0 && rawEps.length === 0 && rawCompilations.length === 0) {
-                rawAlbums = albumsOrData;
-            }
-        } else if (albumsOrData && typeof albumsOrData === 'object') {
-            rawAlbums = albumsOrData.albums || [];
-            rawSingles = albumsOrData.singles || [];
-            rawEps = albumsOrData.eps || [];
-            rawCompilations = albumsOrData.compilations || [];
-        }
-
-        const sortByYear = (arr) => [...arr].sort((a, b) => (b.year || 0) - (a.year || 0));
-
-        this.albums = sortByYear(rawAlbums);
-        this.singles = sortByYear(rawSingles);
-        this.eps = sortByYear(rawEps);
-        this.compilations = sortByYear(rawCompilations);
-
-        // Build combined all-releases list deduplicated
-        const seen = new Set();
-        const all = [];
-        const sourceAll = (albumsOrData && Array.isArray(albumsOrData.all_releases) && albumsOrData.all_releases.length > 0)
-            ? albumsOrData.all_releases
-            : [...this.albums, ...this.singles, ...this.eps, ...this.compilations];
-
-        for (const item of sourceAll) {
-            const k = (item.title || item.album || '').toLowerCase().trim();
-            if (k && !seen.has(k)) {
-                seen.add(k);
-                all.push(item);
-            }
-        }
-        this.allReleases = sortByYear(all);
-
-        // Determine default filter tab
-        if (this.allReleases.length > 0) {
-            this.currentFilter = (this.albums.length > 0 && (this.singles.length > 0 || this.eps.length > 0)) ? 'all' : (this.albums.length > 0 ? 'albums' : 'all');
-        } else {
-            this.currentFilter = 'all';
-        }
-    }
-
-    getItemsForFilter(filter) {
-        switch (filter) {
-            case 'albums': return this.albums;
-            case 'singles': return this.singles;
-            case 'eps': return this.eps;
-            case 'compilations': return this.compilations;
-            case 'all':
-            default:
-                return this.allReleases.length > 0 ? this.allReleases : this.albums;
-        }
-    }
-
-    render() {
-        const container = document.createElement('div');
-        container.className = 'artist-albums-card';
-        
-        const hasMultipleCategories = [
-            this.albums.length > 0,
-            this.singles.length > 0,
-            this.eps.length > 0,
-            this.compilations.length > 0
-        ].filter(Boolean).length > 1;
-
-        const renderTabsHtml = () => {
-            if (!hasMultipleCategories) {
-                return '';
-            }
-            const tabs = [
-                { id: 'all', label: 'Все', count: this.allReleases.length },
-                { id: 'albums', label: 'Альбомы', count: this.albums.length },
-                { id: 'singles', label: 'Синглы', count: this.singles.length },
-                { id: 'eps', label: 'EP', count: this.eps.length },
-                { id: 'compilations', label: 'Сборники', count: this.compilations.length },
-            ].filter(t => t.count > 0);
-
-            return `
-                <div class="disco-filter-tabs" style="display:flex; align-items:center; gap:4px; background:rgba(255,255,255,0.06); border-radius:12px; padding:2px 4px; font-size:11px; font-weight:700;">
-                    ${tabs.map(t => `
-                        <button class="disco-tab-btn ${this.currentFilter === t.id ? 'active' : ''}" data-type="${t.id}" style="padding:3px 8px; border:none; border-radius:10px; background:${this.currentFilter === t.id ? 'var(--primary)' : 'transparent'}; color:${this.currentFilter === t.id ? '#fff' : 'var(--text-sec)'}; cursor:pointer; transition:all 0.15s ease;">
-                            ${escapeHtml(t.label)} <span style="opacity:0.7; font-size:10px;">${t.count}</span>
-                        </button>
-                    `).join('')}
-                </div>
-            `;
-        };
-
-        const renderCardsHtml = (items) => {
-            if (!items || items.length === 0) {
-                return '<div style="color:var(--text-sec); font-size:13px; padding:20px 0;">Релизы не найдены</div>';
-            }
-            return items.map((album, index) => {
-                const title = album.title || 'Unknown';
-                const grad = getCoverFallbackGradient(title);
-                const coverSrc = (album.cover && album.cover !== 'null') ? escapeHtml(album.cover) : ((album.cover_url && album.cover_url !== 'null') ? escapeHtml(album.cover_url) : '');
-                const imgTag = coverSrc ? `<img src="${coverSrc}" alt="${escapeHtml(album.title)}" onerror="this.onerror=null;this.style.display='none'" loading="lazy">` : '';
-                
-                const typeLabel = album.type === 'single' ? 'Сингл' : (album.type === 'ep' ? 'EP' : (album.type === 'compilation' ? 'Сборник' : ''));
-                const metaYear = album.year ? `${album.year} г.` : '';
-                const subtitle = [metaYear, typeLabel].filter(Boolean).join(' • ');
-
-                return `
-                <div class="album-item-card" data-album-index="${index}">
-                    <div class="album-cover-wrap fallback-gradient" style="background: ${grad}">
-                        ${SVG_NOTE_FALLBACK}
-                        ${imgTag}
-                        <div class="album-play-overlay">
-                            <button class="album-play-btn" title="Воспроизвести релиз">
-                                <i data-lucide="play" style="width:18px;height:18px;fill:currentColor"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="album-title" title="${escapeHtml(album.title)}">${escapeHtml(album.title)}</div>
-                    <div class="album-year">${escapeHtml(subtitle || 'Релиз')}</div>
-                </div>
-            `}).join('');
-        };
-
-        const currentItems = this.getItemsForFilter(this.currentFilter);
-
-        container.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-                <h3 class="artist-card-title" style="margin-bottom:0;">
-                    <i data-lucide="disc" style="width:16px;height:16px;color:var(--primary)"></i>
-                    <span id="disco-title-text">Дискография (${this.allReleases.length || this.albums.length})</span>
-                </h3>
-                ${renderTabsHtml()}
-            </div>
-            <div class="artist-albums-carousel feed-scroll" id="disco-carousel-list">
-                ${renderCardsHtml(currentItems)}
-            </div>
-        `;
-
-        const bindEvents = (items) => {
-            const cards = container.querySelectorAll('.album-item-card');
-            cards.forEach(card => {
-                card.style.cursor = 'pointer';
-                const playBtn = card.querySelector('.album-play-btn');
-                if (playBtn) {
-                    playBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        const idx = card.dataset.albumIndex;
-                        if (this.onPlayAlbum && items[idx]) this.onPlayAlbum(items[idx]);
-                    });
-                }
-                card.addEventListener('click', () => {
-                    const idx = card.dataset.albumIndex;
-                    if (items[idx]) {
-                        if (this.onOpenAlbum) {
-                            this.onOpenAlbum(items[idx]);
-                        } else if (window.openAlbumModal) {
-                            window.openAlbumModal(items[idx]);
-                        } else if (this.onPlayAlbum) {
-                            this.onPlayAlbum(items[idx]);
-                        }
-                    }
-                });
-            });
-            renderIcons();
-        };
-
-        bindEvents(currentItems);
-
-        // Tab click listeners
-        container.querySelectorAll('.disco-tab-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const filterType = btn.dataset.type;
-                if (filterType === this.currentFilter) return;
-                this.currentFilter = filterType;
-
-                container.querySelectorAll('.disco-tab-btn').forEach(b => {
-                    const isActive = b.dataset.type === filterType;
-                    b.classList.toggle('active', isActive);
-                    b.style.background = isActive ? 'var(--primary)' : 'transparent';
-                    b.style.color = isActive ? '#fff' : 'var(--text-sec)';
-                });
-
-                const carousel = container.querySelector('#disco-carousel-list');
-                const newItems = this.getItemsForFilter(filterType);
-                if (carousel) {
-                    carousel.innerHTML = renderCardsHtml(newItems);
-                    bindEvents(newItems);
-                }
-            });
-        });
-
-        return container;
-    }
-
-    static renderSkeleton() {
-        const container = document.createElement('div');
-        container.className = 'artist-albums-card';
-        
-        let albumSkeletons = '';
-        for (let i = 0; i < 4; i++) {
-            albumSkeletons += `
-                <div class="album-item-card">
-                    <div class="album-cover-wrap shimmer-bg" style="border:none"></div>
-                    <div class="skeleton-text short shimmer-bg" style="margin-top:6px;margin-bottom:2px"></div>
-                    <div class="skeleton-text shimmer-bg" style="width:40px;height:8px"></div>
-                </div>
-            `;
-        }
-        
-        container.innerHTML = `
-            <div class="skeleton-text heading shimmer-bg"></div>
-            <div class="artist-albums-carousel" style="overflow:hidden">
-                ${albumSkeletons}
-            </div>
-        `;
-        return container;
-    }
-}
-
-// ─── Component 4: Dynamic Scroll Track List (Block 4) ───
-export class ArtistTracksComponent {
-    constructor(tracks) {
-        this.tracks = [...tracks].sort((a, b) => (b.playCount || b.views || b.play_count || 0) - (a.playCount || a.views || a.play_count || 0));
-        this.loadedCount = 20; // Load 20 tracks initially
-    }
-
-    render() {
-        const container = document.createElement('div');
-        container.className = 'artist-tracks-card';
-        
-        container.innerHTML = `
-            <div class="artist-tracks-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <h3 class="artist-card-title" style="margin-bottom:0">
-                    <i data-lucide="sparkles" style="width:16px;height:16px;color:var(--primary)"></i>
-                    Популярные треки (${this.tracks.length})
-                </h3>
-            </div>
-            <div class="artist-tracks-list" id="artist-tracks-list-scroll" style="flex:1; overflow-y:auto;">
-                <!-- Tracks will be appended here -->
-            </div>
-            ${this.tracks.length > this.loadedCount ? `
-            <div id="artist-tracks-more-wrap" style="padding: 12px 0; text-align: center;">
-                <button id="artist-tracks-show-more-btn" style="padding: 8px 24px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: var(--text-main); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;">
-                    Показать ещё
-                </button>
-            </div>` : ''}
-        `;
-
-        const listContainer = container.querySelector('#artist-tracks-list-scroll');
-        const currentTrack = getCurrentTrack();
-
-        const renderBatch = (start, count) => {
-            const batch = this.tracks.slice(start, start + count);
-            
-            batch.forEach((track, i) => {
-                const globalIndex = start + i;
-                
-                // Color gradient and fallback icon
-                const title = track.title || 'Unknown';
-                const grad = getCoverFallbackGradient(title);
-                
-                // Track item element
-                const trackEl = createTrackElement(track, globalIndex, this.tracks, currentTrack);
-                
-                // Format cover wrap to support fallback gradients
-                const coverWrap = trackEl.querySelector('.track-cover-wrap');
-                if (coverWrap) {
-                    coverWrap.classList.add('fallback-gradient');
-                    coverWrap.style.background = grad;
-                    
-                    const noteDiv = document.createElement('div');
-                    noteDiv.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:1;';
-                    noteDiv.innerHTML = SVG_NOTE_FALLBACK;
-                    coverWrap.insertBefore(noteDiv, coverWrap.firstChild);
-                    
-                    const img = coverWrap.querySelector('img');
-                    if (img) {
-                        img.onerror = () => {
-                            img.style.display = 'none';
-                        };
-                    }
-                }
-
-                // Add formatted playCount and release year
-                const durationEl = trackEl.querySelector('.track-duration');
-                if (durationEl) {
-                    let playCountText = '';
-                    const pc = track.playCount || track.views || track.play_count || 0;
-                    if (pc >= 1000000) {
-                        playCountText = `${(pc / 1000000).toFixed(pc >= 10000000 ? 0 : 1)} млн`;
-                    } else if (pc >= 1000) {
-                        playCountText = `${(pc / 1000).toFixed(0)} тыс.`;
-                    } else if (pc > 0) {
-                        playCountText = `${pc}`;
-                    }
-
-                    const year = track.release_date ? new Date(track.release_date).getFullYear() : (track.year || null);
-                    
-                    if (playCountText) {
-                        const metaText = document.createElement('span');
-                        metaText.style.fontSize = '11px';
-                        metaText.style.color = 'var(--text-sec)';
-                        metaText.style.marginRight = '16px';
-                        metaText.textContent = `${playCountText} прослушиваний`;
-                        durationEl.parentNode.insertBefore(metaText, durationEl);
-                    }
-                    
-                    if (year && !isNaN(year)) {
-                        const yearText = document.createElement('span');
-                        yearText.style.fontSize = '11px';
-                        yearText.style.color = 'var(--text-sec)';
-                        yearText.style.marginRight = '12px';
-                        yearText.textContent = `${year}`;
-                        durationEl.parentNode.insertBefore(yearText, durationEl);
-                    }
-                }
-                
-                listContainer.appendChild(trackEl);
-            });
-            
-            renderIcons();
-        };
-
-        // Render initial portion (20 tracks)
-        renderBatch(0, this.loadedCount);
-
-        const showMoreBtn = container.querySelector('#artist-tracks-show-more-btn');
-        const loadMore = () => {
-            if (this.loadedCount < this.tracks.length) {
-                const nextBatchSize = 20;
-                renderBatch(this.loadedCount, nextBatchSize);
-                this.loadedCount += nextBatchSize;
-                if (this.loadedCount >= this.tracks.length && showMoreBtn) {
-                    showMoreBtn.parentElement?.remove();
-                }
-            }
-        };
-
-        if (showMoreBtn) {
-            showMoreBtn.addEventListener('click', loadMore);
-        }
-
-        // Infinite Scroll Event Listener (rAF-throttled & passive)
-        let scrollTicking = false;
-        listContainer.addEventListener('scroll', () => {
-            if (!scrollTicking) {
-                scrollTicking = true;
-                requestAnimationFrame(() => {
-                    scrollTicking = false;
-                    const scrollTop = listContainer.scrollTop;
-                    const clientHeight = listContainer.clientHeight;
-                    const scrollHeight = listContainer.scrollHeight;
-
-                    if (scrollTop + clientHeight >= scrollHeight - 20) {
-                        loadMore();
-                    }
-                });
-            }
-        }, { passive: true });
-        
-        return container;
-    }
-
-    static renderSkeleton() {
-        const container = document.createElement('div');
-        container.className = 'artist-tracks-card';
-        
-        let trackSkeletons = '';
-        for (let i = 0; i < 5; i++) {
-            trackSkeletons += `
-                <div style="display:flex; align-items:center; gap:12px; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.02)">
-                    <div class="shimmer-bg" style="width:48px; height:48px; border-radius:8px; flex-shrink:0;"></div>
-                    <div style="flex:1">
-                        <div class="skeleton-text medium shimmer-bg" style="height:10px; margin-bottom:6px"></div>
-                        <div class="skeleton-text short shimmer-bg" style="height:8px; margin-bottom:0"></div>
-                    </div>
-                    <div class="shimmer-bg" style="width:30px; height:10px; border-radius:4px"></div>
-                </div>
-            `;
-        }
-        
-        container.innerHTML = `
-            <div class="skeleton-text heading shimmer-bg"></div>
-            <div class="artist-tracks-list" style="overflow:hidden">
-                ${trackSkeletons}
-            </div>
-        `;
-        return container;
-    }
-}
-
-// ─── Primary Loader: Combines Skeletons, Backend Bridge / API fetch and Components ───
-export async function loadArtistProfile(artistName, targetContainer) {
-    if (!targetContainer) return;
-    const currentGen = ++profileGenerationId;
-    
-    // Clear and render layout shells
-    targetContainer.innerHTML = '';
-    const wrapper = document.createElement('div');
-    wrapper.className = 'artist-profile-layout';
-    
-    const leftCol = document.createElement('div');
-    leftCol.className = 'artist-col-left skeleton-active';
-    
-    const rightCol = document.createElement('div');
-    rightCol.className = 'artist-col-right skeleton-active';
-    
-    wrapper.appendChild(leftCol);
-    wrapper.appendChild(rightCol);
-    targetContainer.appendChild(wrapper);
-    
-    // 1. Show skeletons
-    leftCol.appendChild(ArtistPhotoComponent.renderSkeleton());
-    leftCol.appendChild(ArtistBioComponent.renderSkeleton());
-    rightCol.appendChild(ArtistAlbumsComponent.renderSkeleton());
-    rightCol.appendChild(ArtistTracksComponent.renderSkeleton());
-    renderIcons();
-
-    const queryKey = artistName.toLowerCase().trim();
-    let artistData = null;
-
-    try {
-        // Step 1: Attempt to fetch real artist profile from backend bridge
-        const bridgeProfile = await fetchArtistProfileFromBridge(artistName);
-        if (currentGen !== profileGenerationId) return; // Stale render protection
-
-        if (bridgeProfile && (bridgeProfile.tracks?.length > 0 || bridgeProfile.albums?.length > 0 || bridgeProfile.singles?.length > 0 || bridgeProfile.eps?.length > 0 || bridgeProfile.bio || bridgeProfile.avatar_url)) {
-            artistData = {
-                name: bridgeProfile.name || artistName,
-                genres: bridgeProfile.genres || (bridgeProfile.subscribers ? `${bridgeProfile.subscribers} подписчиков` : 'Исполнитель'),
-                avatarUrl: bridgeProfile.avatar_url || bridgeProfile.avatarUrl || null,
-                bio: bridgeProfile.bio || `Исполнитель ${bridgeProfile.name || artistName} — музыкальный артист.`,
-                bio_ru: bridgeProfile.bio_ru || bridgeProfile.bio || null,
-                bio_original: bridgeProfile.bio_original || bridgeProfile.bio_en || null,
-                albums: bridgeProfile.albums || [],
-                singles: bridgeProfile.singles || [],
-                eps: bridgeProfile.eps || [],
-                compilations: bridgeProfile.compilations || [],
-                discography: bridgeProfile.discography || null,
-                all_releases: bridgeProfile.all_releases || [],
-                tracks: bridgeProfile.tracks || [],
-                isMock: false
             };
+        }
 
-            // If backend didn't provide avatar or tracks, fallback gracefully
-            if (!artistData.avatarUrl) {
-                artistData.avatarUrl = await fetchArtistAvatarFromApi(artistData.name, 'youtube');
-            }
-            if (currentGen !== profileGenerationId) return;
-
-            if (!artistData.tracks || artistData.tracks.length === 0) {
-                artistData.tracks = await fetchArtistTracks(artistData.name);
-            }
-            if (currentGen !== profileGenerationId) return;
+        // Albums Grid (ART-001)
+        function renderArtistAlbums() {
+        const albums = bridgeProfile.albums || [];
+        if (albums.length === 0) {
+            if (horizTabs) horizTabs.style.display = 'none';
+            if (paneTracks) paneTracks.classList.remove('hidden');
+            if (paneAlbums) paneAlbums.classList.add('hidden');
+            if (albumsGrid) albumsGrid.innerHTML = '';
         } else {
-            // Step 2: Fallback to dynamic artist if bridge call returns empty/fails
-            const fallback = generateFallbackArtist(artistName);
-            fallback.isMock = true;
+            if (horizTabs) horizTabs.style.display = 'flex';
+            if (albumsGrid) {
+                albumsGrid.innerHTML = albums.map((alb, idx) => {
+                    const coverSrc = alb.cover || alb.cover_url || '';
+                    const yearStr = alb.year ? `${escapeHtml(alb.year)} г.` : '';
+                    return `
+                        <div class="artist-album-card" data-album-index="${idx}" role="button" tabindex="0">
+                            <div class="artist-album-cover-wrap fallback-gradient">
+                                ${coverSrc ? `<img src="${escapeHtml(coverSrc)}" alt="${escapeHtml(alb.title || '')}" loading="lazy">` : SVG_NOTE_FALLBACK}
+                            </div>
+                            <div class="artist-album-info">
+                                <span class="artist-album-title" title="${escapeHtml(alb.title || '')}">${escapeHtml(alb.title || '')}</span>
+                                <span class="artist-album-sub">${yearStr || escapeHtml(alb.artist || artistName)}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
 
-            const [resolvedAvatar, tracks] = await Promise.all([
-                fetchArtistAvatarFromApi(fallback.name, 'youtube'),
-                fetchArtistTracks(fallback.name)
-            ]);
-            if (currentGen !== profileGenerationId) return;
-
-            fallback.avatarUrl = fallback.avatarUrl || resolvedAvatar;
-            if (tracks && tracks.length > 0) {
-                fallback.tracks = tracks;
+                albumsGrid.querySelectorAll('.artist-album-card').forEach(card => {
+                    const idx = Number(card.dataset.albumIndex);
+                    const alb = albums[idx];
+                    if (!alb) return;
+                    const openAlb = () => {
+                        if (window.openAlbumModal) {
+                            window.openAlbumModal(alb);
+                        } else if (window.playAlbum) {
+                            window.playAlbum(alb);
+                        }
+                    };
+                    card.onclick = openAlb;
+                    card.onkeydown = (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            openAlb();
+                        }
+                    };
+                });
             }
-            artistData = fallback;
         }
-
-        // 3. Clear skeletons and render real components (with smooth fadeIn transitions)
-        leftCol.innerHTML = '';
-        leftCol.classList.remove('skeleton-active');
-        
-        rightCol.innerHTML = '';
-        rightCol.classList.remove('skeleton-active');
-        
-        const photoComp = new ArtistPhotoComponent(artistData);
-        leftCol.appendChild(photoComp.render());
-        
-        const bioComp = new ArtistBioComponent(artistData);
-        leftCol.appendChild(bioComp.render());
-        
-        const onPlayAlbum = async (album) => {
-            if (!album) return;
-            const albumTitle = (album.title || album.album || '').toLowerCase();
-            const albumTracks = (artistData.tracks || []).filter(t => t.album && t.album.toLowerCase() === albumTitle);
-            if (albumTracks.length > 0) {
-                if (window.pywebview?.api?.play_track) {
-                    window.pywebview.api.play_track(albumTracks[0], albumTracks, 0);
-                }
-                return;
-            }
-
-            // If not found in already loaded artist tracks, fetch via get_album_tracks
-            if (window.pywebview?.api?.get_album_tracks) {
-                try {
-                    const fetched = await window.pywebview.api.get_album_tracks({
-                        title: album.title,
-                        artist: artistData.name,
-                        source: album.source || 'youtube',
-                        source_id: album.yt_source_id || album.source_id || ''
-                    });
-                    if (fetched && fetched.length > 0) {
-                        window.pywebview.api.play_track(fetched[0], fetched, 0);
-                        return;
-                    }
-                } catch (e) {
-                    console.error("Error playing album via get_album_tracks:", e);
-                }
-            }
-
-            // Fallback: play available tracks
-            const playList = artistData.tracks || [];
-            if (window.pywebview?.api?.play_track && playList.length > 0) {
-                window.pywebview.api.play_track(playList[0], playList, 0);
-            }
-        };
-        
-        const hasReleases = (artistData.albums && artistData.albums.length > 0) ||
-                            (artistData.singles && artistData.singles.length > 0) ||
-                            (artistData.eps && artistData.eps.length > 0) ||
-                            (artistData.compilations && artistData.compilations.length > 0);
-
-        if (hasReleases) {
-            const albumsComp = new ArtistAlbumsComponent(
-                artistData, 
-                onPlayAlbum,
-                (album) => {
-                    if (window.openAlbumModal) {
-                        window.openAlbumModal(album);
-                    } else {
-                        onPlayAlbum(album);
-                    }
-                }
-            );
-            rightCol.appendChild(albumsComp.render());
         }
-        
-        const tracksComp = new ArtistTracksComponent(artistData.tracks || []);
-        rightCol.appendChild(tracksComp.render());
-        
+        renderArtistAlbums();
+
         renderIcons();
     } catch (e) {
         if (currentGen !== profileGenerationId) return;
         console.error('Failed to load artist profile:', e);
-        targetContainer.innerHTML = `<div class="empty-state">Ошибка загрузки профиля: ${escapeHtml(e.message)}</div>`;
+        if (fallbackContainer) {
+            fallbackContainer.innerHTML = `<div class="empty-state">Ошибка загрузки профиля: ${escapeHtml(e.message)}</div>`;
+            if (heroWrap) heroWrap.style.display = 'none';
+            if (contentSection) contentSection.style.display = 'none';
+            fallbackContainer.style.display = 'block';
+        }
     }
 }
 
+// ─── Backward compatibility classes (for existing components & tests) ───
+export class ArtistPhotoComponent {
+    constructor(artistData) { this.artistData = artistData; }
+    render() {
+        const div = document.createElement('div');
+        div.className = 'artist-photo-card';
+        return div;
+    }
+    static renderSkeleton() {
+        const div = document.createElement('div');
+        div.className = 'artist-photo-card shimmer-bg';
+        return div;
+    }
+}
 
+const BIO_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+export class ArtistBioComponent {
+    constructor(artistData) {
+        this.artistData = artistData || {};
+        this.currentLang = 'ru';
+    }
+    render() {
+        const div = document.createElement('div');
+        div.className = 'artist-bio-card';
+        const d = this.artistData;
+        const source = (d.source || 'youtube').toLowerCase();
+        const sid = d.source_id || d.id || '';
+        const original = d.bio_original || d.bio || '';
+        if (typeof localStorage !== 'undefined' && sid) {
+            const key = `artist_bio_${source}_${sid}_ru`;
+            if (d.bio_ru) {
+                try {
+                    localStorage.setItem(key, JSON.stringify({ v: d.bio_ru, o: original, t: Date.now() }));
+                } catch (_) {}
+            } else {
+                try {
+                    const raw = localStorage.getItem(key);
+                    if (raw) {
+                        const entry = JSON.parse(raw);
+                        if (Date.now() - (entry.t || 0) > BIO_CACHE_TTL_MS) {
+                            localStorage.removeItem(key);
+                        } else if (entry.o && entry.o === original) {
+                            d.bio_ru = entry.v;
+                        } else {
+                            localStorage.removeItem(key);
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+        return div;
+    }
+    static renderSkeleton() {
+        const div = document.createElement('div');
+        div.className = 'artist-bio-card';
+        return div;
+    }
+}
+
+export function fetchArtistAvatarFallback(name) {
+    if (!name || !window.pywebview?.api?.get_artists_avatars) return Promise.resolve(null);
+    return new Promise(resolve => {
+        const handler = (e) => {
+            window.removeEventListener('app:artists_avatars_ready', handler);
+            resolve(e.detail?.avatars?.[name] || null);
+        };
+        window.addEventListener('app:artists_avatars_ready', handler, { once: true });
+        try {
+            window.pywebview.api.get_artists_avatars([name]);
+        } catch (_) {
+            window.removeEventListener('app:artists_avatars_ready', handler);
+            resolve(null);
+        }
+    });
+}
+
+export class ArtistAlbumsComponent {
+    constructor(albums, onPlayAlbum, onOpenAlbum) {
+        this.albums = albums;
+        this.onPlayAlbum = onPlayAlbum;
+        this.onOpenAlbum = onOpenAlbum;
+    }
+    render() {
+        const div = document.createElement('div');
+        div.className = 'artist-albums-card';
+        return div;
+    }
+    static renderSkeleton() {
+        const div = document.createElement('div');
+        div.className = 'artist-albums-card';
+        return div;
+    }
+}
+
+export class ArtistTracksComponent {
+    constructor(tracks) { this.tracks = tracks; }
+    render() {
+        const div = document.createElement('div');
+        div.className = 'artist-tracks-card';
+        return div;
+    }
+    static renderSkeleton() {
+        const div = document.createElement('div');
+        div.className = 'artist-tracks-card';
+        return div;
+    }
+}

@@ -1,4 +1,5 @@
 import { togglePlayPause } from './player.js';
+import { isFocusInsideModalTrap, showToast } from './utils.js';
 
 export const DEFAULT_KEYBINDS = [
     { id: 'play_pause', label: 'Воспроизведение / Пауза', defaultKey: 'Space' },
@@ -13,23 +14,8 @@ export const DEFAULT_KEYBINDS = [
     { id: 'like', label: 'Нравится трек', defaultKey: 'KeyK' }
 ];
 
-export const ACTION_ALIASES = {
-    'mute': 'toggle_mute',
-    'favorite': 'like',
-    'next': 'next_track',
-    'prev': 'prev_track'
-};
-
-const CYRILLIC_TO_CODE = {
-    'й': 'KeyQ', 'ц': 'KeyW', 'у': 'KeyE', 'к': 'KeyR', 'е': 'KeyT', 'н': 'KeyY', 'г': 'KeyU', 'ш': 'KeyI', 'щ': 'KeyO', 'з': 'KeyP',
-    'х': 'BracketLeft', 'ъ': 'BracketRight',
-    'ф': 'KeyA', 'ы': 'KeyS', 'в': 'KeyD', 'а': 'KeyF', 'п': 'KeyG', 'р': 'KeyH', 'о': 'KeyJ', 'л': 'KeyK', 'д': 'KeyL',
-    'ж': 'Semicolon', 'э': 'Quote',
-    'я': 'KeyZ', 'ч': 'KeyX', 'с': 'KeyC', 'м': 'KeyV', 'и': 'KeyB', 'т': 'KeyN', 'ь': 'KeyM', 'б': 'Comma', 'ю': 'Period',
-    'ё': 'Backquote', '.': 'Slash'
-};
-
 export const activeKeybinds = {};
+const REPEATABLE_ACTIONS = new Set(['volume_up', 'volume_down']);
 let listeningKeybindId = null;
 
 export function setListeningKeybind(id) {
@@ -53,20 +39,9 @@ export function parseKeyEventCombo(e) {
     if (e.shiftKey) parts.push('Shift');
     if (e.metaKey) parts.push('Meta');
 
-    let keyName = e.code || '';
-    if (!keyName || keyName === 'Unidentified') {
-        const kLow = (e.key || '').toLowerCase();
-        if (CYRILLIC_TO_CODE[kLow]) {
-            keyName = CYRILLIC_TO_CODE[kLow];
-        } else if (/^[a-z]$/i.test(e.key)) {
-            keyName = 'Key' + e.key.toUpperCase();
-        } else {
-            keyName = e.key;
-        }
-    }
-
-    if (keyName === ' ' || e.key === ' ' || e.key === 'Spacebar') keyName = 'Space';
-    if (keyName === '/' || e.key === '/') keyName = 'Slash';
+    let keyName = e.code || e.key;
+    if (keyName === ' ') keyName = 'Space';
+    if (keyName === '/') keyName = 'Slash';
     
     // Ignore standalone modifier keypresses
     if (['ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight', 'Control', 'Alt', 'Shift', 'Meta'].includes(keyName)) {
@@ -83,30 +58,25 @@ export function initHotkeys() {
         activeKeybinds[kb.id] = kb.defaultKey;
     });
 
-    const KNOWN_ACTIONS = new Set(DEFAULT_KEYBINDS.map(kb => kb.id));
-
     // 2. Load local storage fallback
     const localSaved = localStorage.getItem('nedotify_keybinds');
     if (localSaved) {
-        try {
-            const parsed = JSON.parse(localSaved);
-            for (let [actionId, key] of Object.entries(parsed)) {
-                if (ACTION_ALIASES[actionId]) actionId = ACTION_ALIASES[actionId];
-                if (KNOWN_ACTIONS.has(actionId)) activeKeybinds[actionId] = key;
-            }
-        } catch(e) {}
+        try { Object.assign(activeKeybinds, JSON.parse(localSaved)); } catch(e) {}
     }
-
-    // Migrate legacy arrow defaults
+    // Migrate legacy defaults: bare arrow keys hijacked list/navigation,
+    // they are now Ctrl-modified.
     const LEGACY_ARROW_MAP = { ArrowRight: 'Ctrl+ArrowRight', ArrowLeft: 'Ctrl+ArrowLeft', ArrowUp: 'Ctrl+ArrowUp', ArrowDown: 'Ctrl+ArrowDown' };
+    // Migrate OLD backend-default formats that used to leak into storage and
+    // shadow the current defaults ("like" was stuck at Ctrl+KeyK, so plain K
+    // never fired). null = drop the entry entirely (action no longer exists).
     const LEGACY_DEFAULT_MIGRATION = {
         'Ctrl+Right': 'Ctrl+ArrowRight', 'Ctrl+Left': 'Ctrl+ArrowLeft',
         'Ctrl+Up': 'Ctrl+ArrowUp', 'Ctrl+Down': 'Ctrl+ArrowDown',
         'Ctrl+KeyM': 'KeyM', 'Ctrl+KeyK': 'KeyK',
-        'Ctrl+M': 'KeyM', 'Ctrl+L': 'KeyK', 'Ctrl+F': 'Slash',
+        'Ctrl+M': 'KeyM', 'Ctrl+L': 'KeyL', 'Ctrl+F': 'Slash',
         'Ctrl+KeyO': null, 'Ctrl+O': null
     };
-
+    const KNOWN_ACTIONS = new Set(DEFAULT_KEYBINDS.map(kb => kb.id));
     let migrated = false;
     for (const [oldK, newK] of Object.entries(LEGACY_ARROW_MAP)) {
         for (const [actionId, key] of Object.entries(activeKeybinds)) {
@@ -120,19 +90,22 @@ export function initHotkeys() {
             else { activeKeybinds[actionId] = newK; }
             migrated = true;
         } else if (!KNOWN_ACTIONS.has(actionId)) {
+            // Ghost entries for actions that no longer exist (e.g. toggle_overlay).
             delete activeKeybinds[actionId];
             migrated = true;
         }
     }
     if (migrated) saveKeybindsToStorage(activeKeybinds);
 
-    // 3. Load backend keybinds category settings
+    // 3. Load backend keybinds category settings.
+    // Only accept KNOWN actions: the backend must never inject ghost entries
+    // (an old "toggle_overlay" default used to linger here forever) and must
+    // not shadow the defaults for actions it does not know about.
     if (window.pywebview?.api?.get_settings_by_category) {
         window.pywebview.api.get_settings_by_category('hotkeys').then(saved => {
             if (saved && typeof saved === 'object') {
                 let backendApplied = false;
-                for (let [actionId, key] of Object.entries(saved)) {
-                    if (ACTION_ALIASES[actionId]) actionId = ACTION_ALIASES[actionId];
+                for (const [actionId, key] of Object.entries(saved)) {
                     if (KNOWN_ACTIONS.has(actionId) && typeof key === 'string' && key) {
                         if (activeKeybinds[actionId] !== key) backendApplied = true;
                         activeKeybinds[actionId] = key;
@@ -146,18 +119,39 @@ export function initHotkeys() {
         });
     }
 
-    // SINGLE AUTHORITATIVE GLOBAL KEYDOWN LISTENER
-    window.addEventListener('keydown', (e) => {
+    // Clicking anywhere except a rebind button cancels rebinding mode.
+    window.addEventListener('pointerdown', (e) => {
+        if (!listeningKeybindId) return;
+        if (e.target instanceof Element && e.target.closest('.keybind-record-btn')) return;
+        listeningKeybindId = null;
+        if (window.renderKeybindsList) window.renderKeybindsList();
+    }, true);
+
+    // SINGLE AUTHORITATIVE GLOBAL KEYDOWN LISTENER (Eliminates double toggle on Space)
+    window.addEventListener('keydown', async (e) => {
         // Rebinding Mode inside Settings UI
         if (listeningKeybindId) {
             e.preventDefault();
             e.stopPropagation();
             const combo = parseKeyEventCombo(e);
+            if (!combo && e.code !== 'Escape') return;
             if (combo && e.code !== 'Escape') {
-                activeKeybinds[listeningKeybindId] = combo;
-                saveKeybindsToStorage(activeKeybinds);
-                if (window.pywebview?.api?.save_setting) {
-                    window.pywebview.api.save_setting(listeningKeybindId, combo, 'hotkeys');
+                const action = listeningKeybindId;
+                const conflict = Object.entries(activeKeybinds).find(([id, key]) => id !== action && key === combo);
+                if (conflict) {
+                    const label = DEFAULT_KEYBINDS.find(item => item.id === conflict[0])?.label || conflict[0];
+                    showToast(`Сочетание уже назначено: ${label}`, 'warning');
+                    return;
+                }
+                listeningKeybindId = null;
+                try {
+                    if (!window.pywebview?.api?.save_setting) throw new Error('Bridge unavailable');
+                    const result = await window.pywebview.api.save_setting(action, combo, 'hotkeys');
+                    if (result === false || result?.success === false) throw new Error('Binding rejected');
+                    activeKeybinds[action] = combo;
+                    saveKeybindsToStorage(activeKeybinds);
+                } catch {
+                    showToast('Не удалось сохранить сочетание клавиш', 'error');
                 }
             }
             listeningKeybindId = null;
@@ -172,6 +166,17 @@ export function initHotkeys() {
         if (activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable || targetIsEditable) {
             return;
         }
+
+        // A modal dialog owns the keyboard while it is open. executeHotkeysAction
+        // is the one dispatcher and it is the only place that calls
+        // preventDefault(); Space and Enter on a focused button are clicks the
+        // browser has not fired yet, so letting the Space bind through would
+        // cancel the very control Tab just moved to. Deliberately narrow: it
+        // only fires for a modal that is armed AND still visible AND has focus,
+        // so no binding changes behaviour outside an open dialog. F11, the media
+        // keys and the rebinding mode above are all before this point and are
+        // untouched.
+        if (isFocusInsideModalTrap(e.target)) return;
 
         // F11: Frameless Window Maximize (keeps taskbar visible)
         if (e.key === 'F11' || e.code === 'F11') {
@@ -190,24 +195,14 @@ export function initHotkeys() {
         const pressedCombo = parseKeyEventCombo(e);
         if (!pressedCombo) return;
 
-        // Cyrillic layout fallback check
-        const cyrKey = (e.key || '').toLowerCase();
-        const cyrCode = CYRILLIC_TO_CODE[cyrKey];
-        const parts = [];
-        if (e.ctrlKey) parts.push('Ctrl');
-        if (e.altKey) parts.push('Alt');
-        if (e.shiftKey) parts.push('Shift');
-        if (e.metaKey) parts.push('Meta');
-        const altCyrCombo = cyrCode ? [...parts, cyrCode].join('+') : null;
-
-        // Check against active keybinds
+        // Exact combo match against active keybinds
         for (const [actionId, key] of Object.entries(activeKeybinds)) {
-            const isMatch = (key === pressedCombo) ||
-                            (altCyrCombo && key === altCyrCombo) ||
-                            (key.toLowerCase() === pressedCombo.toLowerCase()) ||
-                            (key === 'Space' && (pressedCombo === 'Space' || e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar'));
+            const isMatch = (key === pressedCombo) || 
+                            (key === 'Space' && (pressedCombo === 'Space' || e.code === 'Space' || e.key === ' '));
             if (isMatch) {
                 e.preventDefault();
+                // Held key auto-repeat must not re-fire one-shot actions; volume keeps repeating.
+                if (e.repeat && !REPEATABLE_ACTIONS.has(actionId)) break;
                 executeHotkeysAction(actionId);
                 break;
             }
@@ -221,59 +216,35 @@ export function executeHotkeysAction(actionId) {
             togglePlayPause();
             break;
         case 'next_track':
-        case 'next':
             if (window.pywebview?.api?.next_track) window.pywebview.api.next_track();
             break;
         case 'prev_track':
-        case 'prev':
             if (window.pywebview?.api?.prev_track) window.pywebview.api.prev_track();
             break;
         case 'volume_up':
             if (window.NeDotify?.adjustVolume) {
                 window.NeDotify.adjustVolume(5);
-            } else {
-                const slider = document.getElementById('pb-volume-slider');
-                if (slider) {
-                    slider.value = Math.min(100, (parseInt(slider.value, 10) || 70) + 5);
-                    slider.dispatchEvent(new Event('input', { bubbles: true }));
-                    slider.dispatchEvent(new Event('change', { bubbles: true }));
-                }
             }
             break;
         case 'volume_down':
             if (window.NeDotify?.adjustVolume) {
                 window.NeDotify.adjustVolume(-5);
-            } else {
-                const slider = document.getElementById('pb-volume-slider');
-                if (slider) {
-                    slider.value = Math.max(0, (parseInt(slider.value, 10) || 70) - 5);
-                    slider.dispatchEvent(new Event('input', { bubbles: true }));
-                    slider.dispatchEvent(new Event('change', { bubbles: true }));
-                }
             }
             break;
         case 'toggle_mute':
-        case 'mute':
+        case 'mute': {
             const volBtn = document.getElementById('pb-volume-btn');
             if (volBtn) volBtn.click();
             break;
-        case 'like':
-        case 'favorite':
-            const btnLike = document.getElementById('pb-btn-like') ||
-                            document.getElementById('pp-btn-like') ||
-                            document.getElementById('mp-btn-like');
+        }
+        case 'like': {
+            const btnLike = document.getElementById('pb-btn-like') || document.getElementById('pp-btn-like') || document.getElementById('btn-like');
             if (btnLike) btnLike.click();
             break;
+        }
         case 'toggle_lyrics': {
-            const overlay = document.getElementById('lyrics-overlay');
-            if (overlay && overlay.classList.contains('active')) {
-                const closeBtn = document.getElementById('btn-close-lyrics');
-                if (closeBtn) closeBtn.click();
-                else overlay.classList.remove('active');
-            } else {
-                const lyricsBtn = document.getElementById('pp-btn-lyrics');
-                if (lyricsBtn) lyricsBtn.click();
-            }
+            const lyricsBtn = document.getElementById('pp-btn-lyrics');
+            if (lyricsBtn) lyricsBtn.click();
             break;
         }
         case 'toggle_mini':

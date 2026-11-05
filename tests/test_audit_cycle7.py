@@ -48,18 +48,15 @@ class TestCycle7Audits(unittest.TestCase):
 
         try:
             mock_db = MagicMock()
-            mock_db.get_track.return_value = {"id": 1, "file_path": temp_path}
-            # Simulate another track referencing the same file path
-            mock_cursor = MagicMock()
-            mock_cursor.fetchone.return_value = (1,)  # 1 other track found
-            mock_db.conn.cursor.return_value = mock_cursor
+            mock_db.get_track.side_effect = lambda tid: {"id": tid, "file_path": temp_path}
+            mock_db.merge_duplicate_track.return_value = True
 
             service = AudioFingerprintService()
-            result = service.delete_duplicate_track(mock_db, track_id=1, delete_file=True)
+            result = service.delete_duplicate_track(mock_db, duplicate_id=1, keeper_id=2, delete_file=True)
 
             self.assertTrue(result)
-            self.assertTrue(os.path.exists(temp_path), "File should NOT have been deleted from disk because other tracks reference it")
-            mock_db.delete_track.assert_called_once_with(1)
+            self.assertTrue(os.path.exists(temp_path), "File should NOT have been deleted from disk because keeper references it")
+            mock_db.merge_duplicate_track.assert_called_once_with(1, 2)
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
@@ -87,9 +84,12 @@ class TestCycle7Audits(unittest.TestCase):
             temp_db = f.name
 
         try:
-            with sqlite3.connect(temp_db) as conn:
-                conn.execute("CREATE TABLE tracks (id INTEGER, title TEXT, artist TEXT)")
-                conn.commit()
+            init_conn = sqlite3.connect(temp_db)
+            try:
+                init_conn.execute("CREATE TABLE tracks (id INTEGER, title TEXT, artist TEXT)")
+                init_conn.commit()
+            finally:
+                init_conn.close()
 
             profile = UserTasteProfile()
             closed = False
@@ -195,9 +195,12 @@ class TestCycle7Audits(unittest.TestCase):
         scanner = LufsScannerService(mock_core)
         scanner._update_db(42, -14.5, 0.95)
 
-        mock_core.db.update_track.assert_called_once_with(
-            42, lufs=-14.5, loudness_lufs=-14.5, peak_volume=0.95
-        )
+        self.assertTrue(mock_core.db.conn.execute.called)
+        call_args = mock_core.db.conn.execute.call_args[0]
+        self.assertIn("UPDATE tracks SET", call_args[0])
+        self.assertEqual(call_args[1][0], -14.5)
+        self.assertEqual(call_args[1][2], 0.95)
+        self.assertEqual(call_args[1][3], 42)
 
 
 if __name__ == "__main__":

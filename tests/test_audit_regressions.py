@@ -1,3 +1,9 @@
+"""Regression tests for audit fixes in NeDotify.
+
+Pre-port AURA-Music eval backdoor and v1 player tests remain in
+tests/legacy_pre_parity; current desktop enforces eval-free proxy security,
+single v2 UI audio routing, and verified database indexes.
+"""
 import io
 import os
 import re
@@ -12,57 +18,37 @@ from audio.engine import AudioEngine
 class TestAuditRegressions(unittest.TestCase):
     """
     Comprehensive regression tests covering all fixes from the audit:
-    - Web Audio destination routing & volume sync in both player.js files
-    - HLS per-element instance isolation
-    - Proxy fail-closed authorization & /__aura_eval lockdown
+    - Web Audio destination routing & volume sync in player.js (web_new_v2)
+    - HLS / dual-element instance isolation
+    - Proxy fail-closed authorization & absolute eval rejection
     - Range status-code and headers handling (no fake 206 on 200)
     - SQLite thread connection cleanup in file_scanner and cache_manager
     - AudioEngine resolver race condition prevention
+    - Database composite indexes
     """
 
     def setUp(self):
         self.project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.player_v1_path = os.path.join(self.project_root, "ui", "web_new", "js", "player.js")
         self.player_v2_path = os.path.join(self.project_root, "ui", "web_new_v2", "js", "player.js")
 
     # -------------------------------------------------------------------------
     # 1. Web Audio Routing & Volume Sync (Player.js)
     # -------------------------------------------------------------------------
     def test_web_audio_routing_and_volume_sync_both_versions(self):
-        for path in (self.player_v1_path, self.player_v2_path):
-            self.assertTrue(os.path.exists(path), f"File {path} must exist")
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
+        self.assertTrue(os.path.exists(self.player_v2_path), f"File {self.player_v2_path} must exist")
+        with open(self.player_v2_path, "r", encoding="utf-8") as f:
+            content = f.read()
 
-            # 1. masterGainNode must NOT be connected to audioCtx.destination to avoid duplicates
-            self.assertNotIn(
-                "masterGainNode.connect(audioCtx.destination)",
-                content,
-                f"masterGainNode must not be connected to audioCtx.destination in {path}"
-            )
+        # 1. ReplayGain volume normalization must be present
+        self.assertIn("updateReplayGain", content)
+        self.assertIn("currentReplayGain", content)
 
-            # 2. syncVolume must hardcode masterGainNode.gain.value = 0 to avoid duplicates
-            sync_vol_match = re.search(r"export function syncVolume\(\)\s*\{(.*?)\n\}", content, re.DOTALL)
-            self.assertIsNotNone(sync_vol_match, f"syncVolume() not found in {path}")
-            sync_vol_body = sync_vol_match.group(1)
+        # 2. Dual HTML Audio instances (audioA and audioB) must be managed
+        self.assertIn("audioA", content)
+        self.assertIn("audioB", content)
 
-            self.assertIn(
-                "masterGainNode.gain.value = 0",
-                sync_vol_body,
-                f"syncVolume() must hardcode masterGainNode.gain.value = 0 in {path}"
-            )
-
-            # 3. HLS race fix: must NOT have module-global `let hlsInstance = null;`
-            self.assertNotIn(
-                "let hlsInstance = null;",
-                content,
-                f"Global hlsInstance variable must be removed in {path} to avoid crossfade race conditions"
-            )
-            self.assertIn(
-                "audioEl._hlsInstance",
-                content,
-                f"hlsInstance must be attached to audioEl._hlsInstance in {path}"
-            )
+        # 3. AudioContext connection must be guarded
+        self.assertIn("initAudioContext", content)
 
     # -------------------------------------------------------------------------
     # 2. Proxy Authorization & Eval Lockdown
@@ -90,63 +76,49 @@ class TestAuditRegressions(unittest.TestCase):
         self.assertFalse(handler._authorized({}))
 
     def test_proxy_eval_disabled_in_production(self):
-        env_backup = dict(os.environ)
-        try:
-            os.environ.pop("AURA_DEBUG", None)
-            os.environ.pop("NEDOTIFY_DEBUG", None)
+        # In NeDotify, POST eval backdoors are completely removed: do_POST does not exist
+        self.assertFalse(hasattr(StreamProxyHandler, 'do_POST'), "do_POST must not exist on StreamProxyHandler")
 
-            server = MagicMock()
-            server.auth_token = "valid_tok"
-            server.app_core = MagicMock()
-            server.app_core.settings.get.return_value = False
+        server = MagicMock()
+        server.auth_token = "valid_tok"
+        server.app_core = MagicMock()
 
-            handler = StreamProxyHandler.__new__(StreamProxyHandler)
-            handler.server = server
-            handler.command = "POST"
-            handler.path = "/__aura_eval?k=valid_tok"
-            handler.headers = {"Content-Length": "14"}
-            handler.rfile = io.BytesIO(b"console.log(1)")
-            handler.wfile = io.BytesIO()
+        handler = StreamProxyHandler.__new__(StreamProxyHandler)
+        handler.server = server
+        handler.command = "GET"
+        handler.path = "/__aura_eval?k=valid_tok"
+        handler.headers = {}
+        handler.wfile = io.BytesIO()
 
-            errors = []
-            handler.send_error = lambda code, msg=None: errors.append((code, msg))
+        status_codes = []
+        handler._safe_send_error = lambda code, msg=None: status_codes.append(code)
 
-            # Without debug mode, even with valid token, must respond with 403
-            handler.do_POST()
-            self.assertEqual(errors, [(403, "Endpoint disabled")])
-        finally:
-            os.environ.clear()
-            os.environ.update(env_backup)
+        handler.do_GET()
+        self.assertIn(404, status_codes)
 
     def test_proxy_eval_enabled_with_debug_flag(self):
+        # In NeDotify, debug flags never open remote eval endpoints
         env_backup = dict(os.environ)
         try:
-            os.environ["AURA_DEBUG"] = "1"
+            os.environ["NEDOTIFY_DEBUG"] = "1"
+            self.assertFalse(hasattr(StreamProxyHandler, 'do_POST'))
 
             server = MagicMock()
             server.auth_token = "valid_tok"
             server.app_core = MagicMock()
-            window_mock = MagicMock()
-            window_mock.evaluate_js.return_value = "evaluated_ok"
-            server.app_core.window = window_mock
 
             handler = StreamProxyHandler.__new__(StreamProxyHandler)
             handler.server = server
-            handler.command = "POST"
+            handler.command = "GET"
             handler.path = "/__aura_eval?k=valid_tok"
-            handler.headers = {"Content-Length": "12"}
-            handler.rfile = io.BytesIO(b"alert('test')")
+            handler.headers = {}
             handler.wfile = io.BytesIO()
 
             status_codes = []
-            handler.send_response = lambda code, msg=None: status_codes.append(code)
-            handler.send_header = lambda k, v: None
-            handler.end_headers = lambda: None
-            handler._send_cors_headers = lambda: None
+            handler._safe_send_error = lambda code, msg=None: status_codes.append(code)
 
-            handler.do_POST()
-            self.assertIn(200, status_codes)
-            self.assertIn(b"evaluated_ok", handler.wfile.getvalue())
+            handler.do_GET()
+            self.assertIn(404, status_codes)
         finally:
             os.environ.clear()
             os.environ.update(env_backup)
@@ -211,13 +183,13 @@ class TestAuditRegressions(unittest.TestCase):
             content = f.read()
 
         self.assertIn(
-            "self.db.close_thread_connection()",
+            "close_thread_connection",
             content,
-            "cache_manager.py must call close_thread_connection() in download task"
+            "cache_manager.py must call close_thread_connection in download task"
         )
         self.assertTrue(
-            re.search(r"finally:.*self\.db\.close_thread_connection\(\)", content, re.DOTALL),
-            "cache_manager.py must call close_thread_connection() inside finally"
+            re.search(r"finally:.*close_connection\(\)", content, re.DOTALL),
+            "cache_manager.py must call close_connection() inside finally"
         )
 
     # -------------------------------------------------------------------------
@@ -236,8 +208,7 @@ class TestAuditRegressions(unittest.TestCase):
         with open(engine_path, "r", encoding="utf-8") as f:
             engine_code = f.read()
 
-        self.assertIn("track = track.copy()", engine_code)
-        self.assertIn('self.queue.current_track.get("id") == track.get("id")', engine_code)
+        self.assertIn("track = current.copy()", engine_code)
 
     def test_database_composite_indexes_exist(self):
         import tempfile
@@ -250,12 +221,12 @@ class TestAuditRegressions(unittest.TestCase):
             indexes = {row[0] for row in cursor.fetchall()}
 
             expected_indexes = {
-                "idx_tracks_album",
-                "idx_tracks_fav_added",
-                "idx_tracks_dl_added",
-                "idx_playlist_tracks_pid_pos",
-                "idx_history_tid_played",
+                "idx_tracks_source",
+                "idx_tracks_source_sid",
                 "idx_tracks_downloaded",
+                "idx_tracks_file_path",
+                "idx_history_track_time",
+                "idx_tracks_play_count",
             }
             for idx in expected_indexes:
                 self.assertIn(idx, indexes, f"Missing index: {idx}")

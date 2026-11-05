@@ -1,0 +1,212 @@
+/* Settings presentation. Same controls, search, navigation and persistence. */
+html[data-ui-style="macos"] #view-settings :is(select,input[type="text"],input[type="password"],input[type="url"],input[type="number"]) {
+    min-height: 32px;
+    max-width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--mac-glass-edge);
+    border-radius: 8px;
+    color: var(--mac-text);
+    background-color: var(--mac-settings-card);
+    font: 400 calc(12px * var(--mac-font-scale,1))/1.4 var(--mac-font);
+}
+html[data-ui-style="macos"] #view-settings select { cursor: pointer; }
+html[data-ui-style="macos"] #view-settings select option { background: var(--mac-surface); color: var(--mac-text); }
+html[data-ui-style="macos"] #view-settings :is(input,select,button):focus-visible { outline: 2px solid var(--mac-style-ring); outline-offset: 3px; }
+html[data-ui-style="macos"] #view-settings input[type="range"] { accent-color: var(--mac-switch-on); height: 4px; cursor: pointer; }
+html[data-ui-style="macos"] #view-settings input[type="checkbox"] { accent-color: var(--mac-switch-on); width: 16px; height: 16px; cursor: pointer; }
+html[data-ui-style="macos"] #view-settings :is(.toggle-switch,[role="switch"]) { min-width: 36px; }
+html[data-ui-style="macos"] #view-settings :is(select,input,button):disabled { opacity: .5; cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+    html[data-ui-style="macos"] #view-settings :is(input,button,select,input::before) { transition: none !important; }
+}
+html[data-ui-style="macos"] #main-content:has(#view-settings.active) #macos-toolbar { display: none; }
+html[data-ui-style="macos"] #view-settings.view-page.settings-overlay { inset: 0; padding: 0; background: transparent; border-radius: inherit; backdrop-filter: none; -webkit-backdrop-filter: none; animation: none; }
+html[data-ui-style="macos"] #view-settings .settings-modal-card { grid-template-columns: 214px minmax(0,1fr); grid-template-rows: minmax(86px,auto) minmax(0,1fr); background: var(--mac-surface); border-radius: inherit; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+html[data-ui-style="macos"] #view-settings :is(.settings-nav,.settings-panels,.settings-header-bar) { background: transparent; border-color: var(--mac-glass-edge); }
+html[data-ui-style="macos"] #view-settings .settings-header-bar { padding: 18px 22px; background: var(--mac-settings-tint); }
+html[data-ui-style="macos"] #view-settings .settings-current-heading h2 { font: 600 27px/1.2 var(--mac-font); letter-spacing: -.5px; margin-bottom: 6px; }
+html[data-ui-style="macos"] #view-settings .settings-current-heading p { color: var(--mac-secondary); font: 400 calc(12px * var(--mac-font-scale,1))/1.4 var(--mac-font); }
+html[data-ui-style="macos"] #view-settings .settings-search-wrap { width: min(300px,40%); height: 36px; border-color: var(--mac-glass-edge); background: #ffffff08; box-shadow: inset 0 1px 1px #ffffff08; }
+html[data-ui-style="macos"] #view-settings .settings-search-input { font: 400 calc(12px * var(--mac-font-scale,1)) var(--mac-font); }
+html[data-ui-style="macos"] #view-settings .settings-search-wrap:focus-within { outline: 2px solid var(--mac-style-ring); outline-offset: 2px; }
+html[data-ui-style="macos"] #view-settings .settings-search-input:focus-visible { outline: 0; }
+html[data-ui-style="macos"] #view-settings .settings-nav { padding: 22px 12px 18px; background: var(--mac-settings-tint); gap: 4px; }
+html[data-ui-style="macos"] #view-settings .settings-nav-heading { padding: 0 8px 18px; }
+html[data-ui-style="macos"] #view-settings .settings-nav-heading h1 { font: 600 calc(22px * var(--mac-font-scale,1))/1.25 var(--mac-font); letter-spacing: -.4px; }
+html[data-ui-style="macos"] #view-settings .settings-nav-heading p { font: 400 calc(11px * var(--mac-font-scale,1))/1.5 var(--mac-font); color: var(--mac-secondary); }
+html[data-ui-style="macos"] #view-settings .settings-nav-section-label { font: 400 calc(11px * var(--mac-font-scale,1))/1.4 var(--mac-font); color: var(--mac-secondary); padding: 15px 10px 6px; }
+html[data-ui-style="macos"] #view-settings .settings-nav-btn { min-height: 40px; padding: 10px 12px; gap: 12px; font: 400 calc(13px * var(--mac-font-scale,1))/1.4 var(--mac-font); color: var(--mac-text); border: 0; border-radius: 9px; }
+html[data-ui-style="macos"] #view-settings .settings-nav-btn svg { width: 18px; height: 18px; stroke-width: 1.6; }
+html[data-ui-style="macos"] #view-settings .settings-nav-btn.active { color: var(--mac-text); background: var(--mac-settings-selected); box-shadow: inset 0 1px 1px #ffffff08; }
+html[data-ui-style="macos"] #view-settings .settings-nav-btn:hover { color: var(--mac-text); background: var(--mac-glass-edge); }
+html[data-ui-style="macos"] #view-settings .settings-panels { padding: 0 24px 24px; }
+html[data-ui-style="macos"] #view-settings .settings-panel { padding-top: 18px; }
+html[data-ui-style="macos"] #view-settings .settings-section-title { font: 600 calc(20px * var(--mac-font-scale,1))/1.25 var(--mac-font); margin-bottom: 4px; letter-spacing: -.3px; }
+html[data-ui-style="macos"] #view-settings .settings-section-desc { font: 400 calc(12px * var(--mac-font-scale,1))/1.5 var(--mac-font); margin-bottom: 10px; }
+html[data-ui-style="macos"] #view-settings .settings-section { margin-bottom: 24px; }
+
+/* Make the complete settings workspace read as one pane of glass over the
+   wallpaper. The content keeps a low tint so long forms remain readable. */
+html[data-ui-style="macos"][data-macos-transparency="true"] #main-content:has(#view-settings.active) {
+    background: rgba(8, 12, 18, .07);
+}
+html[data-ui-style="macos"][data-macos-mode="light"][data-macos-transparency="true"] #main-content:has(#view-settings.active) {
+    background: rgba(245, 246, 250, .22);
+}
+html[data-ui-style="macos"][data-macos-transparency="false"] #main-content:has(#view-settings.active) {
+    background: var(--mac-base);
+}
+html[data-ui-style="macos"][data-macos-transparency="false"] #view-settings .settings-modal-card {
+    background: var(--mac-base);
+}
+html[data-ui-style="macos"][data-macos-transparency="false"] #view-settings :is(.settings-nav,.settings-header-bar,.settings-panels) {
+    background: var(--mac-surface);
+}
+
+/* The small window illustrations are decorative parts of the existing buttons. */
+html[data-ui-style="macos"] #view-settings .ui-style-choices { gap: 14px; margin: 10px 0 16px; }
+html[data-ui-style="macos"] #view-settings .ui-style-choices > button { padding: 12px; background: var(--mac-settings-card); border: 1px solid var(--mac-glass-edge); border-radius: 13px; box-shadow: inset 0 1px 1px #ffffff08; }
+html[data-ui-style="macos"] #view-settings .ui-style-choices > button:hover { background: var(--mac-settings-selected); }
+html[data-ui-style="macos"] #view-settings .ui-style-choices > button[aria-pressed="true"] { border-color: var(--mac-style-ring); box-shadow: 0 0 0 1px var(--mac-style-ring),inset 0 1px 1px #ffffff20; }
+html[data-ui-style="macos"] #view-settings .ui-style-choices > button strong { font: 600 calc(14px * var(--mac-font-scale,1))/1.3 var(--mac-font); margin: 9px 0 3px; }
+html[data-ui-style="macos"] #view-settings .ui-style-choices > button small { color: var(--mac-secondary); font: 400 calc(12px * var(--mac-font-scale,1))/1.4 var(--mac-font); }
+html[data-ui-style="macos"] #view-settings .ui-style-preview { height: 94px; border-radius: 9px; padding: 9px; grid-template-columns: 21% minmax(0,1fr); grid-template-rows: 1fr 19px; gap: 7px; }
+html[data-ui-style="macos"] #view-settings .ui-style-preview > span { position: relative; border-radius: 4px; }
+html[data-ui-style="macos"] #view-settings .preview-current { background: linear-gradient(140deg,#26313e,#111a23); border: 1px solid #65708055; }
+html[data-ui-style="macos"] #view-settings .preview-current > span { background: #8390a52b; border: 1px solid #bdc9e518; }
+html[data-ui-style="macos"] #view-settings .preview-current > span:first-child { grid-row: 1 / 3; }
+html[data-ui-style="macos"] #view-settings .preview-current > span:first-child::before { content: ''; position: absolute; inset: 20px 10px 7px; background: repeating-linear-gradient(transparent 0 9px,#ccd8ec29 9px 17px,transparent 17px 24px); border-radius: 4px; }
+html[data-ui-style="macos"] #view-settings .preview-current > span:last-child { grid-column: 2; }
+html[data-ui-style="macos"] #view-settings .preview-macos { position: relative; background: linear-gradient(135deg,#edf4ff,#b5d0f3 48%,#e9e2f2); border: 1px solid #fff8; box-shadow: inset 0 0 0 5px #ffffff55; padding-top: 15px; }
+html[data-ui-style="macos"] #view-settings .preview-macos::before { content: ''; position: absolute; top: 17px; left: 17px; width: 37px; height: 7px; z-index: 1; background: radial-gradient(circle at 3.5px 3.5px,#ff625a 3.5px,transparent 4px),radial-gradient(circle at 16px 3.5px,#ffbe41 3.5px,transparent 4px),radial-gradient(circle at 28.5px 3.5px,#50cf73 3.5px,transparent 4px); }
+html[data-ui-style="macos"] #view-settings .preview-macos > span { background: #ffffffc4; border: 1px solid #fff9; }
+html[data-ui-style="macos"] #view-settings .preview-macos > span:first-child { grid-row: 1 / 3; background: #d9e8fcaa; }
+html[data-ui-style="macos"] #view-settings .preview-macos > span:first-child::after { content: ''; position: absolute; left: 9px; right: 9px; top: 39px; height: 11px; border-radius: 4px; background: #7494c342; box-shadow: 0 18px 0 #a3b7d43b; }
+html[data-ui-style="macos"] #view-settings .preview-macos > span:last-child { grid-column: 2; background: linear-gradient(90deg,#94bcef66 0 24%,transparent 24% 28%,#94bcef66 28% 100%); }
+
+/* Native checkbox semantics and keyboard behaviour, with a switch appearance. */
+html[data-ui-style="macos"] #view-settings .macos-mode-choices { padding: 3px; gap: 2px; border: 1px solid var(--mac-glass-edge); border-radius: 10px; background: #79879e20; margin: 16px 0 12px; }
+html[data-ui-style="macos"] #view-settings .macos-mode-choices button { min-width: 96px; min-height: 30px; padding: 6px 16px; border-radius: 7px; font: 400 calc(12px * var(--mac-font-scale,1)) var(--mac-font); color: var(--mac-text); }
+html[data-ui-style="macos"] #view-settings .macos-mode-choices button[aria-pressed="true"] { background: var(--mac-settings-selected); border-color: var(--mac-glass-edge); box-shadow: 0 1px 3px #0002,inset 0 1px 1px #ffffff18; font-weight: 500; }
+html[data-ui-style="macos"] #view-settings .macos-glass-choice { font: 400 calc(12px * var(--mac-font-scale,1))/1.5 var(--mac-font); gap: 10px; margin: 0 0 2px; width: fit-content; }
+html[data-ui-style="macos"] #view-settings .macos-glass-choice input { appearance: none; -webkit-appearance: none; position: relative; flex-shrink: 0; width: 42px; height: 24px; padding: 0; border: 1px solid var(--mac-glass-edge); border-radius: 14px; background: #8a909b6b; cursor: pointer; transition: background-color 140ms ease; }
+html[data-ui-style="macos"] #view-settings .macos-glass-choice input::before { content: ''; position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0004; transition: transform 140ms ease; }
+html[data-ui-style="macos"] #view-settings .macos-glass-choice input:checked { background: var(--mac-switch-on); border-color: #ffffff18; }
+html[data-ui-style="macos"] #view-settings .macos-glass-choice input:checked::before { transform: translateX(18px); }
+html[data-ui-style="macos"] #view-settings .macos-effects-feedback { margin: 0 0 14px; gap: 8px 12px; }
+html[data-ui-style="macos"] #view-settings .macos-effects-feedback .settings-section-desc { margin: 0; }
+html[data-ui-style="macos"] #view-settings .ui-style-section button:focus-visible { outline-color: var(--mac-style-ring); }
+
+/* Five compact art-led columns; all themes and their real controls stay intact. */
+html[data-ui-style="macos"] #view-settings .theme-presets-grid { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 10px; margin-top: 8px; }
+html[data-ui-style="macos"] #view-settings .theme-card { position: relative; padding: 0 0 4px; gap: 2px; border: 1px solid var(--mac-glass-edge); border-radius: 9px; background: var(--mac-settings-card); box-shadow: inset 0 1px 1px #ffffff08; }
+html[data-ui-style="macos"] #view-settings .theme-card::after { content: ''; position: absolute; inset: auto 0 0; height: 31px; background: #12192330; pointer-events: none; }
+html[data-ui-style="macos"] #view-settings .theme-preview { height: 50px; margin-bottom: 2px; border-radius: 8px 8px 0 0; }
+html[data-ui-style="macos"] #view-settings :is(.theme-dots-row,.theme-card-name) { position: relative; z-index: 1; }
+html[data-ui-style="macos"] #view-settings .theme-dots-row { height: 10px; gap: 5px; }
+html[data-ui-style="macos"] #view-settings .theme-dot { width: 9px; height: 9px; border: 1px solid #ffffff24; }
+html[data-ui-style="macos"] #view-settings .theme-card-name { font: 500 calc(11px * var(--mac-font-scale,1))/1.3 var(--mac-font); }
+html[data-ui-style="macos"] #view-settings .theme-card:hover { border-color: var(--mac-theme-ring); background: var(--mac-settings-selected); }
+html[data-ui-style="macos"] #view-settings .theme-card.active { border-color: var(--mac-theme-ring); box-shadow: 0 0 0 1px var(--mac-theme-ring); }
+html[data-ui-style="macos"] #view-settings .theme-card-badge { width: 19px; height: 19px; top: 5px; right: 5px; z-index: 2; background: #b36bf0; color: #fff; box-shadow: 0 1px 4px #0004,inset 0 1px 1px #ffffff70; }
+html[data-ui-style="macos"] #view-settings .theme-card:focus-visible { outline-color: var(--mac-theme-ring); }
+html[data-ui-style="macos"][data-macos-mode="light"] #view-settings .theme-card::after { background: #ffffff38; }
+
+@supports (backdrop-filter: blur(1px)) {
+    /* Blur at the canvas boundary. An animated page is a backdrop root and
+       prevents nested card filters from sampling a custom wallpaper. */
+    html[data-ui-style="macos"][data-macos-transparency="true"] #main-content:has(#view-settings.active) { backdrop-filter: blur(min(var(--mac-panel-blur,38px),var(--blur-surface-cap,16px))) saturate(1.16); -webkit-backdrop-filter: blur(min(var(--mac-panel-blur,38px),var(--blur-surface-cap,16px))) saturate(1.16); }
+    html[data-ui-style="macos"][data-macos-transparency="true"] #view-settings .settings-modal-card { background: var(--mac-settings-glass); }
+}
+@media (max-width: 1200px) {
+    html[data-ui-style="macos"] #view-settings .settings-modal-card { grid-template-columns: 192px minmax(0,1fr); }
+    html[data-ui-style="macos"] #view-settings .settings-nav-btn { font-size: calc(12px * var(--mac-font-scale,1)); padding-inline: 10px; gap: 9px; }
+    html[data-ui-style="macos"] #view-settings .settings-panels { padding-inline: 18px; }
+    html[data-ui-style="macos"] #view-settings .theme-presets-grid { grid-template-columns: repeat(4,minmax(0,1fr)); }
+}
+@media (max-width: 900px) {
+    html[data-ui-style="macos"] #view-settings .settings-modal-card { display: flex; }
+    html[data-ui-style="macos"] #view-settings .settings-header-bar { order: 1; min-height: 74px; padding: 16px; flex-shrink: 0; }
+    html[data-ui-style="macos"] #view-settings .settings-nav { order: 2; flex-direction: row; width: 100%; padding: 5px 12px; min-height: 46px; max-height: 46px; border: 0; border-bottom: 1px solid var(--mac-glass-edge); overflow-x: auto; overflow-y: hidden; }
+    html[data-ui-style="macos"] #view-settings :is(.settings-nav-heading,.settings-nav-section-label) { display: none; }
+    html[data-ui-style="macos"] #view-settings .settings-nav-btn { min-height: 34px; padding: 7px 12px; white-space: nowrap; }
+    html[data-ui-style="macos"] #view-settings .settings-panels { order: 3; flex: 1; min-height: 0; padding-inline: 16px; }
+    html[data-ui-style="macos"] #view-settings .settings-current-heading h2 { font-size: 23px; }
+}
+@media (max-width: 600px) {
+    html[data-ui-style="macos"] #view-settings .settings-header-bar { gap: 10px; padding: 14px; }
+    html[data-ui-style="macos"] #view-settings .settings-search-wrap { width: 45%; min-width: 0; }
+    html[data-ui-style="macos"] #view-settings .settings-current-heading h2 { font-size: calc(21px * var(--mac-font-scale,1)); }
+    html[data-ui-style="macos"] #view-settings .settings-current-heading p { font-size: calc(10px * var(--mac-font-scale,1)); }
+    html[data-ui-style="macos"] #view-settings .ui-style-preview { height: 68px; }
+    html[data-ui-style="macos"] #view-settings .ui-style-choices { gap: 10px; }
+    html[data-ui-style="macos"] #view-settings .ui-style-choices > button { padding: 9px; }
+    html[data-ui-style="macos"] #view-settings .ui-style-choices > button small { font-size: calc(11px * var(--mac-font-scale,1)); }
+    html[data-ui-style="macos"] #view-settings .theme-presets-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+    html[data-ui-style="macos"] #view-settings .macos-mode-choices button { min-width: 0; padding-inline: 14px; }
+}
+@media (forced-colors: active) {
+    html[data-ui-style="macos"] #view-settings .macos-glass-choice input { border-color: CanvasText; }
+    html[data-ui-style="macos"] #view-settings .macos-glass-choice input:checked { background: Highlight; }
+    html[data-ui-style="macos"] #view-settings .macos-glass-choice input::before { background: CanvasText; }
+}
+
+/* Three clear layers in the settings view: app navigation, settings
+   categories, and the selected settings page. */
+html[data-ui-style="macos"] #main-content {
+    margin: 8px 10px calc(var(--player-bar-height) + var(--player-bar-offset) + 12px) 14px;
+    border: 1px solid var(--mac-glass-edge);
+    border-radius: 18px;
+    box-shadow: 0 10px 30px #0003, inset 0 1px 1px #ffffff0c;
+    overflow: hidden;
+}
+html[data-ui-style="macos"] #view-settings .settings-modal-card {
+    padding: 12px;
+    grid-template-columns: 214px minmax(0,1fr);
+    grid-template-rows: minmax(86px,auto) minmax(0,1fr);
+    column-gap: 14px;
+    row-gap: 0;
+    background: transparent;
+}
+html[data-ui-style="macos"] #view-settings .settings-nav {
+    align-self: stretch;
+    border: 1px solid var(--mac-glass-edge);
+    border-radius: 14px;
+    background: var(--mac-settings-glass);
+    box-shadow: 0 8px 22px #0002, inset 0 1px 1px #ffffff0a;
+}
+html[data-ui-style="macos"] #view-settings .settings-header-bar {
+    border: 1px solid var(--mac-glass-edge);
+    border-bottom: 0;
+    border-radius: 15px 15px 0 0;
+    background: var(--mac-settings-glass);
+    box-shadow: inset 0 1px 1px #ffffff0c;
+}
+html[data-ui-style="macos"] #view-settings .settings-panels {
+    border: 1px solid var(--mac-glass-edge);
+    border-top: 0;
+    border-radius: 0 0 15px 15px;
+    background: var(--mac-settings-glass);
+    box-shadow: 0 8px 22px #0002;
+}
+@media (max-width: 1180px) {
+    html[data-ui-style="macos"] #main-content {
+        margin-left: 10px;
+        margin-right: 8px;
+    }
+    html[data-ui-style="macos"] #view-settings .settings-modal-card { padding: 10px; column-gap: 10px; }
+    html[data-ui-style="macos"] #view-settings .settings-nav { border-radius: 12px; }
+    html[data-ui-style="macos"] #view-settings .settings-header-bar { border-radius: 12px 12px 0 0; }
+    html[data-ui-style="macos"] #view-settings .settings-panels { border-radius: 0 0 12px 12px; }
+}
+@media (max-width: 900px) {
+    html[data-ui-style="macos"] #main-content { margin-left: 8px; margin-right: 6px; border-radius: 14px; }
+    html[data-ui-style="macos"] #view-settings .settings-modal-card { padding: 8px; gap: 8px; }
+    html[data-ui-style="macos"] #view-settings .settings-nav { border: 1px solid var(--mac-glass-edge); border-radius: 10px; }
+    html[data-ui-style="macos"] #view-settings .settings-header-bar { border: 1px solid var(--mac-glass-edge); border-radius: 10px; }
+    html[data-ui-style="macos"] #view-settings .settings-panels { border: 1px solid var(--mac-glass-edge); border-radius: 10px; }
+}
+@media (max-width: 600px) {
+    html[data-ui-style="macos"] #main-content { margin-left: 5px; margin-right: 5px; }
+    html[data-ui-style="macos"] #view-settings .settings-modal-card { padding: 6px; gap: 6px; }
+}

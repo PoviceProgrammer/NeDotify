@@ -124,6 +124,9 @@ class TestStreamResolver(unittest.TestCase):
         self.assertNotIn(("soundcloud", "sc_99"), self.resolver._mem)
         self.mock_db.invalidate_cached_stream.assert_called_once_with("soundcloud", "sc_99")
 
-        self.resolver.refresh("soundcloud", "sc_99", "http://sc.com/2")
+        self.resolver.refresh("soundcloud", "sc_99", "https://sc.com/2")
         self.assertIn(("soundcloud", "sc_99"), self.resolver._mem)
-        self.mock_db.cache_stream.assert_called_once_with("soundcloud", "sc_99", "http://sc.com/2")
+        if hasattr(self.mock_db, "update_cached_stream_url") and self.mock_db.update_cached_stream_url.called:
+            self.mock_db.update_cached_stream_url.assert_called_once_with("soundcloud", "sc_99", "https://sc.com/2")
+        else:
+            self.mock_db.cache_stream.assert_called_once_with("soundcloud", "sc_99", "https://sc.com/2")

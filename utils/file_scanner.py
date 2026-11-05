@@ -6,10 +6,13 @@ Recursively scans directories for audio files and adds them to the database.
 import os
 import math
 import threading
+import logging
 from typing import Callable, Optional
 
 from utils.tag_parser import SUPPORTED_FORMATS, parse_tags, save_cover_to_file
 from core.database import DatabaseManager
+
+logger = logging.getLogger(__name__)
 
 # Single source of truth for "is this file playable audio?".
 # Built on top of utils.tag_parser.SUPPORTED_FORMATS (never duplicated here) plus
@@ -21,7 +24,7 @@ def is_audio_file(path: str) -> bool:
     """Return True when `path` has a supported audio extension."""
     if not path:
         return False
-    return os.path.splitext(path)[1].lower() in AUDIO_EXTENSIONS
+    return os.path.splitext(str(path).lower())[1] in AUDIO_EXTENSIONS
 
 
 class FileScanner:
@@ -30,6 +33,9 @@ class FileScanner:
     def __init__(self, db: DatabaseManager):
         self.db = db
         self._scanning = False
+        self._stopped = False
+        self._scan_generation = 0
+        self._scanning_lock = threading.Lock()
         self._scan_thread: Optional[threading.Thread] = None
         self._on_progress: Optional[Callable] = None
         self._on_complete: Optional[Callable] = None
@@ -41,199 +47,164 @@ class FileScanner:
     def scan_files(self, file_paths: list) -> list:
         """Import specific files. Returns list of added track dicts."""
         added = []
-        for filepath in file_paths or []:
-            if not filepath or not isinstance(filepath, str):
+        for filepath in file_paths:
+            if not is_audio_file(filepath):
                 continue
-            norm_path = os.path.normpath(os.path.abspath(filepath))
-            try:
-                if not os.path.isfile(norm_path) or not is_audio_file(norm_path):
-                    continue
-            except OSError:
-                continue
-            track = self._import_file(norm_path)
+            track = self._import_file(filepath)
             if track:
                 added.append(track)
         return added
 
     def scan_single_file(self, filepath: str) -> Optional[dict]:
         """Scan and import a single audio file into the database."""
-        if not filepath or not isinstance(filepath, str):
+        if not is_audio_file(filepath):
             return None
-        norm_path = os.path.normpath(os.path.abspath(filepath))
-        try:
-            if not os.path.isfile(norm_path) or not is_audio_file(norm_path):
-                return None
-        except OSError:
-            return None
-        return self._import_file(norm_path)
+        return self._import_file(filepath)
 
-    def scan_folder(self, folder_path: str, recursive: bool = True):
-        """Scan a folder for audio files (runs in background thread)."""
-        if self._scanning:
-            return
-        if not folder_path or not isinstance(folder_path, str):
-            return
-        folder_path = os.path.normpath(os.path.abspath(folder_path))
-        if not os.path.isdir(folder_path):
-            return
+    def scan_folder(self, folder_path: str, recursive: bool = True) -> bool:
+        """Start a background folder scan; return whether it was accepted.
+
+        Progress callbacks receive ``(current, None, filepath)`` because the
+        folder is enumerated as a stream and its total is intentionally unknown.
+        """
+        if not isinstance(folder_path, (str, os.PathLike)) or not os.path.isdir(folder_path):
+            return False
+        folder_path = os.path.abspath(os.fspath(folder_path))
+        with self._scanning_lock:
+            active_thread = self._scan_thread
+            if self._stopped or self._scanning or (active_thread is not None and active_thread.is_alive()):
+                return False
+            self._scanning = True
+            self._scan_generation += 1
+            generation = self._scan_generation
 
         def _scan():
-            self._scanning = True
             try:
-                files = []
-
-                def _on_walk_error(err):
-                    pass
-
-                # Collect all audio files
-                if recursive:
-                    for root, dirs, filenames in os.walk(folder_path, onerror=_on_walk_error):
-                        for fname in filenames:
-                            fpath = os.path.normpath(os.path.abspath(os.path.join(root, fname)))
-                            try:
-                                if os.path.isfile(fpath) and is_audio_file(fpath):
-                                    files.append(fpath)
-                            except OSError:
-                                continue
-                else:
-                    try:
-                        entries = os.listdir(folder_path)
-                    except OSError:
-                        entries = []
-                    for fname in entries:
-                        fpath = os.path.normpath(os.path.abspath(os.path.join(folder_path, fname)))
-                        try:
-                            if os.path.isfile(fpath) and is_audio_file(fpath):
-                                files.append(fpath)
-                        except OSError:
-                            continue
-
-                total = len(files)
                 added = []
-
-                for i, filepath in enumerate(files):
-                    if not self._scanning:
-                        break
-
+                current = 0
+                for filepath in self._iter_audio_files(folder_path, recursive, generation):
+                    if not self._is_generation_active(generation):
+                        return
                     track = self._import_file(filepath)
+                    # _import_file may spend time decoding tags and writing to
+                    # SQLite. A cancellation that arrived during that work must
+                    # not publish progress or a stale item callback afterward.
+                    if not self._is_generation_active(generation):
+                        return
+                    current += 1
                     if track:
                         added.append(track)
                         if self._on_file_found:
                             self._on_file_found(track)
-
                     if self._on_progress:
-                        self._on_progress(i + 1, total, filepath)
+                        self._on_progress(current, None, filepath)
 
-                # Update scan folder record
-                if getattr(self, "db", None) is not None:
+                # Serialize the terminal database updates against cancel_scan:
+                # either cancellation wins and no completed folder is recorded,
+                # or the scan commits its completion before cancellation begins.
+                with self._scanning_lock:
+                    if not self._scanning or self._scan_generation != generation:
+                        return
                     self.db.add_scan_folder(folder_path)
                     self.db.update_scan_time(folder_path)
-
-                self._scanning = False
                 if self._on_complete:
                     self._on_complete(added)
+            except Exception:
+                logger.warning("Folder scan failed for %s", folder_path, exc_info=True)
             finally:
-                if getattr(self, "db", None) is not None:
-                    try:
-                        self.db.close_thread_connection()
-                    except Exception:
-                        pass
+                with self._scanning_lock:
+                    if generation == self._scan_generation:
+                        self._scanning = False
+                self.db.close_thread_connection()
 
-        self._scan_thread = threading.Thread(target=_scan, daemon=True)
-        self._scan_thread.start()
+        thread = threading.Thread(target=_scan, daemon=True, name="FileScanner")
+        with self._scanning_lock:
+            # Keep the reservation until start() succeeds; another caller cannot
+            # race between marking the scanner active and publishing its thread.
+            self._scan_thread = thread
+        try:
+            thread.start()
+        except Exception:
+            with self._scanning_lock:
+                if generation == self._scan_generation:
+                    self._scanning = False
+                    self._scan_thread = None
+            logger.exception("Could not start folder scan")
+            return False
+        return True
+
+    def _is_generation_active(self, generation: int) -> bool:
+        with self._scanning_lock:
+            return self._scanning and self._scan_generation == generation
+
+    def _iter_audio_files(self, folder_path: str, recursive: bool, generation: int):
+        """Yield audio paths without retaining an unbounded directory listing."""
+        if recursive:
+            for root, dirs, filenames in os.walk(folder_path):
+                if not self._is_generation_active(generation):
+                    return
+                # Do not follow symlinked directory trees outside the selected
+                # folder or revisit cycles.
+                dirs[:] = [name for name in dirs
+                           if not os.path.islink(os.path.join(root, name))]
+                for filename in filenames:
+                    if not self._is_generation_active(generation):
+                        return
+                    filepath = os.path.join(root, filename)
+                    if is_audio_file(filepath):
+                        yield filepath
+        else:
+            try:
+                with os.scandir(folder_path) as entries:
+                    for entry in entries:
+                        if not self._is_generation_active(generation):
+                            return
+                        if entry.is_file(follow_symlinks=False) and is_audio_file(entry.name):
+                            yield entry.path
+            except OSError:
+                logger.warning("Could not enumerate folder %s", folder_path, exc_info=True)
 
     def _import_file(self, filepath: str) -> Optional[dict]:
         """Import a single audio file. Returns track dict or None if already exists."""
-        if not filepath or not isinstance(filepath, str):
+        filepath = os.path.realpath(os.path.abspath(os.fspath(filepath)))
+        if not os.path.isfile(filepath):
             return None
-        filepath = os.path.normpath(os.path.abspath(filepath))
-        try:
-            if not os.path.isfile(filepath):
-                return None
-        except OSError:
-            return None
-
         # Check if already in database
         existing = self.db.get_track_by_path(filepath)
         if existing:
             return None
 
         # Parse tags
-        try:
-            tags = parse_tags(filepath)
-        except Exception:
-            tags = None
+        tags = parse_tags(filepath) or {}
 
-        if not tags or not isinstance(tags, dict):
-            tags = {}
-
-        base_name = os.path.splitext(os.path.basename(filepath))[0] or "Unknown Track"
-        title = tags.get("title")
-        if not title or not str(title).strip():
-            title = base_name
-        else:
-            title = str(title).strip()
-
-        artist = tags.get("artist")
-        if not artist or not str(artist).strip():
-            artist = "Unknown Artist"
-        else:
-            artist = str(artist).strip()
-
-        album = tags.get("album")
-        if not album or not str(album).strip():
-            album = "Unknown Album"
-        else:
-            album = str(album).strip()
-
-        # Sanitize duration
-        raw_duration = tags.get("duration")
-        duration = 0.0
-        if raw_duration is not None:
+        def number(key, integral=False):
             try:
-                duration = float(raw_duration)
-                if math.isnan(duration) or math.isinf(duration) or duration < 0.0:
-                    duration = 0.0
-            except (ValueError, TypeError):
-                duration = 0.0
+                value = float(tags.get(key) or 0)
+                if not math.isfinite(value) or value < 0:
+                    return 0
+                return int(value) if integral else value
+            except (ValueError, TypeError, OverflowError):
+                return 0
 
-        # Sanitize bitrate
-        raw_bitrate = tags.get("bitrate")
-        bitrate = 0
-        if raw_bitrate is not None:
-            try:
-                bitrate = max(0, int(raw_bitrate))
-            except (ValueError, TypeError):
-                bitrate = 0
-
-        # Sanitize year
-        raw_year = tags.get("year")
-        year = None
-        if raw_year is not None:
-            try:
-                year = int(str(raw_year)[:4])
-            except (ValueError, TypeError, IndexError):
-                year = None
-
-        format_ = tags.get("format") or os.path.splitext(filepath)[1].lstrip('.').upper()
-        genre = tags.get("genre")
+        # Save cover art
+        cover_path = None
+        if tags.get("cover_data"):
+            # We'll save cover after getting the track ID
+            pass
 
         # Add to database
         track_id = self.db.add_track(
-            title=title,
-            artist=artist,
-            album=album,
-            duration=duration,
+            title=tags.get("title") or os.path.splitext(os.path.basename(filepath))[0],
+            artist=tags.get("artist") or "Unknown Artist",
+            album=tags.get("album") or "Unknown Album",
+            duration=number("duration"),
             file_path=filepath,
             source="local",
-            bitrate=bitrate,
-            format_=format_,
-            genre=genre,
-            year=year,
+            bitrate=number("bitrate", integral=True),
+            format_=tags.get("format") or os.path.splitext(filepath)[1].lstrip('.').upper(),
+            genre=tags.get("genre"),
+            year=number("year", integral=True) or None,
         )
-
-        if not track_id:
-            return None
 
         # Save cover art with track ID
         if tags.get("cover_data"):
@@ -242,14 +213,10 @@ class FileScanner:
                     tags["cover_data"], tags.get("cover_mime"),
                     self._covers_dir, track_id
                 )
-                if cover_path:
-                    with self.db.conn:
-                        self.db.conn.execute(
-                            "UPDATE tracks SET cover_path = ? WHERE id = ?",
-                            (cover_path, track_id)
-                        )
             except Exception:
-                pass
+                logger.warning("Could not save imported artwork for track %s", track_id, exc_info=True)
+            if cover_path:
+                self.db.update_track(track_id, cover_path=cover_path)
 
         # Return the full track record
         return self.db.get_track(track_id)
@@ -261,9 +228,22 @@ class FileScanner:
             if folder.get("auto_scan"):
                 self.scan_folder(folder["folder_path"])
 
-    def cancel_scan(self):
-        """Cancel ongoing scan."""
-        self._scanning = False
+    def cancel_scan(self, timeout: float = 5.0) -> bool:
+        """Cancel a scan and join its worker up to ``timeout`` seconds."""
+        with self._scanning_lock:
+            self._scanning = False
+            self._scan_generation += 1
+            thread = self._scan_thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(max(0.0, float(timeout)))
+            return not thread.is_alive()
+        return True
+
+    def stop(self, timeout: float = 5.0) -> bool:
+        """Shutdown hook: prevent new work and wait for the scan worker to exit."""
+        with self._scanning_lock:
+            self._stopped = True
+        return self.cancel_scan(timeout=timeout)
 
     # ─── Event Binding ───
 

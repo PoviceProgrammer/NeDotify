@@ -1,5 +1,5 @@
 """
-NeDotify / AURA Music - Last.fm Service Wrapper
+NeDotify - Last.fm Service Wrapper
 Provides Last.fm open API querying with API key rotation, multi-TTL caching,
 SQLite response caching, rate-limiting resilience, and graceful offline/error handling.
 """
@@ -17,7 +17,8 @@ from services.base_service import BaseMusicService
 logger = logging.getLogger(__name__)
 
 # No API key ships with the application. Keys are resolved at runtime from
-# (1) the LASTFM_API_KEY environment variable, then (2) settings 'auth'/'lastfm_api_key'.
+# (1) the LASTFM_API_KEY environment variable, then (2) services.lastfm_api_key.
+# Older profiles may still contain auth.lastfm_api_key; it remains a fallback.
 # Both accept several comma/semicolon separated keys, which keeps the rotation and
 # _mark_bad_key machinery useful for users who supply more than one.
 API_KEYS: List[str] = []
@@ -37,6 +38,26 @@ def _split_keys(raw: Any) -> List[str]:
     return [c.strip() for c in candidates if c and c.strip()]
 
 
+
+def _mapping(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _records(value):
+    if isinstance(value, dict):
+        return [value]
+    return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
+
+
+def _number(value, kind=int):
+    import math
+    try:
+        parsed = float(value or 0)
+        return kind(parsed) if math.isfinite(parsed) and parsed >= 0 else kind(0)
+    except (ValueError, TypeError, OverflowError):
+        return kind(0)
+
+
 class LastFmArtistHandler:
     """Namespace wrapper for artist queries."""
 
@@ -51,12 +72,6 @@ class LastFmArtistHandler:
 
     def getTopTags(self, artist: str) -> List[Dict]:
         return self._service.artist_get_top_tags(artist)
-
-    def getInfo(self, artist: str, lang: str = "ru") -> Dict:
-        return self._service.artist_get_info(artist, lang=lang)
-
-    def getTopAlbums(self, artist: str, limit: int = 50) -> List[Dict]:
-        return self._service.artist_get_top_albums(artist, limit=limit)
 
 
 class LastFmTrackHandler:
@@ -108,18 +123,13 @@ class LastFMService(BaseMusicService):
         self._key_lock = threading.Lock()
         self._bad_keys = set()
 
-        for key in self._resolve_api_keys():
-            if key not in API_KEYS:
-                API_KEYS.append(key)
-
-        if not API_KEYS:
+        if not self._resolve_api_keys():
             self.logger.info(
                 'Last.fm API key not configured — set the LASTFM_API_KEY environment '
-                'variable or auth.lastfm_api_key in settings. Last.fm features are disabled.'
+                'variable or services.lastfm_api_key in settings. Last.fm features are disabled.'
             )
 
         self._cache = {}
-        self._cache_lock = threading.Lock()
 
         self._db_path = self._init_sqlite_cache_path()
         self._init_sqlite_cache_db()
@@ -143,26 +153,31 @@ class LastFMService(BaseMusicService):
         try:
             keys.extend(_split_keys(os.getenv('LASTFM_API_KEY')))
         except Exception as e:
-            self.logger.debug(f'Could not read LASTFM_API_KEY from the environment: {e}', exc_info=True)
+            self.logger.debug('Could not read LASTFM_API_KEY from the environment (%s)', type(e).__name__)
         if self.settings is not None:
             try:
-                keys.extend(_split_keys(self.settings.get('auth', 'lastfm_api_key', '')))
+                configured = self.settings.get('services', 'lastfm_api_key', '')
+                keys.extend(_split_keys(configured or self.settings.get('auth', 'lastfm_api_key', '')))
             except Exception as e:
-                self.logger.debug(f'Could not read auth.lastfm_api_key from settings: {e}', exc_info=True)
+                self.logger.debug('Could not read configured Last.fm credentials: %s', type(e).__name__)
         unique: List[str] = []
         for key in keys:
             if key not in unique:
                 unique.append(key)
         return unique
 
+    def is_enabled(self):
+        """Credentials alone never authorize disclosure of listening metadata."""
+        return self.settings is not None and self.settings.get('services', 'lastfm_enabled', False) is True
+
     def _get_session(self) -> requests.Session:
         """Per-thread requests.Session (M-7): Sessions are not thread-safe."""
         session = getattr(self._session_local, 'session', None)
         if session is None:
             session = requests.Session()
-            session.headers.update({'User-Agent': 'AURA-Music/1.0 (RecommendationEngine)'})
+            session.headers.update({'User-Agent': 'NeDotify/1.0 (RecommendationEngine)'})
             self._session_local.session = session
-        return session
+        return self.configure_session(session)
 
     @property
     def _session(self) -> requests.Session:
@@ -183,48 +198,14 @@ class LastFMService(BaseMusicService):
                 wait_for = (1.0 - self._rate_tokens) / 2.0
                 self._rate_lock.wait(timeout=min(wait_for, 2.0))
 
-    @staticmethod
-    def _extract_image_url(item: Any) -> str:
-        """Safely extract image URL from list of dicts or single dict."""
-        if not isinstance(item, dict):
-            return ''
-        images = item.get('image')
-        if isinstance(images, list) and images:
-            for img in reversed(images):
-                if isinstance(img, dict) and img.get('#text'):
-                    return str(img['#text']).strip()
-        elif isinstance(images, dict) and images.get('#text'):
-            return str(images['#text']).strip()
-        return ''
-
-    @staticmethod
-    def _safe_int(val: Any, default: int = 0) -> int:
-        """Safely parse integer value without raising exceptions."""
-        if val is None:
-            return default
-        try:
-            return int(val)
-        except (ValueError, TypeError):
-            return default
-
-    @staticmethod
-    def _safe_float(val: Any, default: float = 0.0) -> float:
-        """Safely parse float value without raising exceptions or NaN."""
-        if val is None:
-            return default
-        try:
-            f = float(val)
-            return 0.0 if (f != f or f == float('inf') or f == float('-inf')) else f
-        except (ValueError, TypeError):
-            return default
-
     def _init_sqlite_cache_path(self) -> str:
         base_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'cache')
         try:
             os.makedirs(base_dir, exist_ok=True)
             return os.path.join(base_dir, 'lastfm_cache.db')
         except Exception as e:
-            self.logger.warning(f'Cannot create Last.fm cache dir {base_dir} ({e}); using an in-memory cache')
+            self.logger.warning('Cannot create Last.fm cache directory (%s); using an in-memory cache',
+                                type(e).__name__)
             return ':memory:'
 
     def _init_sqlite_cache_db(self):
@@ -240,29 +221,30 @@ class LastFMService(BaseMusicService):
                 ''')
                 conn.commit()
         except Exception as e:
-            self.logger.warning(f'Failed to initialize Last.fm SQLite cache DB: {e}')
+            self.logger.warning('Failed to initialize Last.fm SQLite cache DB (%s)', type(e).__name__)
 
     @property
     def available(self) -> bool:
         """True only when at least one usable (non-blocked) API key is configured."""
         with self._key_lock:
-            return any(k not in self._bad_keys for k in API_KEYS)
+            return any(k not in self._bad_keys for k in self._resolve_api_keys())
 
     def _mark_bad_key(self, api_key: str):
         with self._key_lock:
             if api_key and api_key not in self._bad_keys:
                 self._bad_keys.add(api_key)
-                self.logger.warning(f'Disabling invalid/blocked Last.fm API key: {api_key[:6]}...')
+                self.logger.warning('Disabling an invalid or blocked Last.fm API key')
 
     def _get_next_api_key(self) -> str:
         with self._key_lock:
-            valid_keys = [k for k in API_KEYS if k not in self._bad_keys]
+            keys = self._resolve_api_keys()
+            valid_keys = [k for k in keys if k not in self._bad_keys]
             if valid_keys:
                 key = valid_keys[self._key_index % len(valid_keys)]
                 self._key_index = (self._key_index + 1) % len(valid_keys)
                 return key
-            if API_KEYS:
-                return API_KEYS[0]
+            if keys:
+                return keys[0]
             return ''
 
     def _get_cached(self, cache_key: str) -> Optional[Any]:
@@ -290,7 +272,7 @@ class LastFMService(BaseMusicService):
                         self._cache[cache_key] = {'data': data, 'ts': ts, 'ttl': ttl}
                     return data
         except Exception as e:
-            self.logger.debug(f'SQLite cache lookup error: {e}')
+            self.logger.debug('SQLite cache lookup failed (%s)', type(e).__name__)
         finally:
             if conn:
                 try:
@@ -314,7 +296,7 @@ class LastFMService(BaseMusicService):
             if row:
                 return json.loads(row[0])
         except Exception as e:
-            self.logger.debug(f'Stale SQLite cache lookup failed for {cache_key}: {e}', exc_info=True)
+            self.logger.debug('Stale SQLite cache lookup failed (%s)', type(e).__name__)
         finally:
             if conn:
                 try:
@@ -339,7 +321,7 @@ class LastFMService(BaseMusicService):
                 conn.execute('INSERT OR REPLACE INTO lastfm_response_cache (cache_key, json_data, timestamp, ttl) VALUES (?, ?, ?, ?)',
                              (cache_key, json.dumps(data), now, ttl))
         except Exception as e:
-            self.logger.debug(f'SQLite cache store error: {e}')
+            self.logger.debug('SQLite cache store failed (%s)', type(e).__name__)
         finally:
             if conn:
                 try:
@@ -348,6 +330,8 @@ class LastFMService(BaseMusicService):
                     pass
 
     def _api_request(self, method: str, params: dict, ttl: float) -> Optional[dict]:
+        if not self.is_enabled():
+            return None
         cache_key = f'{method}:' + '&'.join(f'{k}={v}' for k, v in sorted(params.items()))
         cached = self._get_cached(cache_key)
         if cached is not None:
@@ -358,7 +342,7 @@ class LastFMService(BaseMusicService):
             self.logger.debug(f'Skipping Last.fm {method}: no usable API key configured')
             return self._get_stale_cache(cache_key)
 
-        attempts = len(API_KEYS)
+        attempts = len(self._resolve_api_keys())
         for _ in range(attempts):
             api_key = self._get_next_api_key()
             if not api_key or api_key in self._bad_keys:
@@ -367,17 +351,24 @@ class LastFMService(BaseMusicService):
             req_params = {'method': method, 'api_key': api_key, 'format': 'json'}
             req_params.update(params)
             self._acquire_token()
+            if not self.is_enabled():
+                return None
             try:
                 resp = self._get_session().get(self.BASE_URL, params=req_params, timeout=5.0)
                 if resp.status_code == 200:
                     data = resp.json()
                     if 'error' in data:
                         err_code = data.get('error')
+                        safe_error_code = (
+                            err_code if type(err_code) is int or
+                            (isinstance(err_code, str) and err_code.isdigit() and len(err_code) <= 6)
+                            else 'unknown'
+                        )
                         if err_code in (10, 26):
-                            self.logger.warning(f'Last.fm API key rejected (code {err_code}): {data.get("message")}')
+                            self.logger.warning('Last.fm API key rejected (code %s)', safe_error_code)
                             self._mark_bad_key(api_key)
                             continue
-                        self.logger.warning(f'Last.fm API error {err_code}: {data.get("message")}. Rotating key.')
+                        self.logger.warning('Last.fm API error code %s; rotating key', safe_error_code)
                         continue
                     self._set_cache(cache_key, data, ttl)
                     return data
@@ -388,14 +379,11 @@ class LastFMService(BaseMusicService):
                 if resp.status_code in (429, 503):
                     self.logger.warning(f'Last.fm HTTP {resp.status_code}. Rate limit backoff & rotating API key.')
                     continue
-                self.logger.warning(f'Last.fm HTTP {resp.status_code}: {resp.text}')
-                continue
-            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as te:
-                self.logger.warning(f'Last.fm network timeout/connection error: {te}. Rotating key.')
+                self.logger.warning('Last.fm HTTP status %s', resp.status_code)
                 continue
             except Exception as e:
-                self.logger.warning(f'Last.fm request failed: {e}')
-                continue
+                self.logger.warning('Last.fm request failed (%s)', type(e).__name__)
+                break
 
         stale = self._get_stale_cache(cache_key)
         if stale is not None:
@@ -403,53 +391,25 @@ class LastFMService(BaseMusicService):
             return stale
         return None
 
-    @staticmethod
-    def _safe_int(val, default: int = 0) -> int:
-        if val is None:
-            return default
-        try:
-            return int(float(val))
-        except (ValueError, TypeError):
-            return default
-
-    @staticmethod
-    def _safe_float(val, default: float = 0.0) -> float:
-        if val is None:
-            return default
-        try:
-            return float(val)
-        except (ValueError, TypeError):
-            return default
-
-    @staticmethod
-    def _extract_image_url(images) -> str:
-        if isinstance(images, dict) and 'image' in images:
-            images = images.get('image')
-        if isinstance(images, list) and images:
-            last = images[-1]
-            if isinstance(last, dict):
-                return last.get('#text', '')
-            return str(last) if last is not None else ''
-        elif isinstance(images, dict):
-            return images.get('#text', '')
-        return ''
-
     def artist_get_similar(self, artist: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
-        if not artist or not str(artist).strip():
+        if not isinstance(artist, str) or not artist.strip():
             if callback:
                 callback([])
             return []
-
         def _task():
             data = self._api_request('artist.getsimilar', {'artist': artist, 'limit': limit}, RECOMMENDATION_TTL)
             results = []
-            if data and isinstance(data.get('similarartists'), dict):
-                artists_raw = data['similarartists'].get('artist', [])
+            if isinstance(data, dict) and 'similarartists' in data:
+                artists_raw = _records(_mapping(data.get('similarartists')).get('artist'))
                 if isinstance(artists_raw, dict):
                     artists_raw = [artists_raw]
                 for a in artists_raw[:limit]:
-                    img_url = self._extract_image_url(a.get('image', []))
-                    match_val = self._safe_float(a.get('match', 0))
+                    images = _records(a.get('image'))
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
+                    match_val = _number(a.get('match'), float)
                     results.append({
                         'name': a.get('name', ''),
                         'match': match_val,
@@ -467,20 +427,23 @@ class LastFMService(BaseMusicService):
         return _task()
 
     def artist_get_top_tracks(self, artist: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
-        if not artist or not str(artist).strip():
+        if not isinstance(artist, str) or not artist.strip():
             if callback:
                 callback([])
             return []
-
         def _task():
             data = self._api_request('artist.gettoptracks', {'artist': artist, 'limit': limit}, RECOMMENDATION_TTL)
             results = []
-            if data and isinstance(data.get('toptracks'), dict):
-                tracks_raw = data['toptracks'].get('track', [])
+            if isinstance(data, dict) and 'toptracks' in data:
+                tracks_raw = _records(_mapping(data.get('toptracks')).get('track'))
                 if isinstance(tracks_raw, dict):
                     tracks_raw = [tracks_raw]
                 for t in tracks_raw[:limit]:
-                    img_url = self._extract_image_url(t.get('image', []))
+                    images = _records(t.get('image'))
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
                     if isinstance(t.get('artist'), dict):
                         artist_name = t.get('artist', {}).get('name', artist)
                     else:
@@ -488,8 +451,8 @@ class LastFMService(BaseMusicService):
                     results.append({
                         'name': t.get('name', ''),
                         'artist': artist_name,
-                        'playcount': self._safe_int(t.get('playcount', 0)),
-                        'listeners': self._safe_int(t.get('listeners', 0)),
+                        'playcount': _number(t.get('playcount'), int),
+                        'listeners': _number(t.get('listeners'), int),
                         'url': t.get('url', ''),
                         'image': img_url,
                     })
@@ -503,22 +466,21 @@ class LastFMService(BaseMusicService):
         return _task()
 
     def artist_get_top_tags(self, artist: str, callback: Callable = None) -> List[Dict]:
-        if not artist or not str(artist).strip():
+        if not isinstance(artist, str) or not artist.strip():
             if callback:
                 callback([])
             return []
-
         def _task():
             data = self._api_request('artist.gettoptags', {'artist': artist}, RECOMMENDATION_TTL)
             results = []
-            if data and isinstance(data.get('toptags'), dict):
-                tags_raw = data['toptags'].get('tag', [])
+            if isinstance(data, dict) and 'toptags' in data:
+                tags_raw = _records(_mapping(data.get('toptags')).get('tag'))
                 if isinstance(tags_raw, dict):
                     tags_raw = [tags_raw]
                 for tag in tags_raw:
                     results.append({
                         'name': tag.get('name', ''),
-                        'count': self._safe_int(tag.get('count', 0)),
+                        'count': _number(tag.get('count'), int),
                         'url': tag.get('url', ''),
                     })
             if callback:
@@ -530,134 +492,31 @@ class LastFMService(BaseMusicService):
             return []
         return _task()
 
-    def artist_get_info(self, artist: str, lang: str = "ru", callback: Callable = None) -> Dict[str, Any]:
-        """Fetch artist biography, listeners, playcount, tags and images from Last.fm."""
-        if not artist or not str(artist).strip():
-            if callback:
-                callback({})
-            return {}
-
-        def _task():
-            params = {'artist': str(artist).strip(), 'autocorrect': 1}
-            if lang:
-                params['lang'] = lang
-            data = self._api_request('artist.getinfo', params, RECOMMENDATION_TTL)
-            res = {}
-            if data and isinstance(data.get('artist'), dict):
-                a = data['artist']
-                bio_dict = a.get('bio') if isinstance(a.get('bio'), dict) else {}
-                summary = (bio_dict.get('summary') or '').strip()
-                content = (bio_dict.get('content') or '').strip()
-                import re
-                summary_clean = re.sub(r'<a\s+[^>]*>.*?</a>', '', summary, flags=re.IGNORECASE).strip()
-                content_clean = re.sub(r'<a\s+[^>]*>.*?</a>', '', content, flags=re.IGNORECASE).strip()
-
-                for bp in [
-                    r'\s*User-contributed text is available under the Creative Commons.*$',
-                    r'\s*Read more on Last\.fm.*$',
-                ]:
-                    summary_clean = re.sub(bp, '', summary_clean, flags=re.IGNORECASE | re.DOTALL).strip()
-                    content_clean = re.sub(bp, '', content_clean, flags=re.IGNORECASE | re.DOTALL).strip()
-
-                summary_clean = re.sub(r'[\s.]*$', '', summary_clean).strip()
-                if summary_clean and not summary_clean.endswith(('.', '!', '?')):
-                    summary_clean += '.'
-                content_clean = re.sub(r'[\s.]*$', '', content_clean).strip()
-                if content_clean and not content_clean.endswith(('.', '!', '?')):
-                    content_clean += '.'
-
-                stats = a.get('stats') if isinstance(a.get('stats'), dict) else {}
-                tags_data = a.get('tags') if isinstance(a.get('tags'), dict) else {}
-                tag_list = tags_data.get('tag', [])
-                if isinstance(tag_list, dict):
-                    tag_list = [tag_list]
-                tags = [t.get('name', '') for t in tag_list if isinstance(t, dict) and t.get('name')]
-
-                res = {
-                    'name': a.get('name') or artist,
-                    'bio_summary': summary_clean,
-                    'bio_content': content_clean,
-                    'bio': content_clean or summary_clean,
-                    'listeners': self._safe_int(stats.get('listeners')),
-                    'playcount': self._safe_int(stats.get('playcount')),
-                    'tags': tags,
-                    'image': self._extract_image_url(a.get('image', [])),
-                }
-            if callback:
-                callback(res)
-            return res
-
-        if callback:
-            self._executor.submit(_task)
-            return {}
-        return _task()
-
-    def artist_get_top_albums(self, artist: str, limit: int = 50, callback: Callable = None) -> List[Dict[str, Any]]:
-        """Fetch artist top albums from Last.fm."""
-        if not artist or not str(artist).strip():
-            if callback:
-                callback([])
-            return []
-
-        def _task():
-            params = {'artist': str(artist).strip(), 'limit': limit, 'autocorrect': 1}
-            data = self._api_request('artist.gettopalbums', params, CHART_TTL)
-            albums = []
-            if data and isinstance(data.get('topalbums'), dict):
-                items = data['topalbums'].get('album', [])
-                if isinstance(items, dict):
-                    items = [items]
-                for item in items or []:
-                    if not isinstance(item, dict):
-                        continue
-                    name = (item.get('name') or '').strip()
-                    if not name or name == '(null)':
-                        continue
-                    cover = self._extract_image_url(item.get('image', []))
-                    playcount = self._safe_int(item.get('playcount'))
-                    albums.append({
-                        'id': f"lastfm_{abs(hash(name))}",
-                        'title': name,
-                        'album': name,
-                        'artist': (item.get('artist') or {}).get('name', artist) if isinstance(item.get('artist'), dict) else str(item.get('artist') or artist),
-                        'playcount': playcount,
-                        'cover': cover,
-                        'cover_url': cover,
-                        'source': 'lastfm',
-                        'type': 'album',
-                        'album_type': 'album',
-                    })
-            if callback:
-                callback(albums)
-            return albums
-
-        if callback:
-            self._executor.submit(_task)
-            return []
-        return _task()
-
     def track_get_similar(self, artist: str, track: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
-        if not artist or not str(artist).strip() or not track or not str(track).strip():
+        if not isinstance(artist, str) or not artist.strip() or not isinstance(track, str) or not track.strip():
             if callback:
                 callback([])
             return []
-
         def _task():
             data = self._api_request('track.getsimilar', {'artist': artist, 'track': track, 'limit': limit},
                                      RECOMMENDATION_TTL)
             results = []
-            if data and isinstance(data.get('similartracks'), dict):
-                tracks_raw = data['similartracks'].get('track', [])
+            if isinstance(data, dict) and 'similartracks' in data:
+                tracks_raw = _records(_mapping(data.get('similartracks')).get('track'))
                 if isinstance(tracks_raw, dict):
                     tracks_raw = [tracks_raw]
                 for t in tracks_raw[:limit]:
-                    img_url = self._extract_image_url(t.get('image', []))
+                    images = _records(t.get('image'))
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
                     if isinstance(t.get('artist'), dict):
                         artist_name = t.get('artist', {}).get('name', '')
                     else:
                         artist_name = ''
-                    match_val = self._safe_float(t.get('match', 0))
-                    duration = self._safe_int(t.get('duration', 0))
+                    match_val = _number(t.get('match'), float)
+                    duration = _number(t.get('duration'), int)
                     results.append({
                         'name': t.get('name', ''),
                         'artist': artist_name,
@@ -679,12 +538,16 @@ class LastFMService(BaseMusicService):
         def _task():
             data = self._api_request('chart.gettoptracks', {'limit': limit}, CHART_TTL)
             results = []
-            if data and isinstance(data.get('tracks'), dict):
-                tracks_raw = data['tracks'].get('track', [])
+            if isinstance(data, dict) and 'tracks' in data:
+                tracks_raw = _records(_mapping(data.get('tracks')).get('track'))
                 if isinstance(tracks_raw, dict):
                     tracks_raw = [tracks_raw]
                 for t in tracks_raw[:limit]:
-                    img_url = self._extract_image_url(t.get('image', []))
+                    images = _records(t.get('image'))
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
                     if isinstance(t.get('artist'), dict):
                         artist_name = t.get('artist', {}).get('name', '')
                     else:
@@ -692,8 +555,8 @@ class LastFMService(BaseMusicService):
                     results.append({
                         'name': t.get('name', ''),
                         'artist': artist_name,
-                        'playcount': self._safe_int(t.get('playcount', 0)),
-                        'listeners': self._safe_int(t.get('listeners', 0)),
+                        'playcount': _number(t.get('playcount'), int),
+                        'listeners': _number(t.get('listeners'), int),
                         'url': t.get('url', ''),
                         'image': img_url,
                     })
@@ -710,16 +573,20 @@ class LastFMService(BaseMusicService):
         def _task():
             data = self._api_request('chart.gettopartists', {'limit': limit}, CHART_TTL)
             results = []
-            if data and isinstance(data.get('artists'), dict):
-                artists_raw = data['artists'].get('artist', [])
+            if isinstance(data, dict) and 'artists' in data:
+                artists_raw = _records(_mapping(data.get('artists')).get('artist'))
                 if isinstance(artists_raw, dict):
                     artists_raw = [artists_raw]
                 for a in artists_raw[:limit]:
-                    img_url = self._extract_image_url(a.get('image', []))
+                    images = _records(a.get('image'))
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
                     results.append({
                         'name': a.get('name', ''),
-                        'playcount': self._safe_int(a.get('playcount', 0)),
-                        'listeners': self._safe_int(a.get('listeners', 0)),
+                        'playcount': _number(a.get('playcount'), int),
+                        'listeners': _number(a.get('listeners'), int),
                         'url': a.get('url', ''),
                         'image': img_url,
                     })
@@ -732,21 +599,37 @@ class LastFMService(BaseMusicService):
             return []
         return _task()
 
+    def country_get_top_tracks(self, country='US', limit=20):
+        countries = {'US': 'United States', 'RU': 'Russian Federation', 'GB': 'United Kingdom',
+                     'DE': 'Germany', 'FR': 'France', 'UA': 'Ukraine', 'KZ': 'Kazakhstan',
+                     'BY': 'Belarus', 'JP': 'Japan', 'KR': 'Korea, Republic of', 'BR': 'Brazil'}
+        name = countries.get(str(country).upper(), str(country))
+        data = self._api_request('geo.gettoptracks', {'country': name, 'limit': limit}, CHART_TTL)
+        tracks = ((data or {}).get('tracks') or {}).get('track') or []
+        if isinstance(tracks, dict):
+            tracks = [tracks]
+        return [{'name': t.get('name') or '', 'artist': (t.get('artist') or {}).get('name') or '',
+                 'duration': t.get('duration') or 0, 'image': ((t.get('image') or [{}])[-1].get('#text') or '')}
+                for t in tracks[:limit] if isinstance(t, dict)]
+
     def user_get_recent_tracks(self, user: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
-        if not user or not str(user).strip():
+        if not isinstance(user, str) or not user.strip():
             if callback:
                 callback([])
             return []
-
         def _task():
             data = self._api_request('user.getrecenttracks', {'user': user, 'limit': limit}, CHART_TTL)
             results = []
-            if data and isinstance(data.get('recenttracks'), dict):
-                tracks_raw = data['recenttracks'].get('track', [])
+            if isinstance(data, dict) and 'recenttracks' in data:
+                tracks_raw = _records(_mapping(data.get('recenttracks')).get('track'))
                 if isinstance(tracks_raw, dict):
                     tracks_raw = [tracks_raw]
                 for t in tracks_raw[:limit]:
-                    img_url = self._extract_image_url(t.get('image', []))
+                    images = _records(t.get('image'))
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
                     if isinstance(t.get('artist'), dict):
                         artist_name = t.get('artist', {}).get('#text', '')
                     else:
@@ -767,23 +650,26 @@ class LastFMService(BaseMusicService):
         return _task()
 
     def user_get_top_artists(self, user: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
-        if not user or not str(user).strip():
+        if not isinstance(user, str) or not user.strip():
             if callback:
                 callback([])
             return []
-
         def _task():
             data = self._api_request('user.gettopartists', {'user': user, 'limit': limit}, RECOMMENDATION_TTL)
             results = []
-            if data and isinstance(data.get('topartists'), dict):
-                artists_raw = data['topartists'].get('artist', [])
+            if isinstance(data, dict) and 'topartists' in data:
+                artists_raw = _records(_mapping(data.get('topartists')).get('artist'))
                 if isinstance(artists_raw, dict):
                     artists_raw = [artists_raw]
                 for a in artists_raw[:limit]:
-                    img_url = self._extract_image_url(a.get('image', []))
+                    images = _records(a.get('image'))
+                    if isinstance(images, list) and images:
+                        img_url = images[-1].get('#text', '')
+                    else:
+                        img_url = ''
                     results.append({
                         'name': a.get('name', ''),
-                        'playcount': self._safe_int(a.get('playcount', 0)),
+                        'playcount': _number(a.get('playcount'), int),
                         'url': a.get('url', ''),
                         'image': img_url,
                     })
@@ -795,3 +681,11 @@ class LastFMService(BaseMusicService):
             self._executor.submit(_task)
             return []
         return _task()
+
+    def clear_response_cache(self):
+        """Erase locally cached provider responses on an explicit privacy reset."""
+        with self._cache_lock:
+            self._cache.clear()
+            if self._db_path != ':memory:':
+                with sqlite3.connect(self._db_path, timeout=2) as connection:
+                    connection.execute('DELETE FROM lastfm_response_cache')

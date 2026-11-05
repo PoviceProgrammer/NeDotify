@@ -1,0 +1,39 @@
+Riff architecture reference
+The bottom-player wave seek indicator adapts the 42px sine scrubber and rounded
+strokes in Riff v44 src/renderer/app.js (lines 3230-3367). Its media state, input
+handling, sizing and accessibility use NeDotify's shared transport. MIT license:
+Copyright (c) 2026 rootscripts; full notice preserved in riff-MIT.txt.
+https://github.com/rootscripts/riff
+Stable release studied: v43.2.2 (2026-10-28); main server history c1902a1d3577.
+Download and setup architectural ideas adapted independently in native Python:
+bounded keep-alive connections; reuse verified recordings and audio; explicit
+output formats and metadata; per-user tools, verified/resumable installation.
+No Electron-specific APIs or runtime are incorporated. Riff's MIT notice is preserved in
+RIFF_LICENSE.txt (Copyright (c) 2026 rootscripts).
+
+Discord Rich Presence V2 additionally adapts Riff's src/main/discord.js design:
+latest playback snapshot, READY restoration, delayed reconnect, enable/disable,
+activity fallback and cleanup. Implemented with native Python/pypresence; Riff's
+Discord Application ID and Node runtime are not used. The original MIT notice
+is also retained in riff-MIT.txt (Copyright (c) 2026 rootscripts).
+
+Runtime tools are fetched from official yt-dlp and yt-dlp/FFmpeg-Builds releases
+only after SHA-256 verification. Their own licenses apply: yt-dlp release
+executables include third-party components with notices at
+https://github.com/yt-dlp/yt-dlp/blob/master/THIRD_PARTY_LICENSES.txt .
+FFmpeg GPL build sources and corresponding notices:
+https://github.com/yt-dlp/FFmpeg-Builds and https://ffmpeg.org/legal.html .
+Tool archives remain separate from NeDotify source and retain bundled notices.
+
+Windows interface refresh (2026-11-01) also studied upstream main commit
+44145b575d2ee498929c2b1ec69cfbd64cf3b239: renderer audio controls,
+queue sections and toast lifecycle. The audio panel adapts its Web Audio
+effects, enhancer parameter curves and playback-rate semantics from Riff's
+src/renderer/audio.js and app.js under the MIT license. The integration uses
+NeDotify's existing dual-deck player, shared equalizer and settings bridge.
+
+Shared notifications additionally adapt Riff renderer toast queuing and the
+connected top-edge notification shape at the same upstream commit.
+
+Daily mixes additionally adapt Riff planMixes artist weighting and round-robin
+bucketing to the existing Python taste profile and candidate ranking.

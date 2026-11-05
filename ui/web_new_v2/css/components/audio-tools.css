@@ -1,0 +1,42 @@
+/* Riff's connected audio card: fixed outer geometry, independent panel scroll. */
+#audio-tools-dialog { position: fixed; inset: auto 16px calc(var(--player-bar-height,84px) + var(--player-bar-offset,20px) + 12px) auto; margin: 0; box-sizing: border-box; width: min(540px,calc(100% - 32px)); height: min(460px,calc(100% - var(--player-bar-height,84px) - var(--player-bar-offset,20px) - 48px)); max-height: none; padding: 18px; border: 1px solid var(--border,#ffffff20); border-radius: 24px; color: var(--text-main,#f4f4f5); background: var(--bg-card,#242830); box-shadow: 0 16px 48px #0004; overflow: hidden; }
+#audio-tools-dialog[open] { display: flex; flex-direction: column; gap: 14px; }
+#audio-tools-dialog::backdrop { background: #0001; }
+#audio-tools-dialog header { display: flex; align-items: center; justify-content: space-between; flex: 0 0 32px; margin: 0; }
+#audio-tools-dialog h2 { display: flex; align-items: center; gap: 8px; margin: 0; font: 600 24px/1.2 var(--font-family,sans-serif); }
+#audio-tools-dialog h2 svg { width: 22px; height: 22px; }
+#audio-tools-dialog .audio-tools-close { width: 30px; height: 30px; border-radius: 50%; }
+#audio-tools-dialog .audio-tools-close svg { width: 15px; height: 15px; }
+#audio-tools-dialog .audio-tools-layout { display: grid; grid-template-columns: 164px minmax(0,1fr); gap: 14px; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+#audio-tools-dialog nav { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: auto; }
+#audio-tools-dialog nav button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 42px; padding: 8px 12px; border: 0; border-radius: 999px; background: transparent; color: inherit; text-align: left; font: 400 12px/1.3 var(--font-family,sans-serif); cursor: pointer; flex-shrink: 0; transition: none !important; transform: none !important; }
+#audio-tools-dialog nav button svg { width: 18px; height: 18px; flex: 0 0 18px; }
+#audio-tools-dialog nav button[aria-selected="true"] { color: var(--bg-card,#242830); background: var(--text-main,#f4f4f5); }
+#audio-tools-dialog nav button:hover:not([aria-selected="true"]) { background: var(--bg-hover,#ffffff10); }
+#audio-tools-dialog .audio-tools-panels { min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+#audio-tools-dialog [data-audio-pane] { display: flex; flex-direction: column; gap: 3px; padding: 0 4px 4px 0; margin: 0; min-width: 0; }
+#audio-tools-dialog [hidden] { display: none !important; }
+#audio-tools-dialog .audio-tool-slider { display: block; box-sizing: border-box; min-width: 0; margin: 0; padding: 10px 13px; border-radius: 16px; background: var(--bg-hover,#ffffff10); font: 400 12px/1.35 var(--font-family,sans-serif); }
+#audio-tools-dialog .audio-tool-slider > span { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; }
+#audio-tools-dialog output { font: inherit; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#audio-tools-dialog input[data-audio-key] { appearance: none !important; -webkit-appearance: none !important; display: block; box-sizing: border-box; width: 100%; min-width: 0; max-width: none; height: 28px !important; min-height: 0; margin: 7px 0 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0; background: transparent !important; color: inherit; box-shadow: none !important; cursor: pointer; touch-action: none; transition: none !important; }
+#audio-tools-dialog input[data-audio-key]::-webkit-slider-runnable-track { height: 14px; border: 0; border-radius: 8px; background: linear-gradient(to right,currentColor var(--audio-fill),#8888 var(--audio-fill)); }
+#audio-tools-dialog input[data-audio-key]::-webkit-slider-thumb { appearance: none !important; -webkit-appearance: none !important; width: 6px !important; height: 28px !important; margin-top: -7px; border: 0 !important; border-radius: 3px !important; background: currentColor !important; box-shadow: 0 0 0 3px var(--bg-card,#242830) !important; transform: none !important; }
+#audio-tools-dialog input[data-audio-key]:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+#audio-tools-dialog .audio-tool-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; padding: 10px 13px; border-radius: 16px; background: var(--bg-hover,#ffffff10); font-size: 12px; }
+#audio-tools-dialog .audio-tool-switch small { display: block; margin-top: 5px; color: var(--text-sec); font-size: 10px; line-height: 1.4; }
+#audio-tools-dialog .audio-tool-switch input { accent-color: var(--primary); width: 17px; height: 17px; flex-shrink: 0; }
+#audio-tools-dialog select { box-sizing: border-box; width: 100%; margin-top: 8px; border: 1px solid var(--border); border-radius: 12px; padding: 7px; color: inherit; background: var(--bg-card); font: inherit; }
+#audio-tools-dialog .audio-hq-controls { display: flex; flex-direction: column; gap: 3px; }
+#audio-tools-dialog .audio-sleep-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; margin-top: 14px; }
+#audio-tools-dialog .audio-sleep-options button { justify-content: center; padding: 8px 5px; font-size: 11px; transition: none !important; }
+#audio-tools-dialog .audio-sleep-options button[aria-pressed="true"] { background: var(--text-main); color: var(--bg-card); }
+#audio-tools-dialog p { font-size: 11px; color: var(--text-sec); line-height: 1.5; }
+#audio-tools-dialog footer { flex: 0 0 auto; display: flex; justify-content: flex-end; margin: 0; padding: 0; }
+#audio-tools-dialog .audio-tools-reset { padding: 8px 14px; border-radius: 999px; font-size: 11px; }
+#audio-tools-dialog .audio-eq-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 12px; font-size: 11px; }
+#audio-tools-dialog .audio-eq-bands { display: grid; grid-template-columns: repeat(10,minmax(0,1fr)); gap: 2px; padding-top: 10px; }
+#audio-tools-dialog .audio-eq-bands label { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 9px; }
+#audio-tools-dialog input[data-eq-band] { appearance: auto !important; writing-mode: vertical-lr; direction: rtl; width: 16px !important; height: 125px !important; min-height: 0; padding: 0 !important; margin: 0 !important; accent-color: var(--text-main); }
+@media(max-width:600px) { #audio-tools-dialog { padding: 14px; } #audio-tools-dialog .audio-tools-layout { grid-template-columns: 135px minmax(0,1fr); gap: 8px; } #audio-tools-dialog nav button { padding: 8px; gap: 7px; font-size: 11px; } }
+@media(prefers-reduced-motion:reduce) { #audio-tools-dialog, #audio-tools-dialog * { animation: none !important; transition: none !important; } }

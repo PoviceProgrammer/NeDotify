@@ -1,0 +1,117 @@
+/* A presentation pack for the shared application. Never override palette storage.
+   !important on neutral tokens intentionally masks custom inline colours only
+   while macOS is active. Removing data-ui-style restores them verbatim. */
+:root[data-ui-style="macos"] {
+    color-scheme: light;
+    --mac-base: #f5f5f7;
+    --mac-surface: #ffffff;
+    --mac-raised: #ffffff;
+    --mac-sidebar: #eaeaee;
+    --mac-text: #1d1d1f;
+    --mac-secondary: #626268;
+    --mac-dim: #696970;
+    --mac-line: #d8d8de;
+    --mac-hover: #e8e8ed;
+    --mac-shadow: 0 8px 28px #00000012;
+    --mac-glass: rgba(248, 248, 250, .68);
+    --mac-glass-card: rgba(255, 255, 255, .45);
+    --mac-glass-edge: rgba(70, 70, 80, .18);
+    --mac-backdrop-shade: rgba(240, 240, 245, .68);
+    --mac-play: #252529;
+    --mac-play-ink: #fff;
+    --mac-settings-glass: rgba(246, 247, 250, .86);
+    --mac-settings-tint: rgba(255, 255, 255, .12);
+    --mac-settings-card: rgba(255, 255, 255, .24);
+    --mac-settings-selected: rgba(0, 0, 0, .08);
+    --mac-style-ring: #1874cf;
+    --mac-theme-ring: #9252c4;
+    --mac-switch-on: #087ff5;
+    --mac-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "Ubuntu Sans", "Cantarell", "Noto Sans", sans-serif;
+    --bg-main: var(--mac-base) !important;
+    --bg-surface: var(--mac-surface) !important;
+    --bg-panel: var(--mac-surface) !important;
+    --bg-card: var(--mac-surface) !important;
+    --bg-hover: var(--mac-hover) !important;
+    --bg-active: var(--mac-hover) !important;
+    --text-main: var(--mac-text) !important;
+    --text-sec: var(--mac-secondary) !important;
+    --text-dim: var(--mac-dim) !important;
+    --border: var(--mac-line) !important;
+    --border-glow: var(--mac-line) !important;
+    --color-border: var(--mac-line);
+    --color-border-hover: var(--mac-secondary);
+    --color-shadow: #00000012;
+    --shadow-color: #00000014;
+    --home-panel: var(--mac-base);
+    --home-edge: var(--mac-line);
+    --font-family: var(--mac-font) !important;
+    --font-body: var(--mac-font) !important;
+    --font-display: var(--mac-font) !important;
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --accent-glow: transparent !important;
+    --ambient-glow: transparent !important;
+    --color-primary-glow: transparent;
+    --glass-blur: 0px !important;
+    --blur-sm: 0px !important;
+    --blur-md: 0px !important;
+    --blur-lg: 0px !important;
+    --blur-xl: 0px !important;
+    --error: #bd2836;
+    --warning: #845500;
+    --success: #227440;
+}
+:root[data-ui-style="macos"][data-macos-mode="dark"] {
+    color-scheme: dark;
+    --mac-base: #11151a;
+    --mac-surface: #242a32;
+    --mac-raised: #323235;
+    --mac-sidebar: #292d32;
+    --mac-text: #f5f5f7;
+    --mac-secondary: #c4c5c9;
+    --mac-dim: #aeb2ba;
+    --mac-line: #414145;
+    --mac-hover: #36363a;
+    --mac-shadow: 0 8px 28px #00000040;
+    --mac-glass: rgba(64, 69, 77, .22);
+    --mac-glass-card: rgba(72, 82, 100, .18);
+    --mac-glass-edge: rgba(245, 248, 255, .16);
+    --mac-backdrop-shade: rgba(13, 17, 23, .46);
+    --mac-play: #eeeeF2;
+    --mac-play-ink: #292a30;
+    --mac-settings-glass: rgba(34, 40, 51, .82);
+    --mac-settings-tint: rgba(220, 230, 255, .025);
+    --mac-settings-card: rgba(180, 197, 224, .04);
+    --mac-settings-selected: rgba(209, 222, 255, .20);
+    --mac-style-ring: #a4d1ff;
+    --mac-theme-ring: #d09bff;
+    --mac-switch-on: #439cff;
+    --error: #ff8790;
+    --warning: #e7bf68;
+    --success: #7edc9a;
+}
+/* Resolve accent aliases below the root so the root's selected palette remains
+   readable by syncAccent, even when custom colours are stored inline. */
+:root[data-ui-style="macos"] body {
+    --primary: var(--mac-accent, #0062cc);
+    --primary-rgb: var(--mac-accent-rgb, 0, 98, 204);
+    --primary-fg: var(--mac-accent-fg, #fff);
+    --accent: var(--primary);
+    --color-primary: var(--primary);
+    --color-primary-rgb: var(--primary-rgb);
+    --color-primary-fg: var(--primary-fg);
+    --color-surface-hover: var(--mac-hover);
+    --color-surface-active: var(--mac-hover);
+    --color-accent-amber: var(--primary);
+    --color-accent-cyan: var(--primary);
+    --color-text-main: var(--mac-text);
+    --color-text-muted: var(--mac-secondary);
+    --color-text-dim: var(--mac-dim);
+    --color-surface: var(--mac-surface);
+    --color-bg-base: var(--mac-base);
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-danger: var(--error);
+}

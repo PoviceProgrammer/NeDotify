@@ -30,6 +30,7 @@ class AudioFileHandler(FileSystemEventHandler):
         self._pending_files = {}
         self._lock = threading.Lock()
         self._running = True
+        self._stop = threading.Event()
         self._processor_thread = threading.Thread(target=self._process_pending, daemon=True)
         self._processor_thread.start()
 
@@ -47,23 +48,33 @@ class AudioFileHandler(FileSystemEventHandler):
 
     def _add_pending(self, file_path):
         with self._lock:
-            self._pending_files[file_path] = time.time()
+            try:
+                stat = os.stat(file_path)
+                self._pending_files[file_path] = (time.monotonic(), (stat.st_size, stat.st_mtime_ns))
+            except OSError:
+                pass
 
     def _process_pending(self):
         while self._running:
-            time.sleep(1)
-            now = time.time()
+            if self._stop.wait(1):
+                break
+            now = time.monotonic()
             ready_files = []
             with self._lock:
-                for path, timestamp in list(self._pending_files.items()):
+                for path, (timestamp, signature) in list(self._pending_files.items()):
                     if now - timestamp >= 3.0:
                         try:
+                            stat = os.stat(path)
+                            current = (stat.st_size, stat.st_mtime_ns)
+                            if current != signature:
+                                self._pending_files[path] = (now, current)
+                                continue
                             with open(path, 'rb'):
                                 ready_files.append(path)
                                 del self._pending_files[path]
                         except IOError as e:
                             logger.debug(f'Watchdog: {path} still locked by the writer: {e}')
-                            self._pending_files[path] = now
+                            self._pending_files.pop(path, None)
             for path in ready_files:
                 try:
                     self.callback(path)
@@ -72,6 +83,9 @@ class AudioFileHandler(FileSystemEventHandler):
 
     def stop(self):
         self._running = False
+        self._stop.set()
+        if self._processor_thread is not threading.current_thread():
+            self._processor_thread.join(timeout=2)
 
 
 class WatchdogService:
@@ -79,9 +93,10 @@ class WatchdogService:
     def __init__(self, app_core):
         self._core = app_core
         self._watched_paths = set()
+        self._started = False
         if HAS_WATCHDOG:
             self.observer = Observer()
-            self.handler = AudioFileHandler(self._on_new_file)
+            self.handler = None
         else:
             self.observer = None
             self.handler = None
@@ -91,28 +106,26 @@ class WatchdogService:
             return None
         if not self.observer:
             return None
+        if self._started:
+            return None
+        if not self._core.db.get_scan_folders():
+            return None
+        self.handler = AudioFileHandler(self._on_new_file)
         self._sync_folders()
         self.observer.start()
+        self._started = True
 
     def stop(self):
-        if self.handler and hasattr(self.handler, 'stop'):
-            try:
-                self.handler.stop()
-            except Exception as e:
-                logger.debug(f'Error stopping watchdog handler: {e}')
-        if self.observer and hasattr(self.observer, 'stop'):
-            try:
-                self.observer.stop()
-                self.observer.join(timeout=2.0)
-            except Exception as e:
-                logger.debug(f'Error stopping watchdog observer: {e}')
+        if self.handler:
+            self.handler.stop()
+        if self.observer and self._started:
+            self.observer.stop()
+            self.observer.join(timeout=3)
+            self._started = False
 
     def _sync_folders(self):
-        folders = self._core.db.get_scan_folders() if hasattr(self._core, 'db') and hasattr(self._core.db, 'get_scan_folders') else []
-        db_paths = set(
-            f.get('folder_path') for f in folders
-            if isinstance(f, dict) and f.get('auto_scan') and f.get('folder_path')
-        )
+        folders = self._core.db.get_scan_folders()
+        db_paths = {f['folder_path'] for f in folders if f.get('auto_scan')}
         for path in db_paths:
             if path not in self._watched_paths:
                 if not os.path.isdir(path):
@@ -126,6 +139,9 @@ class WatchdogService:
 
     def _on_new_file(self, filepath):
         logger.info(f'Watchdog detected new audio file: {filepath}')
+        lufs = getattr(self._core, 'lufs_scanner', None)
+        if lufs is not None:
+            lufs.enqueue_path(filepath)
         if not hasattr(self._core, 'scanner'):
             return None
         track = self._core.scanner._import_file(filepath)

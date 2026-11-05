@@ -10,6 +10,7 @@ __pycache__/
 *.pyd
 *.egg-info/
 .venv/
+.venv*/
 venv/
 .pytest_cache/
 
@@ -21,6 +22,7 @@ build/
 *.pkg
 *.msi
 *.spec
+!setup_pyinstaller.spec
 
 # Database & Runtime files
 *.db
@@ -32,6 +34,7 @@ backups/
 
 # Tests, Audits, Benchmarks & Reports
 .test_runs/
+.test_deps/
 .jscheck/
 .audit/
 .audit_test_out.txt

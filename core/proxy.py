@@ -3,6 +3,7 @@ NeDotify - Local HTTP Stream Proxy
 Proxies cloud stream requests to inject authentication headers/cookies and support self-healing stream URL re-resolution.
 """
 import hmac
+import io
 import os
 import re
 import secrets
@@ -12,16 +13,16 @@ import mimetypes
 import http.server
 import socketserver
 import socket
+import select
 import random
 import urllib.request
 import urllib.parse
 import urllib.error
 import threading
 import logging
-import sys
-from functools import lru_cache
 
-from core.api import _is_ssrf_safe_url  # mirrors core/api.py:_is_ssrf_safe_url; imported (not copied) — core.api does not import core.proxy, so no import cycle
+from utils.cache_manager import stream_cache_stem, is_valid_cache_file
+from utils.url_safety import safe_public_url as _is_ssrf_safe_url, guarded_open_url
 _is_safe_url = _is_ssrf_safe_url
 
 logger = logging.getLogger(__name__)
@@ -31,13 +32,37 @@ HOP_BY_HOP = frozenset({'trailer', 'upgrade', 'proxy-authenticate', 'proxy-autho
 # Query parameter carrying the per-session proxy token.
 AUTH_PARAM = 'k'
 
+# Paths the proxy actually serves. The catch-all branch in do_GET() falls back
+# to engine.resolve_stream_url() with whatever metadata the query carried, and
+# for an empty query that means source='soundcloud' with an empty target - a
+# real SoundCloud request that blocks the request thread on event.wait(15).
+# Anything outside this set ('/favicon.ico', a typo'd endpoint) is refused here
+# instead. '/' is listed because it IS the generic proxying endpoint emitted by
+# LocalProxyManager.get_proxy_url() and engine._notify_track_changed().
+KNOWN_PROXY_PATHS = ('/', '/api/cover', '/api/avatar', '/api/stream')
+
 # Upstream credentials are attached ONLY when the target host belongs to the
 # provider that owns them. Without this, a caller could point ?url= at any host
 # and have the user's Yandex OAuth token or provider cookies forwarded to it.
+# SoundCloud serves audio from several unrelated-looking domains. Missing
+# `soundcloud.cloud` made every stream on playback.media-streaming.soundcloud.cloud
+# lose its credentials, so downloads/streaming silently lost whatever the API
+# had attached, and source inference fell through leaving `source` unset.
+# Kept as one list so host checks cannot drift apart again.
+SOUNDCLOUD_HOSTS = ('soundcloud.com', 'sndcdn.com', 'soundcloud.cloud', 'scdn.co')
+YOUTUBE_HOSTS = ('youtube.com', 'youtu.be', 'googlevideo.com', 'ytimg.com')
+YANDEX_HOSTS = ('yandex.ru', 'yandex.net', 'yandex.com')
+
+
+def _host_matches(host: str, suffixes) -> bool:
+    """True when host equals or is a subdomain of any of `suffixes`."""
+    return any(host == sfx or host.endswith('.' + sfx) for sfx in suffixes)
+
+
 CREDENTIAL_HOSTS = {
-    'yandex': ('yandex.ru', 'yandex.net', 'yandex.com'),
-    'youtube': ('youtube.com', 'youtu.be', 'googlevideo.com', 'ytimg.com', 'google.com'),
-    'soundcloud': ('soundcloud.com', 'sndcdn.com'),
+    'yandex': YANDEX_HOSTS,
+    'youtube': YOUTUBE_HOSTS,
+    'soundcloud': SOUNDCLOUD_HOSTS,
 }
 
 
@@ -48,8 +73,27 @@ def _host_of(url: str) -> str:
         return ''
 
 
+def _bound_googlevideo_range(req) -> bool:
+    """Keep open browser audio ranges small so Googlevideo does not throttle.
+
+    The upstream's 206 Content-Range is forwarded unchanged; the browser can
+    request the next range. Such a partial response cannot become a full cache.
+    Explicit finite and suffix ranges retain the caller's exact semantics.
+    """
+    if not _host_matches(_host_of(req.full_url), ('googlevideo.com',)):
+        return False
+    match = re.fullmatch(r'bytes=(\d+)-', req.get_header('Range') or '')
+    if not match:
+        return False
+    start = int(match.group(1))
+    req.add_header('Range', f'bytes={start}-{start + 1024 * 1024 - 1}')
+    return True
+
+
 def _host_allows_credentials(url: str, source: str) -> bool:
     """True when `url`'s host is owned by `source`, so its credentials may be sent."""
+    if urllib.parse.urlparse(url).scheme != 'https':
+        return False
     suffixes = CREDENTIAL_HOSTS.get(source or '')
     if not suffixes:
         return False
@@ -57,6 +101,19 @@ def _host_allows_credentials(url: str, source: str) -> bool:
     if not host:
         return False
     return any(host == sfx or host.endswith('.' + sfx) for sfx in suffixes)
+
+
+def _invalidate_provider_stream_cache(app_core, source, source_id):
+    """Invalidate the resolver provider's own stream entry before self-heal."""
+    provider_name = {'youtube': 'youtube', 'spotify': 'youtube', 'soundcloud': 'soundcloud'}.get(source)
+    provider = getattr(app_core, provider_name, None) if provider_name else None
+    invalidator = getattr(provider, 'invalidate_stream_url', None)
+    if callable(invalidator):
+        try:
+            invalidator(source_id)
+        except Exception:
+            logger.debug('Provider stream cache invalidation failed for %s:%s', source, source_id,
+                         exc_info=True)
 
 
 def _is_loopback_origin(origin: str) -> bool:
@@ -76,23 +133,37 @@ def _is_loopback_origin(origin: str) -> bool:
 AVATAR_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
 # Extensions a client may fetch through /api/cover.
 COVER_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+# Extensions a client may fetch through /api/stream when the target is a local
+# file. /api/stream used to hand out ANY file it could open, which turned a
+# token-bearing request into an arbitrary file-read primitive over the disk.
+# The container formats come first; the tail mirrors utils/file_scanner.py's
+# AUDIO_EXTENSIONS, so a file the library can legitimately hold never becomes
+# unplayable.
+AUDIO_EXTENSIONS = {
+    '.mp3', '.m4a', '.aac', '.flac', '.wav', '.ogg', '.opus', '.webm',
+    '.wma', '.alac', '.aiff',
+}
 
 
-@lru_cache(maxsize=1)
 def _avatars_root() -> str:
     """The only directory /api/avatar is allowed to serve files from."""
     return os.path.normpath(os.path.join(os.path.expanduser('~'), '.nedotify', 'avatars'))
 
 
-@lru_cache(maxsize=1)
+def _nedotify_root() -> str:
+    """The application's own data tree: covers, avatars, streams, downloads."""
+    return os.path.normpath(os.path.join(os.path.expanduser('~'), '.nedotify'))
+
+
 def _cover_roots() -> list:
     """Directories /api/cover is allowed to serve files from.
 
     Every cover_path written by the app lands in ~/.nedotify/covers (file
     scanner, tag editor); avatars live next door and are harmless images too.
-    Older DB rows (and the dev scanner) also reference the bundled UI covers
-    folders (ui/web_new*/covers), so those are served as well - still strictly
-    image extensions, still realpath-contained.
+    Older DB rows may also reference the active UI's bundled covers folder,
+    so it is served when the bundle ships one - still strictly image extensions, still
+    realpath-contained. Roots that do not exist are dropped: they can never
+    match a file and only cost a realpath() per request in the cover hot path.
     """
     nedotify = os.path.normpath(os.path.expanduser('~/.nedotify'))
     roots = [
@@ -104,11 +175,26 @@ def _cover_roots() -> list:
         base = getattr(sys, '_MEIPASS', None) or os.path.dirname(
             os.path.dirname(os.path.abspath(__file__))
         )
-        for ui_name in ('web_new', 'web_new_v2'):
-            roots.append(os.path.join(base, 'ui', ui_name, 'covers'))
+        for ui_name in ('web_new_v2',):
+            ui_covers = os.path.join(base, 'ui', ui_name, 'covers')
+            if os.path.isdir(ui_covers):
+                roots.append(ui_covers)
     except Exception:
         logger.debug('_cover_roots: UI covers roots unavailable', exc_info=True)
     return roots
+
+
+def _is_inside_roots(resolved: str, roots) -> bool:
+    """True when `resolved` (already realpath'd) sits inside one of `roots`."""
+    for root in roots:
+        resolved_root = os.path.realpath(root)
+        try:
+            if os.path.commonpath([resolved, resolved_root]) == resolved_root:
+                return True
+        except ValueError:
+            # Different drives on Windows -> commonpath raises.
+            continue
+    return False
 
 
 def _resolve_inside_roots(raw_path: str, roots, extensions) -> str:
@@ -122,7 +208,9 @@ def _resolve_inside_roots(raw_path: str, roots, extensions) -> str:
     try:
         if not raw_path:
             return ''
-        candidate = raw_path
+        candidate = urllib.parse.unquote(str(raw_path))
+        if candidate.startswith(('\\\\', '//')) or (candidate.lower().startswith('file:') and not candidate.lower().startswith('file:///')):
+            return ''
         if candidate.startswith('file:///'):
             candidate = candidate[len('file:///'):]
         candidate = os.path.normpath(urllib.parse.unquote(candidate))
@@ -130,19 +218,80 @@ def _resolve_inside_roots(raw_path: str, roots, extensions) -> str:
         if ext not in extensions:
             return ''
         resolved = os.path.realpath(candidate)
-        for root in roots:
-            resolved_root = os.path.realpath(root)
-            try:
-                if os.path.commonpath([resolved, resolved_root]) != resolved_root:
-                    continue
-            except ValueError:
-                # Different drives on Windows -> commonpath raises.
-                continue
-            if os.path.isfile(resolved):
-                return resolved
-            return ''
+        if _is_inside_roots(resolved, roots):
+            return resolved if os.path.isfile(resolved) else ''
     except Exception:
         logger.debug('_resolve_inside_roots rejected %r', raw_path, exc_info=True)
+    return ''
+
+
+def _referenced_by_library(candidates, db) -> bool:
+    """True when any of `candidates` is a file_path/cover_path in `tracks`.
+
+    A local library may live in any folder the user imported, so a folder
+    whitelist alone would break playback. The database row is what makes a
+    local path legitimate; paths are compared case-insensitively because the
+    stored spelling may differ from the one the client sent.
+    """
+    conn = getattr(db, 'conn', None)
+    if conn is None:
+        return False
+    queries = (
+        'SELECT id FROM tracks WHERE unicode_casefold(file_path) = unicode_casefold(?) LIMIT 1',
+        'SELECT id FROM tracks WHERE unicode_casefold(cover_path) = unicode_casefold(?) LIMIT 1',
+    )
+    for candidate in candidates:
+        if not candidate:
+            continue
+        for sql in queries:
+            try:
+                row = conn.execute(sql, (candidate,)).fetchone()
+            except Exception:
+                logger.debug('_referenced_by_library lookup failed for %r', candidate, exc_info=True)
+                row = None
+            if row:
+                return True
+    return False
+
+
+def _safe_stream_local_path(raw_path, db) -> str:
+    """Resolve `raw_path` to a local audio file /api/stream is allowed to serve.
+
+    Returns '' unless the path is an existing, allow-listed audio file that
+    either lives inside a managed application root (~/.nedotify/..., where the
+    stream cache and downloads are) or is referenced by a row in the `tracks`
+    table (an imported local library). Everything else is refused, so a
+    token-bearing request cannot read arbitrary files off the disk.
+    """
+    try:
+        if not raw_path:
+            return ''
+        raw = str(raw_path).strip()
+        # UNC and file://host/ paths make realpath()/isfile() open an SMB
+        # connection on Windows, so they are refused before any FS access.
+        if raw.startswith(('\\\\', '//')) or raw.lower().startswith('file:'):
+            logger.warning('Refused /api/stream read of UNC/file-URL path: %s', raw[:120])
+            return ''
+        candidate = os.path.normpath(raw)
+        if os.name == 'nt':
+            if not os.path.splitdrive(candidate)[0]:
+                return ''
+        else:
+            if not os.path.isabs(candidate):
+                return ''
+        if os.path.splitext(candidate)[1].lower() not in AUDIO_EXTENSIONS:
+            return ''
+        resolved = os.path.realpath(candidate)
+        if not os.path.isfile(resolved):
+            return ''
+        if _is_inside_roots(resolved, [_nedotify_root()]):
+            return resolved
+        if _referenced_by_library((candidate, resolved), db):
+            return resolved
+        logger.warning('Refused /api/stream read of unlisted local file: %s', candidate)
+        return ''
+    except Exception:
+        logger.debug('_safe_stream_local_path rejected %r', raw_path, exc_info=True)
     return ''
 
 
@@ -156,62 +305,68 @@ def _safe_cover_path(raw_path: str) -> str:
     return _resolve_inside_roots(raw_path, _cover_roots(), COVER_EXTENSIONS)
 
 
-# Content-Type -> stream cache file extension. The on-disk cache probe in
-# do_GET() already looks for all of these, so saving under the real container
-# keeps later lookups and MIME handling consistent.
-_RESPONSE_EXTS = {
-    'audio/mp4': '.m4a',
-    'audio/x-m4a': '.m4a',
-    'audio/m4a': '.m4a',
-    'video/mp4': '.m4a',
-    'audio/webm': '.webm',
-    'video/webm': '.webm',
-    'audio/mpeg': '.mp3',
-    'audio/mp3': '.mp3',
-    'audio/ogg': '.ogg',
-    'application/ogg': '.ogg',
-    'audio/opus': '.ogg',
-}
+def _parse_byte_range(range_header, file_size):
+    """Parse a single-range `Range: bytes=...` header per RFC 7233.
 
+    Returns ``(kind, start, end)`` where kind is:
 
-def _is_valid_audio_cache_file(file_path: str) -> bool:
-    """Check if a cached file exists, has a plausible audio size (>64KB), and is not a text/playlist file."""
+    * ``'range'``  - a satisfiable single range; answer 206 with that slice.
+    * ``'full'``   - no Range, an unparsable one, or a multi-range request;
+      answer 200 with the whole entity (RFC 7233 explicitly allows ignoring a
+      Range header it cannot satisfy at the syntax level).
+    * ``'invalid'``- syntactically valid but unsatisfiable (start beyond EOF,
+      end before start, zero-length suffix); answer 416.
+
+    The old parser read the field positionally, so a suffix range
+    (``bytes=-500``, what HTML5 audio sends) was answered as 0-500 and an
+    unsatisfiable range was silently clamped into a *different* range.
+    """
+    size = int(file_size or 0)
+    if not range_header:
+        return ('full', 0, max(size - 1, 0))
+    header = str(range_header).strip()
+    unit, sep, spec = header.partition('=')
+    if not sep or unit.strip().lower() != 'bytes':
+        return ('full', 0, max(size - 1, 0))
+    spec = spec.strip()
+    if not spec or ',' in spec or '-' not in spec:
+        # Multipart ranges are legal to ignore.
+        return ('full', 0, max(size - 1, 0))
+    first, _, last = spec.partition('-')
+    first, last = first.strip(), last.strip()
+    if (first and not first.isascii()) or (last and not last.isascii()) or (first and not first.isdigit()) or (last and not last.isdigit()):
+        return ('full', 0, max(size - 1, 0))
     try:
-        if not file_path or not os.path.exists(file_path):
-            return False
-        if os.path.getsize(file_path) < 65536:
-            return False
-        with open(file_path, 'rb') as f:
-            hdr = f.read(64)
-            if hdr.startswith(b'#EXTM3U') or hdr.startswith(b'<!DOCTYPE') or hdr.startswith(b'<html') or hdr.startswith(b'{'):
-                return False
-        return True
-    except Exception:
-        return False
-
-
-def _ext_for_response(resp) -> str:
-    """Pick a cache extension from the upstream response's Content-Type."""
-    try:
-        ct = ''
-        if hasattr(resp, 'headers') and resp.headers is not None:
-            ct = resp.headers.get('Content-Type') or ''
-        elif hasattr(resp, 'info'):
-            info = resp.info()
-            ct = (info.get('Content-Type') if info else '') or ''
-        base = ct.split(';', 1)[0].strip().lower()
-        if 'mpegurl' in base or 'text' in base or 'html' in base or 'json' in base:
-            return ''
-        return _RESPONSE_EXTS.get(base, '')
-    except Exception:
-        return ''
+        if not first:
+            # Suffix form: the final N bytes of the entity.
+            if not last:
+                return ('full', 0, max(size - 1, 0))
+            suffix_len = int(last)
+            if suffix_len < 0:
+                # e.g. `bytes=--5`: not a range we can even name.
+                return ('full', 0, max(size - 1, 0))
+            if suffix_len == 0 or size <= 0:
+                return ('invalid', None, None)
+            return ('range', max(0, size - suffix_len), size - 1)
+        start = int(first)
+        end = int(last) if last else size - 1
+    except (TypeError, ValueError):
+        return ('full', 0, max(size - 1, 0))
+    if start >= size:
+        return ('invalid', None, None)
+    if end < start:
+        return ('full', 0, max(size - 1, 0))
+    if start < 0 or start >= size:
+        return ('invalid', None, None)
+    return ('range', start, min(end, size - 1))
 
 
 class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Custom redirect handler that validates all redirect destinations against SSRF protection."""
-    def __init__(self, max_redirects=5):
+    def __init__(self, max_redirects=5, source=''):
         self.max_redirects = max_redirects
         self.redirect_count = 0
+        self.source = source
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         self.redirect_count += 1
@@ -219,13 +374,60 @@ class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
             raise urllib.error.HTTPError(req.full_url, code, "Too many redirects (max 5)", headers, fp)
         if not _is_ssrf_safe_url(newurl):
             raise urllib.error.HTTPError(req.full_url, code, f"SSRF blocked redirect destination: {newurl}", headers, fp)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req is not None and _host_of(newurl) != _host_of(req.full_url):
+            if not _host_allows_credentials(newurl, self.source):
+                for store in (new_req.headers, new_req.unredirected_hdrs):
+                    for name in [k for k in store if k.lower() in ('authorization', 'cookie')]:
+                        del store[name]
+        return new_req
 
 
-def _safe_urlopen(req, timeout=12.0):
+def _safe_urlopen(req, timeout=12.0, source=''):
     """Open URL using custom SafeRedirectHandler enforcing strict SSRF checks on every redirect."""
-    opener = urllib.request.build_opener(SafeRedirectHandler(max_redirects=5))
-    return opener.open(req, timeout=timeout)
+    return guarded_open_url(req, timeout=timeout)
+
+
+class _CachedManifest(io.BytesIO):
+    """A verified VOD body; it still follows normal playlist URL rewriting."""
+    status = 200
+
+    def __init__(self, payload, url):
+        super().__init__(payload['body'])
+        self.url = url
+        self.headers = {'Content-Type': payload['content_type'],
+                        'Content-Length': str(len(payload['body']))}
+
+    def geturl(self):
+        return self.url
+
+    def getheaders(self):
+        return list(self.headers.items())
+
+
+def _rewrite_hls_playlist(text, upstream_url, source, token):
+    """Keep nested playlists, init fragments, keys and segments on the proxy.
+
+    Every resulting request passes the normal authentication, offline and SSRF
+    gates, including redirects. Never forward the local bearer to the CDN.
+    """
+    def local_url(value):
+        absolute = urllib.parse.urljoin(upstream_url, value)
+        if urllib.parse.urlsplit(absolute).scheme not in ('http', 'https'):
+            raise ValueError('HLS resources must use HTTP(S)')
+        return '/?' + urllib.parse.urlencode({
+            'url': absolute, 'source': source or '', 'k': token, 'resource': '1',
+        })
+
+    lines = []
+    for line in text.splitlines():
+        if line.startswith('#'):
+            line = re.sub(r'URI="([^"]+)"',
+                          lambda match: 'URI="' + local_url(match.group(1)) + '"', line)
+        elif line.strip():
+            line = local_url(line.strip())
+        lines.append(line)
+    return '\n'.join(lines) + '\n'
 
 
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -233,36 +435,80 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     Multi-threaded HTTP server holding a reference to the application core.
     """
     block_on_close = False
+    # socketserver.ThreadingMixIn.daemon_threads defaults to False, and nothing
+    # in the app overrode it, so every in-flight request thread was a
+    # non-daemon: sys.exit() blocked on the interpreter's atexit join while a
+    # buffered track was still being served, and the app could not close.
+    daemon_threads = True
 
     def __init__(self, server_address, RequestHandlerClass, app_core, auth_token=''):
         self.app_core = app_core
         self.auth_token = auth_token or ''
-        self._threads_lock = threading.Lock()
+        self._request_slots = threading.BoundedSemaphore(24)
         super().__init__(server_address, RequestHandlerClass)
 
     def process_request(self, request, client_address):
-        thread_cls = get_real_thread_class()
-        t = thread_cls(target=self.process_request_thread, args=(request, client_address))
-        t.daemon = self.daemon_threads
-        with self._threads_lock:
-            if self._threads is None or not isinstance(self._threads, list):
-                self._threads = []
-            self._threads = [th for th in self._threads if hasattr(th, "is_alive") and th.is_alive()]
-            self._threads.append(t)
-        t.start()
+        if not self._request_slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        request.settimeout(15.0)
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._request_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._request_slots.release()
+
+
+
+def _is_client_connected(handler) -> bool:
+    try:
+        conn = getattr(handler, 'connection', None)
+        if conn is None or getattr(conn, 'fileno', lambda: -1)() == -1:
+            return False
+        r, _, _ = select.select([conn], [], [], 0)
+        if r:
+            data = conn.recv(1, socket.MSG_PEEK)
+            if not data:
+                return False
+        return True
+    except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError, ValueError):
+        return False
+
+
+def _sleep_with_client_check(handler, duration: float) -> bool:
+    end_time = time.time() + duration
+    while time.time() < end_time:
+        if not _is_client_connected(handler):
+            return False
+        time.sleep(min(0.1, max(0.01, end_time - time.time())))
+    return _is_client_connected(handler)
 
 
 class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
     """
     HTTP Request Handler to proxy cloud streams and handle credentials and re-resolution.
     """
-    protocol_version = "HTTP/1.1"
 
     def send_error(self, code, message=None, explain=None):
         try:
             super().send_error(code, message, explain)
         except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
             pass
+
+    def _safe_send_error(self, code, message=None, explain=None):
+        """send_error() that never raises on a dead client socket (WinError 10053)."""
+        try:
+            self.send_error(code, message, explain)
+        except OSError:
+            pass
+        except Exception:
+            logger.debug("_safe_send_error suppressed", exc_info=True)
 
     def finish(self):
         """Release this request thread's SQLite connection before the thread dies.
@@ -284,7 +530,7 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 logger.debug('Per-request DB connection release failed', exc_info=True)
 
     def log_message(self, format, *args):
-        logger.debug(format % args)
+        logger.debug(re.sub(r'([?&](?:k|auth_token)=)[^&\s"]*', r'\1***', format % args))
 
     def _authorized(self, query_params) -> bool:
         """Constant-time check of the per-session proxy token.
@@ -292,22 +538,33 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
         The loopback proxy forwards provider credentials and serves cached audio,
         so an unauthenticated port is readable by any local process or by any web
         page that guesses the port. Every request must carry ?k=<token>.
+
+        An unset token fails CLOSED. LocalProxyManager.start() always mints one
+        and, when the server cannot be built, no port is ever announced - so an
+        empty token can only mean "not configured", and serving anyway would
+        expose the proxy with no bearer at all.
         """
         expected = getattr(self.server, 'auth_token', '') or ''
         if not expected:
+            logger.error('Proxy token is not configured - refusing request (fail-closed)')
             return False
         supplied = (query_params.get(AUTH_PARAM) or [''])[0]
         # Legacy alias some frontend helpers still send.
         if not supplied:
             supplied = (query_params.get('auth_token') or [''])[0]
-        if not supplied:
+        return hmac.compare_digest(str(supplied).encode('utf-8'), str(expected).encode('utf-8'))
+
+    def _authenticate(self, parsed_path, query_params) -> bool:
+        """Entry gate shared by GET and HEAD: reject unauthenticated callers."""
+        if not self._authorized(query_params):
+            logger.warning('Rejected unauthenticated proxy request: %s', parsed_path.path)
+            self._reject_unauthorized()
             return False
-        return hmac.compare_digest(str(supplied), str(expected))
+        return True
 
     def _reject_unauthorized(self):
         self.send_response(403)
         self.send_header('Content-Type', 'application/json')
-        self._send_cors_headers()
         self.end_headers()
         try:
             self.wfile.write(b'{"error": "forbidden: missing or invalid proxy token"}')
@@ -315,176 +572,185 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             pass
 
     def _send_cors_headers(self):
-        """Echo a loopback Origin or fallback to * so WebKit audio elements never fail CORS."""
+        """Echo a loopback Origin only. A wildcard would let any web page read
+        proxied responses, including provider-authenticated ones."""
         origin = self.headers.get('Origin', '')
         if _is_loopback_origin(origin):
             self.send_header('Access-Control-Allow-Origin', origin)
-            self.send_header('Access-Control-Allow-Credentials', 'true')
             self.send_header('Vary', 'Origin')
-        else:
-            self.send_header('Access-Control-Allow-Origin', '*')
+
+    def end_headers(self):
+        """Attach loopback CORS to success and error responses consistently."""
+        headers = getattr(self, '_headers_buffer', ())
+        has_allow_origin = any(
+            isinstance(header, bytes) and header.lower().startswith(b'access-control-allow-origin:')
+            for header in headers
+        )
+        if not has_allow_origin:
+            self._send_cors_headers()
+        super().end_headers()
 
     def serve_local_file(self, file_path):
-        file_size = os.path.getsize(file_path)
-        content_type, _ = mimetypes.guess_type(file_path)
-        if not content_type:
-            content_type = 'audio/mp4'
-        range_header = self.headers.get('Range', None)
-        if range_header and range_header.startswith('bytes='):
-            try:
-                range_match = range_header.replace('bytes=', '').split('-')
-                start_byte = int(range_match[0]) if range_match[0] else 0
-                end_byte = int(range_match[1]) if len(range_match) > 1 and range_match[1] else file_size - 1
-                end_byte = min(end_byte, file_size - 1)
-                start_byte = max(0, min(start_byte, end_byte))
-                length = end_byte - start_byte + 1
-                self.send_response(206)
+        try:
+            with open(file_path, 'rb') as audio:
+                size = os.fstat(audio.fileno()).st_size
+                kind, start, end = _parse_byte_range(self.headers.get('Range'), size)
+                if kind == 'invalid':
+                    self._send_range_not_satisfiable(size)
+                    return
+                content_type = mimetypes.guess_type(file_path)[0] or 'audio/mp4'
+                length = end - start + 1 if kind == 'range' else size
+                self.send_response(206 if kind == 'range' else 200)
                 self.send_header('Content-Type', content_type)
                 self.send_header('Accept-Ranges', 'bytes')
-                self.send_header('Content-Range', f'bytes {start_byte}-{end_byte}/{file_size}')
                 self.send_header('Content-Length', str(length))
+                if kind == 'range':
+                    self.send_header('Content-Range', f'bytes {start}-{end}/{size}')
                 self._send_cors_headers()
-                self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
-                self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization, X-Requested-With')
-                self.send_header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges')
                 self.end_headers()
-                with open(file_path, 'rb') as f:
-                    f.seek(start_byte)
-                    chunk_size = 65536
-                    bytes_sent = 0
-                    while bytes_sent < length:
-                        read_size = min(chunk_size, length - bytes_sent)
-                        data = f.read(read_size)
-                        if not data:
-                            break
-                        self.wfile.write(data)
-                        bytes_sent += len(data)
-            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
-                return None
-            except Exception as e:
-                logger.error(f'Error serving Range request: {e}')
-                try:
-                    self.send_error(500, 'Range processing error')
-                except Exception:
-                    logger.debug("serve_local_file: suppressed exception", exc_info=True)
-        else:
-            self.send_response(200)
-            self.send_header('Content-Type', content_type)
+                audio.seek(start)
+                remaining = length
+                while remaining:
+                    chunk = audio.read(min(128 * 1024, remaining))
+                    if not chunk:
+                        self.close_connection = True
+                        return
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except FileNotFoundError:
+            self._safe_send_error(404, 'File not found')
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
+            self.close_connection = True
+
+    def _send_range_not_satisfiable(self, file_size):
+        """416 for a Range the RFC calls unsatisfiable, with the required
+        `Content-Range: bytes * /<size>` (RFC 7233 section 4.4)."""
+        try:
+            self.send_response(416)
+            self.send_header('Content-Type', 'application/json')
             self.send_header('Accept-Ranges', 'bytes')
-            self.send_header('Content-Length', str(file_size))
+            self.send_header('Content-Range', f'bytes */{file_size}')
+            self.send_header('Content-Length', '0')
             self._send_cors_headers()
-            self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization, X-Requested-With')
-            self.send_header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges')
             self.end_headers()
-            try:
-                with open(file_path, 'rb') as f:
-                    import shutil
-                    shutil.copyfileobj(f, self.wfile)
-            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as ce:
-                logger.debug("serve_local_file disconnect: %s", ce)
+        except OSError:
+            pass
+        except Exception:
+            logger.debug('_send_range_not_satisfiable suppressed', exc_info=True)
 
     def do_OPTIONS(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if not self._authenticate(parsed, urllib.parse.parse_qs(parsed.query)):
+            return
         self.send_response(204)
         self._send_cors_headers()
-        self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization, X-Requested-With')
-        self.send_header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges')
+        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization')
         self.end_headers()
 
-    def do_POST(self):
+    def do_HEAD(self):
+        """Answer HEAD with GET's headers and no body (RFC 9110 9.3.2).
+
+        CORS advertises HEAD, but BaseHTTPRequestHandler has no do_HEAD and
+        answered 501. Only what GET can answer from local state is resolved
+        here: fetching an upstream stream purely to throw its body away would
+        be pure waste, so a HEAD that would need one reports 404.
+        """
         parsed_path = urllib.parse.urlparse(self.path)
         query_params = urllib.parse.parse_qs(parsed_path.query)
 
-        if not self._authorized(query_params):
-            self._reject_unauthorized()
+        if not self._authenticate(parsed_path, query_params):
             return None
 
-        if parsed_path.path in ('/__aura_eval', '/api/control/eval'):
-            is_debug = (
-                os.environ.get('AURA_DEBUG') == '1'
-                or os.environ.get('NEDOTIFY_DEBUG') == '1'
-                or any(arg in sys.argv for arg in ('--debug', '--dev'))
-            )
-            if not is_debug and hasattr(self.server.app_core, 'settings') and self.server.app_core.settings:
-                try:
-                    is_debug = bool(
-                        self.server.app_core.settings.get('general', 'debug', False)
-                        or self.server.app_core.settings.get('debug', False)
-                    )
-                except Exception:
-                    is_debug = False
-            if not is_debug:
-                self.send_error(403, "Endpoint disabled")
-                return None
-            try:
-                length = int(self.headers.get('Content-Length', 0))
-                code = self.rfile.read(length).decode('utf-8')
-                api = getattr(self.server.app_core, 'api', None)
-                win = getattr(self.server.app_core, 'window', None) or getattr(api, '_window', None) or getattr(api, '_main_window', None)
-                if win:
-                    if hasattr(win, 'evaluate_js'):
-                        res = win.evaluate_js(code)
-                    else:
-                        res = win.run_js(code)
-                    resp_bytes = json.dumps({"result": res}).encode('utf-8')
-                else:
-                    resp_bytes = json.dumps({"error": "no window"}).encode('utf-8')
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self._send_cors_headers()
-                self.end_headers()
-                self.wfile.write(resp_bytes)
-            except Exception as e:
-                self.send_response(500)
-                self.send_header('Content-Type', 'application/json')
-                self._send_cors_headers()
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+        if parsed_path.path not in KNOWN_PROXY_PATHS:
+            self._safe_send_error(404, 'Not Found')
             return None
-        self.send_error(404, 'Endpoint not found')
+
+        if parsed_path.path == '/api/cover':
+            self._send_local_head(_safe_cover_path(query_params.get('path', [''])[0] or ''))
+            return None
+
+        if parsed_path.path == '/api/avatar':
+            self._send_local_head(_safe_avatar_path(query_params.get('path', [''])[0] or ''))
+            return None
+
+        # '/' and /api/stream: same local-file gate GET applies.
+        local = query_params.get('url', [''])[0] or query_params.get('file_path', [''])[0] or ''
+        if local.startswith('file:///'):
+            local = urllib.request.url2pathname(local[7:])
+        resolved = self._resolve_stream_local_file(local)
+        if not resolved:
+            db = self.server.app_core.db
+            source = query_params.get('source', [''])[0]
+            source_id = query_params.get('source_id', [''])[0]
+            track_id = query_params.get('track_id', [''])[0]
+            try:
+                row = db.get_track(int(track_id)) if track_id else None
+                cached = db.get_cached_stream(source, source_id, max_age_seconds=2**31-1) if source and source_id else None
+                cached_file_path = (cached or {}).get('cached_file_path') or ''
+                # Legacy-format cache names may belong to a colliding track
+                # (BUG-A1-006); only hashed names are valid for serving.
+                if cached_file_path and not is_valid_cache_file(cached_file_path):
+                    cached_file_path = ''
+                resolved = self._resolve_stream_local_file((row or {}).get('file_path') or cached_file_path)
+            except (ValueError, TypeError):
+                pass
+        self._send_local_head(resolved)
         return None
+
+    def _send_local_head(self, file_path):
+        """Emit the headers GET would send for `file_path` (or 404), no body."""
+        if not file_path:
+            self._safe_send_error(404, 'Local file not found')
+            return None
+        try:
+            file_size = os.path.getsize(file_path)
+        except OSError:
+            self._safe_send_error(404, 'File not found')
+            return None
+        content_type, _ = mimetypes.guess_type(file_path)
+        if not content_type:
+            content_type = 'audio/mp4'
+        range_kind, start_byte, end_byte = _parse_byte_range(self.headers.get('Range'), file_size)
+        if range_kind == 'invalid':
+            self._send_range_not_satisfiable(file_size)
+            return None
+        if range_kind == 'range':
+            self.send_response(206)
+            self.send_header('Content-Range', f'bytes {start_byte}-{end_byte}/{file_size}')
+            self.send_header('Content-Length', str(end_byte - start_byte + 1))
+        else:
+            self.send_response(200)
+            self.send_header('Content-Length', str(file_size))
+        self.send_header('Content-Type', content_type)
+        self.send_header('Accept-Ranges', 'bytes')
+        self._send_cors_headers()
+        self.end_headers()
+        return None
+
+    def _resolve_stream_local_file(self, local_path):
+        """The local audio file `/` and /api/stream may serve, or ''.
+
+        A local library can live in any folder the user imported, so the gate
+        is "managed app root OR referenced by a tracks row", never a fixed
+        folder list.
+        """
+        db = getattr(getattr(self.server, 'app_core', None), 'db', None)
+        return _safe_stream_local_path(local_path, db)
 
     def do_GET(self):
         parsed_path = urllib.parse.urlparse(self.path)
         query_params = urllib.parse.parse_qs(parsed_path.query)
 
-        if not self._authorized(query_params):
-            logger.warning('Rejected unauthenticated proxy request: %s', parsed_path.path)
-            self._reject_unauthorized()
+        if not self._authenticate(parsed_path, query_params):
             return None
 
-        if parsed_path.path == '/api/control/play':
-            try:
-                title = query_params.get('title', [''])[0]
-                artist = query_params.get('artist', [''])[0]
-                source_id = query_params.get('source_id', [''])[0]
-                source = query_params.get('source', ['youtube'])[0]
-                file_path = query_params.get('file_path', [''])[0]
-                track = {
-                    'title': title or 'Test Track',
-                    'artist': artist or 'Test Artist',
-                    'source': source,
-                    'source_id': source_id,
-                    'file_path': file_path or None,
-                }
-                api = getattr(self.server.app_core, 'api', None)
-                if api and hasattr(api, 'play_track'):
-                    api.play_track(track, [track], 0)
-                    resp = {"status": "playing", "track": track}
-                else:
-                    resp = {"error": "api not available"}
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self._send_cors_headers()
-                self.end_headers()
-                self.wfile.write(json.dumps(resp).encode('utf-8'))
-            except Exception as e:
-                self.send_response(500)
-                self.send_header('Content-Type', 'application/json')
-                self._send_cors_headers()
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+        # Everything outside the served set is refused here: the catch-all
+        # branch below resolves with empty metadata, which for SoundCloud is a
+        # real network call that blocks the request thread for up to 15s.
+        if parsed_path.path not in KNOWN_PROXY_PATHS:
+            logger.info('Refusing unknown proxy path: %s', parsed_path.path)
+            self._safe_send_error(404, 'Not Found')
             return None
 
         if parsed_path.path == '/api/cover':
@@ -504,317 +770,392 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
             if not path_param:
                 self.send_error(400, 'Missing path parameter')
                 return None
-            avatar_file = _safe_avatar_path(urllib.parse.unquote(path_param))
+            avatar_file = _safe_avatar_path(path_param)
             if avatar_file:
                 self.serve_local_file(avatar_file)
                 return None
             self.send_error(404, 'Avatar file not found')
             return None
 
-        return self._handle_stream(query_params)
+        if parsed_path.path == '/api/stream':
+            url_param = query_params.get('url', [None])[0] or query_params.get('file_path', [None])[0]
+            track_id = query_params.get('track_id', [None])[0]
+            source = query_params.get('source', [None])[0]
+            source_id = query_params.get('source_id', [None])[0]
+            title = query_params.get('title', [''])[0]
+            artist = query_params.get('artist', [''])[0]
 
-    def _handle_stream(self, query_params):
-        url_param = query_params.get('url', [None])[0] or query_params.get('file_path', [None])[0]
-        track_id = query_params.get('track_id', [None])[0]
-        source = query_params.get('source', [None])[0]
-        source_id = query_params.get('source_id', [None])[0]
-        title = query_params.get('title', [''])[0]
-        artist = query_params.get('artist', [''])[0]
-
-        def _clean_local_path(candidate):
-            if not candidate or not isinstance(candidate, str):
-                return None
-            p = candidate.strip()
-            if p.startswith('file:///'):
-                p = urllib.request.url2pathname(p[7:])
-            elif p.startswith('file://'):
-                p = urllib.request.url2pathname(p[6:])
-            return p
-
-        AUDIO_EXTENSIONS = ('.mp3', '.m4a', '.webm', '.ogg', '.opus', '.flac', '.wav', '.aac', '.wma')
-
-        def _is_safe_local_audio(file_path):
-            if not file_path or not isinstance(file_path, str):
-                return False
-            ext = os.path.splitext(file_path)[1].lower()
-            if ext not in AUDIO_EXTENSIONS:
-                return False
-            if not os.path.isfile(file_path):
-                return False
-
-            # Allow if it's in the DB tracks
-            if hasattr(self.server.app_core, 'db'):
-                db = self.server.app_core.db
-                if (db.get_track_by_path(file_path)
-                    or db.get_track_by_path(os.path.normpath(file_path))
-                    or db.get_track_by_path(os.path.realpath(file_path))):
-                    return True
-                # Allow if inside any scan folder
-                try:
-                    for folder in db.get_scan_folders() or []:
-                        f_path = folder.get('folder_path')
-                        if f_path and os.path.isdir(f_path):
-                            rf = os.path.realpath(f_path)
-                            rp = os.path.realpath(file_path)
-                            if os.path.commonpath([rp, rf]) == rf:
-                                return True
-                except Exception:
-                    pass
-
-            # Allow if it's in the streams cache directory
-            streams_dir = getattr(getattr(self.server.app_core, 'cache', None), '_streams_dir', None)
-            if streams_dir and os.path.isdir(streams_dir):
-                try:
-                    rf = os.path.realpath(file_path)
-                    rs = os.path.realpath(streams_dir)
-                    if os.path.commonpath([rf, rs]) == rs:
-                        return True
-                except (ValueError, Exception):
-                    pass
-
-            # Allow if it's in the downloads directory
-            downloader = getattr(self.server.app_core, 'downloader', None)
-            downloads_dir = getattr(downloader, 'download_dir', None) or os.path.join(os.path.expanduser('~'), '.nedotify', 'downloads')
-            if downloads_dir and os.path.isdir(downloads_dir):
-                try:
-                    rf = os.path.realpath(file_path)
-                    rd = os.path.realpath(downloads_dir)
-                    if os.path.commonpath([rf, rd]) == rd:
-                        return True
-                except (ValueError, Exception):
-                    pass
-            return False
-
-        # 1. If url_param points directly to a local file, verify it's safe!
-        cleaned_url = _clean_local_path(url_param)
-        if cleaned_url and os.path.isfile(cleaned_url):
-            if _is_safe_local_audio(cleaned_url):
-                self.serve_local_file(cleaned_url)
-                return None
-            else:
-                self.send_error(403, 'Forbidden local file access')
-                return None
-
-        int_track_id = None
-        if track_id:
-            try:
-                parsed_id = int(track_id)
-                if parsed_id > 0:
-                    int_track_id = parsed_id
-            except (ValueError, TypeError):
-                pass
-
-        track = None
-        if int_track_id and hasattr(self.server.app_core, 'db'):
-            track = self.server.app_core.db.get_track(int_track_id)
-
-        if not track:
-            track = {
-                'id': int_track_id or 0,
-                'source': source if source else 'youtube',
-                'source_id': source_id if source_id else f"{artist} {title}".strip(),
-                'title': title,
-                'artist': artist,
-                'file_path': url_param,
-            }
-
-        source = track.get('source') or source
-        source_id = track.get('source_id') or source_id
-
-        # 2. Local or downloaded track check (play directly from disk without network roundtrips)
-        local_fp = _clean_local_path(url_param or track.get('file_path') or track.get('url'))
-        if local_fp and os.path.isfile(local_fp) and _is_safe_local_audio(local_fp):
-            self.serve_local_file(local_fp)
-            return None
-
-        if source == 'local':
-            self.send_error(404, 'Local file not found or access denied')
-            return None
-
-        # 3. Check DB stream cache for local cached file
-        if source and source_id and hasattr(self.server.app_core, 'db'):
-            cached_stream = self.server.app_core.db.get_cached_stream(source, str(source_id))
-            if cached_stream and cached_stream.get('cached_file_path'):
-                cfp = cached_stream['cached_file_path']
-                if _is_valid_audio_cache_file(cfp):
-                    self.serve_local_file(cfp)
+            # If url_param points directly to a local file, serve it immediately!
+            if url_param:
+                local_path = url_param.strip()
+                if local_path.startswith('file:///'):
+                    local_path = urllib.request.url2pathname(local_path[7:])
+                elif local_path.startswith('file://'):
+                    local_path = urllib.request.url2pathname(local_path[6:])
+                allowed_local = self._resolve_stream_local_file(local_path)
+                if allowed_local:
+                    self.serve_local_file(allowed_local)
                     return None
-                elif os.path.exists(cfp):
-                    try:
-                        os.remove(cfp)
-                    except Exception:
-                        pass
 
-        # 4. Check on-disk cache directly
-        safe_source = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source or 'unknown'))
-        safe_source_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id or ''))
-        cache_name = f"{safe_source}_{safe_source_id}" if safe_source_id else (f"track_{int_track_id}" if int_track_id else f"temp_{int(time.time()*1000)}")
+            int_track_id = None
+            if track_id:
+                try:
+                    parsed_id = int(track_id)
+                    if parsed_id > 0:
+                        int_track_id = parsed_id
+                except (ValueError, TypeError):
+                    pass
 
-        streams_dir = getattr(self.server.app_core.cache, '_streams_dir', None)
-        if streams_dir and os.path.exists(streams_dir) and safe_source_id:
+            track = self.server.app_core.db.get_track(int_track_id) if int_track_id else None
+            if not track:
+                if not source_id and not int_track_id and not url_param:
+                    self.send_error(400, 'Missing track_id or source_id')
+                    return None
+                source = source if source else 'youtube'
+                track = {
+                    'id': int_track_id or 0,
+                    'source': source,
+                    'source_id': source_id if source_id else f"{artist} {title}".strip(),
+                    'title': title,
+                    'artist': artist,
+                    'file_path': url_param,
+                }
+
+            source = track.get('source') or source or 'youtube'
+            source_id = track.get('source_id') or source_id
+
+            if source == 'local':
+                file_path = url_param or track.get('file_path') or track.get('url')
+                if file_path:
+                    local_path = file_path.strip()
+                    if local_path.startswith('file:///'):
+                        local_path = urllib.request.url2pathname(local_path[7:])
+                    elif local_path.startswith('file://'):
+                        local_path = urllib.request.url2pathname(local_path[6:])
+                    allowed_local = self._resolve_stream_local_file(local_path)
+                    if allowed_local:
+                        self.serve_local_file(allowed_local)
+                        return None
+                self.send_error(404, 'Local file not found')
+                return None
+
+            # 1. Check DB stream cache. Rows recorded before the hashed naming
+            # scheme (BUG-A1-006) may name a file that used to be shared by
+            # colliding Cyrillic source_ids; those are ignored and re-resolved.
+            cached_stream = self.server.app_core.db.get_cached_stream(source, source_id)
+            cached_file_path = (cached_stream or {}).get('cached_file_path') or ''
+            if cached_file_path and os.path.exists(cached_file_path) \
+                    and is_valid_cache_file(cached_file_path):
+                self.serve_local_file(cached_file_path)
+                return None
+
+            # 2. Check on-disk cache directly (hashed names only: a legacy name
+            # could belong to a different track with the same shaped query).
+            streams_dir = self.server.app_core.cache._streams_dir
+            cache_name = stream_cache_stem(source, source_id)
+
             for ext in ("m4a", "webm", "mp3", "ogg"):
                 candidate_path = os.path.join(streams_dir, f"{cache_name}.{ext}")
-                if _is_valid_audio_cache_file(candidate_path):
-                    if hasattr(self.server.app_core, 'db') and hasattr(self.server.app_core.db, 'set_cached_file'):
-                        self.server.app_core.db.set_cached_file(source, str(source_id), candidate_path)
+                if os.path.exists(candidate_path) and os.path.getsize(candidate_path) > 1024:
+                    self.server.app_core.db.set_cached_file(source, source_id, candidate_path)
                     self.serve_local_file(candidate_path)
                     return None
-                elif os.path.exists(candidate_path):
-                    try:
-                        os.remove(candidate_path)
-                    except Exception:
-                        pass
 
-        # 5. Determine target URL
-        target_url = url_param
-        if not target_url or any(domain in target_url for domain in ('soundcloud.com', 'youtube.com', 'youtu.be')):
-            target_url = self.server.app_core.engine.resolve_stream_url(track)
+            target_url = url_param or self.server.app_core.engine.resolve_stream_url(track)
             if hasattr(target_url, '_mock_return_value') or not isinstance(target_url, str):
                 target_url = str(target_url) if (target_url and not hasattr(target_url, '_mock_return_value')) else ''
-
-        if not target_url:
-            self.send_error(404, 'Stream not found')
-            return None
-
-        # If target_url resolved to a local file
-        target_local = _clean_local_path(target_url)
-        if target_local and os.path.isfile(target_local):
-            if _is_safe_local_audio(target_local):
-                self.serve_local_file(target_local)
+            if not target_url:
+                try:
+                    self.send_error(404, 'Stream not found')
+                except Exception:
+                    logger.debug("do_GET: suppressed exception", exc_info=True)
                 return None
 
-        # Infer source if not specified
-        if not source:
-            h = _host_of(target_url)
-            if any(h == sfx or h.endswith('.' + sfx) for sfx in ('googlevideo.com', 'youtube.com', 'youtu.be')):
-                source = 'youtube'
-            elif any(h == sfx or h.endswith('.' + sfx) for sfx in ('sndcdn.com', 'soundcloud.com')):
-                source = 'soundcloud'
-            elif any(h == sfx or h.endswith('.' + sfx) for sfx in ('yandex.net', 'yandex.ru')):
-                source = 'yandex'
+            # If resolved stream is a local file or file:// URL, serve directly
+            if target_url:
+                local_path = target_url.strip()
+                if local_path.startswith('file:///'):
+                    local_path = urllib.request.url2pathname(local_path[7:])
+                elif local_path.startswith('file://'):
+                    local_path = urllib.request.url2pathname(local_path[6:])
+                allowed_local = self._resolve_stream_local_file(local_path)
+                if allowed_local:
+                    self.serve_local_file(allowed_local)
+                    return None
 
-        # SSRF validation
-        if not _is_ssrf_safe_url(target_url):
-            logger.warning(f'SSRF guard blocked proxied URL: {target_url[:120]}')
-            try:
-                self.send_response(400)
-                self.send_header('Content-Type', 'application/json')
-                self._send_cors_headers()
-                self.end_headers()
-                self.wfile.write(json.dumps({'error': 'URL blocked: SSRF validation failed'}).encode('utf-8'))
-            except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
-                pass
-            return None
+            # Same SSRF gate as the ?url= branch: a resolver or a poisoned DB cache
+            # row must never be able to make the proxy fetch an internal address.
+            if not _is_ssrf_safe_url(target_url):
+                logger.warning('SSRF guard blocked resolved stream URL for %s:%s', source, source_id)
+                try:
+                    self.send_error(400, 'Resolved stream URL blocked by SSRF validation')
+                except Exception:
+                    logger.debug("do_GET: suppressed exception", exc_info=True)
+                return None
 
-        # 6. Parse Range request headers
-        range_header = self.headers.get('Range', '')
-        range_start = 0
-        range_end = None
-        has_range_request = False
-        if range_header and range_header.startswith('bytes='):
-            has_range_request = True
-            try:
-                parts = range_header[6:].split('-')
-                range_start = int(parts[0]) if parts[0] else 0
-                range_end = int(parts[1]) if len(parts) > 1 and parts[1] else None
-            except (ValueError, IndexError):
-                has_range_request = False
+            # NOTE: stream files are written exclusively by CacheManager
+            # (download_audio_stream) under hashed names. The proxy never
+            # caches to disk itself; the old inline writer raced the background
+            # cache and accepted partial 206 bodies.
+            range_header = self.headers.get('Range', '')
 
-        is_cachable_request = (not has_range_request) or (range_start == 0 and range_end is None)
-        unique_tag = f"{os.getpid()}_{threading.get_ident()}_{int(time.time() * 1000)}"
-        temp_path = os.path.join(self.server.app_core.cache._temp_dir, f"{cache_name}_{unique_tag}.tmp") if streams_dir else None
+            req = urllib.request.Request(target_url)
+            if range_header:
+                req.add_header('Range', range_header)
+        else:
+            target_url = query_params.get('url', [None])[0]
+            source = query_params.get('source', [None])[0]
+            source_id = query_params.get('source_id', [None])[0]
+            title = query_params.get('title', [''])[0]
+            artist = query_params.get('artist', [''])[0]
 
-        def _inject_ydl_cookies(ydl, req_obj):
+            # If target_url points to a local file or file:// URL, serve directly or fallback to online resolution
+            if target_url:
+                local_path = target_url.strip()
+                if local_path.startswith('file:///'):
+                    local_path = urllib.request.url2pathname(local_path[7:])
+                elif local_path.startswith('file://'):
+                    local_path = urllib.request.url2pathname(local_path[6:])
+
+                is_local_candidate = bool(
+                    target_url.startswith('file://') or
+                    re.match(r'^[a-zA-Z]:[\\/]', target_url) or
+                    target_url.startswith('/') or
+                    target_url.startswith('\\')
+                )
+
+                if is_local_candidate:
+                    allowed_local = self._resolve_stream_local_file(local_path)
+                    if allowed_local:
+                        self.serve_local_file(allowed_local)
+                        return None
+
+            if target_url and is_local_candidate:
+                # If file doesn't exist on disk, attempt online resolution if metadata is present.
+                if (source and source_id) or title:
+                    logger.info(f"Local file not found on disk ({local_path[:60]}), resolving online stream for {title or source_id}...")
+                    track_info = {
+                        'source': source if source else 'youtube',
+                        'source_id': source_id,
+                        'title': title,
+                        'artist': artist,
+                    }
+                    target_url = self.server.app_core.engine.resolve_stream_url(track_info)
+                else:
+                    self.send_error(404, f"Local audio file not found: {os.path.basename(local_path)}")
+                    return None
+
+            is_webpage = not query_params.get('resource') and target_url and _host_matches(_host_of(target_url), ('soundcloud.com', 'youtube.com', 'youtu.be'))
+
+            # '/' is a real endpoint (audio/engine.py builds direct-stream proxy
+            # URLs as http://127.0.0.1:<port>/?url=...), so it stays in
+            # KNOWN_PROXY_PATHS. But a request that carries neither a url nor any
+            # track metadata has nothing to resolve: falling through would call
+            # engine.resolve_stream_url with an empty target, and the SoundCloud
+            # branch then performs a real network round trip on a blank id and
+            # blocks this request thread for up to 15s.
+            if not target_url and not (source or source_id or title or artist):
+                self.send_error(400, "Missing 'url' query parameter")
+                return None
+
+            if not target_url or is_webpage:
+                track_info = {
+                    'source': source if source else 'soundcloud',
+                    'source_id': source_id,
+                    'source_url': target_url,
+                    'title': title,
+                    'artist': artist,
+                }
+                target_url = self.server.app_core.engine.resolve_stream_url(track_info)
+
+            if not target_url:
+                self.send_error(400, "Missing 'url' query parameter and could not resolve stream")
+                return None
+
+            # Check if resolved stream is a local file
+            if target_url:
+                local_path = target_url.strip()
+                if local_path.startswith('file:///'):
+                    local_path = urllib.request.url2pathname(local_path[7:])
+                elif local_path.startswith('file://'):
+                    local_path = urllib.request.url2pathname(local_path[6:])
+                allowed_local = self._resolve_stream_local_file(local_path)
+                if allowed_local:
+                    self.serve_local_file(allowed_local)
+                    return None
+
+            # Infer source if not specified
+            if not source and target_url:
+                h = _host_of(target_url)
+                if _host_matches(h, YOUTUBE_HOSTS):
+                    source = 'youtube'
+                elif _host_matches(h, SOUNDCLOUD_HOSTS):
+                    source = 'soundcloud'
+                elif _host_matches(h, YANDEX_HOSTS):
+                    source = 'yandex'
+
+            # SSRF guard: reject URLs resolving to internal/private hosts (same logic as core/api.py).
+            if not _is_ssrf_safe_url(target_url):
+                try:
+                    self.send_response(400)
+                    self.send_header('Content-Type', 'application/json')
+                    self._send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': 'URL blocked: SSRF validation failed'}).encode('utf-8'))
+                except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, OSError):
+                    pass
+                logger.warning('Public DNS/SSRF validation failed for stream host %r', _host_of(target_url))
+                return None
+            req = urllib.request.Request(target_url)
+            if 'Range' in self.headers:
+                req.add_header('Range', self.headers['Range'])
+
+        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+
+        def _inject_ydl_cookies(ydl, req):
+            """Try to inject cookies from a yt-dlp instance into a urllib.request.Request."""
             cj = getattr(ydl, '_cookiejar', None) or getattr(ydl, 'cookiejar', None)
             if cj:
                 try:
-                    cj.add_cookie_header(req_obj)
-                except Exception as ex:
-                    logger.debug(f'Cookie injection failed: {ex}')
+                    cj.add_cookie_header(req)
+                except Exception as e:
+                    logger.debug(f'Cookie injection failed: {e}')
+                return None
+            return None
 
-        def _inject_credentials(r, u, s):
-            if not _host_allows_credentials(u, s):
-                return
-            if s == 'youtube':
-                try:
-                    ydl = self.server.app_core.youtube._get_ydl('high')
-                    _inject_ydl_cookies(ydl, r)
-                except Exception as ex:
-                    logger.warning(f'Error injecting YouTube cookies: {ex}')
-            elif s == 'soundcloud':
-                try:
-                    ydl = self.server.app_core.soundcloud._get_ydl()
-                    _inject_ydl_cookies(ydl, r)
-                except Exception as ex:
-                    logger.warning(f'Error injecting SoundCloud cookies: {ex}')
-            elif s == 'yandex':
-                token = ''
-                if self.server.app_core.settings:
-                    token = self.server.app_core.settings.get('auth', 'yandex_token', '')
-                if token:
-                    r.add_header('Authorization', f'OAuth {token}')
-
-        req = urllib.request.Request(target_url)
-        if has_range_request:
-            req.add_header('Range', range_header)
-        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-        _inject_credentials(req, target_url, source)
+        token = ''
+        if not _host_allows_credentials(target_url, source):
+            if source in CREDENTIAL_HOSTS:
+                logger.warning(
+                    'Withholding %s credentials: target host %r is not owned by that provider',
+                    source, _host_of(target_url)
+                )
+        elif source == 'youtube':
+            try:
+                ydl = self.server.app_core.youtube._get_ydl('high')
+                _inject_ydl_cookies(ydl, req)
+            except Exception as e:
+                logger.warning(f'Error injecting YouTube cookies: {e}')
+        elif source == 'soundcloud':
+            try:
+                ydl = self.server.app_core.soundcloud._get_ydl()
+                _inject_ydl_cookies(ydl, req)
+            except Exception as e:
+                logger.warning(f'Error injecting SoundCloud cookies: {e}')
+        elif source == 'yandex':
+            if self.server.app_core.settings:
+                token = self.server.app_core.settings.get('auth', 'yandex_token', '')
+            if token:
+                req.add_header('Authorization', f'OAuth {token}')
 
         resp = None
         max_retries = 3
         had_connection_issue = False
 
         for attempt in range(max_retries + 1):
+            if not _is_client_connected(self):
+                logger.info('Client socket disconnected, aborting upstream proxy stream attempt')
+                return None
             try:
-                resp = _safe_urlopen(req, timeout=12.0)
+                # Keep open browser audio ranges small so Googlevideo does not
+                # throttle (mutates req's Range header).
+                _bound_googlevideo_range(req)
+                cached_manifest = None
+                if source == 'soundcloud' and not req.has_header('Range'):
+                    provider = getattr(self.server.app_core, 'soundcloud', None)
+                    read_manifest = getattr(provider, 'get_cached_manifest', None)
+                    if callable(read_manifest):
+                        cached_manifest = read_manifest(req.full_url)
+                resp = (_CachedManifest(cached_manifest, req.full_url) if cached_manifest
+                        else _safe_urlopen(req, timeout=12.0, source=source))
+                # Announce recovery only after a visible problem: emitting
+                # 'connected' on every single stream open spammed the bridge.
                 if had_connection_issue and hasattr(self.server.app_core, 'api') and hasattr(self.server.app_core.api, 'emit_event'):
                     self.server.app_core.api.emit_event('proxy_status', {'proxy': 'connected'})
                 break
             except urllib.error.HTTPError as e:
-                if e.code in (401, 403, 404, 410) and source and source_id and attempt == 0:
-                    logger.info(f'Received HTTP {e.code} for {source}:{source_id}. Invalidating cache and self-healing re-resolution...')
-                    try:
-                        resolver = getattr(self.server.app_core, 'resolver', None)
-                        if resolver is not None:
-                            resolver.invalidate(source, str(source_id))
-                    except Exception:
-                        pass
-                    try:
-                        resolve_event = threading.Event()
-                        new_url = None
+                if e.code in (401, 403, 404, 410):
+                    if e.code in (403, 410) and source and source_id and attempt == 0:
+                        logger.info(f'Received HTTP {e.code} for {source}:{source_id}. Invalidating cache and self-healing re-resolution...')
+                        _invalidate_provider_stream_cache(self.server.app_core, source, source_id)
+                        try:
+                            resolver = getattr(self.server.app_core, 'resolver', None)
+                            if resolver is not None:
+                                resolver.invalidate(source, source_id)
+                        except Exception:
+                            logger.debug("_inject_ydl_cookies: suppressed exception", exc_info=True)
+                        try:
+                            # NB: no local `import threading` here. A function-local
+                            # import makes `threading` a local name for the WHOLE
+                            # do_GET body, so the earlier use at the cache-tag line
+                            # raised UnboundLocalError and every stream request
+                            # through the proxy died before reaching the upstream.
+                            # threading is imported at module scope instead.
+                            resolve_event = threading.Event()
+                            new_url = None
 
-                        def _on_resolved(url, metadata=None):
-                            nonlocal new_url
-                            new_url = url
-                            resolve_event.set()
+                            def _on_resolved(url, metadata=None):
+                                # AppCore.re_resolve_stream_url_async invokes this with
+                                # (stream_url, metadata); a 1-arg signature raised TypeError
+                                # here, so the event was never set and every expired URL
+                                # stalled for the full 7s timeout before failing.
+                                nonlocal new_url
+                                new_url = url
+                                resolve_event.set()
 
-                        self.server.app_core.re_resolve_stream_url_async(source, str(source_id), _on_resolved)
-                        resolve_event.wait(timeout=7)
+                            self.server.app_core.re_resolve_stream_url_async(
+                                source, source_id, _on_resolved,
+                                # BUG-A1-010: the playing track's metadata lets
+                                # the cascade verify the replacement recording
+                                # instead of accepting any resolved URL.
+                                track=track,
+                            )
+                            resolve_event.wait(timeout=7)
 
-                        if new_url and _is_ssrf_safe_url(new_url):
-                            target_url = new_url
-                            req = urllib.request.Request(new_url)
-                            if has_range_request:
-                                req.add_header('Range', range_header)
-                            req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-                            _inject_credentials(req, new_url, source)
-                            continue  # Retry request with newly resolved URL!
-                        else:
+                            if new_url and not _is_ssrf_safe_url(new_url):
+                                logger.warning('SSRF guard blocked re-resolved URL for %s:%s', source, source_id)
+                                new_url = None
+                            if new_url:
+                                req = urllib.request.Request(new_url)
+                                if 'Range' in self.headers:
+                                    req.add_header('Range', self.headers['Range'])
+                                req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+
+                                if not _host_allows_credentials(new_url, source):
+                                    logger.warning(
+                                        'Withholding %s credentials on re-resolved host %r',
+                                        source, _host_of(new_url)
+                                    )
+                                elif source == 'youtube':
+                                    ydl = self.server.app_core.youtube._get_ydl('high')
+                                    if hasattr(ydl, '_cookiejar') and ydl._cookiejar:
+                                        ydl._cookiejar.add_cookie_header(req)
+                                elif source == 'soundcloud':
+                                    ydl = self.server.app_core.soundcloud._get_ydl()
+                                    if hasattr(ydl, '_cookiejar') and ydl._cookiejar:
+                                        ydl._cookiejar.add_cookie_header(req)
+                                elif source == 'yandex':
+                                    if token:
+                                        req.add_header('Authorization', f'OAuth {token}')
+                            else:
+                                self.send_response(e.code)
+                                self.end_headers()
+                                return None
+                        except Exception:
                             self.send_response(e.code)
-                            self._send_cors_headers()
                             self.end_headers()
                             return None
-                    except Exception as re_err:
-                        logger.warning(f'Re-resolution failed: {re_err}')
+                    else:
                         self.send_response(e.code)
-                        self._send_cors_headers()
                         self.end_headers()
                         return None
                 else:
-                    if attempt < max_retries:
+                    if attempt < max_retries and (e.code >= 500 or e.code in (408, 429)):
                         backoff = 1.5 ** attempt + random.uniform(0.1, 0.5)
                         logger.warning(f'HTTPError {e.code}, retrying in {backoff:.2f}s...')
-                        time.sleep(backoff)
+                        if not _sleep_with_client_check(self, backoff):
+                            logger.info('Client socket closed during backoff sleep, aborting retry')
+                            return None
                         continue
                     else:
                         self.send_response(e.code)
@@ -826,9 +1167,20 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 if attempt < max_retries:
                     backoff = 1.5 ** attempt + random.uniform(0.1, 0.5)
                     logger.warning(f'Network error {e}, retrying in {backoff:.2f}s...')
-                    time.sleep(backoff)
+                    if hasattr(self.server.app_core, 'api') and hasattr(self.server.app_core.api, 'emit_event'):
+                        self.server.app_core.api.emit_event('proxy_status', {
+                            'proxy': 'reconnecting',
+                            'attempt': attempt + 1,
+                            'max_attempts': max_retries,
+                            'next_retry_in_ms': int(backoff * 1000),
+                        })
+                    if not _sleep_with_client_check(self, backoff):
+                        logger.info('Client socket closed during backoff sleep, aborting retry')
+                        return None
                     continue
                 else:
+                    if hasattr(self.server.app_core, 'api') and hasattr(self.server.app_core.api, 'emit_event'):
+                        self.server.app_core.api.emit_event('proxy_status', {'proxy': 'failed'})
                     self.send_error(502, 'Bad Gateway / Upstream connection failed')
                     return None
             except Exception as e:
@@ -836,106 +1188,79 @@ class StreamProxyHandler(http.server.BaseHTTPRequestHandler):
                 self.send_error(500, 'Internal Server Error')
                 return None
 
-        if resp is None:
-            self.send_error(502, 'Bad Gateway / Upstream connection failed')
+        upstream_headers = (resp.headers if hasattr(resp, 'headers') else resp.info()) or {}
+        content_type = str(upstream_headers.get('Content-Type', '')).lower()
+        if 'mpegurl' in content_type:
+            # A manifest is not an audio file. Rewriting also makes relative
+            # CDN URLs work when HLS.js fetched the manifest from localhost.
+            try:
+                raw = resp.read(2 * 1024 * 1024 + 1)
+                if len(raw) > 2 * 1024 * 1024:
+                    raise ValueError('HLS playlist too large')
+                base_url = resp.geturl() if hasattr(resp, 'geturl') else req.full_url
+                body = _rewrite_hls_playlist(
+                    raw.decode('utf-8-sig'), base_url, source, self.server.auth_token,
+                ).encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/vnd.apple.mpegurl')
+                self.send_header('Content-Length', str(len(body)))
+                self.send_header('Cache-Control', 'no-store')
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(body)
+            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+                pass
+            except (ValueError, UnicodeError):
+                self._safe_send_error(502, 'Invalid upstream HLS playlist')
+            finally:
+                resp.close()
             return None
 
         status_code = getattr(resp, 'status', getattr(resp, 'code', 200))
-        resp_headers = resp.getheaders() if hasattr(resp, 'getheaders') else resp.info().items()
-
-        # Upstream gave 200 OK instead of 206 Partial Content.
-        # We pass it through directly without emulating Range to avoid tight loop CPU burns.
-
-        # Standard 200 / 206 response
         self.send_response(status_code)
-        for header, val in resp_headers:
+
+        if hasattr(resp, 'getheaders'):
+            headers_list = resp.getheaders()
+        else:
+            headers_list = resp.info().items()
+
+        for header, val in headers_list:
             h_low = header.lower()
-            if h_low not in HOP_BY_HOP and not h_low.startswith('access-control-'):
+            if h_low in ('content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified', 'cache-control', 'content-encoding'):
                 self.send_header(header, val)
 
         self._send_cors_headers()
-        if status_code == 206 or any(h.lower() == 'accept-ranges' and v.lower() == 'bytes' for h, v in resp_headers):
-            self.send_header('Accept-Ranges', 'bytes')
-        else:
-            self.send_header('Accept-Ranges', 'none')
         self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization, X-Requested-With')
+        self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type, Authorization')
         self.send_header('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges')
         self.end_headers()
 
         try:
-            cache_ext = _ext_for_response(resp) if is_cachable_request else ''
-            if is_cachable_request and status_code in (200, 206) and temp_path and streams_dir and cache_ext:
-                expected_len = None
-                cl_val = None
-                if hasattr(resp, 'headers') and resp.headers:
-                    cl_val = resp.headers.get('Content-Length')
-                elif hasattr(resp, 'info') and resp.info():
-                    cl_val = resp.info().get('Content-Length')
-                if cl_val:
-                    try:
-                        expected_len = int(cl_val)
-                    except (ValueError, TypeError):
-                        expected_len = None
-
-                final_path = os.path.join(streams_dir, f"{cache_name}{cache_ext}")
-                bytes_written = 0
-                with open(temp_path, 'wb') as tmp:
-                    while True:
-                        chunk = resp.read(65536)
-                        if not chunk:
-                            break
-                        bytes_written += len(chunk)
-                        self.wfile.write(chunk)
-                        tmp.write(chunk)
-
-                if (bytes_written >= 65536 and 
-                    (expected_len is None or bytes_written == expected_len) and
-                    _is_valid_audio_cache_file(temp_path)):
-                    try:
-                        os.replace(temp_path, final_path)
-                        if hasattr(self.server.app_core, 'db'):
-                            self.server.app_core.db.set_cached_file(source, str(source_id), final_path)
-                        logger.info(f'Stream cached successfully to {final_path}')
-                    except Exception as pe:
-                        logger.warning(f'Could not save stream cache {final_path}: {pe}')
-                else:
-                    if os.path.exists(temp_path):
-                        try:
-                            os.remove(temp_path)
-                        except Exception:
-                            pass
-            else:
-                while True:
-                    chunk = resp.read(65536)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
-        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError):
-            if is_cachable_request and temp_path and os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except Exception:
-                    pass
+            # Pure relay: stream files are written only by CacheManager
+            # (BUG-A1-016 — the old inline writer here was unreachable and is
+            # gone; keeping a second writer would race the background cache).
+            # HTTPResponse.read(n) waits for n bytes (or EOF). On a slow CDN
+            # that withheld the first playable packet until 32 KiB arrived.
+            # read1 forwards the bytes already available from one socket read,
+            # keeping large reads for throughput without adding a fill delay.
+            read_chunk = getattr(resp, 'read1', None) or resp.read
+            while True:
+                chunk = read_chunk(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as ce:
+            logger.debug(f'Stream client disconnected: {ce}')
         except Exception as e:
             logger.error(f'Error proxying stream: {e}')
-            if is_cachable_request and temp_path and os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except Exception:
-                    pass
         finally:
             if resp is not None and hasattr(resp, "close"):
                 try:
                     resp.close()
                 except Exception:
                     pass
+
         return None
-
-
-def get_real_thread_class():
-    import threading
-    return getattr(threading, '_original_Thread', threading.Thread)
 
 
 class LocalProxyManager:
@@ -957,15 +1282,9 @@ class LocalProxyManager:
             self.token = secrets.token_urlsafe(24)
             self.server = ThreadingHTTPServer(('127.0.0.1', 0), StreamProxyHandler, self.app_core, self.token)
             self.port = self.server.server_port
-            thread_cls = get_real_thread_class()
-            self.thread = thread_cls(target=self.server.serve_forever, daemon=True)
+            self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
             self.thread.start()
             logger.info(f'Local HTTP stream proxy started on port {self.port}')
-            try:
-                with open('/tmp/nedotify_proxy_info', 'w') as f:
-                    f.write(f"{self.port}:{self.token}")
-            except Exception:
-                pass
         except Exception as e:
             logger.error(f'Failed to start local proxy server: {e}')
 
@@ -992,6 +1311,17 @@ class LocalProxyManager:
     def get_proxy_url(self, source, source_id, original_url=None, track_id=None):
         if not self.port:
             return original_url or ''
+        if original_url and not _host_matches(_host_of(original_url), ('youtube.com', 'youtu.be', 'soundcloud.com')):
+            params = {
+                'url': original_url,
+                'source': source if source else '',
+                'source_id': source_id if source_id else '',
+            }
+            if self.token:
+                params[AUTH_PARAM] = self.token
+            query = urllib.parse.urlencode(params)
+            return f'http://127.0.0.1:{self.port}/?{query}'
+        
         params = {}
         if track_id:
             try:
@@ -1003,10 +1333,8 @@ class LocalProxyManager:
             params['source'] = source
         if source_id:
             params['source_id'] = source_id
-        if original_url:
-            params['url'] = original_url
         if not params:
-            return original_url or ''
+            return ''
         if self.token:
             params[AUTH_PARAM] = self.token
         query = urllib.parse.urlencode(params)
