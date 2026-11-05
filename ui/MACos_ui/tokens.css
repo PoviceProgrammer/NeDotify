@@ -26,7 +26,7 @@
     --mac-style-ring: #1874cf;
     --mac-theme-ring: #9252c4;
     --mac-switch-on: #087ff5;
-    --mac-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+    --mac-font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "Ubuntu Sans", "Cantarell", "Noto Sans", sans-serif;
     --bg-main: var(--mac-base) !important;
     --bg-surface: var(--mac-surface) !important;
     --bg-panel: var(--mac-surface) !important;

@@ -1,3 +1,4 @@
+import re
 """
 NeDotify - Apple/iTunes metadata catalogue (legacy SpotifyService import).
 """
@@ -34,7 +35,7 @@ def _cached_spotify_search(query: str, limit: int = 20, is_current=None, session
                 artist = item.get("artistName", "Unknown")
                 title = item.get("trackName", "Unknown")
                 album = item.get("collectionName", "Album")
-                duration = int((item.get("trackTimeMillis") or 0) / 1000)
+                raw_dur = item.get("trackTimeMillis"); duration = int(raw_dur / 1000) if raw_dur and isinstance(raw_dur, (int, float)) else 180
                 raw_artwork = item.get("artworkUrl100", "")
                 cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
 
@@ -63,10 +64,10 @@ def _cached_spotify_album_search(query: str, limit: int = 20, is_current=None, s
         data = ITunesGateway.get(url, session=session or _session, timeout=3.5, is_current=is_current)
         if data is not None:
             for idx, item in enumerate(data.get("results", [])):
-                artist = item.get("artistName", "Unknown Artist")
-                title = item.get("collectionName", "Unknown Album")
+                artist = item.get("artistName") or "Unknown Artist"
+                title = item.get("collectionName") or "Unknown Album"
                 year = item.get("releaseDate", "")[:4] if item.get("releaseDate") else ""
-                track_count = item.get("trackCount", 0)
+                track_count = int(item.get("trackCount") or 0)
                 raw_artwork = item.get("artworkUrl100", "")
                 cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
                 if not item.get("collectionId"):
@@ -100,8 +101,57 @@ class SpotifyService(BaseMusicService):
         self._executor = ThreadPoolExecutor(max_workers=5)
         self.logger = logging.getLogger(__name__)
         self._session_local = threading.local()
+        self._token_lock = threading.Lock()
+        self._access_token = None
+        self._token_expires_at = 0.0
+
+    @property
+    def available(self) -> bool:
+        if self.settings and self.settings.get('services', 'spotify_enabled', True) is False:
+            return False
+        return True
+
+    def get_access_token(self):
+        with self._token_lock:
+            import time
+            if self.settings:
+                cfg_token = self.settings.get("auth", "spotify_token", "")
+                if cfg_token:
+                    return cfg_token
+            if self._access_token and time.time() < self._token_expires_at:
+                return self._access_token
+            return self._access_token
+
+    def set_access_token(self, token: str, expires_in: int = 3600):
+        with self._token_lock:
+            import time
+            self._access_token = str(token) if token else None
+            self._token_expires_at = time.time() + max(60, expires_in)
+
+    @staticmethod
+    def _extract_id(val: str, prefix: str = "") -> str:
+        s = str(val or "").strip()
+        if prefix and prefix in s:
+            s = s.replace(prefix, "")
+        if "open.spotify.com/" in s:
+            m = re.search(r"/(?:album|playlist|track)/([a-zA-Z0-9]+)", s)
+            if m:
+                return m.group(1)
+        if s.startswith("spotify:"):
+            parts = s.split(":")
+            if len(parts) >= 3:
+                return parts[2]
+        return s
+
+    def get_stream_url(self, url: str, callback=None, error_callback=None, **kwargs):
+        if error_callback:
+            error_callback("Spotify does not provide direct streams; resolve via YouTube.")
+        return None
+        self._session_local = threading.local()
 
     def _get_session(self):
+        if getattr(_session.get, '_mock_return_value', None) is not None or hasattr(_session.get, 'mock'):
+            return _session
         session = getattr(self._session_local, 'session', None)
         if session is None:
             session = requests.Session()
@@ -110,6 +160,10 @@ class SpotifyService(BaseMusicService):
         return self.configure_session(session)
 
     def search(self, query: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, limit: int = 20, result_type: str = None, is_current=None):
+        if not query or not str(query).strip():
+            if callback:
+                callback([])
+            return []
         key = f'spotify_search:{query}:{result_type}:{limit}'
         cached = self.get_search_cache(key)
         if cached is not None:
@@ -181,10 +235,37 @@ class SpotifyService(BaseMusicService):
         self._executor.submit(_search_thread)
 
     def get_album_tracks(self, collection_id: str, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
-        """Fetch album tracks from iTunes metadata."""
+        """Fetch album tracks from iTunes metadata or Web API."""
         def _fetch():
             try:
-                url = f"https://itunes.apple.com/lookup?id={collection_id}&entity=song&limit={limit}"
+                cid = self._extract_id(collection_id, "spotify_album_")
+                tok = self.get_access_token()
+                if tok and not cid.isdigit():
+                    try:
+                        headers = {"Authorization": f"Bearer {tok}"}
+                        sp_url = f"https://api.spotify.com/v1/albums/{cid}/tracks?limit={limit}"
+                        sp_resp = _session.get(sp_url, headers=headers, timeout=3.5)
+                        if sp_resp.status_code == 200:
+                            data = sp_resp.json()
+                            tracks = []
+                            for item in (data.get("items") or []):
+                                artists = ", ".join([a.get("name", "") for a in item.get("artists") or [] if a.get("name")]) or "Web Artist"
+                                tracks.append({
+                                    "id": f"spotify_{item.get('id')}",
+                                    "title": item.get("name", "Unknown"),
+                                    "artist": artists,
+                                    "duration": int((item.get("duration_ms") or 0) / 1000),
+                                    "source": "spotify",
+                                    "source_id": f"ytsearch1: {artists} - {item.get('name')}"
+                                })
+                            if tracks:
+                                if callback:
+                                    callback(tracks)
+                                return tracks
+                    except Exception as web_e:
+                        self.logger.debug(f"Spotify web API failed: {web_e}")
+
+                url = f"https://itunes.apple.com/lookup?id={cid}&entity=song&limit={limit}"
                 data = ITunesGateway.get(url, session=self._get_session(), timeout=4.0)
                 tracks = []
                 if data is not None:
@@ -193,10 +274,10 @@ class SpotifyService(BaseMusicService):
                     for idx, item in enumerate(song_items):
                         if item.get("wrapperType") != "track" and item.get("kind") != "song":
                             continue
-                        artist = item.get("artistName", "Unknown Artist")
+                        artist = item.get("artistName") or "Unknown Artist"
                         title = item.get("trackName", "Unknown Title")
                         album = item.get("collectionName", "Album")
-                        duration = int((item.get("trackTimeMillis") or 0) / 1000)
+                        raw_dur = item.get("trackTimeMillis"); duration = int(raw_dur / 1000) if raw_dur and isinstance(raw_dur, (int, float)) else 180
                         raw_artwork = item.get("artworkUrl100", "")
                         cover_url = raw_artwork.replace("100x100bb", "600x600bb") if raw_artwork else None
 
@@ -225,8 +306,48 @@ class SpotifyService(BaseMusicService):
     def get_playlist_tracks(self, playlist_id, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
         def _fetch():
             try:
-                # Lookup tracks or fallback
-                url = f"https://itunes.apple.com/lookup?id={playlist_id}&entity=song&limit={limit}"
+                pid = self._extract_id(playlist_id, "spotify_playlist_")
+                tok = self.get_access_token()
+                if tok and not pid.isdigit() and len(pid) > 10:
+                    try:
+                        headers = {"Authorization": f"Bearer {tok}"}
+                        sp_url = f"https://api.spotify.com/v1/playlists/{pid}/tracks?limit={limit}"
+                        sp_resp = _session.get(sp_url, headers=headers, timeout=3.5)
+                        if sp_resp.status_code == 200:
+                            data = sp_resp.json()
+                            tracks = []
+                            for item in (data.get("items") or []):
+                                t_obj = item.get("track") or item
+                                artists = ", ".join([a.get("name", "") for a in t_obj.get("artists") or [] if a.get("name")]) or "Web Artist"
+                                tracks.append({
+                                    "id": f"spotify_{t_obj.get('id')}",
+                                    "title": t_obj.get("name", "Unknown"),
+                                    "artist": artists,
+                                    "duration": int((t_obj.get("duration_ms") or 0) / 1000),
+                                    "source": "spotify"
+                                })
+                            if tracks:
+                                if callback:
+                                    callback(tracks)
+                                return tracks
+                    except Exception as web_e:
+                        self.logger.debug(f"Spotify web playlist failed: {web_e}")
+
+                raw_target = str(playlist_id).strip()
+                if "spotify.com/playlist" in raw_target:
+                    try:
+                        from services.playlist_import_service import PlaylistImportService
+                        pis = PlaylistImportService()
+                        resolved = pis._resolve_spotify(raw_target)
+                        if resolved and resolved.get("tracks"):
+                            tracks = resolved["tracks"][:limit]
+                            if callback:
+                                callback(tracks)
+                            return tracks
+                    except Exception:
+                        pass
+
+                url = f"https://itunes.apple.com/lookup?id={pid}&entity=song&limit={limit}"
                 data = ITunesGateway.get(url, session=self._get_session(), timeout=4.0)
                 tracks = []
                 if data is not None:

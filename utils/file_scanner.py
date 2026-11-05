@@ -4,6 +4,7 @@ Recursively scans directories for audio files and adds them to the database.
 """
 
 import os
+import math
 import threading
 import logging
 from typing import Callable, Optional
@@ -165,13 +166,25 @@ class FileScanner:
 
     def _import_file(self, filepath: str) -> Optional[dict]:
         """Import a single audio file. Returns track dict or None if already exists."""
+        filepath = os.path.realpath(os.path.abspath(os.fspath(filepath)))
+        if not os.path.isfile(filepath):
+            return None
         # Check if already in database
         existing = self.db.get_track_by_path(filepath)
         if existing:
             return None
 
         # Parse tags
-        tags = parse_tags(filepath)
+        tags = parse_tags(filepath) or {}
+
+        def number(key, integral=False):
+            try:
+                value = float(tags.get(key) or 0)
+                if not math.isfinite(value) or value < 0:
+                    return 0
+                return int(value) if integral else value
+            except (ValueError, TypeError, OverflowError):
+                return 0
 
         # Save cover art
         cover_path = None
@@ -181,24 +194,27 @@ class FileScanner:
 
         # Add to database
         track_id = self.db.add_track(
-            title=tags["title"],
-            artist=tags["artist"],
-            album=tags["album"],
-            duration=tags["duration"],
+            title=tags.get("title") or os.path.splitext(os.path.basename(filepath))[0],
+            artist=tags.get("artist") or "Unknown Artist",
+            album=tags.get("album") or "Unknown Album",
+            duration=number("duration"),
             file_path=filepath,
             source="local",
-            bitrate=tags["bitrate"],
-            format_=tags["format"],
-            genre=tags["genre"],
-            year=tags["year"],
+            bitrate=number("bitrate", integral=True),
+            format_=tags.get("format") or os.path.splitext(filepath)[1].lstrip('.').upper(),
+            genre=tags.get("genre"),
+            year=number("year", integral=True) or None,
         )
 
         # Save cover art with track ID
         if tags.get("cover_data"):
-            cover_path = save_cover_to_file(
-                tags["cover_data"], tags["cover_mime"],
-                self._covers_dir, track_id
-            )
+            try:
+                cover_path = save_cover_to_file(
+                    tags["cover_data"], tags.get("cover_mime"),
+                    self._covers_dir, track_id
+                )
+            except Exception:
+                logger.warning("Could not save imported artwork for track %s", track_id, exc_info=True)
             if cover_path:
                 self.db.update_track(track_id, cover_path=cover_path)
 

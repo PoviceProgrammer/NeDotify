@@ -96,15 +96,17 @@ def dpapi_encrypt(text: str) -> str:
 
     Returns 'dpapi:<base64>' ciphertext.
     If text is empty or already encrypted, returns text as-is.
-    If DPAPI is unavailable, falls back gracefully to a mock prefix.
+    On Linux uses Secret Service or private authenticated file encryption.
     """
     if not isinstance(text, str) or not text:
         return text
     if text.startswith(DPAPI_PREFIX):
         return text
+    if not _IS_WINDOWS:
+        from core.secret_store import encrypt
+        return encrypt(text)
     if _CryptProtectData is None:
-        # Fallback for non-Windows or environments without crypt32
-        return DPAPI_PREFIX + "mock:" + base64.b64encode(text.encode("utf-8")).decode("ascii")
+        raise RuntimeError("Secure credential storage is unavailable")
 
     try:
         raw = text.encode("utf-8")
@@ -131,7 +133,7 @@ def dpapi_encrypt(text: str) -> str:
             _LocalFree(out_blob.pbData)
     except Exception as exc:
         logger.error("DPAPI encryption failed: %s", exc)
-        return text
+        raise RuntimeError("Secure credential storage failed") from exc
 
 
 def dpapi_decrypt(cipher_text: str) -> str:
@@ -142,6 +144,9 @@ def dpapi_decrypt(cipher_text: str) -> str:
     """
     if not isinstance(cipher_text, str) or not cipher_text.startswith(DPAPI_PREFIX):
         return cipher_text
+    if cipher_text.startswith(("dpapi:keyring:", "dpapi:fernet:")):
+        from core.secret_store import decrypt
+        return decrypt(cipher_text)
     payload = cipher_text[len(DPAPI_PREFIX):]
     if payload.startswith("mock:"):
         try:

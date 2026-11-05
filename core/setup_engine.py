@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tarfile
 import threading
 import time
 from urllib.parse import urlparse
@@ -148,14 +149,14 @@ class SetupEngine:
         managed = self._managed_path(name)
         if managed:
             return managed, "managed"
-        filename = ("yt-dlp" if name == "yt_dlp" else name) + ".exe"
+        filename = ("yt-dlp" if name == "yt_dlp" else name) + (".exe" if sys.platform == "win32" else "")
         locations = [Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1])),
                      Path(sys.executable).parent]
         for directory in locations:
             path = directory / filename
             if path.is_file():
                 return str(path.resolve()), "bundled"
-        external = shutil.which(filename) or shutil.which(filename[:-4])
+        external = shutil.which(filename) or (shutil.which(filename[:-4]) if filename.endswith(".exe") else None)
         return (str(Path(external).resolve()), "system") if external else (None, None)
 
     @staticmethod
@@ -418,8 +419,14 @@ class SetupEngine:
     @staticmethod
     def _asset_name(tool):
         machine = platform.machine().lower()
+        if sys.platform == "linux":
+            if machine in {"amd64", "x86_64"}:
+                return "yt-dlp_linux" if tool == "yt_dlp" else "ffmpeg-master-latest-linux64-gpl.tar.xz"
+            if machine in {"arm64", "aarch64"}:
+                return "yt-dlp_linux_aarch64" if tool == "yt_dlp" else "ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
+            raise SetupDependencyError("unsupported_architecture", "Установите ffmpeg и yt-dlp средствами вашего дистрибутива", False)
         if sys.platform != "win32":
-            raise SetupDependencyError("unsupported_platform", "Автоустановка предназначена для Windows", False)
+            raise SetupDependencyError("unsupported_platform", "Для этой платформы нет проверенных сборок", False)
         if machine in {"arm64", "aarch64"}:
             return "yt-dlp_arm64.exe" if tool == "yt_dlp" else "ffmpeg-master-latest-winarm64-gpl.zip"
         if machine in {"amd64", "x86_64"}:
@@ -550,16 +557,36 @@ class SetupEngine:
         self.tools_dir.mkdir(parents=True, exist_ok=True)
         stage_root = self.tools_dir / ".staging"
         stage_root.mkdir(exist_ok=True)
-        archive = stage_root / (digest + (".exe.part" if tool == "yt_dlp" else ".zip.part"))
+        archive = stage_root / (digest + ".part")
         self._download(asset, archive, digest)
         self._progress(status="verifying", percent=None)
         stage = Path(tempfile.mkdtemp(prefix=f"{tool}-", dir=stage_root))
         paths = {}
         try:
             if tool == "yt_dlp":
-                target = stage / "yt-dlp.exe"
+                target = stage / ("yt-dlp.exe" if sys.platform == "win32" else "yt-dlp")
                 shutil.copyfile(archive, target)
+                if sys.platform == "linux":
+                    target.chmod(0o700)
                 paths[tool] = target
+            elif sys.platform == "linux":
+                # Read individual regular members into fixed destinations. Never
+                # tar.extractall: archive paths and symlinks are untrusted.
+                with tarfile.open(archive, "r:xz") as bundle:
+                    entries = bundle.getmembers()
+                    for name in ("ffmpeg", "ffprobe"):
+                        matches = [entry for entry in entries if entry.name.rsplit("/", 1)[-1] == name]
+                        if len(matches) != 1 or not matches[0].isfile() or not 0 < matches[0].size <= 300 * 1024 * 1024:
+                            raise SetupDependencyError("invalid_archive", f"Не удалось найти безопасный {name} в архиве")
+                        target = stage / name
+                        with bundle.extractfile(matches[0]) as source, target.open("wb") as output:
+                            shutil.copyfileobj(source, output, 1024 * 1024)
+                        target.chmod(0o700)
+                        paths[name] = target
+                    notices = [entry for entry in entries if entry.isfile() and re.search(r"(?:^|/)(?:LICENSE|COPYING)(?:\.[^/]*)?$", entry.name, re.I) and entry.size < 2 * 1024 * 1024]
+                    for index, entry in enumerate(notices):
+                        with bundle.extractfile(entry) as source:
+                            (stage / f"LICENSE-{index}.txt").write_bytes(source.read(2 * 1024 * 1024))
             else:
                 # Extract only the two expected binaries and license notices.
                 # Never extract archive paths, symlinks, or executable extras.

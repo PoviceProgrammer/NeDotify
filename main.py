@@ -10,6 +10,11 @@ import os
 import subprocess
 import sys
 import threading
+import signal
+
+from linux_runtime import configure_environment, InstanceLock
+
+configure_environment()
 
 
 if sys.platform == "win32":
@@ -20,33 +25,34 @@ import webview
 # Pin WebView2 runtime to a known-good version: Evergreen 151.0.4129.93 hangs
 # bridge injection (loaded/_pywebviewready never fire) on this machine, while
 # 151.0.4129.86 works. Falls back to system runtime if the pinned copy is gone.
-_PINNED_WEBVIEW2 = os.path.join(
-    os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)'),
-    'Microsoft', 'EdgeWebView', 'Application', '151.0.4129.86',
-)
-if os.path.exists(os.path.join(_PINNED_WEBVIEW2, 'msedgewebview2.exe')):
-    # pywebview's ImmutableDict does not define WEBVIEW2_RUNTIME_PATH. WebView2
-    # reads this environment variable before runtime initialization instead.
-    os.environ['WEBVIEW2_BROWSER_EXECUTABLE_FOLDER'] = _PINNED_WEBVIEW2
+if sys.platform == "win32":
+    _PINNED_WEBVIEW2 = os.path.join(
+        os.environ.get('ProgramFiles(x86)', r'C:\Program Files (x86)'),
+        'Microsoft', 'EdgeWebView', 'Application', '151.0.4129.86',
+    )
+    if os.path.exists(os.path.join(_PINNED_WEBVIEW2, 'msedgewebview2.exe')):
+        # pywebview's ImmutableDict does not define WEBVIEW2_RUNTIME_PATH. WebView2
+        # reads this environment variable before runtime initialization instead.
+        os.environ['WEBVIEW2_BROWSER_EXECUTABLE_FOLDER'] = _PINNED_WEBVIEW2
 
-_ADDITIONAL_ARGS = (
-    '--no-first-run '
-    '--disable-background-networking '
-    '--disable-component-update '
-    # Session autoplay restores playback without a click; without this flag
-    # Chromium's gesture requirement would block the programmatic play().
-    '--autoplay-policy=no-user-gesture-required '
-    # Kill the HTTP disk cache: WebView2 kept serving STALE ES modules (js/)
-    # despite Cache-Control: no-store, so frontend fixes silently did not
-    # apply until a cache-flush happened by luck. 1MB is enough for trivial
-    # reuse, stale module bodies no longer survive restarts.
-    '--disk-cache-size=1048576 '
-    '--disable-features=CalculateNativeWinOcclusion,msSmartScreenProtection'
-)
-if 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS' in os.environ:
-    os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] += ' ' + _ADDITIONAL_ARGS
-else:
-    os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = _ADDITIONAL_ARGS
+    _ADDITIONAL_ARGS = (
+        '--no-first-run '
+        '--disable-background-networking '
+        '--disable-component-update '
+        # Session autoplay restores playback without a click; without this flag
+        # Chromium's gesture requirement would block the programmatic play().
+        '--autoplay-policy=no-user-gesture-required '
+        # Kill the HTTP disk cache: WebView2 kept serving STALE ES modules (js/)
+        # despite Cache-Control: no-store, so frontend fixes silently did not
+        # apply until a cache-flush happened by luck. 1MB is enough for trivial
+        # reuse, stale module bodies no longer survive restarts.
+        '--disk-cache-size=1048576 '
+        '--disable-features=CalculateNativeWinOcclusion,msSmartScreenProtection'
+    )
+    if 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS' in os.environ:
+        os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] += ' ' + _ADDITIONAL_ARGS
+    else:
+        os.environ['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = _ADDITIONAL_ARGS
 
 import bottle as _bottle
 from core.ui_server import LocalUiServer, cached_static_file
@@ -182,6 +188,7 @@ def main():
     import tempfile
     _INSTANCE_MUTEX = None
     _INSTALLER_MUTEX = None
+    _linux_instance = InstanceLock()
 
     def _acquire_instance_lock():
         nonlocal _INSTANCE_MUTEX, _INSTALLER_MUTEX
@@ -210,25 +217,9 @@ def main():
                 logging.error("Single-instance protection failed", exc_info=True)
                 raise
         else:
-            lock_path = os.path.join(tempfile.gettempdir(), 'nedotify_instance.lock')
-            if os.path.exists(lock_path):
-                try:
-                    with open(lock_path, 'r') as f:
-                        old_pid = int(f.read().strip())
-                    if old_pid != os.getpid():
-                        try:
-                            os.kill(old_pid, 0)
-                            logging.info(f"[startup] Another instance is already running (PID {old_pid}); exiting cleanly.")
-                            sys.exit(0)
-                        except OSError:
-                            pass
-                except Exception:
-                    logging.debug("_acquire_instance_lock: suppressed exception", exc_info=True)
-            try:
-                with open(lock_path, 'w') as f:
-                    f.write(str(os.getpid()))
-            except Exception:
-                logging.debug("_acquire_instance_lock: suppressed exception", exc_info=True)
+            if not _linux_instance.acquire():
+                logging.info('[startup] Another NeDotify instance owns this user profile; exiting.')
+                sys.exit(0)
 
     def _release_instance_lock():
         nonlocal _INSTANCE_MUTEX, _INSTALLER_MUTEX
@@ -246,18 +237,19 @@ def main():
                 _INSTALLER_MUTEX = None
             except Exception:
                 logging.debug("_release_instance_lock: suppressed exception", exc_info=True)
-        try:
-            lock_path = os.path.join(tempfile.gettempdir(), 'nedotify_instance.lock')
-            if os.path.exists(lock_path):
-                os.remove(lock_path)
-        except Exception:
-            logging.debug("_release_instance_lock: suppressed exception", exc_info=True)
+        if sys.platform != 'win32':
+            _linux_instance.release()
 
     _acquire_instance_lock()
+
+    if sys.platform.startswith('linux') and os.environ.get('NEDOTIFY_VALIDATION_OUTPUT'):
+        from tools.validate_linux import prepare_validation
+        prepare_validation()
 
     app_core = None
     api = None
     window = None
+    desktop_integration = None
     _INTENTIONAL_CLOSE = threading.Event()
     _shutdown_lock = threading.Lock()
     _shutdown_complete = False
@@ -277,6 +269,8 @@ def main():
             return _shutdown_result
         _INTENTIONAL_CLOSE.set()
         try:
+            if desktop_integration is not None:
+                desktop_integration.stop()
             if app_core is not None:
                 _shutdown_result = app_core.cleanup()
             elif api is not None:
@@ -335,6 +329,19 @@ def main():
             background_color='#0f0f14', easy_drag=False,
         )
         api.set_window(window)
+        if sys.platform.startswith('linux'):
+            from core.linux_integration import LinuxDesktopIntegration
+            desktop_integration = LinuxDesktopIntegration(api)
+            desktop_integration.start()
+
+        def on_signal(signum, frame):
+            logging.info('Received signal %s; closing NeDotify', signum)
+            _INTENTIONAL_CLOSE.set()
+            threading.Thread(target=window.destroy, name='SignalClose', daemon=True).start()
+
+        if sys.platform.startswith('linux'):
+            signal.signal(signal.SIGTERM, on_signal)
+            signal.signal(signal.SIGINT, on_signal)
         logging.info("[startup] window created (+%.0fms)", (_time.monotonic()-_t0)*1000)
 
         _window_loaded_handled = threading.Event()
@@ -493,12 +500,21 @@ def main():
                              restart=launch_restart, exit_code=3)
 
         threading.Thread(target=startup_watchdog, name='StartupWatchdog', daemon=True).start()
-        storage_dir = os.path.join(os.path.expanduser('~'), '.nedotify', 'webview2_data')
+        storage_dir = os.path.join(os.path.expanduser('~'), '.nedotify',
+                                   'webview2_data' if sys.platform == 'win32' else 'webview_data')
         os.makedirs(storage_dir, exist_ok=True)
         debug = os.environ.get('NEDOTIFY_DEVTOOLS', '').strip().lower() in ('1','true','yes','on')
         logging.info('[startup] WebView2 runtime setting: %s',
                      os.environ.get('WEBVIEW2_BROWSER_EXECUTABLE_FOLDER', 'default'))
-        webview.start(http_server=True, server=LocalUiServer, debug=debug,
+        if sys.platform.startswith('linux'):
+            from linux_runtime import install_qt_capture
+            install_qt_capture()
+            if os.environ.get('NEDOTIFY_VALIDATION_OUTPUT'):
+                from tools.validate_linux import validate_running_app
+                threading.Thread(target=validate_running_app, args=(api, window),
+                                 name='NativeValidation', daemon=True).start()
+        webview.start(gui='qt' if sys.platform.startswith('linux') else None,
+                      http_server=True, server=LocalUiServer, debug=debug,
                       private_mode=False, storage_path=storage_dir)
     except Exception:
         logging.exception('Application startup or runtime failed')

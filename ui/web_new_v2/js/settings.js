@@ -70,9 +70,13 @@ const PRESET_THEMES = [
     { id: 'ocean', name: 'Ocean', colors: ['#06141a', '#06b6d4', '#0284c7'] }
 ];
 
-const FONTS_LIST = [
-    // System
-    { id: 'default', name: 'По умолчанию', family: "'Segoe UI', system-ui, sans-serif", cat: 'system' },
+export const FONTS_LIST = [
+    // System; native Linux families remain available without a font CDN.
+    { id: 'default', name: 'По умолчанию', family: "'DM Sans', 'NeDotify Cyrillic', system-ui, 'Ubuntu Sans', 'Ubuntu', 'Cantarell', 'Liberation Sans', sans-serif", cat: 'system' },
+    { id: 'ubuntu', name: 'Ubuntu', family: "'Ubuntu', 'Ubuntu Sans', sans-serif", cat: 'system' },
+    { id: 'cantarell', name: 'Cantarell (GNOME)', family: "'Cantarell', 'Adwaita Sans', sans-serif", cat: 'system' },
+    { id: 'liberation', name: 'Liberation Sans', family: "'Liberation Sans', 'DejaVu Sans', sans-serif", cat: 'system' },
+    { id: 'noto', name: 'Noto Sans', family: "'Noto Sans', sans-serif", cat: 'system' },
     { id: 'inter', name: 'Inter', family: "'Inter', sans-serif", cat: 'system' },
     { id: 'arial', name: 'Arial', family: "Arial, sans-serif", cat: 'system' },
     { id: 'segoe_ui', name: 'Segoe UI', family: "'Segoe UI', sans-serif", cat: 'system' },
@@ -116,6 +120,34 @@ const FONTS_LIST = [
     { id: 'copperplate', name: 'Copperplate', family: "Copperplate, fantasy", cat: 'game' }
 ];
 
+// Keep pre-port Linux font identifiers readable while the durable family value
+// remains the shared desktop setting. All typography reacts to a font change.
+const normalizeFont = value => String(value || '').replace(/["']/g, '').replace(/\s+/g, '').toLowerCase();
+const activeFontFamilies = {};
+
+export function highlightActiveFontCard(identifier) {
+    const grid = document.getElementById('font-cards-grid');
+    grid?.querySelectorAll('.font-card').forEach(card => {
+        const match = card.dataset.fontId === identifier || normalizeFont(card.dataset.font) === normalizeFont(identifier);
+        card.classList.toggle('active', match);
+    });
+}
+
+export function applyFontFamily(fontFamily, fontId = null, save = true) {
+    const match = FONTS_LIST.find(font => font.id === fontFamily || font.family === fontFamily)
+        || (!fontFamily ? FONTS_LIST.find(font => font.id === fontId) : null);
+    const isDefault = (!fontFamily && !fontId) || ['system', 'default'].includes(fontFamily) || (!fontFamily && fontId === 'default');
+    const family = isDefault ? FONTS_LIST[0].family : match?.family || fontFamily;
+    const style = document.documentElement.dataset.uiStyle === 'macos' ? 'macos' : 'current';
+    activeFontFamilies[style] = family;
+    document.documentElement.style.setProperty('--font-family', family);
+    document.documentElement.style.setProperty('--font-body', family);
+    document.documentElement.style.setProperty('--font-display', family);
+    const macos = document.documentElement.dataset.uiStyle === 'macos';
+    if (save) saveSetting(macos ? 'macos_font_family' : 'font_family', isDefault ? 'system' : family, macos ? 'interface' : 'theme');
+    highlightActiveFontCard(isDefault ? 'default' : family);
+}
+
 function renderThemePresets() {
     const container = document.getElementById('theme-presets-grid');
     if (!container) return;
@@ -158,10 +190,8 @@ function renderFontCards(activeCat = 'system') {
     const container = document.getElementById('font-cards-grid');
     if (!container) return;
 
-    // The picker families (Inter, Outfit, Roboto, Montserrat, Plus Jakarta
-    // Sans) are remote and loaded on demand by boot.js. Request them here -
-    // i.e. when the picker is actually rendered - so a cold start does not
-    // pay for them. Idempotent; a failed/offline load just leaves the fallback.
+    // Optional faces are bundled locally and loaded only when the picker opens.
+    // Keep first paint independent of these extra stylesheets and font requests.
     if (typeof window.NeDotifyEnsurePickerFonts === 'function') {
         try { window.NeDotifyEnsurePickerFonts(); } catch (e) {}
     }
@@ -170,12 +200,12 @@ function renderFontCards(activeCat = 'system') {
     const filteredFonts = FONTS_LIST.filter(f => f.cat === activeCat || activeCat === 'all');
     filteredFonts.forEach(f => {
         const card = document.createElement('div');
-        const normalizedFont = value => value.replace(/["']/g, '').replace(/\s+/g, '').toLowerCase();
         const macos = document.documentElement.dataset.uiStyle === 'macos';
-        const savedFont = savedSetting(macos?'interface':'theme',macos?'macos_font_family':'font_family','system');
-        const isActive = savedFont === 'system' ? f.id === 'default' : normalizedFont(savedFont) === normalizedFont(f.family);
+        const savedFont = activeFontFamilies[macos ? 'macos' : 'current'] || savedSetting(macos?'interface':'theme',macos?'macos_font_family':'font_family','system');
+        const isActive = ['system', 'default'].includes(savedFont) ? f.id === 'default' : normalizeFont(savedFont) === normalizeFont(f.family);
         card.className = `font-card${isActive ? ' active' : ''}`;
         card.dataset.font = f.family;
+        card.dataset.fontId = f.id;
         card.innerHTML = `
             <div class="font-preview-letters" style="font-family:${f.family}">Aa</div>
             <span class="font-card-name">${escapeHtml(f.name)}</span>
@@ -183,10 +213,7 @@ function renderFontCards(activeCat = 'system') {
         card.addEventListener('click', () => {
             container.querySelectorAll('.font-card').forEach(c => c.classList.remove('active'));
             card.classList.add('active');
-            document.documentElement.style.setProperty('--font-family', f.family);
-            const macos = document.documentElement.dataset.uiStyle === 'macos';
-            const val = f.id === 'default' ? 'system' : f.family;
-            saveSetting(macos?'macos_font_family':'font_family', val, macos?'interface':'theme');
+            applyFontFamily(f.family, f.id);
         });
         container.appendChild(card);
     });
@@ -390,7 +417,7 @@ export function applySettingsFromBackend(settings) {
             // BUG-U3-005: мёртвый lookup select-font-family удалён — элемента нет
             // в разметке. setProperty — живое применение сохранённого шрифта при
             // загрузке настроек (выбор — карточки font-cards-grid, settings.js:183).
-            document.documentElement.style.setProperty('--font-family', settings.theme.font_family === 'system' ? '"Segoe UI", system-ui, sans-serif' : settings.theme.font_family);
+            applyFontFamily(settings.theme.font_family, settings.theme.font_id, false);
         }
 
         if (settings.theme) {

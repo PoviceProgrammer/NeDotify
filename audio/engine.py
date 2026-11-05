@@ -725,4 +725,70 @@ class AudioEngine:
             if cancel_token and cancel_token():
                 return None
             return url
+        if source == "vk":
+            import threading
+            url = None
+            event = threading.Event()
+
+            def cb(*args):
+                nonlocal url
+                try:
+                    url = args[0] if args else None
+                finally:
+                    event.set()
+
+            def err_cb(e):
+                try:
+                    logger.error(f"VK stream resolution error: {e}")
+                finally:
+                    event.set()
+
+            try:
+                vk_service = getattr(self.app_core, "vk", None) if self.app_core else None
+                if vk_service and hasattr(vk_service, "get_stream_url"):
+                    vk_target = str(source_id).strip() if str(source_id).strip().startswith(("http://", "https://")) else f"https://vk.com/audio?id={source_id}"
+                    vk_service.get_stream_url(vk_target, cb, err_cb)
+                else:
+                    event.set()
+            except Exception as ex:
+                logger.debug(f"VK stream error: {ex}")
+                event.set()
+            _wait(event, 10)
+            if cancel_token and cancel_token():
+                return None
+            if url:
+                return url
+
+            # Fallback to YouTube search for VK track if direct resolution fails
+            artist = track.get("artist", "")
+            title = track.get("title", "")
+            search_query = f"{artist} {title}".strip()
+            youtube_service = getattr(self.app_core, "youtube", None) if self._source_enabled("youtube") else None
+            if search_query and youtube_service:
+                from services.recording_selection import search_verified, stream_matches
+                candidate = search_verified(youtube_service, track, query=search_query, timeout=8.0)
+                candidate_id = str((candidate or {}).get("source_id") or "")
+                if candidate_id:
+                    candidate_url = candidate.get("source_url") or candidate_id
+                    if not (str(candidate_url).startswith("http") and not is_safe_media_url(candidate_url)):
+                        event2 = threading.Event()
+
+                        def cb2(*args):
+                            nonlocal url
+                            try:
+                                s_url = args[0] if args else None
+                                metadata = args[1] if len(args) > 1 else None
+                                if stream_matches(track, metadata, requested_id=candidate_id):
+                                    url = s_url
+                            finally:
+                                event2.set()
+
+                        try:
+                            youtube_service.get_stream_url(candidate_url, cb2, lambda e: event2.set())
+                        except Exception:
+                            event2.set()
+                        _wait(event2, 10)
+                        if cancel_token and cancel_token():
+                            return None
+            return url
         return None

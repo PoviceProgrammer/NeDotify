@@ -102,9 +102,11 @@ class AudioFingerprintService:
         return os.path.normcase(os.path.realpath(first)) == os.path.normcase(os.path.realpath(second))
 
     def delete_duplicate_track(
-        self, db_manager, duplicate_id: int, delete_file: bool = False,
-        keeper_id: Optional[int] = None,
+        self, db_manager, duplicate_id: Optional[int] = None, delete_file: bool = False,
+        keeper_id: Optional[int] = None, track_id: Optional[int] = None,
     ) -> bool:
+        if duplicate_id is None and track_id is not None:
+            duplicate_id = track_id
         """Merge an exact-content duplicate into a keeper, optionally removing its file.
 
         A row is never deleted on its own: both rows must still exist, have

@@ -2,28 +2,11 @@
 // A Content-Security-Policy of script-src 'self' blocks inline scripts, so this
 // file exists to keep that policy strict rather than relaxing it.
 
-// Fonts offered by the Settings > Appearance font picker (Inter, Outfit,
-// Roboto, Montserrat, Plus Jakarta Sans). These are NOT the app's own faces -
-// DM Sans and Sora are self-hosted in assets/fonts/ and are declared by
-// css/fonts.css, so the UI renders correctly with no network at all.
-//
-// This used to be an unconditional request fired one second after `load`. It is
-// now lazy and on demand. The picker is opt-in, so a cold start no longer pays
-// for a stylesheet most sessions never need, and an offline install no longer
-// issues a request that can only fail.
-//
-// It stays remote rather than bundled because five extra families would add
-// roughly a megabyte to the installer for a rarely-used panel; that trade is
-// the reason `https://fonts.googleapis.com` must remain in `style-src` in
-// index.html. Dropping it there silently breaks picking any of these fonts.
+// Optional picker faces use local WOFF2 files with bundled SIL OFL licenses.
+// Load this stylesheet only when the picker is opened. Both startup and choosing
+// a font remain usable offline, and the strict same-origin CSP stays intact.
 (function () {
-    var PICKER_FONT_HREF = 'https://fonts.googleapis.com/css2'
-        + '?family=Inter:wght@300;400;500;600;700;800'
-        + '&family=Outfit:wght@300;400;500;600;700;800'
-        + '&family=Roboto:wght@300;400;500;700'
-        + '&family=Montserrat:wght@400;500;600;700;800'
-        + '&family=Plus+Jakarta+Sans:wght@400;500;600;700;800'
-        + '&display=swap';
+    var PICKER_FONT_HREF = 'assets/fonts/picker/fontfaces.css';
 
     window.NeDotifyEnsurePickerFonts = function () {
         if (document.getElementById('nedotify-picker-fonts')) return;

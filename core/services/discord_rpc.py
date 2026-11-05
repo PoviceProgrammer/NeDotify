@@ -164,6 +164,11 @@ class DiscordRPCService:
             self._generation += 1
             self._retry_at, self._attempts = 0, 0
             self.state = 'SHUTTING_DOWN' if self._worker and self._worker.is_alive() else 'DISABLED'
+            if not self._worker or not self._worker.is_alive():
+                client, self.rpc = self.rpc, None
+                was_connected, self.connected = self.connected, False
+                if client:
+                    self._close(client, clear=was_connected)
         self._wake.set()
 
     def refresh(self):

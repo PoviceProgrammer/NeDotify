@@ -956,6 +956,12 @@ def _probe_covered_host(timeout: float = 1.5) -> Optional[bool]:
 
 
 class ZapretService:
+    def __new__(cls, settings_manager=None):
+        if sys.platform == "linux":
+            from services.linux_zapret import LinuxZapretService
+            return LinuxZapretService(settings_manager)
+        return super().__new__(cls)
+
     def __init__(self, settings_manager=None):
         self.settings = settings_manager
         self.process = None

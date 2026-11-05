@@ -24,6 +24,12 @@ logger = logging.getLogger(__name__)
 class TrayIcon:
     """Manages the Windows system tray icon and its interactive context menu."""
 
+    def __new__(cls, api=None, icon_path=None):
+        if sys.platform == "linux":
+            from core.linux_tray import LinuxTrayIcon
+            return LinuxTrayIcon(api, icon_path)
+        return super().__new__(cls)
+
     def __init__(self, api, icon_path: Optional[str] = None):
         self.api = api
         self.icon_path = icon_path or self._resolve_default_icon_path()

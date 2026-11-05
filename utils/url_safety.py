@@ -90,6 +90,20 @@ def _connect_public(connection):
     addresses = _public_addresses(connection.host, connection.port)
     if not addresses:
         raise urllib.error.URLError('URL does not resolve to a public address')
+    from utils.linux_proxy import endpoint
+    proxy = endpoint()
+    if proxy:
+        import socks
+        # Use a vetted numerical target to retain DNS rebinding protection.
+        error = None
+        for _, _, _, address in addresses:
+            try:
+                connection.sock = socks.create_connection((address[0], connection.port), timeout=connection.timeout,
+                    proxy_type=socks.SOCKS5, proxy_addr=proxy[0], proxy_port=proxy[1], proxy_rdns=False)
+                return
+            except OSError as exc:
+                error = exc
+        raise error or OSError('App SOCKS connection failed')
     error = None
     for family, kind, protocol, address in addresses:
         candidate = socket.socket(family, kind, protocol)
@@ -127,6 +141,15 @@ def _connect_public_tls(connection):
     addresses = _public_addresses(connection.host, connection.port)
     if not addresses:
         raise urllib.error.URLError('URL does not resolve to a public address')
+    from utils.linux_proxy import endpoint
+    if endpoint():
+        _connect_public(connection)
+        try:
+            connection.sock = connection._context.wrap_socket(connection.sock, server_hostname=connection.host)
+        except Exception:
+            connection.sock.close()
+            raise
+        return
     timeout = connection.timeout
     if timeout is socket._GLOBAL_DEFAULT_TIMEOUT:
         timeout = socket.getdefaulttimeout()

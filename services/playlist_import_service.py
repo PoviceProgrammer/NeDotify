@@ -25,6 +25,9 @@ class UnsupportedPlaylistService(PlaylistImportError):
 
 
 class PlaylistImportService:
+    def _resolve_spotify(self, url: str):
+        raise UnsupportedPlaylistService("Поддерживается импорт YouTube, SoundCloud, Deezer, M3U/M3U8, JSON и текстовых списков")
+
     """Service to parse, resolve, and normalize playlists from URLs or local files."""
 
     def __init__(self, ydl_factory: Optional[Callable] = None, settings: Any = None):

@@ -151,16 +151,18 @@ class ArtistService(BaseMusicService):
         # 3. Bio fallback via Last.fm
         if not biography and (deadline is None or time.monotonic() < deadline) and is_current():
             try:
-                from services.lastfm_service import LastFMService
+                from services.lastfm_service import LastFMService, RECOMMENDATION_TTL
                 lastfm = LastFMService(settings=self.settings)
-                if lastfm.has_credentials():
-                    info = lastfm._get('artist.getInfo', artist=artist_name)
-                    l_bio = (info.get('artist', {}).get('bio', {}).get('content') or info.get('artist', {}).get('bio', {}).get('summary') or '')
-                    if l_bio:
-                        biography = clean_artist_bio(l_bio)
+                if lastfm.is_enabled() and lastfm._resolve_api_keys():
+                    info = lastfm._api_request('artist.getinfo', {'artist': artist_name}, RECOMMENDATION_TTL)
+                    if isinstance(info, dict):
+                        artist_data = info.get('artist') or {}
+                        bio_data = artist_data.get('bio') if isinstance(artist_data, dict) else {}
+                        l_bio = (bio_data.get('content') or bio_data.get('summary') or '') if isinstance(bio_data, dict) else ''
+                        if l_bio:
+                            biography = clean_artist_bio(l_bio)
             except Exception as exc:
                 logger.debug("Last.fm bio fallback failed for %s: %s", artist_name, exc)
-
         return (avatar or '', biography or '')
 
     """Resolves an artist name to a full profile using the YouTube Music catalogue."""
@@ -224,11 +226,15 @@ class ArtistService(BaseMusicService):
 
     @staticmethod
     def _artists_label(item: dict, fallback: str = "") -> str:
-        names = [a.get("name", "") for a in (item.get("artists") or []) if a.get("name")]
+        item = item if isinstance(item, dict) else {}
+        names = [a.get("name", "") for a in (item.get("artists") or [])
+                 if isinstance(a, dict) and a.get("name")]
         return ", ".join(names) or fallback
 
     def _normalize_album(self, item: dict, artist_name: str, channel_id='') -> Optional[dict]:
         """Shape one ytmusicapi album/single entry into the app's album dict."""
+        if not isinstance(item, dict):
+            return None
         browse_id = item.get("browseId") or item.get("playlistId")
         title = item.get("title")
         if not browse_id or not title:

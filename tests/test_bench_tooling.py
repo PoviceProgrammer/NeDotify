@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import runpy
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -19,7 +20,7 @@ from tools.bench.scenarios import scenario_download, scenario_play, scenario_idl
 from tools.bench.run_bench import aggregate  # noqa: E402
 from tools.bench.paths import results_dir, visual_artifacts_dir  # noqa: E402
 from tools.visual_guard import run_guard  # noqa: E402
-from tools.packaging.native_manifest import validate_native_inputs  # noqa: E402
+LINUX_PACKAGING = runpy.run_path(str(ROOT / "packaging/linux_support.py"))
 
 
 def test_native_cdp_transport_preserves_protocol_result_and_evaluation_errors(monkeypatch):
@@ -136,52 +137,46 @@ def test_benchmark_aggregate_excludes_failed_repetitions():
     assert summary["medians"]["cold_start.elapsed"] == 15
 
 
-def test_packaging_spec_anchors_resources_and_collects_curl_dlls():
+def test_packaging_spec_anchors_resources_and_collects_native_curl_libraries():
     spec = (ROOT / "setup_pyinstaller.spec").read_text(encoding="utf-8")
-    assert "ROOT = SPECPATH" in spec
-    assert "os.path.join(ROOT, 'icon.ico')" in spec
-    assert "binaries=extra_binaries" in spec
-    assert "curl_cffi.libs" in spec
-    assert "source.suffix.lower() in {'.jpg', '.jpeg'}" in spec
-    assert "release_mode_from_environment()" in spec
+    assert "ROOT = Path(SPECPATH)" in spec
+    assert 'ROOT / "icon.png"' in spec
+    assert "binaries=binaries" in spec
+    assert 'collect_dynamic_libs("curl_cffi")' in spec
+    assert 'support["native_tools"]()' in spec
+    assets = LINUX_PACKAGING["collect_ui_datas"](ROOT)
+    assert any(path.endswith(".webp") for path, _ in assets)
+    assert not any("backgrounds" in Path(path).parts and Path(path).suffix.lower() in {".jpg", ".jpeg"}
+                   for path, _ in assets)
 
 
-def test_native_manifest_is_optional_for_debug_and_fail_closed_for_release(tmp_path):
-    assert validate_native_inputs(tmp_path) == []
-    try:
-        validate_native_inputs(tmp_path, release_mode=True)
-    except ValueError as exc:
-        assert "requires a valid winws.exe or zapret.exe" in str(exc)
-    else:
-        raise AssertionError("release mode accepted a build with no native bundle")
-
-    zapret = tmp_path / "zapret"
-    zapret.mkdir()
-    (zapret / "winws.exe").write_bytes(b"bad")
-    try:
-        validate_native_inputs(tmp_path)
-    except ValueError as exc:
-        assert "no valid entrypoint" in str(exc)
-    else:
-        raise AssertionError("partial native bundle was accepted")
-
-    pe = bytearray(0x100)
-    pe[:2] = b"MZ"
-    pe[0x3C:0x40] = (0x80).to_bytes(4, "little")
-    pe[0x80:0x84] = b"PE\0\0"
-    (zapret / "winws.exe").write_bytes(pe)
-    assert validate_native_inputs(tmp_path, release_mode=True) == [(str(zapret.resolve()), "zapret")]
+def test_native_tools_fail_closed_for_wrong_platform_missing_tools_and_windows_binaries(tmp_path, monkeypatch):
+    import pytest
+    native_tools = LINUX_PACKAGING["native_tools"]
+    monkeypatch.setattr(sys, "platform", "win32")
+    with pytest.raises(RuntimeError, match="on Linux"):
+        native_tools()
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(native_tools.__globals__["shutil"], "which", lambda _: None)
+    with pytest.raises(RuntimeError, match="ELF ffmpeg"):
+        native_tools()
+    binary = tmp_path / "ffmpeg.exe"
+    binary.write_bytes(b"MZ" + b"\0" * 128)
+    monkeypatch.setattr(native_tools.__globals__["shutil"], "which", lambda _: str(binary))
+    with pytest.raises(RuntimeError, match="ELF ffmpeg"):
+        native_tools()
 
 
 def test_installer_has_stable_identity_and_does_not_delete_install_folder():
-    iss = (ROOT / "installer.iss").read_text(encoding="utf-8")
-    assert "AppId={{8F56F2A1-90E1-4A0A-AB89-24A326E6D371}" in iss
-    assert "[UninstallDelete]" not in iss
-    assert "{cm:WelcomeBody}" in iss
-    assert "english.WelcomeBody=" in iss
-    assert "AppMutex=Local\\NeDotify_Installer_Guard" in iss
-    main_source = (ROOT / "main.py").read_text(encoding="utf-8")
-    assert r"Local\NeDotify_Installer_Guard" in main_source
+    assert not (ROOT / "installer.iss").exists()
+    desktop = ROOT / "packaging/org.nedotify.NeDotify.desktop"
+    assert "Name=NeDotify" in desktop.read_text(encoding="utf-8")
+    assert "Exec=/opt/nedotify/NeDotify" in desktop.read_text(encoding="utf-8")
+    assert LINUX_PACKAGING["MANAGED_MARKER"] == "nedotify.linux.install.v1"
+    # Updates select a new immutable release; the previous one stays available.
+    source = (ROOT / "packaging/linux_support.py").read_text(encoding="utf-8")
+    assert 'os.replace(pending, appdir / "current")' in source
+    assert "shutil.rmtree(release" not in source
 
 
 def test_benchmark_list_includes_every_supported_scenario():

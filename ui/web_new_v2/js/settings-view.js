@@ -1,5 +1,6 @@
 // Presentation helpers; settings.js owns persistence and the existing controls.
 import { renderIcons } from './utils.js';
+import { mountRecommendationControls } from './recommendation-controls.js';
 
 const THEME_IMAGES = {
     dark:'01_Dark', amoled:'02_AMOLED', midnight:'03_Midnight', sky:'04_Sky',
@@ -33,6 +34,19 @@ export function syncCustomColorFields() {
 // Small extensions use the same persistence/restore path as the original
 // controls. Mount before indexing Settings search so these rows are searchable.
 export function initAdditionalSettings({save, read, applyRadius}) {
+    const player = document.getElementById('settings-player');
+    if (player && !document.getElementById('settings-recommendation-controls')) {
+        const section = document.createElement('section');
+        section.className = 'settings-section';
+        const heading = document.createElement('h2');
+        heading.className = 'settings-section-title';
+        heading.textContent = 'Рекомендации';
+        const controls = document.createElement('div');
+        controls.id = 'settings-recommendation-controls';
+        section.append(heading, controls);
+        player.prepend(section);
+        mountRecommendationControls(controls);
+    }
     const appearance = document.getElementById('settings-appearance');
     if (appearance && !document.getElementById('settings-radius')) {
         const section = document.createElement('section');

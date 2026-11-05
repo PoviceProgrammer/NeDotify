@@ -99,10 +99,11 @@
     /* ----------------------------------------------------------------------
        5. Typography Scale & Fonts: «Sora + DM Sans»
        ---------------------------------------------------------------------- */
-    --font-display: 'Sora', 'NeDotify Cyrillic', system-ui, -apple-system, sans-serif;
-    --font-body: 'DM Sans', 'NeDotify Cyrillic', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --font-sans-fallback: system-ui, 'Ubuntu Sans', 'Ubuntu', 'Cantarell', 'Adwaita Sans', 'Noto Sans', 'Liberation Sans', 'DejaVu Sans', sans-serif;
+    --font-display: 'Sora', 'NeDotify Cyrillic', var(--font-sans-fallback);
+    --font-body: 'DM Sans', 'NeDotify Cyrillic', var(--font-sans-fallback);
     --font-family: var(--font-body);
-    --font-mono: 'Consolas', 'Courier New', monospace;
+    --font-mono: 'Consolas', 'Adwaita Mono', 'Liberation Mono', 'Ubuntu Mono', monospace;
     
     --font-size-xs: 11px;
     --font-size-sm: 13px;

@@ -1,6 +1,7 @@
 import { refreshFavoritesCovers, initHomeAtmosphere, updateHomeCoverCollage } from './home-atmosphere.js';
 import { updateHomeCollections, openHomeLibrary, openHomeDialog } from './home-shell.js';
 import { getPlaylistCover } from './library-view.js';
+import { mountRecommendationControls } from './recommendation-controls.js';
 import { formatTime, formatListeningTime, renderIcons, getCoverUrl, escapeHtml, coverImgHtml, artistAvatarHtml, renderPlaylistCoverCollage, sizeCanvasForDpr, registerCanvasDprListener, createTrackElement, showToast } from './utils.js';
 
 const feedTimeouts = new Map();
@@ -20,6 +21,7 @@ export function isCurrentHomeEvent(sectionId, data) {
 }
 
 window.addEventListener('nedotify:recommendation_feedback_changed', () => loadHome());
+window.addEventListener('nedotify:recommendation_mode_changed', () => loadHome());
 let coverBackfillPromise = null;
 let lastCoverBackfillAt = 0;
 
@@ -148,6 +150,7 @@ function backfillHomeCovers(currentGen) {
 export async function loadHome(isTrackChange = false) {
     await window.awaitBridge();
     if (!window.pywebview?.api) return;
+    mountRecommendationControls(document.getElementById('home-recommendation-controls'));
 
     const currentGen = ++homeLoadGeneration;
 
@@ -334,6 +337,7 @@ export function renderAuthenticHome(sections) {
             if (!item) return;
             if (item.type === 'track') {
                 const trackData = {
+                    ...item,
                     title: item.title,
                     artist: item.artist,
                     cover_url: item.cover_url,
@@ -725,6 +729,13 @@ function createFeedCard(track, trackList = null, trackIndex = 0, options = {}) {
         artistName: artistLink ? track.artist : '',
         track: track,
     });
+    if (track.recommendation_reason) {
+        const reason = document.createElement('span');
+        reason.className = 'recommendation-reason';
+        reason.textContent = track.recommendation_reason;
+        reason.title = track.recommendation_reason;
+        card.append(reason);
+    }
     card.addEventListener('click', (e) => {
         if (e.target.closest('.feed-card-sub')) return;
         if (window.pywebview?.api) {

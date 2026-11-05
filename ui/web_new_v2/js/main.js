@@ -2,6 +2,7 @@ import { initWindowResize } from './window-resize.js';
 import { initFeatureControls, handleFeatureEvent } from './feature-controls.js';
 import { initProfileComparison } from './profile-comparison.js';
 import { initHomeShell } from './home-shell.js';
+import { initTrackWave, startTrackWave } from './track-wave.js';
 // NeDotify - Main Entry Point
 import { initPlayer, applySettings, playTrack, getAtmosphereAudioSource } from './player.js';
 import { initPages, showPage } from './pages.js';
@@ -98,7 +99,6 @@ window.awaitBridge = function awaitBridge() {
 const loadProfile = () => import('./profile.js').then(m => m.loadProfile());
 window.loadProfile = loadProfile;
 window.searchArtistProfile = searchArtistProfile;
-let trackWaveRequestSequence = 0;
 window.NeDotify = {
     ...window.NeDotify,
     openPlaylistMenu: openPlaylistMenu,
@@ -131,68 +131,7 @@ window.NeDotify = {
             catch { showToast('Не удалось начать скачивание', 'error'); }
         }
     },
-    startTrackWave: async (seedTrack) => {
-        if (!seedTrack) return;
-        const requestId = String(++trackWaveRequestSequence);
-        if (window._activeTrackWaveCleanup) window._activeTrackWaveCleanup();
-        const toastFn = (msg, type) => window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg, type } }));
-        toastFn(`📻 Собираем волну по треку «${seedTrack.title || 'выбранному треку'}»...`, 'info');
-        
-        // Play the seed track first
-        if (window.pywebview?.api?.play_track) {
-            window.pywebview.api.play_track(seedTrack, [seedTrack], 0);
-        }
-
-        await window.awaitBridge();
-        if (requestId !== String(trackWaveRequestSequence)) return;
-        if (!window.pywebview?.api?.get_track_wave) return;
-
-        let longWaitTimer = setTimeout(() => toastFn('⏳ Волна собирается дольше обычного...', 'info'), 8000);
-        let deadlineTimer = null;
-        const handler = async (e) => {
-            if (e.detail?.request_id !== requestId) return;
-            cleanup();
-            const tracks = (e.detail && e.detail.tracks) || [];
-            if (tracks.length > 0) {
-                try {
-                    if (window.pywebview?.api?.add_tracks_to_queue) {
-                        await window.pywebview.api.add_tracks_to_queue(tracks);
-                    } else if (window.pywebview?.api?.add_to_queue) {
-                        for (const t of tracks) {
-                            await window.pywebview.api.add_to_queue(t);
-                        }
-                    }
-                    toastFn(`📻 В волну добавлено ${tracks.length} треков!`, 'success');
-                } catch (err) {
-                    console.error('Error adding wave to queue:', err);
-                    toastFn('Не удалось добавить волну в очередь', 'error');
-                }
-            } else {
-                toastFn('Не удалось найти похожие треки для волны', 'warning');
-            }
-        };
-        const cleanup = () => {
-            if (longWaitTimer) { clearTimeout(longWaitTimer); longWaitTimer = null; }
-            if (deadlineTimer) { clearTimeout(deadlineTimer); deadlineTimer = null; }
-            window.removeEventListener('nedotify:track_wave_ready', handler);
-            if (window._activeTrackWaveCleanup === cleanup) window._activeTrackWaveCleanup = null;
-        };
-        window._activeTrackWaveCleanup = cleanup;
-        window.addEventListener('nedotify:track_wave_ready', handler);
-        deadlineTimer = setTimeout(() => {
-            cleanup();
-            toastFn('Не удалось собрать волну. Попробуйте ещё раз', 'warning');
-        }, 25000);
-
-        const seedId = seedTrack.id || seedTrack.source_id;
-        try {
-            await window.pywebview.api.get_track_wave(seedTrack, 15, seedId ? [seedId] : [], requestId);
-        } catch(e) {
-            cleanup();
-            console.error('Error starting track wave:', e);
-            toastFn('Не удалось запустить волну', 'error');
-        }
-    },
+    startTrackWave: startTrackWave,
     toggleMiniPlayerMode: toggleMiniPlayerMode
 };
 
@@ -626,6 +565,7 @@ async function init() {
         // Initialize all modules safely after the first idle icon pass.
         deferPythonEvents();
         await safeInit('Events', () => initEvents());
+        await safeInit('Track wave', () => initTrackWave(addPythonEventHandler));
         await safeInit('Pages', () => initPages());
         // M-2: warn early if localStorage is near the ~5MB quota
         try { checkLocalStorageQuota(); } catch (e) {}
@@ -803,7 +743,7 @@ function showBridgeError() {
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(10,10,15,0.96);color:#e5e7eb;font-family:Inter,sans-serif;text-align:center;padding:24px;';
     overlay.innerHTML = `
         <div style="font-size:15px;line-height:1.6;max-width:420px;">
-            Связь с приложением не установлена (WebView2 bridge не инициализировался).
+            Связь с приложением не установлена (мост pywebview не инициализировался).
             <br>Нажмите «Перезагрузить», чтобы попробовать снова.
         </div>
         <div style="display:flex;gap:12px;">

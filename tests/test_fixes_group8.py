@@ -3,7 +3,7 @@
 Covers:
 - BUG-WIN-024: scipy in requirements.txt, hiddenimports in setup_pyinstaller.spec,
   and lufs_scanner fallback.
-- BUG-WIN-025: WebView2 Evergreen runtime registry detection and bootstrapper in installer.iss.
+- Linux runtime packaging: Qt WebEngine, EJS and native dependency preparation.
 - BUG-WIN-028: Windows DPAPI token encryption, SQLite persistence without plaintext,
   and transparent migration on read.
 """
@@ -97,36 +97,35 @@ def test_analyze_lufs_uses_fallback_when_scipy_import_fails(monkeypatch):
 # BUG-WIN-025 Tests: WebView2 Evergreen runtime bootstrapper in installer.iss
 # ==============================================================================
 
-def test_installer_iss_webview2_detection_and_bootstrapper():
-    """Verify installer.iss checks WebView2 registry and executes silent bootstrapper."""
-    iss_path = os.path.join(PROJECT_ROOT, "installer.iss")
-    assert os.path.exists(iss_path), "installer.iss not found"
-    content = open(iss_path, "r", encoding="utf-8").read()
-
-    # WebView2 registry GUID and URLs
-    assert "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" in content
-    assert "https://go.microsoft.com/fwlink/p/?LinkId=2124703" in content
-
-    # Registry detection
-    assert "IsWebView2Installed" in content
-    assert "SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\" in content
-    assert "SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\" in content
-    assert "Software\\Microsoft\\EdgeUpdate\\Clients\\" in content
-
-    # Bootstrapper execution
-    assert "MicrosoftEdgeWebview2Setup.exe" in content
-    assert "/silent /install" in content
-    assert "PrepareToInstall" in content
+def test_linux_webengine_is_an_explicit_runtime_dependency():
+    """The Linux renderer is installed with the app, rather than relying on WebView2."""
+    from packaging.requirements import Requirement
+    req_path = os.path.join(PROJECT_ROOT, "requirements.txt")
+    lines = open(req_path, encoding="utf-8").read().splitlines()
+    requirements = {requirement.name.lower(): requirement for line in lines
+                    if line.strip() and not line.lstrip().startswith("#")
+                    for requirement in [Requirement(line)]}
+    assert "qt" in requirements["pywebview"].extras
+    assert "pyqt6" in requirements and "pyqt6-webengine" in requirements
+    assert "qtpy" in requirements
+    assert "pythonnet" not in requirements
+    assert not os.path.exists(os.path.join(PROJECT_ROOT, "installer.iss"))
 
 
-def test_installer_iss_zapret_sections_preserved():
-    """Verify installer.iss Zapret sections are preserved and untouched."""
-    iss_path = os.path.join(PROJECT_ROOT, "installer.iss")
-    content = open(iss_path, "r", encoding="utf-8").read()
-
-    assert "ZapretBundleWinws" in content
-    assert "ZapretBundleReady" in content
-    assert 'Source: "dist\\zapret\\*"' in content
+def test_linux_tool_preparation_ships_ejs_and_a_supported_js_runtime():
+    """Current YouTube extraction requires the EJS companion and a JS runtime."""
+    from packaging.requirements import Requirement
+    lines = open(os.path.join(PROJECT_ROOT, "requirements.txt"), encoding="utf-8").read().splitlines()
+    requirements = {requirement.name.lower(): requirement for line in lines
+                    if line.strip() and not line.lstrip().startswith("#")
+                    for requirement in [Requirement(line)]}
+    assert "default" in requirements["yt-dlp"].extras
+    assert requirements["deno"].specifier.contains("2.6.6")
+    assert not requirements["deno"].specifier.contains("2.0.0")
+    spec = open(os.path.join(PROJECT_ROOT, "setup_pyinstaller.spec"), encoding="utf-8").read()
+    assert 'support["native_tools"]()' in spec
+    assert '"yt_dlp_ejs"' in spec
+    assert "winws.exe" not in spec
 
 
 # ==============================================================================

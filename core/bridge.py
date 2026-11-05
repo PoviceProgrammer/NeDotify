@@ -63,6 +63,7 @@ PUBLIC_METHODS = frozenset({
     'get_next_track',
     'get_offline_library',
     'get_playlist_tracks',
+    'get_playlist_recommendations',
     'get_playlists',
     'get_popular_tracks',
     'get_profile_stats',

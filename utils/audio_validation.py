@@ -16,7 +16,7 @@ def ffprobe_path():
             return managed
     except (ImportError, OSError, ValueError):
         pass
-    bundled = os.path.join(getattr(sys, '_MEIPASS', ''), 'ffprobe.exe')
+    bundled = os.path.join(getattr(sys, '_MEIPASS', ''), ('ffprobe.exe' if sys.platform == 'win32' else 'ffprobe'))
     if getattr(sys, '_MEIPASS', None) and os.path.isfile(bundled):
         return bundled
     installed = shutil.which('ffprobe')

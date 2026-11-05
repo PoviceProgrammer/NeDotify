@@ -1,9 +1,10 @@
 """One shared application resolves its assets plus the scoped macOS pack."""
-import ast
 from html.parser import HTMLParser
 from pathlib import Path
 import re
+import runpy
 import sys
+from types import SimpleNamespace
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,29 +55,27 @@ def test_ui_v2_resolves_all_static_assets_without_other_ui_trees():
 
 def test_v2_is_the_only_active_and_packaged_ui():
     assert {p.name for p in (ROOT / 'ui').iterdir() if p.is_dir() and (p / 'index.html').is_file()} == {'web_new_v2'}
-    tree = ast.parse((ROOT / 'setup_pyinstaller.spec').read_text(encoding='utf-8'))
-    functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)
-                 and node.name in {'_is_ui_cover_cache', '_collect_ui_datas'}]
-    namespace = {'Path': Path}
-    exec(compile(ast.Module(body=functions, type_ignores=[]), '<spec-data-helpers>', 'exec'), namespace)
-    data = namespace['_collect_ui_datas'](UI)
+    support = runpy.run_path(str(ROOT / 'packaging/linux_support.py'))
+    data = support['collect_ui_datas'](ROOT)
     published = {(Path(destination) / Path(source).name).as_posix() for source, destination in data}
     assert 'ui/web_new_v2/index.html' in published
     assert 'ui/web_new_v2/js/player.js' in published
     assert any(path.endswith('.webp') for path in published)
-    assert not any('/covers/' in path or path.endswith('/SOURCES.json') for path in published)
+    assert not any('/covers/' in path for path in published)
+    assert not any('/backgrounds/' in path and path.lower().endswith('/sources.json') for path in published)
     assert not any('/backgrounds/' in path and path.endswith(('.jpg', '.jpeg')) for path in published)
     for source, destination in data:
-        assert Path(source).is_relative_to(UI)
-        assert (Path(destination) / Path(source).name).as_posix() == 'ui/web_new_v2/' + Path(source).relative_to(UI).as_posix()
+        assert Path(source).is_relative_to(UI) or Path(source).is_relative_to(ROOT / 'ui/MACos_ui')
+        assert (Path(destination) / Path(source).name).as_posix() == Path(source).relative_to(ROOT).as_posix()
     # The presentation pack is explicitly retained beside the sole application.
-    assert any(isinstance(node, ast.Constant) and node.value == 'ui/MACos_ui' for node in ast.walk(tree))
+    assert any(path.startswith('ui/MACos_ui/') for path in published)
 
 
-def test_frozen_tray_icon_resolves_from_v2_without_legacy_assets(tmp_path, monkeypatch):
+def test_frozen_linux_tray_icon_resolves_the_bundled_png(tmp_path, monkeypatch):
     from core.tray import TrayIcon
     monkeypatch.setattr(sys, '_MEIPASS', str(tmp_path), raising=False)
-    logo = tmp_path / 'ui' / 'web_new_v2' / 'assets' / 'logo.png'
-    logo.parent.mkdir(parents=True)
+    monkeypatch.setattr(sys, 'platform', 'linux')
+    logo = tmp_path / 'icon.png'
     logo.write_bytes(b'fixture')
-    assert TrayIcon.__new__(TrayIcon)._resolve_default_icon_path() == str(logo)
+    tray = TrayIcon(SimpleNamespace(_window=None))
+    assert tray.icon_path == str(logo)

@@ -64,6 +64,9 @@
     <link rel="stylesheet" href="css/components/audio-tools.css">
 <link rel="stylesheet" href="css/components/notifications.css">
 <link rel="stylesheet" href="css/components/navigation-motion.css">
+<link rel="stylesheet" href="css/components/recommendation-controls.css">
+<link rel="stylesheet" href="css/components/playlist-recommendations.css">
+<link rel="stylesheet" href="css/components/track-wave.css">
 </head>
 <body>
 
@@ -227,6 +230,7 @@
 
             <section class="feed-section" id="home-for-you-section" aria-labelledby="home-for-you-title">
                 <div class="home-section-header"><h2 class="feed-title" id="home-for-you-title">Для тебя</h2><button id="home-refresh-mixes" class="glass-btn" type="button" aria-label="Обновить подборки для тебя"><i data-lucide="refresh-cw"></i> Обновить</button></div>
+                <div id="home-recommendation-controls"></div>
                 <div class="feed-scroll" id="home-mixes"><div class="empty-state">Миксы на основе ваших предпочтений</div></div>
             </section>
             <!-- Playlists -->
@@ -1311,7 +1315,7 @@
                     <div id="settings-audio" class="settings-panel">
                         <section class="settings-section">
                             <div class="settings-section-title">Устройство вывода</div>
-                            <div class="audio-output-controls"><select id="audio-output-device" class="glass-select" aria-label="Аудиоустройство"><option value="default">Устройство Windows по умолчанию</option></select><button type="button" id="audio-output-refresh" class="home-pill">Обновить</button><button type="button" id="audio-output-permission" class="home-pill">Показать устройства</button></div>
+                            <div class="audio-output-controls"><select id="audio-output-device" class="glass-select" aria-label="Аудиоустройство"><option value="default">Системное устройство по умолчанию</option></select><button type="button" id="audio-output-refresh" class="home-pill">Обновить</button><button type="button" id="audio-output-permission" class="home-pill">Показать устройства</button></div>
                             <p id="audio-output-status" class="audio-output-status" role="status">Список загрузится при открытии раздела. Чтобы показать дополнительные устройства, разрешите их выбор в системном диалоге.</p>
                         </section>
                         <section class="settings-section" aria-labelledby="lyrics-settings-title">
@@ -2213,7 +2217,7 @@
                 <section class="onboarding-step" data-step="3" aria-labelledby="ob-title-3" hidden>
                     <h2 id="ob-title-3" tabindex="-1">Как будет звучать музыка</h2><p class="ob-lead">Выбери устройство и характер переходов между треками.</p>
                     <label class="ob-field-label" for="ob-audio-device">Устройство вывода</label>
-                    <div class="ob-device-row"><select id="ob-audio-device"><option value="default">Устройство Windows по умолчанию</option></select><button type="button" class="ob-quiet-button" id="ob-audio-refresh" aria-label="Обновить список устройств"><i data-lucide="refresh-cw"></i></button></div>
+                    <div class="ob-device-row"><select id="ob-audio-device"><option value="default">Системное устройство по умолчанию</option></select><button type="button" class="ob-quiet-button" id="ob-audio-refresh" aria-label="Обновить список устройств"><i data-lucide="refresh-cw"></i></button></div>
                     <p id="ob-audio-status" class="ob-hint" role="status">Список устройств появится при открытии шага.</p><button type="button" class="ob-text-button" id="ob-audio-permission" hidden>Показать другие устройства</button>
                     <div class="ob-options">
                         <label class="ob-option"><span><strong>Плавные переходы</strong><span>Конец одного трека мягко переходит в начало следующего</span></span><input type="checkbox" id="ob-crossfade"><span class="ob-switch" aria-hidden="true"></span></label>
@@ -2236,7 +2240,7 @@
                     <h2 id="ob-title-6" tabindex="-1">Всё готово к прослушиванию</h2><p class="ob-lead">Проверь свой выбор и последние два параметра.</p>
                     <dl class="ob-summary"><div><dt>Оформление</dt><dd id="ob-summary-theme">Тёмная</dd></div><div><dt>Режим работы</dt><dd id="ob-summary-profile">Баланс</dd></div><div><dt>Звук</dt><dd id="ob-summary-sound"></dd></div><div><dt>Медиатека</dt><dd id="ob-summary-library"></dd></div></dl>
                     <div class="ob-options">
-                        <label class="ob-option"><span><strong>Запускать вместе с Windows</strong><span>NeDotify будет готов, когда включишь компьютер</span></span><input type="checkbox" id="ob-autostart"><span class="ob-switch" aria-hidden="true"></span></label>
+                        <label class="ob-option"><span><strong>Запускать при входе в систему</strong><span>NeDotify будет готов, когда включишь компьютер</span></span><input type="checkbox" id="ob-autostart"><span class="ob-switch" aria-hidden="true"></span></label>
                     </div>
                 </section>
             </div>

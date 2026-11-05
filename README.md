@@ -1,185 +1,135 @@
-<p align="center"><img src="screenshots/banner.png" width="100%" alt="NeDotify — Your music space"></p>
+# NeDotify Linux
 
-<h1 align="center">NeDotify</h1>
-<p align="center"><b>NeDotify 2.5.1 для Windows 10 / 11</b><br>Локальная библиотека, онлайн-источники, тексты песен и оформление под себя.</p>
-<p align="center">
-  <a href="https://github.com/PoviceProgrammer/NeDotify/releases/latest"><img src="https://img.shields.io/badge/СКАЧАТЬ_ДЛЯ_WINDOWS-8b5cf6?style=for-the-badge&logo=windows&logoColor=white" alt="Скачать"></a>
-  <a href="https://github.com/PoviceProgrammer/NeDotify/releases"><img src="https://img.shields.io/badge/ВСЕ_РЕЛИЗЫ-24292f?style=for-the-badge&logo=github" alt="Релизы"></a>
-</p>
-<p align="center"><a href="#возможности">Возможности</a> · <a href="#скриншоты">Интерфейс</a> · <a href="#установка">Установка</a> · <a href="#запуск-из-исходников">Из исходников</a></p>
-<p align="center">
-  <img src="https://img.shields.io/github/stars/PoviceProgrammer/NeDotify?style=flat-square" alt="Stars">
-  <img src="https://img.shields.io/github/last-commit/PoviceProgrammer/NeDotify?style=flat-square" alt="Последний коммит">
-  <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?style=flat-square" alt="Windows">
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/PoviceProgrammer/NeDotify?style=flat-square" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square" alt="Python">
-</p>
+Порт текущего Windows desktop-приложения: обычный и macOS-интерфейс,
+поиск и воспроизведение через локальный прокси, библиотека и плейлисты,
+скачивание, офлайн-файлы, тексты, эквалайзер, рекомендации и непрерывная волна.
+Оба оформления работают внутри одного приложения; macOS не требуется.
 
-## Скриншоты
+**Состояние на 2026-11-05:** исходники и Linux-адаптации перенесены;
+нативные запуск, звук, скриншоты и готовый Linux-пакет пока не подтверждены.
+Работа выполнялась на Windows без установленного WSL. Подробный статус и
+доказательства: [матрица соответствия](docs/WINDOWS_PARITY.md),
+[проверки](docs/LINUX_VALIDATION.md).
 
-Два оформления одного Windows-приложения. Переключаются в настройках.
+## Установка из исходников
 
-<details open><summary><b>Обычный интерфейс</b></summary>
+Заявленная среда сборки: **Ubuntu 24.04 x86_64, Python 3.12+**, Qt 6 WebEngine,
+PipeWire/PulseAudio и графический сеанс X11 или Wayland. Другие дистрибутивы,
+ARM и старые glibc требуют отдельной нативной проверки. Виртуальное окружение
+из другой ОС использовать нельзя.
 
-<table>
-<tr><td width="50%"><img src="screenshots/standard/home.png" alt="Главная"><br><sub>Главная</sub></td><td width="50%"><img src="screenshots/standard/search.png" alt="Поиск"><br><sub>Поиск</sub></td></tr>
-<tr><td width="50%"><img src="screenshots/standard/library.png" alt="Библиотека"><br><sub>Библиотека</sub></td><td width="50%"><img src="screenshots/standard/player.png" alt="Плеер"><br><sub>Плеер</sub></td></tr>
-<tr><td width="50%"><img src="screenshots/standard/settings.png" alt="Настройки"><br><sub>Настройки</sub></td><td width="50%"><img src="screenshots/standard/profile.png" alt="Профиль"><br><sub>Профиль</sub></td></tr>
-</table>
-</details>
-
-<details><summary><b>macOS-стиль на Windows</b></summary>
-
-<table>
-<tr><td width="50%"><img src="screenshots/macos/home.png" alt="Главная"><br><sub>Главная</sub></td><td width="50%"><img src="screenshots/macos/search.png" alt="Поиск"><br><sub>Поиск</sub></td></tr>
-<tr><td width="50%"><img src="screenshots/macos/library.png" alt="Библиотека"><br><sub>Библиотека</sub></td><td width="50%"><img src="screenshots/macos/player.png" alt="Плеер"><br><sub>Плеер</sub></td></tr>
-<tr><td width="50%"><img src="screenshots/macos/settings.png" alt="Настройки"><br><sub>Настройки</sub></td><td width="50%"><img src="screenshots/macos/profile.png" alt="Профиль"><br><sub>Профиль</sub></td></tr>
-</table>
-</details>
-
----
-
-## Что нового в 2.5.1
-
-Очередь с историей воспроизведения, исправление видимости её кнопки и плавные
-анимации окон, меню и переключения разделов в обоих оформлениях. [Полный список изменений](CHANGELOG.md).
-
-## Возможности
-
-**Источники**
-
-- Стриминг с YouTube Music, Spotify, SoundCloud и Яндекс.Музыки
-- Офлайн-треки: плейлисты импортируются и качаются на диск
-- Чтение тегов из локальных файлов, эквалайзер на 10 полос
-
-**Воспроизведение**
-
-- Тексты песни по строкам, сдвиг синхронизации ±0.5&nbsp;с, перевод
-- Визуализатор
-- Повтор, перемешивание, перетаскивание треков в очереди
-- Мини-плеер поверх других окон
-- ⌨ Горячие клавиши — любую можно переназначить
-
-**Интерфейс**
-
-- Темы оформления, можно собрать свою
-- Плейлисты: создать и импортировать; экран плейлиста разделяет описание
-  и список треков
-- Подборки «Для тебя» и ежедневные миксы строятся по истории и предпочтениям;
-  состав можно открыть или сразу воспроизвести
-- Главная использует обложки из истории прослушивания для фоновой атмосферы
-- Пошаговая первоначальная настройка с живым предпросмотром оформления и параметров
-- Анимированный переход между обычным окном и мини-плеером
-- Discord Rich Presence — статус об играющем треке
-
----
-
-## Установка
-
-Установщик `.exe` ставит ярлыки на рабочий стол и в меню «Пуск».
-Актуальная сборка — **2.5.1**, файл `NeDotify_Setup.exe` на странице релизов:
-
-**[Скачать на GitHub Releases](https://github.com/PoviceProgrammer/NeDotify/releases)**
-
-Собрать самому (имя выходного файла задаёт `OutputBaseFilename` в `installer.iss`):
-
-```powershell
-& ".venv_win\Scripts\python.exe" -m pip install -r requirements.txt
-& ".venv_win\Scripts\python.exe" -m PyInstaller setup_pyinstaller.spec
-iscc installer.iss
+```bash
+sudo apt-get update
+sudo apt-get install -y python3-venv ffmpeg libegl1 libgl1 libnss3 libnspr4 \
+  libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+  libxcb-keysyms1 libxcb-render-util0 libxcomposite1 libxdamage1 libxrandr2 \
+  libxtst6 libasound2t64 libdbus-1-3 libsecret-1-0 libpulse0 \
+  gnome-keyring libnotify-bin libfontconfig1 libfreetype6
+bash install_linux.sh --source
+bash start_linux.sh
 ```
 
-На выходе — `dist\NeDotify_Setup.exe`.
+Ручной запуск после установки зависимостей: `.venv/bin/python main.py`.
+Qt выбирается явно; Chromium sandbox включён. На Wayland запускать приложение
+нужно из своего графического сеанса. Для окружения без поддерживаемого Wayland
+plugin можно явно выбрать XWayland: `QT_QPA_PLATFORM=xcb bash start_linux.sh`.
+Реальный `DISPLAY`/`WAYLAND_DISPLAY` задаёт сеанс, приложение их не подделывает.
 
----
+FFmpeg/ffprobe берутся из Linux PATH или инструментов мастера настройки.
+yt-dlp устанавливается с EJS, curl_cffi и Deno для JavaScript challenges.
+Мастер поддерживает проверку, установку и обновление Linux-инструментов;
+процесс проигрывателя не меняет собственный импортированный yt-dlp через pip.
 
-## ‍ Запуск из исходников
+## Обновление и удаление
 
-```powershell
-git clone https://github.com/PoviceProgrammer/NeDotify.git
-cd NeDotify
+При установке исходников ярлык запускает текущую рабочую копию. Для обновления
+нужно закрыть приложение, обновить исходники, повторить
+`bash install_linux.sh --source` и запустить снова. Зависимости обновляются
+между сеансами приложения.
 
-python -m venv .venv_win
-& ".venv_win\Scripts\python.exe" -m pip install -r requirements.txt
+Portable-пакет распаковывается в отдельную папку. Из неё выполнить:
+
+```bash
+bash install_linux.sh --bundle
 ```
 
-Запуск — `python main.py` из корня репозитория, интерпретатором из `.venv_win`:
+Установка для пользователя сохраняет версии в
+`${XDG_DATA_HOME:-$HOME/.local/share}/nedotify-app/releases` и атомарно меняет
+ссылку `current`. Предыдущая версия остаётся для отката. Debian-пакет
+устанавливается через `sudo apt install ./nedotify_2.5.1_amd64.deb` и
+обновляется тем же способом.
 
-```powershell
-& ".venv_win\Scripts\python.exe" main.py
+```bash
+bash install_linux.sh --uninstall
+# Для Debian-установки: sudo apt remove nedotify
 ```
 
-> Системный `python` не подойдёт — в нём нет `pywebview` и `yt-dlp`.
-> Нужен именно интерпретатор из `.venv_win`.
+Удаление приложения сохраняет пользовательский профиль `~/.nedotify/`.
+Ни установка, ни обновление не переносят Windows-кеши, базы или бинарники.
 
-Если приложение уже работает, но окно скрыто, откройте NeDotify через значок
-в трее. Крестик полностью закрывает приложение и очищает Discord-статус.
-Обычное сворачивание сохраняет воспроизведение музыки.
+## Данные и интеграции
 
----
+Профиль остаётся в `~/.nedotify/`: `nedotify_storage.db`, `downloads/`,
+`streams/`, `covers/`, `temp/`, `logs/`. Идентификаторы сохранённых настроек и
+провайдеров сохраняются. База обновляется миграциями при открытии;
+проверки миграций используют временные файлы.
 
-## Тесты
+Секреты сохраняются через Secret Service/KWallet. Если защищённый desktop
+keyring недоступен, используется Fernet с отдельным ключом
+`~/.nedotify/secrets/key` (каталог 0700, файл 0600). Это защищает отдельный
+экспорт базы; доступ от имени того же пользователя позволяет прочитать ключ.
+Для переноса такого профиля нужно сохранить и базу, и ключ. Windows DPAPI
+зависит от Windows-аккаунта: его зашифрованные значения нельзя расшифровать
+на Linux, авторизацию потребуется повторить. Исходные записи не удаляются.
 
-```powershell
-& ".venv_win\Scripts\python.exe" -m pytest
-& ".venv_win\Scripts\python.exe" -m pytest tests\test_build_and_brand.py -q
+Автозапуск использует XDG `.desktop`; трей — Qt; медиаклавиши и внешнее
+управление — MPRIS на session D-Bus. В композиторе должен быть доступен
+обработчик медиаклавиш/MPRIS и host системного трея. Discord Rich Presence
+требует запущенный локальный Discord с доступным IPC.
+
+Wayland может ограничивать абсолютное перемещение окна, topmost и глобальные
+сочетания клавиш; перетаскивание/resize используют системные жесты Qt.
+Произвольные глобальные комбинации назначаются в настройках композитора;
+сочетания внутри приложения и MPRIS остаются доступны.
+
+Linux-режим обхода сетевых ограничений использует upstream `tpws` как
+локальный SOCKS-прокси для TCP-запросов приложения с проверкой загружаемых
+ресурсов. Windows-драйвер WinDivert не переносится. Системный UDP/QUIC и
+голосовой трафик Discord требуют внешней настройки `nfqws` и прав
+администратора; приложение не выдаёт TCP-режим за системный обход.
+
+Источники, требующие авторизации/подписки или доступности сервиса в регионе,
+сохраняют эти требования. Spotify используется для метаданных и импорта,
+воспроизведение разрешается через действующие музыкальные источники.
+
+## Проверки и сборка
+
+```bash
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m pytest
+# Отдельно, реальные внешние запросы:
+.venv/bin/python -m pytest -m network
+# Настоящее приложение, временный профиль, оба UI, скриншоты:
+.venv/bin/python tools/validate_linux.py --output reports/native-source
+
+.venv/bin/python -m pip install -r requirements-build.txt
+bash build_linux.sh
+.venv/bin/python tools/validate_linux.py \
+  --executable dist/NeDotify/NeDotify --output reports/native-package
 ```
 
-`pytest.ini` по умолчанию исключает тесты с маркером `network`, которым нужен
-реальный доступ к площадкам. Для их отдельного запуска передайте `-m network`.
-`run_tests.py` использует ту же конфигурацию pytest.
+Сборка выполняется **на Linux**. Результаты: onedir `dist/NeDotify/`,
+`NeDotify-2.5.1-linux-amd64.tar.gz`, `nedotify_2.5.1_amd64.deb` и `SHA256SUMS`.
+Оба UI, шрифты, иконки, QtWebEngineProcess, EJS и нативные ffmpeg/ffprobe/Deno
+включаются в пакет. Пакет рассчитан на системные библиотеки Ubuntu 24.04.
+`BUILD-REQUIREMENTS.txt` фиксирует фактически установленные версии сборщика.
 
-Инструкции для разработки:
+[Linux CI](.github/workflows/linux-parity.yml) готовит эту среду, запускает
+тесты, source/frozen UI smoke и публикует отчёты/скриншоты/артефакты.
+Xvfb smoke проверяет запуск и интерфейс; слышимое воспроизведение, настоящий
+Wayland и desktop-интеграции проверяются отдельно по
+[нативному сценарию](docs/LINUX_VALIDATION.md).
 
-- [Тесты — nedotify-test](.claude/skills/nedotify-test/SKILL.md)
-- [Запуск и проверка окна — nedotify-run](.claude/skills/nedotify-run/SKILL.md)
-- [Сборка EXE и установщика — nedotify-build](.claude/skills/nedotify-build/SKILL.md)
-- [Замеры производительности — nedotify-perf](.claude/skills/nedotify-perf/SKILL.md)
-
-Актуальные описания функций и изменений интерфейса собраны в
-[STATUS.md](STATUS.md) и тематических заметках:
-
-- [Рекомендации «Для тебя» и ежедневные миксы](docs/recommendations-for-you-20261102.md)
-- [Первоначальная настройка и анимации](docs/riff-onboarding.md)
-- [Атмосфера главной и Discord Rich Presence](docs/ATMOSPHERE_AND_DISCORD.md)
-- [История функций и проверок библиотеки](docs/FEATURES_2026_10_15.md) — датированный
-  архив; некоторые пункты могли быть удалены позднее.
-
----
-
-## Доступ к онлайн-источникам
-
-Если площадка недоступна в вашей сети, приложение может работать через системный
-VPN в TUN-режиме. Явный прокси задаётся в настройках приложения.
-
-<table>
-<tr><td>
-
-### TequilaVPN
-
-**VPN для доступа к музыкальным сервисам.**
-
-[Открыть TequilaVPN в Telegram](https://t.me/TequilaVPNbot?start=refugkQUieF)
-
-Реферальная ссылка автора проекта. Сервис предоставляется отдельно от NeDotify.
-
-</td></tr>
-</table>
-
----
-
-## Стек
-
-Python 3.14 · pywebview + WebView2 · SQLite (WAL) · yt-dlp · Vanilla JS
-
-Фронтенд без сборщика и бандлера: правьте `ui/web_new_v2/` и перезапускайте.
-Единственный интерфейс **desktop-плеера** — `ui/web_new_v2/`; он включён в
-сборку EXE. Выбор других версий удалён.
-
----
-
-## Лицензия
-
-Проект распространяется по лицензии [MIT](LICENSE).
-
-Уведомления об авторстве и лицензии сторонних компонентов сохранены в [licenses/](licenses/).
+Исторические изображения в `screenshots/` относятся к предыдущему GTK-порту.
+Новые доказательства должны создаваться в `reports/native-*`; на Windows
+стенд отказывается создавать отчёт об успешной Linux-проверке.

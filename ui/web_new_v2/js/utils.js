@@ -755,6 +755,7 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
     item._trackIndex = index;
     const isCurrentlyPlaying = currentTrack && isSameTrack(track, currentTrack);
     item.className = `track-item${isCurrentlyPlaying ? ' playing' : ''}`;
+    if (track.recommendation_reason) item.classList.add('has-recommendation-reason');
     if (selectedTracksMap.has(String(track.source_id || track.id || `track_${index}`))) item.classList.add('selected');
     item.style.animationDelay = `${Math.min(index * 0.03, 0.5)}s`;
     item.dataset.trackSourceId = String(track.source_id || track.id || '');
@@ -794,6 +795,7 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
         <div class="track-info">
             <div class="track-title">${escapeHtml(track.title || 'Unknown')}</div>
             <div class="track-artist">${formatArtistNames(track.artist || 'Unknown')}</div>
+            ${track.recommendation_reason ? `<span class="recommendation-reason" title="${escapeHtml(track.recommendation_reason)}">${escapeHtml(track.recommendation_reason)}</span>` : ''}
         </div>
         <div class="track-actions">
             <button class="icon-btn download-btn ${track.is_downloaded || track.source === 'local' ? 'downloaded' : ''}" title="${track.is_downloaded || track.source === 'local' ? 'Скачан' : 'Скачать'}">
@@ -1556,10 +1558,7 @@ export function openEditTagsModal(track) {
                     const res = await window.pywebview.api.choose_cover_image();
                     if (res && res.success && res.path) {
                         if (coverPathInput) coverPathInput.value = res.path;
-                        const cleanPath = res.path.replace(/\\/g, '/');
-                        const segs = cleanPath.replace(/^\//, '').split('/');
-                        const encoded = segs.map((s, i) => (i === 0 && /^[a-zA-Z]:$/.test(s)) ? s : encodeURIComponent(s));
-                        if (coverImg) coverImg.src = `file:///${encoded.join('/')}`;
+                        if (coverImg) coverImg.src = `./api/cover?path=${encodeURIComponent(res.path)}`;
                     }
                 } catch(e) {
                     console.error('Error selecting cover image:', e);

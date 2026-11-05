@@ -12,9 +12,22 @@ import types
 import tempfile
 import wave
 
+test_deps = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.test_deps')
+if os.path.isdir(test_deps) and test_deps not in sys.path:
+    sys.path.insert(0, test_deps)
+
 import pytest
 
 pytest_plugins = ("tests.helpers",)
+
+# Historical GTK suites use the retired /__aura_eval endpoint, global /tmp
+# PID files and a disabled sandbox. Native Qt acceptance is now provided by
+# tools/validate_linux.py with an isolated HOME and UI-thread screenshots.
+collect_ignore = [
+    'legacy_pre_parity',
+    'test_visual_ui.py', 'test_ui_adversarial_stress.py', 'test_lifecycle_stress.py',
+    'test_windows_signing.py',  # Inno/Authenticode is a Windows build contract.
+]
 
 
 @pytest.fixture(autouse=True)

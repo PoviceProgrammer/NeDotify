@@ -52,8 +52,11 @@ class YandexService(BaseMusicService):
                 return ''
             match = re.search(r'(?:^|/)track/(\d+)(?:/|$)', parsed.path)
             return match.group(1) if match else ''
-        if raw.lower().startswith('yandex:'):
-            raw = raw.split(':', 1)[1].strip()
+        if raw.lower().startswith(('yandex:', 'ya:', 'track:')):
+            parts = [p for p in raw.split(':') if p and not p.lower().startswith('album')]
+            for p in parts:
+                if re.fullmatch(r'\d+', p):
+                    return p
         return raw if re.fullmatch(r'\d+', raw) else ''
 
     def _get_client(self):
@@ -146,6 +149,11 @@ class YandexService(BaseMusicService):
                 error_callback("Yandex Music client not initialized")
             return
 
+        if not query or not str(query).strip():
+            if callback:
+                callback([])
+            return
+
         def _search():
             try:
                 self._get_client()
@@ -172,9 +180,10 @@ class YandexService(BaseMusicService):
 
                         artist_name = 'Unknown Artist'
                         if t.artists:
-                            artist_name = ", ".join(a.name for a in t.artists)
+                            names = [str(a.name) for a in t.artists if getattr(a, 'name', None)]
+                            artist_name = ", ".join(names) if names else 'Unknown Artist'
                         track = {
-                            "title": t.title,
+                            "title": t.title or "Unknown Title",
                             "artist": artist_name,
                             "duration": t.duration_ms / 1000.0 if t.duration_ms else 0,
                             "source": "yandex",
@@ -245,7 +254,7 @@ class YandexService(BaseMusicService):
 
                 best_info = download_infos[0]
                 for info in download_infos:
-                    if info.codec == 'mp3' and info.bitrate_in_kbps > best_info.bitrate_in_kbps:
+                    if info.codec == 'mp3' and int(info.bitrate_in_kbps or 0) > int(best_info.bitrate_in_kbps or 0):
                         best_info = info
 
                 stream_url = best_info.direct_link or best_info.get_direct_link()
@@ -255,7 +264,8 @@ class YandexService(BaseMusicService):
 
                 artist_name = 'Unknown Artist'
                 if track.artists:
-                    artist_name = ", ".join(a.name for a in track.artists)
+                    names = [str(a.name) for a in track.artists if getattr(a, 'name', None)]
+                    artist_name = ", ".join(names) if names else 'Unknown Artist'
 
                 metadata = {
                     "title": track.title,
@@ -321,7 +331,15 @@ class YandexService(BaseMusicService):
             output_path = os.path.join(output_dir, download_context.stem + '.mp3')
             return download_context.download_http(variant.get_direct_link(), output_path)
         output_path = os.path.join(output_dir, file_name)
-        track.download(output_path, codec="mp3", bitrate_in_kbps=320)
+        try:
+            track.download(output_path, codec="mp3", bitrate_in_kbps=320)
+        except Exception:
+            if os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except OSError:
+                    pass
+            raise
 
         if not os.path.exists(output_path):
             raise Exception("Файл не был создан после загрузки из Яндекс Музыки")

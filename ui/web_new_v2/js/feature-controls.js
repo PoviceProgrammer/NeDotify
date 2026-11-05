@@ -16,7 +16,7 @@ async function refreshOutputs(permission = false) {
         const result = await listAudioOutputs(permission);
         if (generation !== outputGeneration) return;
         select.replaceChildren();
-        const devices = [{ deviceId: 'default', label: 'Устройство Windows по умолчанию' }, ...(result.devices || []).filter(item => item.deviceId !== 'default')];
+        const devices = [{ deviceId: 'default', label: 'Системное устройство по умолчанию' }, ...(result.devices || []).filter(item => item.deviceId !== 'default')];
         devices.forEach(device => {
             const option = document.createElement('option');
             option.value = device.deviceId;
@@ -26,7 +26,7 @@ async function refreshOutputs(permission = false) {
         const saved = window.settings?.audio?.output_device || 'default';
         select.value = devices.some(device => device.deviceId === saved) ? saved : 'default';
         select.disabled = !result.supported;
-        status.textContent = result.error || (result.supported ? 'Выбранное устройство применяется к воспроизведению и переходам между треками.' : 'Выбор устройства недоступен. Используется устройство Windows по умолчанию.');
+        status.textContent = result.error || (result.supported ? 'Выбранное устройство применяется к воспроизведению и переходам между треками.' : 'Выбор устройства недоступен. Используется системное устройство по умолчанию.');
     } catch {
         if (generation === outputGeneration) {
             select.disabled = false;

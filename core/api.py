@@ -536,6 +536,9 @@ class AppApi:
 
     def _get_scale_factor(self):
         """Use the same scale as pywebview's WinForms move() implementation."""
+        if sys.platform == "linux":
+            # Qt and GTK expose logical sizes and coordinates already.
+            return 1.0
         native = getattr(getattr(self, '_window', None), 'native', None)
         for value in (getattr(native, 'scale_factor', None),
                       (getattr(native, 'DeviceDpi', 96) or 96) / 96):
@@ -550,6 +553,9 @@ class AppApi:
     def _logical_workarea(self):
         """(x, y, w, h) of the work area (taskbar excluded) under the window,
         in LOGICAL pixels - matching what Window.move() expects."""
+        if sys.platform == "linux":
+            from core.linux_integration import workarea
+            return workarea(self._window)
         try:
             import ctypes
             from ctypes import wintypes
@@ -639,6 +645,9 @@ class AppApi:
 
     def _on_window_ui_thread(self, target_win, fn):
         """Queue a WinForms operation without blocking the JS bridge thread."""
+        if sys.platform == "linux":
+            from core.linux_integration import on_ui_thread
+            return on_ui_thread(target_win, fn)
         native = getattr(target_win, "native", None)
         try:
             if native is not None and native.InvokeRequired:
@@ -651,6 +660,9 @@ class AppApi:
 
     def _native_window_geometry(self, target_win):
         """Read window bounds through Win32, avoiding cross-thread Form getters."""
+        if sys.platform == "linux":
+            from core.linux_integration import native_geometry
+            return native_geometry(target_win)
         if sys.platform != "win32":
             return None
         hwnd = self._get_hwnd()
@@ -695,7 +707,13 @@ class AppApi:
                 if enable:
                     if not previous:
                         self._saved_main_geometry = self._native_window_geometry(window) or (*MAIN_WINDOW_SIZE, None, None)
-                    if native is not None:
+                    if sys.platform == "linux":
+                        from core.linux_integration import set_minimum_size
+                        if not previous:
+                            self._saved_main_maximized = bool(native.isMaximized()) if native is not None and hasattr(native, "isMaximized") else getattr(self, "_is_maximized", False)
+                        window.restore()
+                        set_minimum_size(window, 1, 1)
+                    if sys.platform == "win32" and native is not None:
                         from System.Drawing import Size
                         from System.Windows.Forms import FormWindowState
                         self._saved_main_maximized = native.WindowState == FormWindowState.Maximized if not previous else getattr(self, '_saved_main_maximized', False)
@@ -716,7 +734,12 @@ class AppApi:
                     window.on_top = False
                     self._set_native_window_corners(False)
                     window.resize(int(width), int(height))
-                    if native is not None:
+                    if sys.platform == "linux":
+                        from core.linux_integration import set_minimum_size
+                        set_minimum_size(window, *MAIN_WINDOW_MIN_SIZE)
+                        if getattr(self, "_saved_main_maximized", False):
+                            window.maximize()
+                    if sys.platform == "win32" and native is not None:
                         from System.Drawing import Size
                         from System.Windows.Forms import FormWindowState
                         native.MinimumSize = Size(*MAIN_WINDOW_MIN_SIZE)
@@ -889,8 +912,11 @@ class AppApi:
 
     def begin_window_drag(self):
         """Start a native caption drag for frameless-window drag handles."""
+        if sys.platform == "linux":
+            from core.linux_integration import begin_window_gesture
+            return begin_window_gesture(self._window)
         if sys.platform != "win32":
-            return {"success": False, "error": "Native dragging is only available on Windows"}
+            return {"success": False, "error": "Native dragging is unavailable"}
         hwnd = self._get_hwnd()
         if not hwnd:
             return {"success": False, "error": "Window handle is unavailable"}
@@ -925,8 +951,13 @@ class AppApi:
                  'nw': HTTOPLEFT, 'ne': HTTOPRIGHT, 'sw': HTBOTTOMLEFT, 'se': HTBOTTOMRIGHT}
         if not isinstance(direction, str) or direction not in edges:
             return {'success': False, 'error': 'Invalid resize direction'}
+        if sys.platform == 'linux' and self._window:
+            if getattr(self, '_is_maximized', False) or self._is_mini_active:
+                return {'success': False, 'error': 'Restore the main window before resizing'}
+            from core.linux_integration import begin_window_gesture
+            return begin_window_gesture(self._window, direction)
         if sys.platform != 'win32' or not self._window:
-            return {'success': False, 'error': 'Native resizing is only available on Windows'}
+            return {'success': False, 'error': 'Native resizing is unavailable'}
         if getattr(self, '_is_maximized', False) or self._is_mini_active:
             return {'success': False, 'error': 'Restore the main window before resizing'}
         hwnd = self._get_hwnd()
@@ -1068,6 +1099,9 @@ class AppApi:
 
     def _emit(self, event_name: str, data=None):
         """One bounded FIFO owns evaluate_js; the UI thread never waits on it."""
+        desktop = getattr(self, '_linux_desktop', None)
+        if desktop and event_name in ('download_complete', 'download_failed'):
+            desktop.notify('Загрузка завершена' if event_name == 'download_complete' else 'Ошибка загрузки', str((data or {}).get('error') or (data or {}).get('track_id') or ''))
         if event_name in ('download_complete', 'download_failed', 'library_updated'):
             self._storage_metrics_cache = None
             self._storage_info_cache = None
@@ -1656,11 +1690,14 @@ class AppApi:
             self._notify_queue_updated()
         return {'success': True}
 
-    def add_tracks_to_queue(self, tracks):
+    def add_tracks_to_queue(self, tracks, expected_entry_id=None, revision=None):
         import uuid
         if not isinstance(tracks, list) or not tracks or len(tracks) > 1000 or any(not isinstance(track,dict) for track in tracks):
             return {'success': False}
         with self._playback_guard():
+            current = self._core.engine.queue.current_track
+            if (revision is not None and str(revision) != str(self._queue_revision)) or (expected_entry_id is not None and (not current or current.get('entry_id') != expected_entry_id)):
+                return {'success': False, 'code': 'stale_queue'}
             self._core.engine.add_tracks_to_queue([dict(track,entry_id=uuid.uuid4().hex) for track in tracks])
             self._queue_revision += 1
             self._notify_queue_updated()
@@ -2428,17 +2465,12 @@ class AppApi:
 
     def add_to_playlist(self, playlist_id: int, track_data: dict):
         """Add track to playlist."""
-        track_id = track_data.get("id")
-        if not track_id:
-            track_id = self._core.db.add_track(
-                title=track_data.get("title") or "Unknown",
-                artist=track_data.get("artist", "Unknown Artist"),
-                source=track_data.get("source", "local"),
-                source_id=track_data.get("source_id"),
-                duration=track_data.get("duration", 0)
-            )
+        if not isinstance(track_data, dict) or not track_data.get('title'):
+            return False
+        track_id = self._core.db.ensure_track_exists(track_data)
         res = self._core.db.add_to_playlist(playlist_id, track_id)
-        self._emit("playlist_changed", {"playlist_id": playlist_id})
+        if res:
+            self._emit("playlist_changed", {"playlist_id": playlist_id})
         return res
 
     def get_track_info(self, track_id: int):
@@ -2783,6 +2815,13 @@ class AppApi:
         enabling (second launch at logon) and only the old code, on disable,
         removed the pair.
         """
+        if sys.platform == "linux":
+            from core.linux_integration import update_autostart
+            try:
+                return update_autostart(enabled)
+            except OSError:
+                logger.warning("Linux autostart update failed", exc_info=True)
+                return False
         if sys.platform != "win32":
             return False
         try:
@@ -2937,6 +2976,8 @@ class AppApi:
                 return False
             value = round(value)
         if category == 'services' and key in ('lastfm_enabled', 'youtube_enabled', 'soundcloud_enabled') and not isinstance(value, bool):
+            return False
+        if category == 'personalization' and key == 'recommendation_mode' and value not in ('familiar', 'balanced', 'discovery'):
             return False
         if key == 'border_radius' and category in ('theme', 'interface'):
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 24:
@@ -3592,7 +3633,29 @@ class AppApi:
             publish(error=exc)
         return {'status':'pending', 'request_id':rid}
 
-    def get_track_wave(self, track_data: dict, limit: int = 15, exclude_ids: list = None, request_id=None):
+    def get_playlist_recommendations(self, playlist_id, max_results=10, request_id=None):
+        """Load collection suggestions off the bridge thread with correlated completion."""
+        import uuid
+        rid = str(request_id or uuid.uuid4().hex)
+        count = 10
+
+        def publish(tracks=None, error=None):
+            payload = {'playlist_id': playlist_id, 'request_id': rid, 'tracks': (tracks or [])[:count]}
+            if error:
+                payload['error'] = describe_error(error, 'recommendations')['message']
+            self._emit('playlist_recommendations_ready', payload)
+
+        try:
+            count = max(0, min(50, int(max_results)))
+            if playlist_id != 'favorites' and (isinstance(playlist_id, bool) or int(playlist_id) <= 0):
+                raise ValueError('Invalid playlist')
+            self._core.recommendations.get_playlist_recommendations(playlist_id, max_results=count,
+                callback=publish, error_callback=lambda error: publish(error=error))
+        except Exception as exc:
+            publish(error=exc)
+        return {'status': 'pending', 'request_id': rid}
+
+    def get_track_wave(self, track_data: dict, limit: int = 15, exclude_ids: list = None, request_id=None, continuation_tracks=None):
         """Get smart wave / radio of related tracks for a seed track (async, O-4).
 
         Returns [] immediately; results are delivered via the track_wave_ready event.
@@ -3610,10 +3673,17 @@ class AppApi:
             publish(error="Трек для волны не выбран")
             return []
         try:
+            limit = max(0, min(50, int(limit)))
+            exclude_ids = [str(i)[:500] for i in (exclude_ids if isinstance(exclude_ids, list) else [])[:1000]
+                           if isinstance(i, (str, int))]
+            continuation = ([dict(t) for t in continuation_tracks[-10:] if isinstance(t, dict)]
+                            if isinstance(continuation_tracks, list) else [])
+            extra = {'continuation_tracks': continuation} if continuation else {}
             self._core.recommendations.get_wave_for_track(
                 track_data, limit=limit, exclude_ids=exclude_ids or [],
                 callback=lambda tracks: publish(tracks),
                 error_callback=lambda e: publish(error=e),
+                **extra,
             )
         except Exception as e:
             logger.error(f"Error in get_track_wave: {type(e).__name__}")
@@ -4267,6 +4337,18 @@ class AppApi:
 
     def _set_native_icon(self):
         if os.environ.get('PYTEST_CURRENT_TEST') or not self._window:
+            return
+        if sys.platform == 'linux':
+            window = self._window
+            base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            def apply_icon():
+                native = getattr(window, 'native', None)
+                if native is not None and hasattr(native, 'setWindowIcon'):
+                    from PyQt6.QtGui import QIcon
+                    native.setWindowIcon(QIcon(os.path.join(base, 'icon.png')))
+                elif native is not None and hasattr(native, 'set_icon_from_file'):
+                    native.set_icon_from_file(os.path.join(base, 'icon.png'))
+            self._on_window_ui_thread(window, apply_icon)
             return
         try:
             import clr

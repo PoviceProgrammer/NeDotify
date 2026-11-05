@@ -1,5 +1,6 @@
 import { initLibraryView, loadLibraryOverview, updateLibraryPlaylists, updateLibraryFavoriteCount, updateLibraryHero, decorateLibraryRow, renderLibraryEmpty, renderLibraryFailure, openPlaylistActions } from './library-view.js';
 import { createLibraryVirtualList } from './library-virtual-list.js';
+import { initPlaylistRecommendations, showPlaylistRecommendations, hidePlaylistRecommendations } from './playlist-recommendations.js';
 // NeDotify — Library Module (Favorites, Playlists, Local Files)
 import { createTrackElement, renderIcons, escapeHtml, openModalFocusTrap, closeModalFocusTrap, showToast } from './utils.js';
 import { getCurrentTrack } from './player.js';
@@ -9,6 +10,7 @@ let currentContextTrack = null;
 let currentActiveTracks = [];
 
 export function initLibrary() {
+    initPlaylistRecommendations();
     initLibraryView({select:selectSection,overview:showLibraryOverview,create:createPlaylist,tracks:()=>currentActiveTracks,selected:()=>currentSelectedPlaylistData,section:()=>currentActiveSection,row:(track,index,tracks)=>createTrackElement(track,index,tracks,getCurrentTrack()),remove:deleteLibraryPlaylist});
     document.addEventListener('nedotify:offline_mode_changed', () => {
         if (document.getElementById('view-library')?.classList.contains('active')) refreshActiveLibraryView();
@@ -418,6 +420,7 @@ function renderLibraryList(tracksContainer, tracks) {
 }
 
 export function showLibraryOverview() {
+    hidePlaylistRecommendations();
     if (libraryScrollCleanup) { libraryScrollCleanup(); libraryScrollCleanup = null; }
     libraryGeneration++;
     document.getElementById('view-library')?.classList.remove('has-open-playlist');
@@ -443,6 +446,7 @@ async function deleteLibraryPlaylist(playlist) {
 }
 
 export async function selectSection(type, data = null) {
+    hidePlaylistRecommendations();
     if (libraryScrollCleanup) { libraryScrollCleanup(); libraryScrollCleanup = null; }
     document.getElementById('view-library')?.classList.toggle('has-open-playlist',type==='playlist');
     currentActiveSection=type;
@@ -485,6 +489,7 @@ export async function selectSection(type, data = null) {
         const allHasMore=type==='all' && (typeof result?.has_more==='boolean'?result.has_more:(allTotal!==null?raw.length<allTotal:raw.length>=200));
         sub.textContent=type==='all' && allTotal!==null?`${allTotal} треков`:type==='all' && allHasMore?`${count} треков загружено`: `${count} треков`;
         updateLibraryHero(type,data,tracks);
+        showPlaylistRecommendations(type,data,tracks);
         if(!tracks.length){renderLibraryEmpty(container,type==='playlist'?'В этом плейлисте пока нет треков':type==='favorites'?'Добавьте любимые треки':type==='offline'?'Музыка для прослушивания без сети':'Начните свою коллекцию');return;}
         const renderer=renderLibraryList(container,tracks);
         if(type==='all' && allHasMore) {

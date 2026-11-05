@@ -100,7 +100,7 @@ function destroyHls(audioEl) {
 
 function normalizeAudioSourceUrl(src) {
     if (typeof src === 'string' && (src.startsWith('\\\\') || src.startsWith('//'))) return '';
-    if (typeof src === 'string' && (src.match(/^[a-zA-Z]:[\\/]/) || src.startsWith('file://')) && window.PROXY_PORT) {
+    if (typeof src === 'string' && (src.match(/^[a-zA-Z]:[\\/]/) || src.startsWith('/') || src.startsWith('file://')) && window.PROXY_PORT) {
         const tokenQuery = window.PROXY_TOKEN ? `&k=${encodeURIComponent(window.PROXY_TOKEN)}` : '';
         return `http://127.0.0.1:${window.PROXY_PORT}/api/stream?url=${encodeURIComponent(src)}${tokenQuery}`;
     }
@@ -1049,7 +1049,45 @@ export function togglePlayPause() {
     }
 }
 
+// Linux desktop controls use the same HTML5 transport as buttons and hotkeys.
+// Register a stable listener so reinitialization cannot toggle playback twice.
+export function handleSystemMedia(event) {
+    const {action, value} = event.detail || {};
+    switch (action) {
+        case 'play':
+            if (!activeAudio || activeAudio.paused) togglePlayPause();
+            break;
+        case 'pause':
+            if (activeAudio && !activeAudio.paused) togglePlayPause();
+            break;
+        case 'toggle_play':
+            togglePlayPause();
+            break;
+        case 'stop':
+            stopPlaybackForQueueEnd();
+            onStateChanged('stopped');
+            break;
+        case 'seek':
+            if (Number.isFinite(value)) seekTo(value);
+            break;
+        case 'volume':
+            if (!Number.isFinite(value)) break;
+            currentVolume = Math.max(0, Math.min(100, Math.round(value)));
+            isMuted = false;
+            [audioA, audioB].forEach(audio => { if (audio) audio.volume = playbackVolume(); });
+            ['pb', 'mp'].forEach(prefix => {
+                setVolumeFill(`${prefix}-volume-fill`, currentVolume);
+                document.getElementById(`${prefix}-volume-track`)?.setAttribute('aria-valuenow', String(currentVolume));
+            });
+            updateVolumeIcon(currentVolume, isMuted);
+            scheduleVolumeRpc(currentVolume, true);
+            break;
+    }
+}
+
 export function initPlayer() {
+    window.removeEventListener('nedotify:system_media', handleSystemMedia);
+    window.addEventListener('nedotify:system_media', handleSystemMedia);
     // Reserve the largest morph width so transport neighbours never move.
     for (const prefix of ['pb', 'pp']) {
         const button = document.getElementById(`${prefix}-btn-play`);
@@ -1172,11 +1210,8 @@ export function initPlayer() {
 
 
 
-    const ppQueue = document.getElementById('pp-btn-queue');
-    if (ppQueue) ppQueue.addEventListener('click', () => {
-        const queueDrawer = document.getElementById('queue-drawer');
-        if (queueDrawer) queueDrawer.classList.toggle('open');
-    });
+    // queue.js owns the drawer state, accessibility and both queue buttons.
+    // A second toggle here would immediately close the drawer on the same click.
 
     // Tray Context Menu Action Listener (Phase 5)
     window.addEventListener('nedotify:tray_action', (evt) => {

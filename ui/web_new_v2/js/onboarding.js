@@ -218,13 +218,13 @@ async function startOnboarding(force = false) {
             const result = await listAudioOutputs(permission);
             if (finished || generation !== outputGeneration) return;
             const select = $('ob-audio-device');select.replaceChildren();
-            const devices = [{deviceId:'default',label:'Устройство Windows по умолчанию'},...(result.devices || []).filter(device=>device.deviceId !== 'default')];
+            const devices = [{deviceId:'default',label:'Системное устройство по умолчанию'},...(result.devices || []).filter(device=>device.deviceId !== 'default')];
             devices.forEach(device => { const option=document.createElement('option');option.value=device.deviceId;option.textContent=device.label || 'Аудиоустройство';select.append(option); });
             if (!devices.some(device=>device.deviceId===draft.device)) draft.device='default';
             select.value = draft.device;select.disabled = !result.supported || saving;
-            $('ob-audio-status').textContent = result.error || (result.supported ? 'Выбранное устройство будет использоваться для музыки.' : 'Используется устройство Windows по умолчанию. Выбор другого устройства здесь недоступен.');
+            $('ob-audio-status').textContent = result.error || (result.supported ? 'Выбранное устройство будет использоваться для музыки.' : 'Используется системное устройство по умолчанию. Выбор другого устройства здесь недоступен.');
             $('ob-audio-permission').hidden = !result.supported || typeof navigator.mediaDevices?.selectAudioOutput !== 'function';
-        } catch { $('ob-audio-status').textContent = 'Не удалось получить устройства. Можно продолжить с устройством Windows.'; }
+        } catch { $('ob-audio-status').textContent = 'Не удалось получить устройства. Можно продолжить с системным устройством.'; }
         finally { if (generation===outputGeneration) $('ob-audio-refresh').disabled = saving; }
     }
     async function finish(skip = false) {

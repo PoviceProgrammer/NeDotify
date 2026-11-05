@@ -187,6 +187,7 @@ DEFAULT_SETTINGS = {
         "blocked_artists": [],
         "disliked_tracks": [],
         "discovery_ratio": 0.2,
+        "recommendation_mode": "balanced",
     },
     "theme": {
         "decorations_enabled": True,

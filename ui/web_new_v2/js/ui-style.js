@@ -97,8 +97,8 @@
         const strength = Math.max(0, Math.min(40, Number(setting('interface', 'macos_blur', 38)) || 0));
         setProperty('--mac-panel-blur', `${strength}px`);
         const family = setting('interface', 'macos_font_family', 'system');
-        const systemFont = '-apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", sans-serif';
-        setProperty('--mac-font', !family || family === 'system' ? systemFont : `${family}, "Segoe UI", sans-serif`);
+        const systemFont = '-apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "Ubuntu Sans", "Cantarell", "Noto Sans", sans-serif';
+        setProperty('--mac-font', !family || family === 'system' ? systemFont : `${family}, "NeDotify Cyrillic", "Ubuntu Sans", "Cantarell", sans-serif`);
         const fontSize = Math.max(12, Math.min(22, Number(setting('interface', 'macos_font_size', 14)) || 14));
         setProperty('--mac-font-scale', String(fontSize / 14));
         const low = root.classList.contains('perf-low') || setting('optimization', 'performance_preset', 'high') === 'low';

@@ -1157,6 +1157,16 @@ class DatabaseManager:
         if 'is_system' not in {row['name'] for row in cursor.execute('PRAGMA table_info(playlists)')}:
 
             cursor.execute('ALTER TABLE playlists ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0')
+        existing_cols = {row['name'] for row in cursor.execute('PRAGMA table_info(playlists)')}
+        for col_name, col_def in [
+            ('updated_at', 'TIMESTAMP'),
+            ('is_smart', 'INTEGER DEFAULT 0'),
+            ('smart_rules_json', 'TEXT'),
+            ('cover_path', 'TEXT'),
+        ]:
+            if col_name not in existing_cols:
+                cursor.execute(f'ALTER TABLE playlists ADD COLUMN {col_name} {col_def}')
+
 
         if 'category' not in {row['name'] for row in cursor.execute('PRAGMA table_info(settings)')}:
 
@@ -5370,7 +5380,14 @@ class DatabaseManager:
         cat = row["category"] if "category" in row.keys() else "general"
 
         if is_dpapi_encrypted(raw_v):
-            return dpapi_decrypt(raw_v)
+            val = dpapi_decrypt(raw_v)
+            if raw_v.startswith('dpapi:mock:') and val:
+                try:
+                    with self._write_lock, self.conn:
+                        self.conn.execute('UPDATE settings SET value = ? WHERE key = ?', (dpapi_encrypt(val), key))
+                except Exception:
+                    logger.warning('Legacy credential upgrade deferred')
+            return val
 
         val = self._deserialize_setting(raw_v)
         if is_sensitive_setting(key, cat) and isinstance(val, str) and val:
@@ -5394,6 +5411,8 @@ class DatabaseManager:
             k, raw_v = row[0], row[1]
             if is_dpapi_encrypted(raw_v):
                 result[k] = dpapi_decrypt(raw_v)
+                if raw_v.startswith('dpapi:mock:') and result[k]:
+                    to_migrate.append((k, result[k]))
             else:
                 val = self._deserialize_setting(raw_v)
                 result[k] = val
@@ -5422,6 +5441,8 @@ class DatabaseManager:
             k, raw_v, cat = row[0], row[1], row[2]
             if is_dpapi_encrypted(raw_v):
                 result[k] = dpapi_decrypt(raw_v)
+                if raw_v.startswith('dpapi:mock:') and result[k]:
+                    to_migrate.append((k, result[k]))
             else:
                 val = self._deserialize_setting(raw_v)
                 result[k] = val

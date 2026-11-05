@@ -48,11 +48,12 @@ def normalize_proxy_url(raw: Any) -> str:
     an unusable value is strictly better than applying it, and the rejection is
     logged so the cause stays visible instead of silently changing behaviour.
     """
-    if not raw or not isinstance(raw, str):
+    if not raw or (isinstance(raw, str) and not raw.strip()):
+        from utils.linux_proxy import proxy_url
+        return proxy_url()
+    if not isinstance(raw, str):
         return ""
     value = raw.strip()
-    if not value:
-        return ""
     try:
         parsed = urllib.parse.urlsplit(value)
         scheme = parsed.scheme.lower()
@@ -170,6 +171,9 @@ class BaseMusicService:
         import ssl
         settings = getattr(self, 'settings', None)
         proxy = normalize_proxy_url(settings.get('auth', 'proxy_url', '')) if settings else ''
+        if proxy.startswith(('socks5://', 'socks5h://')):
+            from utils.url_safety import guarded_open_url
+            return guarded_open_url(request, timeout=timeout)
         opener = urllib.request.build_opener(
             urllib.request.ProxyHandler({'http': proxy, 'https': proxy} if proxy else None),
             urllib.request.HTTPSHandler(context=ssl.create_default_context()))

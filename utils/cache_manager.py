@@ -148,6 +148,7 @@ class CacheManager:
             except Exception:
                 quota_gb = 5
 
+        quota_gb = max(0, quota_gb)
         quota_bytes = quota_gb * 1024 * 1024 * 1024 if quota_gb > 0 else 0
         # The configurable quota is for evictable stream files only. Cover art
         # and short-lived temp files have separate cleanup controls; including
@@ -405,6 +406,9 @@ class CacheManager:
             finally:
                 with self._active_downloads_lock:
                     self._active_downloads.discard(download_id)
+                close_connection = getattr(self.db, 'close_thread_connection', None)
+                if callable(close_connection):
+                    close_connection()
 
         try:
             self._executor.submit(_download_task)

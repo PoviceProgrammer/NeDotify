@@ -38,6 +38,26 @@ def _split_keys(raw: Any) -> List[str]:
     return [c.strip() for c in candidates if c and c.strip()]
 
 
+
+def _mapping(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _records(value):
+    if isinstance(value, dict):
+        return [value]
+    return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
+
+
+def _number(value, kind=int):
+    import math
+    try:
+        parsed = float(value or 0)
+        return kind(parsed) if math.isfinite(parsed) and parsed >= 0 else kind(0)
+    except (ValueError, TypeError, OverflowError):
+        return kind(0)
+
+
 class LastFmArtistHandler:
     """Namespace wrapper for artist queries."""
 
@@ -372,20 +392,24 @@ class LastFMService(BaseMusicService):
         return None
 
     def artist_get_similar(self, artist: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
+        if not isinstance(artist, str) or not artist.strip():
+            if callback:
+                callback([])
+            return []
         def _task():
             data = self._api_request('artist.getsimilar', {'artist': artist, 'limit': limit}, RECOMMENDATION_TTL)
             results = []
-            if data and 'similarartists' in data:
-                artists_raw = data['similarartists'].get('artist', [])
+            if isinstance(data, dict) and 'similarartists' in data:
+                artists_raw = _records(_mapping(data.get('similarartists')).get('artist'))
                 if isinstance(artists_raw, dict):
                     artists_raw = [artists_raw]
                 for a in artists_raw[:limit]:
-                    images = a.get('image', [])
+                    images = _records(a.get('image'))
                     if isinstance(images, list) and images:
                         img_url = images[-1].get('#text', '')
                     else:
                         img_url = ''
-                    match_val = float(a.get('match', 0)) if a.get('match') else 0.0
+                    match_val = _number(a.get('match'), float)
                     results.append({
                         'name': a.get('name', ''),
                         'match': match_val,
@@ -403,15 +427,19 @@ class LastFMService(BaseMusicService):
         return _task()
 
     def artist_get_top_tracks(self, artist: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
+        if not isinstance(artist, str) or not artist.strip():
+            if callback:
+                callback([])
+            return []
         def _task():
             data = self._api_request('artist.gettoptracks', {'artist': artist, 'limit': limit}, RECOMMENDATION_TTL)
             results = []
-            if data and 'toptracks' in data:
-                tracks_raw = data['toptracks'].get('track', [])
+            if isinstance(data, dict) and 'toptracks' in data:
+                tracks_raw = _records(_mapping(data.get('toptracks')).get('track'))
                 if isinstance(tracks_raw, dict):
                     tracks_raw = [tracks_raw]
                 for t in tracks_raw[:limit]:
-                    images = t.get('image', [])
+                    images = _records(t.get('image'))
                     if isinstance(images, list) and images:
                         img_url = images[-1].get('#text', '')
                     else:
@@ -423,8 +451,8 @@ class LastFMService(BaseMusicService):
                     results.append({
                         'name': t.get('name', ''),
                         'artist': artist_name,
-                        'playcount': int(t.get('playcount', 0)) if t.get('playcount') else 0,
-                        'listeners': int(t.get('listeners', 0)) if t.get('listeners') else 0,
+                        'playcount': _number(t.get('playcount'), int),
+                        'listeners': _number(t.get('listeners'), int),
                         'url': t.get('url', ''),
                         'image': img_url,
                     })
@@ -438,17 +466,21 @@ class LastFMService(BaseMusicService):
         return _task()
 
     def artist_get_top_tags(self, artist: str, callback: Callable = None) -> List[Dict]:
+        if not isinstance(artist, str) or not artist.strip():
+            if callback:
+                callback([])
+            return []
         def _task():
             data = self._api_request('artist.gettoptags', {'artist': artist}, RECOMMENDATION_TTL)
             results = []
-            if data and 'toptags' in data:
-                tags_raw = data['toptags'].get('tag', [])
+            if isinstance(data, dict) and 'toptags' in data:
+                tags_raw = _records(_mapping(data.get('toptags')).get('tag'))
                 if isinstance(tags_raw, dict):
                     tags_raw = [tags_raw]
                 for tag in tags_raw:
                     results.append({
                         'name': tag.get('name', ''),
-                        'count': int(tag.get('count', 0)) if tag.get('count') else 0,
+                        'count': _number(tag.get('count'), int),
                         'url': tag.get('url', ''),
                     })
             if callback:
@@ -461,16 +493,20 @@ class LastFMService(BaseMusicService):
         return _task()
 
     def track_get_similar(self, artist: str, track: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
+        if not isinstance(artist, str) or not artist.strip() or not isinstance(track, str) or not track.strip():
+            if callback:
+                callback([])
+            return []
         def _task():
             data = self._api_request('track.getsimilar', {'artist': artist, 'track': track, 'limit': limit},
                                      RECOMMENDATION_TTL)
             results = []
-            if data and 'similartracks' in data:
-                tracks_raw = data['similartracks'].get('track', [])
+            if isinstance(data, dict) and 'similartracks' in data:
+                tracks_raw = _records(_mapping(data.get('similartracks')).get('track'))
                 if isinstance(tracks_raw, dict):
                     tracks_raw = [tracks_raw]
                 for t in tracks_raw[:limit]:
-                    images = t.get('image', [])
+                    images = _records(t.get('image'))
                     if isinstance(images, list) and images:
                         img_url = images[-1].get('#text', '')
                     else:
@@ -479,8 +515,8 @@ class LastFMService(BaseMusicService):
                         artist_name = t.get('artist', {}).get('name', '')
                     else:
                         artist_name = ''
-                    match_val = float(t.get('match', 0)) if t.get('match') else 0.0
-                    duration = int(t.get('duration', 0)) if t.get('duration') else 0
+                    match_val = _number(t.get('match'), float)
+                    duration = _number(t.get('duration'), int)
                     results.append({
                         'name': t.get('name', ''),
                         'artist': artist_name,
@@ -502,12 +538,12 @@ class LastFMService(BaseMusicService):
         def _task():
             data = self._api_request('chart.gettoptracks', {'limit': limit}, CHART_TTL)
             results = []
-            if data and 'tracks' in data:
-                tracks_raw = data['tracks'].get('track', [])
+            if isinstance(data, dict) and 'tracks' in data:
+                tracks_raw = _records(_mapping(data.get('tracks')).get('track'))
                 if isinstance(tracks_raw, dict):
                     tracks_raw = [tracks_raw]
                 for t in tracks_raw[:limit]:
-                    images = t.get('image', [])
+                    images = _records(t.get('image'))
                     if isinstance(images, list) and images:
                         img_url = images[-1].get('#text', '')
                     else:
@@ -519,8 +555,8 @@ class LastFMService(BaseMusicService):
                     results.append({
                         'name': t.get('name', ''),
                         'artist': artist_name,
-                        'playcount': int(t.get('playcount', 0)) if t.get('playcount') else 0,
-                        'listeners': int(t.get('listeners', 0)) if t.get('listeners') else 0,
+                        'playcount': _number(t.get('playcount'), int),
+                        'listeners': _number(t.get('listeners'), int),
                         'url': t.get('url', ''),
                         'image': img_url,
                     })
@@ -537,20 +573,20 @@ class LastFMService(BaseMusicService):
         def _task():
             data = self._api_request('chart.gettopartists', {'limit': limit}, CHART_TTL)
             results = []
-            if data and 'artists' in data:
-                artists_raw = data['artists'].get('artist', [])
+            if isinstance(data, dict) and 'artists' in data:
+                artists_raw = _records(_mapping(data.get('artists')).get('artist'))
                 if isinstance(artists_raw, dict):
                     artists_raw = [artists_raw]
                 for a in artists_raw[:limit]:
-                    images = a.get('image', [])
+                    images = _records(a.get('image'))
                     if isinstance(images, list) and images:
                         img_url = images[-1].get('#text', '')
                     else:
                         img_url = ''
                     results.append({
                         'name': a.get('name', ''),
-                        'playcount': int(a.get('playcount', 0)) if a.get('playcount') else 0,
-                        'listeners': int(a.get('listeners', 0)) if a.get('listeners') else 0,
+                        'playcount': _number(a.get('playcount'), int),
+                        'listeners': _number(a.get('listeners'), int),
                         'url': a.get('url', ''),
                         'image': img_url,
                     })
@@ -577,15 +613,19 @@ class LastFMService(BaseMusicService):
                 for t in tracks[:limit] if isinstance(t, dict)]
 
     def user_get_recent_tracks(self, user: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
+        if not isinstance(user, str) or not user.strip():
+            if callback:
+                callback([])
+            return []
         def _task():
             data = self._api_request('user.getrecenttracks', {'user': user, 'limit': limit}, CHART_TTL)
             results = []
-            if data and 'recenttracks' in data:
-                tracks_raw = data['recenttracks'].get('track', [])
+            if isinstance(data, dict) and 'recenttracks' in data:
+                tracks_raw = _records(_mapping(data.get('recenttracks')).get('track'))
                 if isinstance(tracks_raw, dict):
                     tracks_raw = [tracks_raw]
                 for t in tracks_raw[:limit]:
-                    images = t.get('image', [])
+                    images = _records(t.get('image'))
                     if isinstance(images, list) and images:
                         img_url = images[-1].get('#text', '')
                     else:
@@ -610,22 +650,26 @@ class LastFMService(BaseMusicService):
         return _task()
 
     def user_get_top_artists(self, user: str, limit: int = 10, callback: Callable = None) -> List[Dict]:
+        if not isinstance(user, str) or not user.strip():
+            if callback:
+                callback([])
+            return []
         def _task():
             data = self._api_request('user.gettopartists', {'user': user, 'limit': limit}, RECOMMENDATION_TTL)
             results = []
-            if data and 'topartists' in data:
-                artists_raw = data['topartists'].get('artist', [])
+            if isinstance(data, dict) and 'topartists' in data:
+                artists_raw = _records(_mapping(data.get('topartists')).get('artist'))
                 if isinstance(artists_raw, dict):
                     artists_raw = [artists_raw]
                 for a in artists_raw[:limit]:
-                    images = a.get('image', [])
+                    images = _records(a.get('image'))
                     if isinstance(images, list) and images:
                         img_url = images[-1].get('#text', '')
                     else:
                         img_url = ''
                     results.append({
                         'name': a.get('name', ''),
-                        'playcount': int(a.get('playcount', 0)) if a.get('playcount') else 0,
+                        'playcount': _number(a.get('playcount'), int),
                         'url': a.get('url', ''),
                         'image': img_url,
                     })

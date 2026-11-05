@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=NeDotify
+GenericName=Music Player
+Comment=Search, play, download and organize your music
+Exec=/opt/nedotify/NeDotify
+Icon=nedotify
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+StartupNotify=true
+StartupWMClass=NeDotify

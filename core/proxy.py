@@ -273,8 +273,12 @@ def _safe_stream_local_path(raw_path, db) -> str:
             logger.warning('Refused /api/stream read of UNC/file-URL path: %s', raw[:120])
             return ''
         candidate = os.path.normpath(raw)
-        if not os.path.splitdrive(candidate)[0]:
-            return ''
+        if os.name == 'nt':
+            if not os.path.splitdrive(candidate)[0]:
+                return ''
+        else:
+            if not os.path.isabs(candidate):
+                return ''
         if os.path.splitext(candidate)[1].lower() not in AUDIO_EXTENSIONS:
             return ''
         resolved = os.path.realpath(candidate)

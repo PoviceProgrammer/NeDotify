@@ -4,6 +4,8 @@ The autostart tests drive core.api.update_autostart against an in-memory fake
 winreg, so the real HKCU\\...\\Run key is never touched.
 """
 import os
+from pathlib import Path
+import runpy
 import shutil
 import subprocess
 import sys
@@ -111,58 +113,33 @@ def test_autostart_uses_hkcu_and_the_documented_key(autostart_api, fake_winreg):
     assert r"Run" in path
 
 
-def test_non_windows_is_a_noop(autostart_api, fake_winreg, monkeypatch):
+def test_linux_autostart_uses_xdg_desktop_entry(autostart_api, fake_winreg, monkeypatch, tmp_path):
+    config = tmp_path / "config"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config))
     monkeypatch.setattr(api_module.sys, "platform", "linux")
-    assert autostart_api.update_autostart(True) is False
+    assert autostart_api.update_autostart(True) is True
+    desktop = config / "autostart/nedotify.desktop"
+    text = desktop.read_text(encoding="utf-8")
+    assert "[Desktop Entry]" in text and "Name=NeDotify" in text
+    assert "Exec=" in text and "main.py" in text
+    assert "X-GNOME-Autostart-enabled=true" in text
     assert fake_winreg.values == {}
+    assert autostart_api.update_autostart(False) is True
+    assert not desktop.exists()
 
 
-# --- installer.iss / api.py must agree on the Run value name ----------------
-
-ISS = os.path.join(PROJECT_ROOT, "installer.iss")
+# --- Linux installer identity replaces the Windows registry installer --------
 
 
-def test_installer_writes_the_same_run_value_name():
-    if not os.path.exists(ISS):
-        pytest.skip("installer.iss not present")
-    text = open(ISS, encoding="utf-8").read()
-
-    assert f'ValueName: "{api_module.AUTOSTART_RUN_VALUE}"' in text, (
-        "installer.iss and core/api.py disagree on the Run value name; the app "
-        "would write one entry and the installer another"
-    )
-    assert "Root: HKCU;" in text, "installer must use the same hive as the app"
-
-
-def test_installer_does_not_emit_legacy_run_name():
-    if not os.path.exists(ISS):
-        pytest.skip("installer.iss not present")
-    text = open(ISS, encoding="utf-8").read()
-    run_section = text.split("[Registry]", 1)[-1].split("[", 1)[0]
-    assert "AURA Music" not in run_section
-
-
-def test_installer_output_name_matches_readme():
-    if not os.path.exists(ISS):
-        pytest.skip("installer.iss not present")
-    text = open(ISS, encoding="utf-8").read()
-    assert "OutputBaseFilename=NeDotify_Setup" in text
-
-
-def test_installer_zapret_bundle_is_conditionally_gated():
-    """BUG-001 (installer half): an installer-shipped Zapret bundle lands in
-    {app}\\zapret — the directory zapret_service.find_binary() scans in a
-    frozen build and the elevation gate accepts — but the [Files] entry must
-    stay behind the ISPP FileExists guard so a build without the staged
-    dist\\zapret\\winws.exe still compiles (shipping the binary remains a
-    policy decision; the app falls back to the pinned download)."""
-    if not os.path.exists(ISS):
-        pytest.skip("installer.iss not present")
-    text = open(ISS, encoding="utf-8").read()
-    assert "#define ZapretBundleWinws SourcePath" in text
-    assert "#if FileExists(ZapretBundleWinws)" in text
-    assert "#ifdef ZapretBundleReady" in text
-    assert 'DestDir: "{app}\\zapret"' in text
+def test_linux_has_native_installer_and_no_windows_setup():
+    root = Path(PROJECT_ROOT)
+    assert not (root / "installer.iss").exists()
+    assert (root / "install_linux.sh").is_file()
+    assert (root / "build_linux.sh").is_file()
+    desktop = root / "packaging/org.nedotify.NeDotify.desktop"
+    text = desktop.read_text(encoding="utf-8")
+    assert "Name=NeDotify" in text and "Exec=/opt/nedotify/NeDotify" in text
+    assert "Icon=nedotify" in text
 
 
 # --- the deleted PyInstaller GUI-installer pipeline stays deleted ------------
@@ -220,12 +197,11 @@ def test_no_doc_points_at_a_deleted_installer_script(doc):
 README = os.path.join(PROJECT_ROOT, "README.md")
 
 
-def test_readme_advertises_the_canonical_setup_exe():
+def test_readme_advertises_linux_package_outputs():
     text = _read(README)
-    assert "NeDotify_Setup.exe" in text, (
-        "README must name the file the release actually contains; "
-        "installer.iss OutputBaseFilename=NeDotify_Setup"
-    )
+    assert "NeDotify-2.5.1-linux-amd64.tar.gz" in text
+    assert "nedotify_2.5.1_amd64.deb" in text
+    assert "bash build_linux.sh" in text
 
 
 @pytest.mark.parametrize("stale", ["NeDotify_v2.exe", "beta5_Setup.exe", "Beta5_Setup.exe"])
@@ -235,11 +211,11 @@ def test_readme_does_not_advertise_a_duplicate_setup(stale):
     assert stale not in _read(README)
 
 
-def test_readme_python_floor_is_314():
-    """requirements.txt declares 3.14+; README claiming 3.10 sends users into
-    an unsupported interpreter."""
+def test_readme_python_floor_matches_linux_runtime():
+    """Linux supports the Python 3.12 interpreter shipped by Ubuntu 24.04."""
     readme = _read(README)
-    assert "Python 3.14" in readme, "README must state the real minimum Python"
+    assert "Python 3.12+" in readme, "README must state the supported Linux Python floor"
+    assert "Python 3.12+" in _read(os.path.join(PROJECT_ROOT, "requirements.txt"))
     assert "3.10" not in readme, "README still advertises the stale 3.10 floor"
 
 
@@ -374,35 +350,13 @@ def test_spec_strips_both_covers_caches():
     The predicate is loaded out of the spec and exercised directly, so this
     asserts the real behaviour rather than the spelling of the source.
     """
-    if not os.path.exists(SPEC):
-        pytest.skip("setup_pyinstaller.spec not present")
-    predicate = _load_spec_cover_predicate()
-
-    must_strip = (
-        "ui/web_new/covers/a.png",
-        "ui/web_new_v2/covers/b.png",
-        "ui\\web_new_v2\\covers\\c.jpg",
-    )
-    must_keep = (
-        "ui/web_new/js/player.js",
-        "ui/web_new_v2/index.html",
-        "covers/loose.png",
-        "ui/web_new_assets/keep.png",
-    )
-    for sample in must_strip:
-        assert predicate(sample), f"{sample} would ship in the exe"
-    for sample in must_keep:
-        assert not predicate(sample), f"{sample} would be wrongly stripped"
-
-
-def _load_spec_cover_predicate():
-    """Execute the spec's filter helper without running the whole build."""
-    source = open(SPEC, encoding="utf-8").read()
-    start = source.index("def _is_ui_cover_cache")
-    end = source.index("\n\n", source.index("return '/ui/' in norm"))
-    namespace = {}
-    exec(source[start:end], namespace)
-    return namespace["_is_ui_cover_cache"]
+    support = runpy.run_path(str(Path(PROJECT_ROOT) / "packaging/linux_support.py"))
+    data = support["collect_ui_datas"](Path(PROJECT_ROOT))
+    published = {(Path(destination) / Path(source).name).as_posix() for source, destination in data}
+    assert "ui/web_new_v2/index.html" in published
+    assert "ui/web_new_v2/js/player.js" in published
+    assert any(path.startswith("ui/MACos_ui/") for path in published)
+    assert not any("covers" in Path(path).parts for path in published)
 
 
 # --- tray icon must point at the active UI ----------------------------------

@@ -414,13 +414,13 @@ class SoundCloudService(BaseMusicService):
                                 if artwork and 'large.jpg' in artwork:
                                     artwork = artwork.replace('large.jpg', 't500x500.jpg')
                                 
-                                user_info = item.get('user', {})
+                                user_info = item.get('user') or {}
                                 artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
                                 duration = int((item.get('duration') or 0) / 1000)
                                 waveform_url = item.get('waveform_url') or ''
                                 
                                 track = {
-                                    'title': item.get('title', 'Unknown Title'),
+                                    'title': item.get('title') or 'Unknown Title',
                                     'artist': artist,
                                     'duration': duration,
                                     'source': 'soundcloud',
@@ -488,6 +488,10 @@ class SoundCloudService(BaseMusicService):
 
     def get_playlist_tracks(self, playlist_id, limit: int = 50, callback: Callable = None, error_callback: Callable = None):
         """Fetch SoundCloud playlist/set tracks (v2 REST API with yt-dlp fallback)."""
+        if not playlist_id or not str(playlist_id).strip():
+            if error_callback:
+                error_callback("Empty playlist ID")
+            return None
         if self.settings and self.settings.get('services', 'soundcloud_enabled', True) is False:
             if callback:
                 callback([])
@@ -514,23 +518,57 @@ class SoundCloudService(BaseMusicService):
                         r = self._api_get(url, timeout=4.0)
                         if r.status_code == 200:
                             data = r.json()
-                            tracks = []
-                            for item in data.get('tracks') or []:
-                                if not item or not item.get('id') or not item.get('title'):
+                            raw_tracks = data.get('tracks') or []
+                            tracks_map = {}
+                            stub_ids = []
+                            for item in raw_tracks:
+                                if not isinstance(item, dict) or not item.get('id'):
                                     continue
-                                artwork = item.get('artwork_url') or ''
+                                t_id = str(item['id'])
+                                if item.get('title'):
+                                    tracks_map[t_id] = item
+                                else:
+                                    stub_ids.append(t_id)
+
+                            if stub_ids and cid:
+                                fetch_count = min(len(stub_ids), (limit * 2) if limit else len(stub_ids))
+                                for i in range(0, fetch_count, 50):
+                                    batch = stub_ids[i:i + 50]
+                                    try:
+                                        b_r = self._api_get(
+                                            f"https://api-v2.soundcloud.com/tracks?ids={','.join(batch)}&client_id={cid}",
+                                            timeout=5.0
+                                        )
+                                        if b_r.status_code == 200:
+                                            for t in b_r.json():
+                                                if isinstance(t, dict) and t.get('id'):
+                                                    tracks_map[str(t['id'])] = t
+                                    except Exception:
+                                        pass
+
+                            tracks = []
+                            for item in raw_tracks:
+                                if not item or not isinstance(item, dict) or not item.get('id'):
+                                    continue
+                                t_id = str(item['id'])
+                                item_full = tracks_map.get(t_id, item)
+                                if not item_full.get('title'):
+                                    continue
+                                artwork = item_full.get('artwork_url') or ''
                                 if artwork and 'large.jpg' in artwork:
                                     artwork = artwork.replace('large.jpg', 't500x500.jpg')
-                                user_info = item.get('user', {})
+                                user_info = item_full.get('user', {})
+                                if not isinstance(user_info, dict):
+                                    user_info = {}
                                 artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
-                                duration = int((item.get('duration') or 0) / 1000)
+                                duration = int((item_full.get('duration') or 0) / 1000)
                                 track = {
-                                    'title': item.get('title', 'Unknown Title'),
+                                    'title': item_full.get('title', 'Unknown Title'),
                                     'artist': artist,
                                     'duration': duration,
                                     'source': 'soundcloud',
-                                    'source_id': str(item.get('id')),
-                                    'source_url': item.get('permalink_url') or f"https://soundcloud.com/{item.get('permalink', item.get('id'))}",
+                                    'source_id': t_id,
+                                    'source_url': item_full.get('permalink_url') or f"https://soundcloud.com/{item_full.get('permalink', t_id)}",
                                     'cover_url': artwork,
                                 }
                                 tracks.append(track)
@@ -704,6 +742,10 @@ class SoundCloudService(BaseMusicService):
 
     def get_stream_url(self, track_url: str, callback: Callable = None, error_callback: Callable = None, quality: str = "high", **kwargs):
         """Extract direct audio stream URL from a SoundCloud track."""
+        if not track_url or not str(track_url).strip():
+            if error_callback:
+                error_callback("Empty track URL")
+            return None
         if self.settings and self.settings.get('services', 'soundcloud_enabled', True) is False:
             if error_callback:
                 error_callback('Источник SoundCloud отключён в настройках')
@@ -839,7 +881,7 @@ class SoundCloudService(BaseMusicService):
                                     artwork = artwork.replace('large.jpg', 't500x500.jpg')
                                 metadata = {
                                     'title': t_data.get('title', 'Unknown'),
-                                    'artist': t_data.get('user', {}).get('username', 'Unknown'),
+                                    'artist': (t_data.get('user') or {}).get('username', 'Unknown'),
                                     'duration': int((t_data.get('duration') or 0) / 1000),
                                     'cover_url': artwork,
                                     'source_id': str(t_data.get('id')),
@@ -1151,12 +1193,12 @@ class SoundCloudService(BaseMusicService):
                     artwork = item.get('artwork_url') or ''
                     if artwork and 'large.jpg' in artwork:
                         artwork = artwork.replace('large.jpg', 't500x500.jpg')
-                    user_info = item.get('user', {})
+                    user_info = item.get('user') or {}
                     artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
                     duration = int((item.get('duration') or 0) / 1000)
                     waveform_url = item.get('waveform_url') or ''
                     track = {
-                        'title': item.get('title', 'Unknown Title'),
+                        'title': item.get('title') or 'Unknown Title',
                         'artist': artist,
                         'duration': duration,
                         'source': 'soundcloud',
