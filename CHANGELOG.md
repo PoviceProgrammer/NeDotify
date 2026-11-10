@@ -10,7 +10,9 @@
 - Добавлены проверка обновлений приложения и настройки текстов песен.
 - Установщик ограничен Windows 10/11 x64. Исправлена обработка установки WebView2.
 
+Файлы: [NeDotify_Setup.exe](https://github.com/PoviceProgrammer/NeDotify/releases/download/v2.5.6/NeDotify_Setup.exe) и `NeDotify_Setup.exe.sha256`. Поддерживаются Windows 10/11 x64.
 
+[Релиз на GitHub](https://github.com/PoviceProgrammer/NeDotify/releases/tag/v2.5.6) · [Инструкция по установке и первому запуску](docs/TUTORIAL_WINDOWS_INSTALL_VPN_PLAYBACK.md).
 
 ## v2.5.1 — 3 ноября 2026
 
