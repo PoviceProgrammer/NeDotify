@@ -67,7 +67,7 @@ const context = vm.createContext({console, Promise, Date, URL,
         if (ms < 1000) Promise.resolve().then(fn); else timers.set(id, {fn, ms});
         return id;
     }, clearTimeout: id => timers.delete(id),
-        updateHomeCoverCollage() {}, renderIcons() {}, registerCanvasDprListener() {}, updateHomeCollections() {}, refreshFavoritesCovers() {}, initHomeAtmosphere() {},
+        mountPersonalWave() {}, mountRecommendationControls() {}, updateHomeCoverCollage() {}, renderIcons() {}, registerCanvasDprListener() {}, updateHomeCollections() {}, refreshFavoritesCovers() {}, initHomeAtmosphere() {},
 });
 const code = SOURCE.replace(/^import .*;\r?$/gm, '').replace(/\bexport\s+/g, '');
 vm.runInContext(code + '\nglobalThis.subject = {loadHome, renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, isCurrentHomeEvent};', context);
@@ -140,46 +140,17 @@ for (const [event,section] of cases) {
 
 
 def test_radio_ignores_old_wave_response_and_cleans_up_deadline():
-    run_node(r"""
-import assert from 'node:assert/strict';
-import vm from 'node:vm';
-const listeners = new Set(); const timers = new Map(); let timerId = 0;
-const requests = []; const queued = [];
-const window = {awaitBridge: async () => {}, dispatchEvent() {},
-    addEventListener: (name, handler) => listeners.add(handler),
-    removeEventListener: (name, handler) => listeners.delete(handler),
-    pywebview: {api: {play_track() {},
-        get_track_wave: (...args) => { requests.push(args); return Promise.resolve([]); },
-        add_tracks_to_queue: async tracks => queued.push(...tracks),
-    }},
-};
-const code = SOURCE.match(/startTrackWave: async \(seedTrack\) => \{([\s\S]*?)\n    \},\r?\n    toggleMiniPlayerMode/)[1];
-const context = vm.createContext({console, window,
-    CustomEvent: class { constructor(name, options) { this.detail = options.detail; } },
-    setTimeout: (fn, ms) => { const id = ++timerId; timers.set(id, {fn, ms}); return id; },
-    clearTimeout: id => timers.delete(id),
-});
-vm.runInContext('let trackWaveRequestSequence = 0; globalThis.startWave = async seedTrack => {' + code + '};', context);
-await context.startWave({source_id: 'old', title: 'Old'});
-await context.startWave({source_id: 'new', title: 'New'});
-assert.notEqual(requests[0][3], requests[1][3]);
-for (const handler of Array.from(listeners)) await handler({detail: {request_id: requests[0][3], tracks: [{source_id: 'wrong'}]}});
-assert.equal(queued.length, 0, 'old response must not populate the current wave');
-assert.equal(listeners.size, 1);
-for (const handler of Array.from(listeners)) await handler({detail: {request_id: requests[1][3], tracks: [{source_id: 'right'}]}});
-assert.equal(queued[0].source_id, 'right');
-assert.equal(listeners.size, 0);
-assert.equal(timers.size, 0);
-await context.startWave({source_id: 'timeout', title: 'Timeout'});
-const deadline = Array.from(timers.values()).find(timer => timer.ms === 25000);
-deadline.fn();
-assert.equal(listeners.size, 0, 'a timed-out wave must release its listener');
-assert.equal(timers.size, 0);
-assert.equal(window._activeTrackWaveCleanup, null);
-for (const handler of Array.from(listeners)) await handler({detail: {request_id: requests[2][3], tracks: [{source_id: 'late'}]}});
-assert.equal(queued.length, 1, 'a response arriving after the deadline must not alter the queue');
-window.pywebview.api.get_track_wave = () => Promise.reject(new Error('bridge failed'));
-await context.startWave({source_id: 'failure', title: 'Failure'});
-assert.equal(listeners.size, 0, 'bridge rejection must release the listener');
-assert.equal(timers.size, 0);
-""".replace("SOURCE", source("main.js")))
+    # The controller is a module now; exercise its public boundary instead of
+    # extracting an implementation body from the main namespace initializer.
+    from tests.test_continuous_wave_ui import run_wave
+    run_wave(r"""
+await wave.start(track('old'));const oldRequest=requests.at(-1)[3];
+await wave.start(track('new'));
+await wave.handlePythonEvent('track_wave_ready',{request_id:oldRequest,tracks:[track('wrong')]});
+assert.equal(added.length,0);assert.equal(timers.size,1);
+[...timers.values()][0].fn();assert.equal(timers.size,0);
+await respond([track('late')]);assert.equal(added.length,0);
+api.get_track_wave=async()=>{throw new Error('bridge failed');};
+await wave.retry();assert.equal(wave.state().status,'waiting');assert.equal(timers.size,0);
+wave.stop();assert.equal(wave.state().active,false);
+""")

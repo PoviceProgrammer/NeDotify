@@ -167,7 +167,7 @@ class TrackResolver:
             'duration': 0,
         }
 
-    def _search_local(self, title: str, artist: str) -> Optional[Dict[str, Any]]:
+    def _search_local(self, title: str, artist: str, expected_duration: float = 0) -> Optional[Dict[str, Any]]:
         if not self.db:
             return None
 
@@ -227,7 +227,7 @@ class TrackResolver:
                 # Untagged legacy rows deliberately match on title; a known
                 # different artist must never be accepted by the title fallback.
                 match_artist = artist if known_artist and not legacy_unknown else ''
-                if not self._is_plausible_match(title, match_artist, r):
+                if not self._is_plausible_match(title, match_artist, r, expected_duration):
                     continue
                 priority = 0
                 if known_artist and not legacy_unknown:
@@ -429,7 +429,7 @@ class TrackResolver:
         else:
             query = title.strip()
 
-        local_res = self._search_local(title, artist)
+        local_res = self._search_local(title, artist, expected_duration)
         if local_res:
             return local_res
 

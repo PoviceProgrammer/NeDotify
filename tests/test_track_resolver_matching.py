@@ -118,6 +118,28 @@ def test_empty_stored_artist_does_not_bypass_known_artist_check(local_db):
     assert resolver._search_local("Hello", "Lionel Richie") is None
 
 
+def test_requested_duration_rejects_wrong_local_recording_before_provider_search(local_db, monkeypatch):
+    db, add = local_db
+    add('Song', artist='Artist', duration=300, file_path='C:/library/extended.mp3')
+    resolver = TrackResolver(db=db, providers=('youtube',))
+    wanted = {'source': 'youtube', 'source_id': 'verified', 'title': 'Song',
+              'artist': 'Artist', 'duration': 180}
+    search = Mock(return_value=wanted)
+    monkeypatch.setattr(resolver, '_search_youtube', search)
+
+    assert resolver.resolve_track('Song', 'Artist', expected_duration=180) == wanted
+    search.assert_called_once()
+
+
+def test_requested_duration_selects_matching_local_recording(local_db):
+    db, add = local_db
+    add('Song', artist='Artist', duration=300, file_path='C:/library/extended.mp3')
+    wanted_id = add('Song', artist='Artist', duration=180, file_path='C:/library/original.mp3')
+    resolver = TrackResolver(db=db)
+
+    assert resolver.resolve_track('Song', 'Artist', expected_duration=180)['id'] == wanted_id
+
+
 def test_rejected_local_row_falls_through_to_matching_provider(local_db):
     db, add = local_db
     add("Hello", artist="Adele", file_path="C:/library/adele.mp3")

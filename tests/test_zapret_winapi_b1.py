@@ -459,7 +459,7 @@ class TestElevatedLogRedirect:
         exe = _write_pe(os.path.join(svc.app_dir, "winws.exe"))
         _setup_allowed_elevation(svc, monkeypatch, exe)
         ok, msg = svc._launch_elevated(exe, "--wf-tcp=80,443")
-        assert ok is True  # BUG-040 warning-success (see below)
+        assert ok is False  # Dispatch without a verified PID stays unknown.
         recorder = svc._shell_execute_elevated
         assert len(recorder.calls) == 1
         comspec, cmd_params, cwd = recorder.calls[0][0]
@@ -502,8 +502,8 @@ class TestElevatedLogRedirect:
         with open(svc.log_file, "wb") as f:
             f.write(b"old session Access is denied\r\n")
         ok, msg = svc._launch_elevated(exe, "--wf-tcp=80,443")
-        assert ok is True
-        assert "не удалось определить его PID" in msg
+        assert ok is False
+        assert "PID не определён" in msg
 
 
 # ─── BUG-040: PID discovery failure is a warning, not a fake failure ─────────
@@ -542,14 +542,14 @@ class TestElevatedPidDiscovery:
         assert ok is True
         assert "ранее запущен" in msg
 
-    def test_empty_log_reports_warning_success_not_failure(self, svc, monkeypatch):
+    def test_empty_log_reports_unknown_without_success(self, svc, monkeypatch):
         """BUG-040: the old path claimed «не запустился» and invited an
         immediate relaunch — a second elevated winws over the live one."""
         exe = _write_pe(os.path.join(svc.app_dir, "winws.exe"))
         _setup_allowed_elevation(svc, monkeypatch, exe)
         ok, msg = svc._launch_elevated(exe, "--wf-tcp=80,443")
-        assert ok is True
-        assert "не удалось определить его PID" in msg
+        assert ok is False
+        assert "PID не определён" in msg
         assert "не запустился" not in msg
 
 
@@ -559,17 +559,17 @@ class TestElevatedPidPresumption:
     the status panel showed «отключен» right after a successful toggle and a
     repeated start() could not see the probable first instance."""
 
-    def test_warning_success_reports_running_until_stopped(self, svc, monkeypatch):
+    def test_unknown_dispatch_never_claims_running_or_stopped(self, svc, monkeypatch):
         exe = _write_pe(os.path.join(svc.app_dir, "winws.exe"))
         _setup_allowed_elevation(svc, monkeypatch, exe)
         ok, msg = svc._launch_elevated(exe, "--wf-tcp=80,443")
-        assert ok is True
+        assert ok is False
         assert svc._elevation_pid_unknown is True
-        assert svc.is_running() is True
+        assert svc.is_running() is False
 
         stopped, _ = svc.stop()
-        assert stopped is True
-        assert svc._elevation_pid_unknown is False
+        assert stopped is False
+        assert svc._elevation_pid_unknown is True
         assert svc.is_running() is False
 
     def test_positive_pid_discovery_clears_the_presumption(self, svc, monkeypatch):
@@ -587,10 +587,11 @@ class TestElevatedPidPresumption:
         _setup_allowed_elevation(svc, monkeypatch, exe)
         monkeypatch.setattr(m, "check_internet", lambda timeout=1.5: True)
         ok, _ = svc._launch_elevated(exe, "--wf-tcp=80,443")
-        assert ok is True
+        assert ok is False
         svc._build_status()
         status = svc._status_cache
-        assert status["running"] is True
+        assert status["running"] is False
+        assert status["state_unknown"] is True
         assert "PID не определён" in status["message"]
 
 

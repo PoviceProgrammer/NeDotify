@@ -229,7 +229,11 @@ class YouTubeService(BaseMusicService):
             proxy = normalize_proxy_url(self.settings.get("auth", "proxy_url", "")) if self.settings else ""
             if proxy:
                 session.proxies = {"http": proxy, "https": proxy}
-            self._ytmusic = YTMusic(language="ru", location="RU", requests_session=session)
+            # The SDK matches filtered shelf labels against English tokens
+            # (album/artist/playlist). Russian response labels are discarded
+            # as unrelated shelves. Keep catalogue parsing in English; the
+            # desktop UI owns its Russian labels independently.
+            self._ytmusic = YTMusic(language="en", location="RU", requests_session=session)
 
         # One YoutubeDL instance per thread: yt-dlp objects carry mutable shared
         # state (cookie jars, internal caches) and are NOT safe to use
@@ -442,7 +446,7 @@ class YouTubeService(BaseMusicService):
             return None
 
         is_artist_search = result_type in ('artists', 'artist')
-        yt_filter = 'artists' if is_artist_search else ('playlists' if result_type in ('playlists', 'playlist') else ('albums' if result_type in ('albums', 'album') else None))
+        yt_filter = 'artists' if is_artist_search else ('songs' if result_type == 'songs_only' else ('playlists' if result_type in ('playlists', 'playlist') else ('albums' if result_type in ('albums', 'album') else None)))
         cache_key = f'yt_search:{query}:{yt_filter}:{max_results}'
         cached = self.get_search_cache(cache_key)
         if cached is not None:
@@ -458,7 +462,7 @@ class YouTubeService(BaseMusicService):
                 is_album_search = result_type in ("albums", "album")
                 is_playlist_search = result_type in ("playlists", "playlist")
                 is_artist_search = result_type in ("artists", "artist")
-                yt_filter = "artists" if is_artist_search else ("playlists" if is_playlist_search else ("albums" if is_album_search else None))
+                yt_filter = "artists" if is_artist_search else ("songs" if result_type == "songs_only" else ("playlists" if is_playlist_search else ("albums" if is_album_search else None)))
                 cached = self.get_search_cache(cache_key)
                 if cached is not None:
                     if callback:

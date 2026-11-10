@@ -162,6 +162,7 @@ async function startOnboarding(force = false) {
     });
     const paint = () => {
         paintPreferences();
+        $('ob-btn-next').disabled = currentStep === 5 && draft.artists.length < 3;
         const theme = THEMES[draft.theme];
         for (const key of ['bg','surface','accent','ink','muted','foreground']) wizard.style.setProperty(`--ob-${key}`, theme[key]);
         wizard.dataset.previewTheme = draft.theme;
@@ -228,6 +229,7 @@ async function startOnboarding(force = false) {
         finally { if (generation===outputGeneration) $('ob-audio-refresh').disabled = saving; }
     }
     async function finish(skip = false) {
+        if (!skip && draft.artists.length < 3) { showStep(5); return; }
         if (saving || finished || session.signal.aborted || (!skip && !validLibrary())) return;
         saving = true;wizard.setAttribute('aria-busy','true');$('ob-save-error').hidden = true;
         const disabled = new Map(controls.map(control=>[control,control.disabled]));

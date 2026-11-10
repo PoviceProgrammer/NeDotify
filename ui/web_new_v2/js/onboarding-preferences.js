@@ -1,9 +1,11 @@
+import { mountArtistPicker } from './onboarding-artists.js';
 // Riff's welcome flow keeps a preview draft, then hands one preference payload
 // to the main app. Adapted for NeDotify's existing Python persistence boundary.
 // Reference and attribution: docs/riff-onboarding.md (MIT, rootscripts 2026).
 const FORMATS = ['source', 'mp3', 'm4a', 'opus', 'flac', 'wav'];
 const QUALITIES = ['best', '320', '256', '192', '128'];
 const SOURCE_NAMES = {youtube: 'YouTube / YouTube Music', soundcloud: 'SoundCloud'};
+export const ONBOARDING_ARTISTS = ['королевский XVII','тёмный принц','madk1d','VILLIAN','zombiqe','KAI ANGEL','9mice','Heronwater','LOVV66','FORTUNA 812','uglystephan','BUSHIDO ZHO','Lildrughill','Toxi$','FRIENDLY THUG 52 NGG','dekma','xxxmanera','kantaa','STED.D','nkeeei'];
 
 export function preferenceDraft(settings = {}, saved = {}) {
     const source = saved.sources && typeof saved.sources === 'object' ? saved.sources : {};
@@ -11,6 +13,7 @@ export function preferenceDraft(settings = {}, saved = {}) {
     const format = saved.format ?? settings.downloads?.format;
     const quality = String(saved.quality ?? settings.downloads?.quality ?? 'best');
     return {
+        artists: [...new Set((Array.isArray(saved.artists) ? saved.artists : settings.personalization?.favorite_artists || []).filter(name => typeof name === 'string' && name.trim()).map(name => name.trim()))],
         uiStyle: style === 'macos' ? 'macos' : 'current',
         sources: Object.fromEntries(Object.keys(SOURCE_NAMES).map(name => [name,
             typeof source[name] === 'boolean' ? source[name] : settings.services?.[`${name}_enabled`] !== false])),
@@ -21,6 +24,7 @@ export function preferenceDraft(settings = {}, saved = {}) {
 
 export function preferencePayload(draft) {
     return {ui_style: draft.uiStyle, sources: {...draft.sources},
+        favorite_artists: [...(draft.artists || [])],
         download_format: draft.format, download_quality: draft.quality};
 }
 
@@ -47,6 +51,10 @@ export function mountOnboardingPreferences(wizard, draft, {signal, onChange}) {
         <p class="ob-hint">Конвертация не повышает качество источника. Для исходного файла и lossless битрейт не меняется.</p></fieldset>`);
     section(4, `<fieldset class="ob-fieldset"><legend>Музыка с компьютера</legend><button type="button" id="ob-import-folder" class="ob-secondary">Выбрать и добавить папку…</button>
         <p class="ob-hint" id="ob-folder-status" role="status">Файлы останутся на своём месте; папка появится в медиатеке.</p></fieldset>`);
+    const artists = section(5, '<div class="ob-artist-picker"></div>');
+    // Put taste selection before optional source/download controls.
+    artists.parentElement.querySelector('.ob-lead').after(artists);
+    const paintArtists = mountArtistPicker(artists.firstElementChild, draft, ONBOARDING_ARTISTS, {signal,onChange});
     const summary = wizard.querySelector('.ob-summary');
     const rows = document.createElement('div');
     rows.dataset.obPreferences = '';
@@ -87,6 +95,7 @@ export function mountOnboardingPreferences(wizard, draft, {signal, onChange}) {
         if (event.detail?.success !== false) folderStatus.textContent = `Добавлено треков: ${event.detail?.count || 0}. Папка сохранена в медиатеке.`;
     });
     return () => {
+        paintArtists();
         appearance.querySelectorAll('[data-ob-style]').forEach(button => {
             const active = button.dataset.obStyle === draft.uiStyle;
             button.classList.toggle('active', active);button.setAttribute('aria-pressed', String(active));

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
-const {chromium} = require('playwright-core');
+const {chromium} = require(process.env.PLAYWRIGHT_CORE_PATH || 'playwright-core');
 const root = path.resolve(__dirname, '..', 'ui');
 const server = http.createServer((req, res) => {
     const name = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
@@ -29,8 +29,14 @@ const server = http.createServer((req, res) => {
             window.settings={general:{first_launch_done:false},services:{youtube_enabled:true,soundcloud_enabled:true}};
             window.submissions=[];window.folderImports=0;
             window.pywebview={api:{
-                complete_onboarding:async payload=>{window.submissions.push(payload);return {success:true,settings:{...window.settings,general:{first_launch_done:true}}};},
+                complete_onboarding:async payload=>{window.submissions.push(payload);return {success:true,settings:{...window.settings,general:{first_launch_done:true},personalization:{favorite_artists:payload.favorite_artists||[]}}};},
                 import_music_folder:async()=>{window.folderImports++;return {success:true,pending:true,path:'C:\\Music'};},
+                search:async(query,source,type,request_id)=>{
+                    setTimeout(()=>{
+                        window.dispatchEvent(new CustomEvent('app:search_results',{detail:{request_id,tracks:[{artist:'Radiohead',cover_url:''}]}}));
+                        window.dispatchEvent(new CustomEvent('app:search_completed',{detail:{request_id}}));
+                    },20);return {status:'pending'};
+                },
             }};
         });
         await page.goto(`http://127.0.0.1:${server.address().port}/`);
@@ -39,7 +45,7 @@ const server = http.createServer((req, res) => {
         assert.equal(await page.locator('.onboarding-step').count(),6);
         assert.equal(await page.locator('#ob-progress').getAttribute('max'),'6');
         assert.ok(await page.evaluate(()=>document.getAnimations().some(a=>a.effect?.target?.closest('#onboarding-wizard'))),'wizard has live motion');
-        const screenshots=path.resolve(__dirname,'..','docs','screenshots','onboarding-motion-20261030');
+        const screenshots=path.resolve(__dirname,'..','docs','screenshots','onboarding-artists-20261109');
         fs.mkdirSync(screenshots,{recursive:true});
         await page.waitForTimeout(800);
         await page.screenshot({path:path.join(screenshots,'appearance.png')});
@@ -55,6 +61,14 @@ const server = http.createServer((req, res) => {
         assert.match(await page.locator('#ob-folder-status').textContent(), /C:\\Music/);
         await page.locator('#ob-btn-next').click();
         await page.locator('[data-ob-source="youtube"]').uncheck();
+        assert.equal(await page.locator('.ob-artist-grid .ob-artist').count(),20);
+        assert.equal(await page.locator('#ob-btn-next').isDisabled(),true);
+        for(const name of ['9mice','Heronwater','nkeeei'])await page.getByRole('button',{name,exact:true}).click();
+        await page.locator('#ob-artist-search').fill('Radiohead');
+        await page.locator('.ob-artist-grid').getByRole('button',{name:'Radiohead',exact:true}).click();
+        await page.locator('#ob-artist-search').fill('');
+        await page.locator('#ob-title-5').scrollIntoViewIfNeeded();
+        await page.screenshot({path:path.join(screenshots,'artists.png')});
         await page.locator('#ob-download-format').selectOption('mp3');
         await page.locator('#ob-download-quality').selectOption('192');
         await page.locator('#ob-btn-next').click();
@@ -63,6 +77,7 @@ const server = http.createServer((req, res) => {
         await page.waitForFunction(()=>window.submissions.length === 1);
         const payload=await page.evaluate(()=>window.submissions[0]);
         assert.equal(payload.ui_style,'macos');assert.deepEqual(payload.sources,{youtube:false,soundcloud:true});
+        assert.deepEqual(payload.favorite_artists,['9mice','Heronwater','nkeeei','Radiohead']);
         assert.equal(payload.download_format,'mp3');assert.equal(payload.download_quality,'192');
         assert.equal(payload.crossfade_enabled,true);
         assert.equal(payload.performance_preset,'high');
@@ -124,6 +139,15 @@ const server = http.createServer((req, res) => {
         await page.locator('#onboarding-wizard').waitFor({state:'hidden'});
         assert.equal(await page.evaluate(()=>window.submissions.length),3);
         assert.deepEqual(errors,[]);
-        console.log('onboarding browser: six steps, saved choices, reentry during exit, reduced motion, rapid navigation, validation, low profile, macOS at 360px passed');
+        await page.setViewportSize({width:1100,height:800});
+        const rail = await page.evaluate(() => {
+            const sidebar=document.getElementById('sidebar');sidebar.classList.add('is-collapsed');
+            const box=sidebar.getBoundingClientRect(),center=box.x+box.width/2;
+            return [...sidebar.querySelectorAll('.nav-item')].map(el=>{
+                const r=el.getBoundingClientRect();return {width:r.width,offset:Math.abs(r.x+r.width/2-center)};
+            }).filter(r=>r.width>0);
+        });
+        assert.ok(rail.length>0 && rail.every(r=>r.offset<=1),JSON.stringify(rail));
+        console.log('onboarding browser: artist quick choices, catalogue search, saved choices, six steps, reentry, mobile layout and centered macOS rail passed');
     } finally {await browser.close();server.close();}
 })().catch(error=>{console.error(error);server.close();process.exitCode=1;});

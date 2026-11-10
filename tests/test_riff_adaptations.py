@@ -26,7 +26,7 @@ def test_smart_home_keeps_local_file_and_applies_changed_feedback(recommendation
     profile.favorite_tracks = [favorite]
     profile.top_tracks = [favorite]
     recommendations._profile = lambda history=None: profile
-    values = {'blocked_artists': []}
+    values = {'blocked_artists': [], 'recommendation_mode': 'familiar'}
     recommendations.settings = SimpleNamespace(get=lambda category, key, default=None: values.get(key, default))
     recommendations.resolver.resolve_track = lambda *a, **kw: pytest.fail('A playable local track must not be re-resolved')
     payload = fetch(recommendations.get_smart_home_feed)
@@ -38,6 +38,8 @@ def test_smart_home_keeps_local_file_and_applies_changed_feedback(recommendation
 
 
 def test_network_outage_keeps_available_favorites_in_feed(recommendations):
+    recommendations.settings = SimpleNamespace(get=lambda category, key, default=None:
+        'familiar' if key == 'recommendation_mode' else default)
     current = track('seed', 'Current')
     favorite = track('local', 'Offline favorite', artist='Local Artist', source='local', id=7, file_path='C:/music/song.wav')
     profile = UserTasteProfile()

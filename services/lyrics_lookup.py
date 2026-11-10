@@ -31,8 +31,9 @@ class LyricsLookup:
     BUDGET = 8.0
     MEMORY_ENTRIES = 2048
 
-    def __init__(self, service, *, cache_path=None):
+    def __init__(self, service, *, cache_path=None, db=None):
         self.service = service
+        self.db = db
         # All shared lookup state belongs to LyricsService's existing cache lock.
         self.service._cache = collections.OrderedDict()
         self.service._inflight = {}
@@ -586,6 +587,39 @@ class LyricsLookup:
         refresh_legacy = False
         failed = False  # офлайн-режим удалён: раньше здесь был shortcut is_offline
         try:
+            if getattr(self, 'db', None):
+                try:
+                    override = None
+                    if video_id:
+                        override = self.db.get_track_lyrics_override(identity_key=f"youtube:{video_id}")
+                    elif upload_source and upload_id:
+                        override = self.db.get_track_lyrics_override(identity_key=f"{upload_source}:{upload_id}")
+                    elif file_path:
+                        override = self.db.get_track_lyrics_override(identity_key=f"local:{os.path.normcase(os.path.abspath(file_path))}")
+                    if not override:
+                        comp_artist = ','.join(canonical_artist(a, aliases) for a in metadata['artists'])
+                        override = self.db.get_track_lyrics_override(identity_key=f"meta:{normalize(metadata['title'])}\0{comp_artist}\0{metadata.get('version', '')}")
+                    if override and (override.get('synced_lyrics') or override.get('plain_lyrics')):
+                        synced = override.get('synced_lyrics')
+                        plain = override.get('plain_lyrics') or self.plain(synced)
+                        override_payload = {
+                            'status': 'found',
+                            'source': override.get('source_name', 'Пользовательский'),
+                            'match_type': 'exact',
+                            'confidence': 1.0,
+                            'syncedLyrics': synced,
+                            'plainLyrics': plain,
+                            'syncType': override.get('sync_type', 'line' if synced else 'plain'),
+                            'weight': 1 if synced else 2,
+                            'instrumental': False,
+                            'isOverride': True,
+                            'overrideType': override.get('override_type', 'chosen_version'),
+                            'offsetMs': override.get('offset_ms', 0),
+                        }
+                        offer(override_payload, final=True)
+                        return copy.deepcopy(flight['best'])
+                except Exception as ex:
+                    logger.debug("Database override check failed: %s", ex)
             saved_entry = self.disk_cache.get(key, with_ttl=True) if self.disk_cache else None
             if saved_entry:
                 saved, remaining_ttl = saved_entry

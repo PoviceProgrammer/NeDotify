@@ -67,7 +67,7 @@ const context = vm.createContext({
       dispatchEvent:(e)=>{windowEvents.push(e);for(const fn of (windowListeners.get(e.type)||[]).slice())fn(e);return true;}},
     document:{documentElement:root,body:root,
       getElementById:(id)=>elements.get(id)||null,
-      createElement:(tag)=>({tagName:String(tag).toUpperCase(),value:'',textContent:'',setAttribute(){},appendChild(){}}),
+      createElement:(tag)=>({tagName:String(tag).toUpperCase(),value:'',textContent:'',setAttribute(){},appendChild(){},remove(){}}),
       addEventListener(){},dispatchEvent(){},querySelectorAll:()=>[]},
     localStorage:{getItem:()=>null,setItem(){},removeItem(){}},
     CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},
@@ -331,6 +331,56 @@ assert.equal(toggle.disabled,false);
 assert.equal(select.disabled,false);
 assert.equal(btnUpdate.disabled,false);
 assert.ok(toasts.some(t=>t[1]==='warning'));
+""")
+
+
+def test_selection_progress_and_cancel_keep_controls_locked_until_worker_finishes():
+    zapret_panel_js(r"""
+const toggle=element('toggle-zapret-enabled'), select=element('select-zapret-mode');
+const status=element('zapret-update-status'), host=element('status-host');
+status.parentElement=host;
+let finish;
+window.pywebview={api:{
+  toggle_zapret:async(enabled)=>{
+    calls.push(['toggle',enabled]);
+    if(enabled)return new Promise(resolve=>{finish=resolve;});
+    return {success:true,pending:true,running:true};
+  },
+  get_zapret_status:async()=>stubStatus(),
+}};
+subject.setupZapretPanel();await tick();
+await toggle.fire('click');
+await fireWindow('nedotify:zapret_selection_progress',{message:'Попытка 2 из 5'});
+assert.equal(status.textContent,'Попытка 2 из 5');
+const cancel=host.children.find(child=>child.textContent==='Отменить включение');
+assert.ok(cancel);
+await cancel.onclick();
+assert.equal(cancel.disabled,true);
+assert.equal(select.disabled,true);
+assert.deepEqual(calls.filter(call=>call[0]==='toggle').map(call=>call[1]),[true,false]);
+finish({success:false,running:false,message:'Подбор отменён'});await tick();await tick();
+assert.equal(select.disabled,false);
+assert.equal(toggle.classList.contains('on'),false);
+""")
+
+
+def test_update_check_completion_cannot_overwrite_active_selection_progress():
+    zapret_panel_js(r"""
+const toggle=element('toggle-zapret-enabled'),select=element('select-zapret-mode');
+const check=element('btn-check-zapret-update'),status=element('zapret-update-status');
+let finish,requestId;
+window.pywebview={api:{
+  get_zapret_status:async()=>stubStatus(),
+  check_zapret_update:async(rid)=>{requestId=rid;return {status:'pending',request_id:rid};},
+  toggle_zapret:()=>new Promise(resolve=>{finish=resolve;}),
+}};
+subject.setupZapretPanel();await tick();
+await check.fire('click');await tick();
+await toggle.fire('click');await tick();
+await fireWindow('nedotify:zapret_selection_progress',{message:'Попытка 3 из 5'});
+await fireWindow('nedotify:zapret_update_checked',{request_id:requestId,latest_version:'v72.13',current_version:'v72.13'});
+assert.equal(status.textContent,'Попытка 3 из 5');
+finish({success:false,running:false,message:'Подбор отменён'});await tick();
 """)
 
 

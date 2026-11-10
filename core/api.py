@@ -23,6 +23,7 @@ import webview
 from utils.stream_urls import stream_url_expired
 from utils.cache_manager import stream_cache_stem
 from core.offline import offline_library
+from core.updater import AppUpdater
 from core.user_errors import describe_error
 from utils.url_safety import safe_public_url, guarded_open_url
 
@@ -196,12 +197,15 @@ class AppApi:
         self._main_window = None
         self._mini_window = None
         self._is_mini_active = False
+        self._is_maximized = False
+        self._is_fullscreen = False
         self._saved_mini_pos = "bottom-right"
         self._window_op_lock = threading.RLock()
         self._listening_sessions = {}
         self._active_listening_token = None
         self._closed = False
         self._ui_ready_event = threading.Event()
+        self._updater = AppUpdater()
         # Renderer liveness (see frontend_heartbeat); monotonic clock domain.
         self._ui_heartbeat_monotonic = None
         self._ui_visibility = 'visible'
@@ -408,7 +412,7 @@ class AppApi:
                 logger.debug("Snap Layouts hwnd lookup failed", exc_info=True)
             if hwnd:
                 try:
-                    snap = SnapLayouts(hwnd, can_resize=lambda: not (getattr(self, '_is_maximized', False) or self._is_mini_active))
+                    snap = SnapLayouts(hwnd, can_resize=lambda: not (getattr(self, '_is_maximized', False) or self._is_mini_active), is_fullscreen=lambda: getattr(self, '_is_fullscreen', False))
                     if snap.install():
                         self._snap_layouts = snap
                         pending_rect = getattr(self, '_pending_snap_rect', None)
@@ -468,6 +472,8 @@ class AppApi:
             view.Invalidate()
 
     def _recalc_native_frame(self, hwnd):
+        if getattr(self, '_is_fullscreen', False):
+            return
         """Force a WM_NCCALCSIZE pass on the frameless host window.
 
         WHITE-001 root cause (reproduced live): after minimize → restore the
@@ -516,10 +522,11 @@ class AppApi:
                 native = getattr(window, 'native', None)
                 if native is not None and hasattr(native, 'WindowState'):
                     from System.Windows.Forms import FormWindowState
-                    self._is_maximized = native.WindowState == FormWindowState.Maximized
-                    if not self._is_maximized and not self._is_mini_active:
-                        bounds = native.Bounds
-                        self._last_geometry = (bounds.X, bounds.Y, bounds.Width, bounds.Height)
+                    if not getattr(self, '_is_fullscreen', False):
+                        self._is_maximized = native.WindowState == FormWindowState.Maximized
+                        if not self._is_maximized and not self._is_mini_active:
+                            bounds = native.Bounds
+                            self._last_geometry = (bounds.X, bounds.Y, bounds.Width, bounds.Height)
                 self._fit_window_content(window)
                 # WHITE-001: re-sync the frameless window surface whenever its
                 # state transitioned (restore/maximize/minimize detached it).
@@ -1006,13 +1013,17 @@ class AppApi:
                     from System.Drawing import Rectangle
                     from System.Windows.Forms import FormWindowState, Screen
 
+                    # If returning from fullscreen, clear the fullscreen flag first.
+                    was_fs = getattr(self, '_is_fullscreen', False)
+                    self._is_fullscreen = False
+
                     # Use WinForms state/bounds once, on its owning UI thread.
                     # Mixing SetWindowPos with pywebview.resize from the bridge
                     # left the host form and the embedded browser out of sync.
                     is_max = native.WindowState == FormWindowState.Maximized
                     requested = not is_max if maximized is None else maximized
                     if requested:
-                        if not is_max:
+                        if not is_max and not was_fs:
                             bounds = native.Bounds
                             self._last_geometry = (bounds.X, bounds.Y, bounds.Width, bounds.Height)
                         native.MaximizedBounds = Screen.FromHandle(native.Handle).WorkingArea
@@ -1047,8 +1058,85 @@ class AppApi:
         self._change_maximized_state()
 
     def toggle_fullscreen(self):
-        """Legacy handler redirecting to maximize() to guarantee Windows taskbar visibility."""
-        self.maximize()
+        """Toggle true fullscreen covering the entire display including taskbar."""
+        target_win = self._window
+        if not target_win:
+            return
+
+        with self._window_op_lock:
+            if getattr(self, '_fullscreen_in_progress', False):
+                return
+            self._fullscreen_in_progress = True
+
+        def change():
+            try:
+                native = getattr(target_win, 'native', None)
+                if sys.platform == 'win32' and native is not None:
+                    from System.Drawing import Rectangle
+                    from System.Windows.Forms import FormWindowState, Screen
+                    import ctypes
+
+                    is_fs = getattr(self, '_is_fullscreen', False)
+                    if not is_fs:
+                        # 1. Entering true fullscreen covering monitor including taskbar
+                        is_max = getattr(self, '_is_maximized', False) or (native.WindowState == FormWindowState.Maximized)
+                        self._was_maximized_before_fullscreen = is_max
+                        if not is_max:
+                            bounds = native.Bounds
+                            self._last_geometry = (bounds.X, bounds.Y, bounds.Width, bounds.Height)
+
+                        self._is_fullscreen = True
+                        self._is_maximized = True
+
+                        screen = Screen.FromHandle(native.Handle)
+                        screen_bounds = screen.Bounds
+
+                        # Normal window state allows the window to sit above the taskbar
+                        native.WindowState = FormWindowState.Normal
+                        native.Bounds = screen_bounds
+
+                        try:
+                            user32 = ctypes.windll.user32
+                            raw_h = native.Handle
+                            hwnd = int(raw_h.ToInt64() if hasattr(raw_h, 'ToInt64') else raw_h)
+                            user32.SetWindowPos(
+                                hwnd, 0,
+                                int(screen_bounds.X), int(screen_bounds.Y),
+                                int(screen_bounds.Width), int(screen_bounds.Height),
+                                0x0040 | 0x0020  # SWP_SHOWWINDOW | SWP_FRAMECHANGED
+                            )
+                        except Exception:
+                            logger.debug("SetWindowPos fullscreen positioning failed", exc_info=True)
+                    else:
+                        # 2. Exiting true fullscreen, restoring to previous state
+                        self._is_fullscreen = False
+
+                        if getattr(self, '_was_maximized_before_fullscreen', False):
+                            native.MaximizedBounds = Screen.FromHandle(native.Handle).WorkingArea
+                            native.WindowState = FormWindowState.Maximized
+                            self._is_maximized = True
+                        else:
+                            native.WindowState = FormWindowState.Normal
+                            geometry = getattr(self, '_last_geometry', None)
+                            if geometry:
+                                native.Bounds = Rectangle(*map(int, geometry))
+                            self._is_maximized = False
+
+                    self._fit_window_content(target_win)
+                else:
+                    if hasattr(target_win, 'toggle_fullscreen'):
+                        target_win.toggle_fullscreen()
+                    elif hasattr(target_win, 'fullscreen'):
+                        target_win.fullscreen = not target_win.fullscreen
+                    self._is_fullscreen = not getattr(self, '_is_fullscreen', False)
+                logger.info('[WINDOW] Fullscreen %s', 'enabled' if getattr(self, '_is_fullscreen', False) else 'restored')
+            except Exception:
+                logger.warning('Could not toggle fullscreen', exc_info=True)
+            finally:
+                with self._window_op_lock:
+                    self._fullscreen_in_progress = False
+
+        self._deferred_window_op(.03, lambda: self._on_window_ui_thread(target_win, change))
 
     def open_url(self, url: str):
         """Open web URL in user's default browser."""
@@ -1656,11 +1744,14 @@ class AppApi:
             self._notify_queue_updated()
         return {'success': True}
 
-    def add_tracks_to_queue(self, tracks):
+    def add_tracks_to_queue(self, tracks, expected_entry_id=None, revision=None):
         import uuid
         if not isinstance(tracks, list) or not tracks or len(tracks) > 1000 or any(not isinstance(track,dict) for track in tracks):
             return {'success': False}
         with self._playback_guard():
+            current = self._core.engine.queue.current_track
+            if (revision is not None and str(revision) != str(self._queue_revision)) or (expected_entry_id is not None and (not current or current.get('entry_id') != expected_entry_id)):
+                return {'success': False, 'code': 'stale_queue'}
             self._core.engine.add_tracks_to_queue([dict(track,entry_id=uuid.uuid4().hex) for track in tracks])
             self._queue_revision += 1
             self._notify_queue_updated()
@@ -1718,60 +1809,6 @@ class AppApi:
             category, name = str(section), key
         success = self.save_setting(name, value, category)
         return success if isinstance(success, dict) else {'success': bool(success)}
-
-    def yandex_device_auth(self):
-        """Start Yandex Music device-code authorization (O-1)."""
-        try:
-            svc = getattr(self._core, "yandex", None)
-            if not svc:
-                return {"success": False, "message": "Yandex Music сервис недоступен"}
-
-            def _on_code(code):
-                user_code = getattr(code, "user_code", "") or ""
-                ver_url = getattr(code, "verification_url", "") or "https://passport.yandex.ru/device"
-                self._emit("yandex_device_auth_code", {
-                    "user_code": user_code,
-                    "verification_url": ver_url
-                })
-
-            def _worker():
-                try:
-                    from yandex_music import Client
-                    if not hasattr(Client, "device_auth"):
-                        self._emit("yandex_device_auth_result", {
-                            "success": False,
-                            "message": "Установленная библиотека yandex-music не поддерживает device-авторизацию. Введите токен вручную в поле ниже."
-                        })
-                        return
-                    client = svc._get_client()
-                    if client is None:
-                        client = Client()
-                    token = client.device_auth(on_code=_on_code, timeout=300)
-                    if token and getattr(token, "access_token", ""):
-                        from core.oauth import store_yandex_token
-                        store_yandex_token(self._core.settings, token)
-                        svc.reset_client()
-                        self._emit("yandex_device_auth_result", {
-                            "success": True,
-                            "message": "Авторизация Яндекс Музыки выполнена успешно"
-                        })
-                    else:
-                        self._emit("yandex_device_auth_result", {
-                            "success": False,
-                            "message": "Не удалось получить токен Яндекс Музыки"
-                        })
-                except Exception as e:
-                    logger.error("Yandex device auth failed: %s", type(e).__name__)
-                    self._emit("yandex_device_auth_result", {
-                        "success": False,
-                        "message": f"Ошибка авторизации Яндекс Музыки: {type(e).__name__}"
-                    })
-
-            threading.Thread(target=_worker, daemon=True).start()
-            return {"success": True, "message": "Запрос авторизации запущен"}
-        except Exception as e:
-            logger.error("yandex_device_auth error: %s", type(e).__name__)
-            return {"success": False, "message": describe_error(e)['message']}
 
     def set_volume(self, volume: int):
         """Set playback volume (0-100)."""
@@ -1917,7 +1954,7 @@ class AppApi:
             generation = self._search_generation
         # DEBUG, not INFO: search fires once per keystroke batch on the bridge
         # hot path and this line dominated app.log during normal use.
-        logger.debug('Search requested from provider %s', source if source in ('all','local','youtube','soundcloud','spotify','deezer','yandex') else 'unsupported')
+        logger.debug('Search requested from provider %s', source if source in ('all','local','youtube','soundcloud','spotify','deezer') else 'unsupported')
         if not query:
             self._emit('search_completed', {'query': '', 'source': source, 'type': result_type, 'request_id': request_id})
             return {'query': '', 'tracks': []}
@@ -1926,12 +1963,12 @@ class AppApi:
             with self._search_lock:
                 return generation == self._search_generation
 
-        DISABLED_UI_PROVIDERS = {"vk", "vkontakte", "zeno"}
+        DISABLED_UI_PROVIDERS = {"vk", "vkontakte", "zeno", "yandex"}
         if source == "all":
             if result_type in ("artists", "artist"):
                 requested_providers = ["local", "youtube", "deezer"]
             else:
-                requested_providers = ["local", "youtube", "soundcloud", "spotify", "deezer", "yandex"]
+                requested_providers = ["local", "youtube", "soundcloud", "spotify", "deezer"]
         elif source == "local":
             requested_providers = ["local"]
         elif source in DISABLED_UI_PROVIDERS:
@@ -2428,17 +2465,12 @@ class AppApi:
 
     def add_to_playlist(self, playlist_id: int, track_data: dict):
         """Add track to playlist."""
-        track_id = track_data.get("id")
-        if not track_id:
-            track_id = self._core.db.add_track(
-                title=track_data.get("title") or "Unknown",
-                artist=track_data.get("artist", "Unknown Artist"),
-                source=track_data.get("source", "local"),
-                source_id=track_data.get("source_id"),
-                duration=track_data.get("duration", 0)
-            )
+        if not isinstance(track_data, dict) or not track_data.get('title'):
+            return False
+        track_id = self._core.db.ensure_track_exists(track_data)
         res = self._core.db.add_to_playlist(playlist_id, track_id)
-        self._emit("playlist_changed", {"playlist_id": playlist_id})
+        if res:
+            self._emit("playlist_changed", {"playlist_id": playlist_id})
         return res
 
     def get_track_info(self, track_id: int):
@@ -2679,6 +2711,10 @@ class AppApi:
         if not isinstance(settings_data, dict):
             return {"success": False, "error": "Некорректные параметры настройки"}
         boolean_keys = ("particles_enabled", "crossfade_enabled", "volume_normalization", "autostart", "minimize_to_tray")
+        chosen_artists = settings_data.get("favorite_artists")
+        if chosen_artists is not None and (not isinstance(chosen_artists, list) or len(chosen_artists) > 200
+                or any(not isinstance(name, str) or not name.strip() or len(name) > 200 for name in chosen_artists)):
+            return {"success": False, "error": "Некорректный список исполнителей"}
         for key in boolean_keys:
             if key in settings_data and not isinstance(settings_data[key], bool):
                 return {"success": False, "error": "Некорректное значение переключателя"}
@@ -2728,6 +2764,7 @@ class AppApi:
                 "ui_style": ("interface", "ui_style"),
                 "download_format": ("downloads", "format"),
                 "download_quality": ("downloads", "quality"),
+                "favorite_artists": ("personalization", "favorite_artists"),
             }
             if theme is not None or mode is not None:
                 selected = theme or ("light" if mode == "light" else "dark")
@@ -2937,6 +2974,8 @@ class AppApi:
                 return False
             value = round(value)
         if category == 'services' and key in ('lastfm_enabled', 'youtube_enabled', 'soundcloud_enabled') and not isinstance(value, bool):
+            return False
+        if category == 'personalization' and key == 'recommendation_mode' and value not in ('familiar', 'balanced', 'discovery'):
             return False
         if key == 'border_radius' and category in ('theme', 'interface'):
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 24:
@@ -3252,6 +3291,185 @@ class AppApi:
             return {'success': True, 'text': str(text or ''), 'error': None}
         except Exception as exc:
             return {'success': False, 'text': '', 'error': describe_error(exc, 'translation')['message']}
+
+    def search_lyrics(self, query: str, artist: str = '', title: str = '', duration_sec: float = 0, request_id: str = None):
+        """Search candidates across multiple independent public lyrics services."""
+        from services.lyrics_search_service import LyricsSearchService
+        svc = getattr(self, '_lyrics_search_service', None)
+        if svc is None:
+            svc = self._lyrics_search_service = LyricsSearchService(
+                settings=self._core.settings,
+                lyrics_service=self._core.lyrics,
+            )
+        try:
+            candidates = svc.search_candidates(
+                query=query, artist=artist, title=title, duration_sec=float(duration_sec or 0)
+            )
+            return {'success': True, 'candidates': candidates, 'request_id': request_id}
+        except Exception as ex:
+            logger.warning("search_lyrics failed: %s", ex, exc_info=True)
+            return {'success': False, 'candidates': [], 'error': str(ex), 'request_id': request_id}
+
+    def _resolve_identity_key(self, track: dict) -> str:
+        if not isinstance(track, dict):
+            return ""
+        video_id = str(track.get("source_id") or "") if track.get("source") == "youtube" else ""
+        if video_id:
+            return f"youtube:{video_id}"
+        upload_source = str(track.get("source") or "")
+        upload_id = str(track.get("source_id") or track.get("id") or "")
+        if upload_source == "soundcloud" and upload_id:
+            return f"soundcloud:{upload_id}"
+        file_path = str(track.get("file_path") or "")
+        if file_path and not file_path.lower().startswith(('http://', 'https://')):
+            return f"local:{os.path.normcase(os.path.abspath(file_path))}"
+        title = str(track.get("title") or "").strip().lower()
+        artist = str(track.get("artist") or "").strip().lower()
+        return f"meta:{title}\0{artist}\0"
+
+    def apply_lyrics_candidate(self, candidate_payload: dict, track_identity: dict):
+        """Apply a chosen search candidate to the track and persist it in the database."""
+        from services.lyrics_search_service import LyricsSearchService
+        svc = getattr(self, '_lyrics_search_service', None)
+        if svc is None:
+            svc = self._lyrics_search_service = LyricsSearchService(
+                settings=self._core.settings,
+                lyrics_service=self._core.lyrics,
+            )
+        raw_payload = candidate_payload.get('rawPayload') or candidate_payload
+        resolved = svc.resolve_candidate_lyrics(raw_payload)
+        if not resolved:
+            return {'success': False, 'error': 'Не удалось получить текст для выбранного варианта'}
+
+        identity_key = self._resolve_identity_key(track_identity)
+        track_id = int(track_identity.get('id') or 0) if str(track_identity.get('id') or '').isdigit() else None
+        synced = resolved.get('syncedLyrics')
+        plain = resolved.get('plainLyrics') or ''
+        source = resolved.get('source') or candidate_payload.get('source', 'Online')
+        sync_type = resolved.get('syncType', 'line' if synced else 'plain')
+
+        if identity_key and hasattr(self._core.db, 'set_track_lyrics_override'):
+            self._core.db.set_track_lyrics_override(
+                identity_key=identity_key,
+                override_type='chosen_version',
+                source_name=source,
+                plain_lyrics=plain,
+                synced_lyrics=synced,
+                sync_type=sync_type,
+                source_id=str(raw_payload.get('id') or raw_payload.get('songmid') or ''),
+                track_id=track_id,
+            )
+
+        payload = {
+            'status': 'found',
+            'source': source,
+            'match_type': 'exact',
+            'confidence': 1.0,
+            'syncedLyrics': synced,
+            'plainLyrics': plain,
+            'syncType': sync_type,
+            'isOverride': True,
+            'overrideType': 'chosen_version',
+            'revision': 1,
+            'phase': 'final',
+        }
+        self._emit('lyrics_ready', payload)
+        return {'success': True, 'lyrics': payload}
+
+    def save_custom_lyrics(self, track_identity: dict, text: str, is_synced: bool = False, offset_ms: int = 0):
+        """Save user-edited custom lyrics for a track."""
+        from services.lyrics_formats import parse_lyrics, plain_text, to_lrc, validate_lyrics
+        raw_text = str(text or '').strip()
+        if not raw_text:
+            return {'success': False, 'error': 'Текст песни не может быть пустым'}
+
+        synced = None
+        plain = raw_text
+        sync_type = 'plain'
+
+        if is_synced or re.search(r'\[\d+:\d+', raw_text):
+            try:
+                model = parse_lyrics(raw_text, 'lrc')
+                if model and model.get('lines'):
+                    synced = to_lrc(model)
+                    plain = plain_text(model)
+                    sync_type = model.get('syncType', 'line')
+            except Exception as ex:
+                return {'success': False, 'error': f'Ошибка формата LRC: {ex}'}
+
+        identity_key = self._resolve_identity_key(track_identity)
+        track_id = int(track_identity.get('id') or 0) if str(track_identity.get('id') or '').isdigit() else None
+
+        if identity_key and hasattr(self._core.db, 'set_track_lyrics_override'):
+            self._core.db.set_track_lyrics_override(
+                identity_key=identity_key,
+                override_type='custom_user',
+                source_name='Пользовательский',
+                plain_lyrics=plain,
+                synced_lyrics=synced,
+                sync_type=sync_type,
+                track_id=track_id,
+                offset_ms=int(offset_ms or 0),
+            )
+
+        payload = {
+            'status': 'found',
+            'source': 'Пользовательский',
+            'match_type': 'exact',
+            'confidence': 1.0,
+            'syncedLyrics': synced,
+            'plainLyrics': plain,
+            'syncType': sync_type,
+            'isOverride': True,
+            'overrideType': 'custom_user',
+            'revision': 1,
+            'phase': 'final',
+        }
+        self._emit('lyrics_ready', payload)
+        return {'success': True, 'lyrics': payload}
+
+    def delete_custom_lyrics(self, track_identity: dict):
+        """Delete custom or pinned lyric override and restore automatic lookup."""
+        identity_key = self._resolve_identity_key(track_identity)
+        track_id = int(track_identity.get('id') or 0) if str(track_identity.get('id') or '').isdigit() else None
+        if identity_key and hasattr(self._core.db, 'delete_track_lyrics_override'):
+            self._core.db.delete_track_lyrics_override(identity_key=identity_key, track_id=track_id)
+        # Clear memory cache for track to trigger clean cascade
+        return {'success': True}
+
+    def get_lyrics_display_settings(self):
+        """Get user typography preferences for lyrics display."""
+        try:
+            stored = self._core.db.get_settings_by_category('lyrics_display') or {}
+            return {
+                'fontSize': int(stored.get('fontSize') or 24),
+                'fontWeight': int(stored.get('fontWeight') or 700),
+                'lineHeight': float(stored.get('lineHeight') or 1.45),
+                'textAlign': str(stored.get('textAlign') or 'center'),
+            }
+        except Exception:
+            return {'fontSize': 24, 'fontWeight': 700, 'lineHeight': 1.45, 'textAlign': 'center'}
+
+    def save_lyrics_display_settings(self, settings: dict):
+        """Persist typography preferences for lyrics display."""
+        if not isinstance(settings, dict):
+            return False
+        try:
+            items = []
+            if 'fontSize' in settings:
+                items.append(('fontSize', int(settings['fontSize']), 'lyrics_display'))
+            if 'fontWeight' in settings:
+                items.append(('fontWeight', int(settings['fontWeight']), 'lyrics_display'))
+            if 'lineHeight' in settings:
+                items.append(('lineHeight', float(settings['lineHeight']), 'lyrics_display'))
+            if 'textAlign' in settings:
+                items.append(('textAlign', str(settings['textAlign']), 'lyrics_display'))
+            if items:
+                self._core.db.set_settings_batch(items)
+            return True
+        except Exception as ex:
+            logger.error("save_lyrics_display_settings error: %s", ex)
+            return False
 
     def get_home_data(self):
         """Get home feed dashboard statistics and data."""
@@ -3592,7 +3810,29 @@ class AppApi:
             publish(error=exc)
         return {'status':'pending', 'request_id':rid}
 
-    def get_track_wave(self, track_data: dict, limit: int = 15, exclude_ids: list = None, request_id=None):
+    def get_playlist_recommendations(self, playlist_id, max_results=10, request_id=None):
+        """Load collection suggestions off the bridge thread with correlated completion."""
+        import uuid
+        rid = str(request_id or uuid.uuid4().hex)
+        count = 10
+
+        def publish(tracks=None, error=None):
+            payload = {'playlist_id': playlist_id, 'request_id': rid, 'tracks': (tracks or [])[:count]}
+            if error:
+                payload['error'] = describe_error(error, 'recommendations')['message']
+            self._emit('playlist_recommendations_ready', payload)
+
+        try:
+            count = max(0, min(50, int(max_results)))
+            if playlist_id != 'favorites' and (isinstance(playlist_id, bool) or int(playlist_id) <= 0):
+                raise ValueError('Invalid playlist')
+            self._core.recommendations.get_playlist_recommendations(playlist_id, max_results=count,
+                callback=publish, error_callback=lambda error: publish(error=error))
+        except Exception as exc:
+            publish(error=exc)
+        return {'status': 'pending', 'request_id': rid}
+
+    def get_track_wave(self, track_data: dict, limit: int = 15, exclude_ids: list = None, request_id=None, continuation_tracks=None):
         """Get smart wave / radio of related tracks for a seed track (async, O-4).
 
         Returns [] immediately; results are delivered via the track_wave_ready event.
@@ -3610,10 +3850,17 @@ class AppApi:
             publish(error="Трек для волны не выбран")
             return []
         try:
+            limit = max(0, min(50, int(limit)))
+            exclude_ids = [str(i)[:500] for i in (exclude_ids if isinstance(exclude_ids, list) else [])[:1000]
+                           if isinstance(i, (str, int))]
+            continuation = ([dict(t) for t in continuation_tracks[-10:] if isinstance(t, dict)]
+                            if isinstance(continuation_tracks, list) else [])
+            extra = {'continuation_tracks': continuation} if continuation else {}
             self._core.recommendations.get_wave_for_track(
                 track_data, limit=limit, exclude_ids=exclude_ids or [],
                 callback=lambda tracks: publish(tracks),
                 error_callback=lambda e: publish(error=e),
+                **extra,
             )
         except Exception as e:
             logger.error(f"Error in get_track_wave: {type(e).__name__}")
@@ -3779,6 +4026,32 @@ class AppApi:
             logger.error(f"Error cancelling batch download: {type(e).__name__}")
             return False
 
+    def get_personal_wave(self, request_id=None, exclude_tracks=None):
+        rid = str(request_id or '')
+        excluded = [t for t in (exclude_tracks or [])[:1000] if isinstance(t, dict)] if isinstance(exclude_tracks, list) else []
+        def publish(tracks, error=None):
+            self._emit('personal_wave_ready', {'request_id': rid, 'tracks': tracks or [], 'error': error})
+        try:
+            self._core.recommendations.get_personal_wave(self._core.db.get_history(limit=100) or [], excluded,
+                callback=publish, error_callback=lambda error: publish([], describe_error(error, 'recommendations')['message']))
+        except Exception as exc:
+            publish([], describe_error(exc, 'recommendations')['message'])
+        return {'status': 'pending', 'request_id': rid}
+
+    def replace_personal_wave_tail(self, tracks, token, expected_entry_id, revision):
+        import uuid
+        if not isinstance(tracks, list) or not tracks or len(tracks) > 150 or any(not isinstance(t, dict) for t in tracks):
+            return {'success': False}
+        with self._playback_guard():
+            if str(revision) != str(self._queue_revision):
+                return {'success': False, 'code': 'stale_queue'}
+            entries = [dict(t, entry_id=uuid.uuid4().hex, _personal_wave_session=token) for t in tracks]
+            if not self._core.engine.queue.replace_personal_wave_tail(entries, token, expected_entry_id):
+                return {'success': False, 'code': 'stale_queue'}
+            self._queue_revision += 1
+            self._notify_queue_updated()
+        return {'success': True}
+
     def get_feed(self, max_results: int = 20, request_id=None):
         """Request recommendations without blocking the UI bridge."""
         max_results = max(0, min(100, int(max_results)))
@@ -3864,20 +4137,47 @@ class AppApi:
 
     def toggle_zapret(self, enabled: bool, mode: str = "youtube_discord", custom_args: str = "", binary_path: str = ""):
         """Toggle DPI bypass Zapret service."""
+        if not isinstance(enabled, bool):
+            return {'success': False, 'error': 'Некорректное значение переключателя Zapret',
+                    'message': 'Некорректное значение переключателя Zapret'}
         try:
+            selection_succeeded = False
+            selection_attempted = False
             if enabled:
-                success, msg = self._core.zapret.start(mode=mode, custom_args=custom_args, binary_path=binary_path)
+                selected = self._core.settings.get('zapret', 'strategy_selected', False)
+                if isinstance(selected, str):
+                    selected = selected.strip().lower() in ('true', '1', 'yes', 'on')
+                if mode != 'custom' and not selected:
+                    selection_attempted = True
+                    success, msg, mode = self._core.zapret.select_strategy(preferred=mode, binary_path=binary_path)
+                    selection_succeeded = success
+                else:
+                    success, msg = self._core.zapret.start(mode=mode, custom_args=custom_args, binary_path=binary_path,
+                                                           interactive=True)
             else:
-                success, msg = self._core.zapret.stop()
+                cancel_selection = getattr(self._core.zapret, 'cancel_selection', None)
+                if cancel_selection and cancel_selection():
+                    running = self._core.zapret.is_running()
+                    return {'success': True, 'pending': True, 'running': running,
+                            'enabled': running, 'message': 'Отмена подбора…'}
+                stop = getattr(self._core.zapret, "stop_interactive", self._core.zapret.stop)
+                success, msg = stop()
             # BUG-009: `enabled` must reflect the ACTUAL process state. The old
             # `enabled and success` wrote False while a failed stop left an
             # elevated winws running, desyncing settings from reality (and
             # hiding the live bypass from the next autostart decision).
             is_running = self._core.zapret.is_running()
             self._core.settings.set("zapret", "enabled", is_running)
-            self._core.settings.set("zapret", "mode", mode)
-            self._core.settings.set("zapret", "custom_args", custom_args or "")
-            self._core.settings.set("zapret", "binary_path", binary_path or "")
+            # Disabling changes only enabled. A rejected command must not
+            # replace the last valid configuration used by autostart.
+            # Failed selection can retain its current process if stop/UAC was
+            # denied, so record that candidate's actual mode in that case.
+            if enabled and (success or (selection_attempted and is_running)):
+                self._core.settings.set("zapret", "mode", mode)
+                self._core.settings.set("zapret", "custom_args", custom_args or "")
+                self._core.settings.set("zapret", "binary_path", binary_path or "")
+            if selection_succeeded and is_running:
+                self._core.settings.set('zapret', 'strategy_selected', True)
             return {
                 "success": success,
                 "running": is_running,
@@ -4242,7 +4542,33 @@ class AppApi:
                     self._restoring_session = True
                     self._on_track_changed(dict(queue.current_track))
                 self._notify_queue_updated()
+            if first:
+                self._schedule_startup_update_check()
             return {'success': True, 'playback_epoch': self._playback_epoch}
+
+    def _schedule_startup_update_check(self):
+        def _runner():
+            time.sleep(4.0)
+            if getattr(self, '_closed', False):
+                return
+            try:
+                res = self._updater.check_for_updates(manual=False)
+                if res.get('update_available') and not res.get('error'):
+                    self._emit('update_available', res)
+            except Exception as e:
+                logger.debug('Background startup update check failed: %s', e)
+
+        t = threading.Thread(target=_runner, name='AppUpdateCheckThread', daemon=True)
+        t.start()
+
+    def get_app_version(self) -> str:
+        return self._updater.get_app_version()
+
+    def check_for_updates(self, manual: bool = True) -> dict:
+        return self._updater.check_for_updates(manual=manual)
+
+    def open_release_page(self, url=None) -> bool:
+        return self._updater.open_release_url(url)
 
     def filter_artist_tracks(self, tracks, artist_name):
         from services.artist_identity import canonical_artist, artist_aliases

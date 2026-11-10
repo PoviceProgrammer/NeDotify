@@ -101,6 +101,7 @@ class RecommendationService(BaseMusicService):
             'title': track.get('title') or 'Unknown Title',
             'artist': track.get('artist') or 'Unknown Artist',
             'cover_url': track.get('cover_url') or track.get('cover_path') or '',
+            'cover_path': track.get('cover_path') or '',
             'source': track.get('source') or 'unknown',
             'source_id': str(track.get('source_id') or track.get('id') or ''),
             'source_url': track.get('source_url') or '',
@@ -110,6 +111,7 @@ class RecommendationService(BaseMusicService):
             'recommendation_relevance': self._bounded_score(track.get('recommendation_relevance')),
             'recommendation_source': track.get('recommendation_source') or '',
             'recommendation_origin': track.get('recommendation_origin') or '',
+            'recommendation_reason': track.get('recommendation_reason') or '',
             'recommendation_seed_artists': list(track.get('recommendation_seed_artists') or []),
             'is_favorite': bool(track.get('is_favorite', False)),
             'is_downloaded': bool(track.get('is_downloaded', False)),
@@ -241,7 +243,8 @@ class RecommendationService(BaseMusicService):
         favorite = any(self._artist_key(t) == artist for t in taste_profile.favorite_tracks)
         relevance = self._bounded_score(candidate.get('recommendation_relevance'))
         preferred = {self._text_key(g): self._bounded_score(weight) for g, weight in taste_profile.genre_distribution.items()}
-        configured = self.settings.get('personalization', 'favorite_genres', []) if self.settings else []
+        configured = (self.settings.get('personalization', 'favorite_genres', [])
+                      if self.settings and not getattr(taste_profile, '_collection_context', False) else [])
         if isinstance(configured, list):
             preferred.update({self._text_key(g): 1 for g in configured if isinstance(g, str)})
         genres = {self._text_key(g) for g in re.split(r'[,;/]', str(candidate.get('genre') or '')) if g.strip()}
@@ -261,8 +264,39 @@ class RecommendationService(BaseMusicService):
         except (ValueError, TypeError):
             return 0.0
 
-    def _rank_tracks(self, tracks, profile, limit, exclude_tracks=(), exclude_ids=()):
-        limit = max(0, min(50, int(limit)))
+    def _recommendation_mode(self):
+        mode = self.settings.get('personalization', 'recommendation_mode', 'balanced') if self.settings else 'balanced'
+        return mode if mode in ('familiar', 'balanced', 'discovery') else 'balanced'
+
+    def _preference_signature(self):
+        """Separate in-flight requests when taste controls or feedback change."""
+        return (self._recommendation_mode(), repr(self._feedback()),
+                repr(self.settings.get('personalization', 'favorite_artists', []) if self.settings else []),
+                repr(artist_aliases(self.settings)))
+
+    def _reason_artist_names(self, profile):
+        names = {self._artist_key(t): str(t.get('artist') or '')
+                 for t in self._known_tracks(profile) + list(getattr(profile, 'recommendation_seeds', []))}
+        names.update({self._artist_key(a.get('name')): str(a.get('name') or '') for a in profile.top_artists})
+        return names
+
+    def _recommendation_reason(self, track, profile, known, names):
+        """Describe available evidence without inventing an audio similarity."""
+        artist = self._artist_key(track)
+        evidence = [names[self._artist_key(a)] for a in track.get('recommendation_seed_artists', [])
+                    if self._artist_key(a) in names]
+        if evidence and self._bounded_score(track.get('recommendation_relevance')) >= .5:
+            return 'По музыке ' + ', '.join(dict.fromkeys(evidence))[:160]
+        if any(self._artist_key(t) == artist for t in profile.favorite_tracks):
+            return 'Исполнитель из ваших любимых'
+        if self._content_key(track) in known:
+            return 'Из вашей библиотеки и истории'
+        if artist in names:
+            return 'Знакомый исполнитель'
+        return ''
+
+    def _rank_tracks(self, tracks, profile, limit, exclude_tracks=(), exclude_ids=(), *, maximum=50):
+        limit = max(0, min(maximum, int(limit)))
         if not limit:
             return []
         excluded = {str(i).strip().casefold() for i in exclude_ids if i is not None}
@@ -270,6 +304,9 @@ class RecommendationService(BaseMusicService):
         blocked, disliked = self._feedback()
         excluded_content.update(disliked)
         known = self._known_content_keys(profile)
+        reason_names = self._reason_artist_names(profile)
+        mode = self._recommendation_mode()
+        novelty_bonus = {'familiar': 0.0, 'balanced': .18, 'discovery': .4}[mode]
         known_rows = {}
         def identity_quality(t):
             return (bool(t.get('file_path')), bool(t.get('is_favorite')),
@@ -313,17 +350,21 @@ class RecommendationService(BaseMusicService):
                 continue
             seen.add(key)
             seen_ids.add(provider_id)
-            score = self._calculate_taste_weights(track, profile) + (0.18 if key not in known else 0)
+            score = self._calculate_taste_weights(track, profile) + (novelty_bonus if key not in known else (.3 if mode == 'familiar' else 0))
             if key in skipped:
                 score -= 1
-            ranked.append((score, index, self._format_ui_track(track), key in known))
+            formatted = self._format_ui_track(track)
+            formatted['recommendation_reason'] = self._recommendation_reason(track, profile, known, reason_names)
+            ranked.append((score, index, formatted, key in known))
         ranked.sort(key=lambda item: (-item[0], item[1]))
         result, deferred, artist_counts = [], [], {}
-        familiar_count, familiar_cap = 0, max(1, round(limit * 0.3))
+        familiar_count, familiar_cap = 0, max(1, round(limit * {'familiar': .8, 'balanced': .3, 'discovery': .1}[mode]))
         artist_cap = max(2, math.ceil(limit / 5))
         known_artists = {(a.get('identity_key') or self._artist_key(a.get('name'))) for a in profile.top_artists}
         known_artists.update(self._artist_key(t) for t in self._known_tracks(profile))
         configured_ratio = self.settings.get('personalization', 'discovery_ratio', .2) if self.settings else .2
+        if mode != 'balanced':
+            configured_ratio = 0 if mode == 'familiar' else .4
         discovery_count = round(limit * min(.4, self._bounded_score(configured_ratio))) if known_artists else 0
         for _, _, track, familiar in ranked:
             artist = self._artist_key(track)
@@ -410,7 +451,7 @@ class RecommendationService(BaseMusicService):
         jobs = []
         def add_job(source, artist, work):
             jobs.append((source, self._artist_key(artist), work))
-        artist_budget = 10 if limit >= 60 else 2
+        artist_budget = 20 if limit >= 120 else 10 if limit >= 60 else 2
         for seed in seeds[:10 if limit >= 60 else 5]:
             sid = str(seed.get('source_id') or '')
             if seed.get('source') == 'soundcloud' and self.sc_service and self._provider_enabled('soundcloud'):
@@ -425,7 +466,10 @@ class RecommendationService(BaseMusicService):
                         self._related_catalogue_seed(seed, min(30, limit + 5), deadline))
         if self.youtube_service and self._provider_enabled('youtube'):
             for artist in artists[:artist_budget]:
-                add_job('artist_search', artist, lambda artist=artist: self.youtube_service.search_sync(artist, limit=8, timeout=5))
+                if limit >= 120:
+                    add_job('artist_search', artist, lambda artist=artist: self.youtube_service.search_sync(artist, limit=50, result_type='songs_only', timeout=5))
+                else:
+                    add_job('artist_search', artist, lambda artist=artist: self.youtube_service.search_sync(artist, limit=8, timeout=5))
         if self._provider_enabled('deezer') and (seeds or artists):
             add_job('catalogue_discovery', '', lambda: self._catalogue_discovery_candidates(seeds, artists, limit, deadline))
         if self._lastfm_enabled():
@@ -471,6 +515,11 @@ class RecommendationService(BaseMusicService):
                 else:
                     relevance = rank * {'youtube_radio': .95, 'soundcloud_related': .9, 'seed_radio': .9,
                                         'artist_search': .4, 'lastfm_similar': .8, 'lastfm_artist': .45}[source]
+                    # A catalogue result credited to the selected artist is
+                    # direct evidence, unlike an arbitrary search result.
+                    if (limit >= 120 and source == 'artist_search' and seed_artist
+                            and self._artist_key(candidate) == seed_artist):
+                        relevance = max(relevance, .7)
                 candidate.update(recommendation_source=evidence_source, recommendation_relevance=relevance,
                                  recommendation_seed_artists=seed_artists)
                 previous = by_content.get(key)
@@ -588,6 +637,7 @@ class RecommendationService(BaseMusicService):
                      repr(self._feedback()), repr(artist_aliases(self.settings)),
                      repr(self.settings.get('personalization', 'favorite_genres', []) if self.settings else []),
                      self.settings.get('personalization', 'discovery_ratio', .2) if self.settings else .2,
+                     self._recommendation_mode(),
                      self._provider_enabled('youtube'), self._provider_enabled('soundcloud'), self._provider_enabled('deezer'), self._lastfm_enabled())
         digest = hashlib.sha256()
         for component in signature:
@@ -600,15 +650,22 @@ class RecommendationService(BaseMusicService):
         if cached is not None:
             return [dict(t) for t in cached]
         familiar = profile.get_seed_tracks(limit=20) + profile.get_local_liked_and_downloaded_tracks(limit=20) + profile.recent_history
+        include_familiar = self._recommendation_mode() == 'familiar'
         try:
             candidates = self._collect_candidates(profile, artists=seed_artists, deadline=deadline)
         except Exception:
-            # An unavailable discovery provider must not hide the user's local
-            # library. With no usable alternative, retain the explicit failure.
-            if not self._rank_tracks(familiar, profile, max_results, exclude_tracks=profile.recent_history[:1]):
+            # Only the explicitly selected familiar mode can use the library
+            # as a fallback. Discovery must surface an outage rather than
+            # presenting saved songs as newly discovered recommendations.
+            if not include_familiar or not self._rank_tracks(familiar, profile, max_results, exclude_tracks=profile.recent_history[:1]):
                 raise
             candidates = []
-        tracks = self._rank_tracks(candidates + familiar, profile, max_results,
+        if include_familiar:
+            pool = candidates + familiar
+        else:
+            known = self._known_content_keys(profile)
+            pool = [track for track in candidates if self._content_key(track) not in known]
+        tracks = self._rank_tracks(pool, profile, max_results,
                                    exclude_tracks=profile.recent_history[:1])
         if not tracks and profile.is_empty() and not profile.recent_history:
             tracks = self._rank_tracks(CURATED_WELCOME_TRACKS, profile, max_results)
@@ -635,6 +692,11 @@ class RecommendationService(BaseMusicService):
 
     def _get_merged_seed_artists(self, taste_profile, limit=10):
         seed_artists = taste_profile.get_seed_artists(limit=max(20, limit))
+        selected = self.settings.get('personalization', 'favorite_artists', []) if self.settings else []
+        if isinstance(selected, list):
+            selected = [name.strip() for name in selected if isinstance(name, str) and name.strip()]
+            if selected:
+                seed_artists = selected + ([] if taste_profile.is_empty() and not taste_profile.recent_history else seed_artists)
         seed_artists += [t.get('artist') for t in self._known_tracks(taste_profile) if t.get('artist')]
         username = self.settings.get('auth', 'lastfm_username', '') if self.settings else ''
         username = username or os.getenv('LASTFM_USERNAME', '')
@@ -768,9 +830,23 @@ class RecommendationService(BaseMusicService):
 
         self._executor.submit(_task)
 
+    def get_personal_wave(self, history=None, exclude_tracks=None, callback=None, error_callback=None):
+        """A large personal radio pool, ranked again against current listening signals."""
+        def task():
+            profile = self._profile(history)
+            artists = self._get_merged_seed_artists(profile, limit=20)
+            candidates = self._collect_candidates(profile, artists=artists, limit=240,
+                                                   deadline=time.monotonic() + 22)
+            pool = candidates + self._known_tracks(profile)
+            return [dict(t, recommendation_origin='personal_wave') for t in
+                    self._rank_tracks(pool, profile, 100, exclude_tracks=exclude_tracks or [], maximum=100)]
+        key = ('personal-wave', self._preference_signature(), repr(history), repr(exclude_tracks))
+        return self._async_recommendation(key, task, callback or (lambda rows: None),
+                                          error_callback or (lambda error: None))
+
     def get_feed(self, history=None, personalization=None, max_results=20, callback=None, error_callback=None):
         max_results = max(0, min(50, int(max_results)))
-        key = 'recommendation:pending-feed:' + repr((history, personalization, max_results))
+        key = 'recommendation:pending-feed:' + repr((history, personalization, max_results, self._preference_signature()))
         return self._async_recommendation(key, lambda: self._feed_tracks(self._profile(history), max_results),
                                           callback, error_callback)
 
@@ -830,7 +906,7 @@ class RecommendationService(BaseMusicService):
                 return []
             candidates = self._collect_candidates(profile, seeds=[], artists=artists[:3], limit=max_results)
             return [dict(t, recommendation_origin='artist') for t in self._rank_tracks(candidates, profile, max_results)]
-        return self._async_recommendation('recommendation:pending-artists:' + repr((favorite_artists, max_results)),
+        return self._async_recommendation('recommendation:pending-artists:' + repr((favorite_artists, max_results, self._preference_signature())),
                                           task, callback, error_callback)
 
     def _daily_artist_buckets(self, profile):
@@ -868,22 +944,25 @@ class RecommendationService(BaseMusicService):
                 if tracks:
                     mixes.append({'type': 'custom_playlist', 'title': title, 'artist': 'NeDotify',
                                   'cover_url': tracks[0].get('cover_url') or '', 'tracks': tracks})
-            add_mix('Любимые и знакомые', familiar)
+            include_familiar = self._recommendation_mode() == 'familiar'
+            if include_familiar:
+                add_mix('Любимые и знакомые', familiar)
             add_mix('Открытия для вас', discoveries)
             for index,artists in enumerate(buckets,1):
                 keys={self._artist_key(artist) for artist in artists}
                 related = [t for t in candidates if self._belongs_to_daily_bucket(t, keys)]
                 unheard = self._rank_tracks([t for t in related if self._content_key(t) not in known], profile, 12)
                 if unheard:
-                    old = self._rank_tracks([t for t in familiar if self._artist_key(t) in keys], profile, 12-len(unheard))
+                    old = (self._rank_tracks([t for t in familiar if self._artist_key(t) in keys], profile, 12-len(unheard))
+                           if include_familiar else [])
                     # The visible collage and the beginning of the exact play
                     # queue reflect the generated material, rather than replay.
                     add_mix(f'Ежедневный микс {index}', unheard + old, discovery_first=True)
                     mixes[-1].update(artist=', '.join(artists),mix_id=f'daily-mix-{index}',date=datetime.date.today().isoformat())
-            if not mixes:
+            if not mixes and profile.is_empty() and not profile.recent_history:
                 add_mix('Первое знакомство', self._rank_tracks(CURATED_WELCOME_TRACKS, profile, 12))
             return mixes[:max(0, min(10, int(max_results)))]
-        return self._async_recommendation('recommendation:pending-mixes:' + repr((history, personalization, max_results)),
+        return self._async_recommendation('recommendation:pending-mixes:' + repr((history, personalization, max_results, self._preference_signature())),
                                           task, callback, error_callback)
 
     def _belongs_to_daily_bucket(self, track, artist_keys):
@@ -938,11 +1017,13 @@ class RecommendationService(BaseMusicService):
                                   'artist': 'NeDotify', 'cover_url': tracks[0].get('cover_url') or '',
                                   'tracks': tracks})
 
-            add_mix('Любимые и знакомые', familiar)
+            include_familiar = self._recommendation_mode() == 'familiar'
+            if include_familiar:
+                add_mix('Любимые и знакомые', familiar)
             add_mix('Открытия для вас', discoveries)
             for artist in self._get_merged_seed_artists(profile, limit=3):
                 group = self._rank_tracks(
-                    [t for t in feed + familiar if self._artist_key(t) == self._artist_key(artist)],
+                    [t for t in feed + (familiar if include_familiar else []) if self._artist_key(t) == self._artist_key(artist)],
                     profile, 8)
                 if len(group) >= 3:
                     add_mix(f'Микс: {artist}', group)
@@ -952,7 +1033,7 @@ class RecommendationService(BaseMusicService):
                 sections.append({'title': 'Открытия для вас', 'items': discoveries[:10]})
             return {'greeting': context['greeting'], 'sections': sections}
 
-        key = 'recommendation:pending-smart-home:' + repr((history, personalization))
+        key = 'recommendation:pending-smart-home:' + repr((history, personalization, self._preference_signature()))
         return self._async_recommendation(key, task, callback, error_callback)
 
     def get_authentic_home(self, history=None, max_results=5, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None):
@@ -993,17 +1074,112 @@ class RecommendationService(BaseMusicService):
                 error_callback(str(exc))
             return None
 
-    def get_wave_for_track(self, seed_track, limit=15, exclude_ids=None, callback=None, error_callback=None):
+    def get_playlist_recommendations(self, playlist_id, max_results=10, callback=None, error_callback=None):
+        """Use this collection's taste rather than unrelated global listening."""
+        count = max(0, min(50, int(max_results)))
+
+        def collection_tracks():
+            if not self.db:
+                return []
+            rows = (self.db.get_favorite_tracks() if playlist_id == 'favorites'
+                    else self.db.get_playlist_tracks(int(playlist_id)))
+            return [dict(t) for t in (rows or []) if isinstance(t, dict)]
+
+        def task():
+            rows = collection_tracks()
+            blocked, disliked = self._feedback()
+            eligible = [t for t in rows if self._playable(t) and self._artist_key(t) not in blocked
+                        and self._content_key(t) not in disliked]
+            if not eligible or not count:
+                return []
+            profile = UserTasteProfile(settings=self.settings)
+            profile._collection_context = True
+            profile.playlist_tracks = eligible
+            artists, genres = {}, {}
+            for track in eligible:
+                identity = self._artist_key(track)
+                entry = artists.setdefault(identity, {'name': track.get('artist') or '', 'identity_key': identity, 'play_count': 0})
+                entry['play_count'] += 1
+                for genre in re.split(r'[,;/]', str(track.get('genre') or '')):
+                    if genre.strip():
+                        genres[genre.strip()] = genres.get(genre.strip(), 0) + 1
+            profile.top_artists = sorted(artists.values(), key=lambda a: -a['play_count'])
+            maximum = max(genres.values(), default=1)
+            profile.genre_distribution = {g: weight / maximum for g, weight in genres.items()}
+            # Sample the whole collection, then favour distinct artists. This
+            # avoids letting the first imported album define every suggestion.
+            sample_count = min(5, len(eligible))
+            sampled = [eligible[round(i * (len(eligible) - 1) / max(1, sample_count - 1))] for i in range(sample_count)]
+            seeds, seen_artists = [], set()
+            for track in sampled + eligible:
+                artist = self._artist_key(track)
+                if artist in seen_artists:
+                    continue
+                seeds.append(track)
+                seen_artists.add(artist)
+                if len(seeds) >= 5:
+                    break
+            candidates = self._collect_candidates(profile, seeds=seeds,
+                artists=[t['artist'] for t in seeds if t.get('artist')], limit=max(20, count * 3))
+            # Re-read exclusions after network work: a concurrent Add action
+            # must not recommend the just-added song again under another ID.
+            excluded = rows + collection_tracks()
+            return [dict(t, recommendation_origin='playlist') for t in
+                    self._rank_tracks(candidates, profile, count, exclude_tracks=excluded)]
+
+        key = 'recommendation:pending-playlist:' + repr((playlist_id, count,
+            getattr(self.db, 'data_revision', None), self._preference_signature()))
+        return self._async_recommendation(key, task, callback, error_callback)
+
+    def _wave_continuation_seeds(self, anchor, tracks):
+        """Only previously generated, evidenced songs can expand an anchored wave."""
+        blocked, disliked = self._feedback()
+        seeds, seen = [], {self._content_key(anchor)}
+        seen_artists = {self._artist_key(anchor)}
+        # The frontend sends listening order. Prefer the most recent two valid
+        # recommendations, without allowing an arbitrary queued song to steer.
+        for track in reversed(tracks):
+            key = self._content_key(track)
+            if (key in seen or key in disliked or key[0] in blocked or key[0] in seen_artists or not self._playable(track)
+                    or track.get('recommendation_origin') != 'wave'
+                    or self._bounded_score(track.get('recommendation_relevance')) < .5
+                    or not track.get('recommendation_seed_artists')):
+                continue
+            seen.add(key)
+            seen_artists.add(key[0])
+            seeds.append(track)
+            if len(seeds) >= 2:
+                break
+        return seeds
+
+    def get_wave_for_track(self, seed_track, limit=15, exclude_ids=None, callback=None, error_callback=None, continuation_tracks=None):
+        limit = max(0, min(50, int(limit)))
+        exclude_ids = [str(i)[:500] for i in (exclude_ids or [])[:1000] if isinstance(i, (str, int))]
+        continuation_tracks = ([dict(t) for t in continuation_tracks[-10:] if isinstance(t, dict)]
+                               if isinstance(continuation_tracks, list) else [])
         def task():
             seed = seed_track if isinstance(seed_track, dict) else {}
             profile = self._profile()
             seeds = [seed] if seed else self._seed_tracks(profile)
+            continuation = self._wave_continuation_seeds(seed, continuation_tracks) if seed else []
+            seeds += continuation
+            profile.recommendation_seeds = seeds
             artists = [seed['artist']] if seed.get('artist') else self._get_merged_seed_artists(profile, limit=2)
-            candidates = self._collect_candidates(profile, seeds=seeds, artists=artists, limit=limit)
-            familiar = profile.get_seed_tracks(limit=20) + profile.recent_history
+            candidates = self._collect_candidates(profile, seeds=seeds, artists=artists,
+                limit=max(30, limit) if continuation else limit, deadline=time.monotonic() + 12)
+            if continuation:
+                anchor_artist = self._artist_key(seed)
+                allowed_artists = {self._artist_key(t) for t in seeds}
+                candidates = [dict(t) for t in candidates if self._bounded_score(t.get('recommendation_relevance')) >= .5
+                              and any(self._artist_key(a) in allowed_artists for a in t.get('recommendation_seed_artists', []))]
+                for candidate in candidates:
+                    evidence = {self._artist_key(a) for a in candidate['recommendation_seed_artists']}
+                    if anchor_artist not in evidence:
+                        candidate['recommendation_relevance'] *= .85
+            familiar = [] if continuation else profile.get_seed_tracks(limit=20) + profile.recent_history
             blocked = list(exclude_ids or []) + [seed.get('id'), seed.get('source_id')]
             return [dict(t, recommendation_origin='wave') for t in self._rank_tracks(candidates + familiar, profile, limit, exclude_tracks=[seed], exclude_ids=blocked)]
         if callback:
-            key = 'recommendation:pending-wave:' + repr((seed_track, limit, exclude_ids))
+            key = 'recommendation:pending-wave:' + repr((seed_track, limit, exclude_ids, continuation_tracks, self._preference_signature()))
             return self._async_recommendation(key, task, callback, error_callback)
         return task()

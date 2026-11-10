@@ -133,7 +133,7 @@ class AppCore:
         self.spotify = SpotifyService(self.settings)
         self.deezer = DeezerService(self.settings, providers=lambda source: getattr(self, source))
         self.lyrics = LyricsService(self.settings, cache_path=os.path.join(
-            os.path.dirname(os.path.abspath(self.db.db_path)), 'lyrics_cache.db'))
+            os.path.dirname(os.path.abspath(self.db.db_path)), 'lyrics_cache.db'), db=self.db)
         self.artists = ArtistService(youtube_service=self.youtube, settings=self.settings)
 
         # Proxy, Downloader & Plugins
@@ -306,10 +306,6 @@ class AppCore:
             if not getattr(self, "zapret", None):
                 return
 
-            mode = self.settings.get("zapret", "mode", "youtube_discord")
-            custom_args = self.settings.get("zapret", "custom_args", "")
-            bin_path = self.settings.get("zapret", "binary_path", "")
-
             def _start_worker():
                 try:
                     # Re-checked on this thread: cleanup() may have started
@@ -324,6 +320,12 @@ class AppCore:
                     if not _flag("enabled"):
                         logger.info("Zapret autostart skipped: disabled in settings (re-checked)")
                         return
+                    if not _flag("auto_start"):
+                        logger.info("Zapret autostart skipped: auto_start is off (re-checked)")
+                        return
+                    mode = self.settings.get("zapret", "mode", "youtube_discord")
+                    custom_args = self.settings.get("zapret", "custom_args", "")
+                    bin_path = self.settings.get("zapret", "binary_path", "")
                     try:
                         result = self.zapret.start(mode=mode, custom_args=custom_args,
                                                    binary_path=bin_path)

@@ -40,6 +40,9 @@
 @import "components/lyrics.css";
 @import "components/home-view.css";
 @import "components/track-table.css";
+@import "components/recommendation-controls.css";
+@import "components/playlist-recommendations.css";
+@import "components/track-wave.css";
 @import "themes.css";
 @import "components/home-refresh.css";
 @import "components/search-refresh.css";

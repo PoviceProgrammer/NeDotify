@@ -4785,3 +4785,13 @@ body:not(.mini-player-active) #app-container { animation: mainPlayerEnter .22s e
 @media(prefers-reduced-motion:reduce) { #sidebar, #sidebar .nav-item, #sidebar .nav-label { transition: none !important; } body.mini-player-active #mini-player-overlay, body:not(.mini-player-active) #app-container { animation: none; } }
 
 :root.resource-bg-disabled :is(#custom-bg-layer, #custom-bg-dim-layer, #macos-backdrop) { display: none !important; }
+
+/* Center each clickable target within the collapsed rail, including its footer. */
+#sidebar.is-collapsed { align-items:center; padding-left:8px; padding-right:8px; }
+#sidebar.is-collapsed .nav-item { margin-left:auto; margin-right:auto; flex-shrink:0; }
+#sidebar.is-collapsed :is(.sidebar-brand-row,.sidebar-footer) { width:100%; justify-content:center; }
+#sidebar.is-collapsed .sidebar-logo-initial { left:50%; transform:translateX(-50%); }
+
+.personal-wave-tracks { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr)); gap:4px 18px; max-height:440px; overflow-y:auto; overscroll-behavior:contain; }
+.personal-wave-status { color:var(--text-sec); font-size:12px; margin:0 0 16px; }
+.personal-wave .track-item { min-width:0; }

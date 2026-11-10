@@ -3,7 +3,7 @@ import { onTrackChanged, onStateChanged, applySettings, applyMuteState, getCurre
 import { onSearchResults } from './search.js';
 import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome, isCurrentHomeEvent, renderHomeRetry } from './home.js';
 import { loadLibrary, loadDownloaded, loadPlaylists } from './library.js';
-import { applySettingsFromBackend, onStorageInfo, setYandexWarning } from './settings.js';
+import { applySettingsFromBackend, onStorageInfo } from './settings.js';
 import { showToast, renderIcons, escapeHtml } from './utils.js';
 
 let isNextTrackChange = false;
@@ -369,6 +369,10 @@ export function initEvents() {
                 break;
 
 
+            case 'update_available':
+                window.dispatchEvent(new CustomEvent('nedotify:update_available', { detail: data }));
+                break;
+
             case 'zapret_update_checked':
                 window.dispatchEvent(new CustomEvent('nedotify:zapret_update_checked', { detail: data }));
                 break;
@@ -382,17 +386,10 @@ export function initEvents() {
             case 'zapret_still_running':
             case 'zapret_autostart_failed':
             case 'zapret_download_started':
+            case 'zapret_selection_progress':
             case 'zapret_download_finished':
             case 'zapret_download_failed':
                 window.dispatchEvent(new CustomEvent('nedotify:' + eventName, { detail: data }));
-                break;
-
-            case 'yandex_device_auth_code':
-                document.dispatchEvent(new CustomEvent('nedotify:yandex_device_auth_code', { detail: data }));
-                break;
-
-            case 'yandex_device_auth_result':
-                document.dispatchEvent(new CustomEvent('nedotify:yandex_device_auth_result', { detail: data }));
                 break;
 
             case 'audio_error': {
@@ -440,8 +437,6 @@ export function initEvents() {
             }
 
             // ================= FUTURE EVENTS / DEPRECATED =================
-            // NOTE: yandex_device_auth_* are handled above; do not duplicate
-            // them here - JS switch silently shadows the first handler.
             // BUG-U3-010: 'proxy_status' — живое событие (эмитят core/proxy.py
             // при смене статуса прокси). Обрабатывается подписчиком в main.js
             // (баннер состояния прокси), здесь — тихий пропуск, чтобы не
@@ -449,15 +444,6 @@ export function initEvents() {
             // BUG-U3-008: мёртвый case 'smart_home_ready' удалён — событие не
             // эмитится; живой путь — 'authentic_home_ready' (обработан выше).
             case 'proxy_status':
-                break;
-
-            case 'yandex_auth_error':
-                setYandexWarning(data?.invalid === true);
-                if (data?.invalid === true) showToast('Авторизация Яндекс Музыки истекла. Подключите аккаунт заново в настройках.', 'warning');
-                break;
-
-            case 'yandex_subscription_status':
-                showToast(data?.has_plus === true ? 'Подписка Яндекс Плюс активна' : 'Подписка Яндекс Плюс не найдена', 'info');
                 break;
 
             default:

@@ -159,6 +159,37 @@ export function initHotkeys() {
             return;
         }
 
+        // F11: Toggle Fullscreen (always available, regardless of input focus or modal trap)
+        if (e.key === 'F11' || e.code === 'F11') {
+            e.preventDefault();
+            if (e.repeat) return;
+            if (window._fullscreenToggling) return;
+            window._fullscreenToggling = true;
+            const unlock = () => { window._fullscreenToggling = false; };
+            const timer = setTimeout(unlock, 1000);
+            if (window.pywebview?.api?.toggle_fullscreen) {
+                try {
+                    const res = window.pywebview.api.toggle_fullscreen();
+                    if (res && typeof res.finally === 'function') {
+                        res.finally(() => { clearTimeout(timer); unlock(); });
+                    } else if (res && typeof res.then === 'function') {
+                        res.then(unlock, unlock).finally(() => clearTimeout(timer));
+                    } else {
+                        setTimeout(unlock, 200);
+                    }
+                } catch {
+                    unlock();
+                }
+            } else if (document.fullscreenElement) {
+                document.exitFullscreen?.().then(unlock, unlock).catch(unlock);
+            } else if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen().then(unlock, unlock).catch(unlock);
+            } else {
+                unlock();
+            }
+            return;
+        }
+
         // Ignore if user is typing in an input or editable element
         const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
         const targetIsEditable = e.target instanceof Element &&
@@ -177,15 +208,6 @@ export function initHotkeys() {
         // keys and the rebinding mode above are all before this point and are
         // untouched.
         if (isFocusInsideModalTrap(e.target)) return;
-
-        // F11: Frameless Window Maximize (keeps taskbar visible)
-        if (e.key === 'F11' || e.code === 'F11') {
-            e.preventDefault();
-            if (window.pywebview?.api?.maximize) {
-                window.pywebview.api.maximize();
-            }
-            return;
-        }
 
         // Handle native Media Keys
         if (e.key === 'MediaPlayPause') { e.preventDefault(); togglePlayPause(); return; }

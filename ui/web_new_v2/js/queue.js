@@ -1,5 +1,6 @@
 import { formatTime, renderIcons, getCoverUrl, escapeHtml, showToast } from './utils.js';
 import { getCurrentTrack, playTrack, incrementQueueVersion } from './player.js';
+import { getTrackWaveState, stopTrackWave, retryTrackWave } from './track-wave.js';
 
 let isQueueVisible = false;
 let draggedItemIndex = null;
@@ -74,6 +75,8 @@ export function initQueue() {
     if (closeBtn) closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeQueue(); });
 
     ensureClearButton(drawer);
+    ensureWaveStatus(drawer);
+    window.addEventListener('nedotify:track_wave_state_changed', event => renderWaveStatus(event.detail));
 
     // Close on click outside WITHOUT blocking underlying clicks
     document.addEventListener('pointerdown', (e) => {
@@ -137,6 +140,7 @@ function ensureClearButton(drawer) {
     renderIcons(header);
     btn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        stopTrackWave();
         btn.disabled = true;
         try {
             if (window.pywebview?.api?.clear_queue) {
@@ -159,6 +163,32 @@ function ensureClearButton(drawer) {
             btn.disabled = false;
         }
     });
+}
+
+function ensureWaveStatus(drawer) {
+    if (!drawer || document.getElementById('queue-wave-status')) return;
+    const panel = document.createElement('div');
+    panel.id = 'queue-wave-status';
+    panel.className = 'queue-wave-status';
+    panel.hidden = true;
+    panel.innerHTML = '<div class="queue-wave-copy"><strong>Непрерывная волна</strong><span role="status" aria-live="polite"></span></div>' +
+        '<button type="button" class="queue-wave-retry">Повторить</button><button type="button" class="queue-wave-stop" aria-label="Остановить подбор волны" title="Остановить подбор, сохранив очередь">Стоп</button>';
+    panel.querySelector('.queue-wave-stop').addEventListener('click', stopTrackWave);
+    panel.querySelector('.queue-wave-retry').addEventListener('click', () => { void retryTrackWave(); });
+    drawer.insertBefore(panel, drawer.querySelector('.queue-view-tabs') || drawer.querySelector('#queue-drawer-content'));
+    renderWaveStatus(getTrackWaveState());
+}
+
+function renderWaveStatus(state = getTrackWaveState()) {
+    const panel = document.getElementById('queue-wave-status');
+    if (!panel) return;
+    panel.hidden = !state.active;
+    panel.dataset.status = state.status;
+    const message = state.status === 'loading' ? 'Подбираем продолжение…' : state.status === 'waiting' ? 'Продолжение не загружено' : 'Продолжение добавится автоматически';
+    const label = panel.querySelector('[role="status"]');
+    label.textContent = message;
+    label.title = state.title ? `Волна по треку «${state.title}»` : message;
+    panel.querySelector('.queue-wave-retry').hidden = state.status !== 'waiting';
 }
 
 function renderQueue(tracks, currentIndex, history = []) {
@@ -216,6 +246,7 @@ function renderQueue(tracks, currentIndex, history = []) {
             <div class="track-item-info">
                 <div class="track-item-title" style="${queueTab !== 'history' && index === currentIndex ? 'color:var(--primary)' : ''}">${escapeHtml(track.title || 'Unknown')}</div>
                 <div class="track-item-artist">${escapeHtml(track.artist || 'Unknown Artist')}</div>
+                ${track.recommendation_reason ? `<div class="recommendation-reason" title="${escapeHtml(track.recommendation_reason)}">${escapeHtml(track.recommendation_reason)}</div>` : ''}
             </div>
             <div class="track-item-duration">${formatTime(track.duration || 0)}</div>
             <button class="icon-btn queue-remove-btn" title="Удалить из очереди" style="flex-shrink:0;width:26px;height:26px;opacity:0.55;">

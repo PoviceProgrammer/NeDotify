@@ -19,7 +19,10 @@ def run_module(filename, setup, assertions, exports):
         import assert from 'node:assert/strict';
         {setup}
         // Pagination is tested independently of the separately exercised DOM virtualizer.
-        if ({json.dumps(filename)} === 'library.js') context.createLibraryVirtualList = () => ({{destroy(){{}},refresh(){{}},update(){{}},renderNext(){{}}}});
+        if ({json.dumps(filename)} === 'library.js') {{
+            context.createLibraryVirtualList = () => ({{destroy(){{}},refresh(){{}},update(){{}},renderNext(){{}}}});
+            context.initPlaylistRecommendations = context.showPlaylistRecommendations = context.hidePlaylistRecommendations = () => {{}};
+        }}
         const source = {json.dumps(source)}.replace(/^import[\\s\\S]*?from ['"][^'"]+['"];?\\r?$/gm, '').replace(/\\bexport\\s+/g, '');
         vm.runInContext(source + '\\nglobalThis.subject = {{ {exports} }};', context);
         {assertions}

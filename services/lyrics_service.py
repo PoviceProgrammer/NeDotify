@@ -82,12 +82,13 @@ atexit.register(_lyrics_pool.shutdown, wait=False, cancel_futures=True)
 
 
 class LyricsService:
-    def __init__(self, settings=None, *, cache_path=None):
+    def __init__(self, settings=None, *, cache_path=None, db=None):
         self.settings = settings
+        self.db = db
         self._cache = {}
         self._cache_lock = threading.RLock()
         from services.lyrics_lookup import LyricsLookup
-        self._lookup = LyricsLookup(self, cache_path=cache_path)
+        self._lookup = LyricsLookup(self, cache_path=cache_path, db=db)
 
     @classmethod
     def submit(cls, fn: Callable, *args, **kwargs) -> Optional[concurrent.futures.Future]:

@@ -2,12 +2,43 @@
 
 import math
 import os
+import re
 import threading
 import time
 from urllib.parse import urlparse
 
-from services.music_matching import artist_matches, normalize, similarity, title_metadata
+from services.music_matching import VERSION_PATTERNS, artist_matches, normalize, similarity, title_metadata
 from utils.stream_urls import stream_url_expired
+
+
+def _remix_titles_match(requested, candidate):
+    """Allow a shared artist credit inside an otherwise identical named mix.
+
+    Catalogues sometimes include the remixer's name in only one qualifier.
+    Remove at most that shared credit on one side; never remove the mix name,
+    year, or different credits on both sides. A generic 'Remix' is insufficient.
+    """
+    left, right = normalize(requested['title']), normalize(candidate['title'])
+    if left == right:
+        return True
+    common = ({normalize(a) for a in requested['artists']}
+              & {normalize(a) for a in candidate['artists']}) - {''}
+    for metadata, target in ((requested, right), (candidate, left)):
+        text = metadata['title']
+        for match in re.finditer(r'[\[(]([^\])]+)[\])]', text):
+            qualifier = normalize(match.group(1))
+            if not re.search(VERSION_PATTERNS['remix'], qualifier, re.I):
+                continue
+            for credit in common:
+                shortened = re.sub(r'(?<!\w)' + re.escape(credit) + r'(?!\w)', ' ', qualifier)
+                if shortened == qualifier:
+                    continue
+                if not re.sub(VERSION_PATTERNS['remix'], '', shortened, flags=re.I).strip():
+                    continue
+                variant = text[:match.start(1)] + shortened + text[match.end(1):]
+                if normalize(variant) == target:
+                    return True
+    return False
 
 
 def same_recording(wanted, offered):
@@ -22,7 +53,7 @@ def same_recording(wanted, offered):
         return False
     if requested["version"] != candidate["version"]:
         return False
-    if requested["version"] == "remix" and normalize(requested["title"]) != normalize(candidate["title"]):
+    if requested["version"] == "remix" and not _remix_titles_match(requested, candidate):
         return False
     if requested["artists"] and not artist_matches(requested["artists"], candidate["artists"]):
         return False

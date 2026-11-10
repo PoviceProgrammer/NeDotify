@@ -133,6 +133,10 @@ def _start_hermetic(svc, monkeypatch, launch_result=None):
 
 def _write_zip(entries):
     """Build an in-memory zapret-shaped archive {archive_name: content}."""
+    entries = dict(entries)
+    if entries.get('zapret/x86_64/winws.exe'):
+        for dependency in ('WinDivert.dll', 'WinDivert64.sys', 'cygwin1.dll'):
+            entries.setdefault('zapret/x86_64/' + dependency, _pe_bytes())
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         for name, content in entries.items():
@@ -562,6 +566,8 @@ def test_a_mid_swap_failure_is_rolled_back(svc, monkeypatch):
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("zapret/x86_64/winws.exe", new_winws)
         z.writestr("zapret/x86_64/cygwin1.dll", _pe_bytes())
+        z.writestr("zapret/x86_64/WinDivert.dll", _pe_bytes())
+        z.writestr("zapret/x86_64/WinDivert64.sys", _pe_bytes())
 
     with pytest.raises(PermissionError):
         svc._extract_zip(buf.getvalue())
@@ -581,6 +587,8 @@ def test_successful_extract_swaps_every_valid_file(svc):
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("zapret/x86_64/bin/winws.exe", payload)
         z.writestr("zapret/x86_64/bin/cygwin1.dll", dll)
+        z.writestr("zapret/x86_64/bin/WinDivert.dll", _pe_bytes())
+        z.writestr("zapret/x86_64/bin/WinDivert64.sys", _pe_bytes())
         z.writestr("zapret/README.txt", b"docs are not binaries")
         z.writestr("zapret/x86_64/bin/empty.exe", b"")  # skipped, not an error
     svc._extract_zip(buf.getvalue())
@@ -590,7 +598,7 @@ def test_successful_extract_swaps_every_valid_file(svc):
     assert os.path.isfile(os.path.join(svc.app_dir, "cygwin1.dll"))
     assert not os.path.isfile(os.path.join(svc.app_dir, "empty.exe"))
     assert not os.path.isfile(os.path.join(svc.app_dir, "README.txt"))
-    assert sorted(os.listdir(svc.app_dir)) == ["cygwin1.dll", "winws.exe"]
+    assert set(os.listdir(svc.app_dir)) == set(m._REQUIRED_BUNDLE_FILES)
     assert _extract_tmp_dirs(svc) == []
 
 
@@ -601,7 +609,8 @@ def test_an_archive_without_usable_binaries_touches_nothing(svc):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("zapret/x86_64/winws.exe", b"")  # 0-byte entries are skipped
-    svc._extract_zip(buf.getvalue())
+    with pytest.raises(ValueError):
+        svc._extract_zip(buf.getvalue())
     with open(target, "rb") as f:
         assert f.read() == b"OLD"
     assert _extract_tmp_dirs(svc) == []

@@ -267,6 +267,17 @@ class LocalUiServer:
                 length = -1
             if denied or length < 0 or length > 1_048_576:
                 status = '403 Forbidden' if denied else '413 Payload Too Large'
+                # A small POST may arrive in a packet after its headers.
+                # Closing with unread incoming bytes can reset Winsock before
+                # the peer receives our 403. Drain only bounded small bodies;
+                # never read an oversized/invalid request or dispatch it.
+                if denied and 0 < length <= 65_536:
+                    stream = environ.get('wsgi.input')
+                    if stream is not None:
+                        try:
+                            stream.read(length)
+                        except (OSError, ValueError):
+                            pass
                 start_response(status, [('Content-Type', 'text/plain'), ('Content-Length', '0')])
                 return [b'']
 

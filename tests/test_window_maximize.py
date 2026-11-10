@@ -41,17 +41,28 @@ class Form:
         self._state = state
         if state == 'maximized': self.Bounds = self.MaximizedBounds
     def PerformLayout(self): pass
+    is_fullscreen = False
+    def toggle_fullscreen(self):
+        if not self.is_fullscreen:
+            self._saved_bounds = Rect(self.Bounds.X, self.Bounds.Y, self.Bounds.Width, self.Bounds.Height)
+            self._saved_state = self._state
+            self.Bounds = Rect(-1920, 0, 1920, 1080)  # full screen bounds
+            self.is_fullscreen = True
+        else:
+            self.Bounds = self._saved_bounds
+            self._state = self._saved_state
+            self.is_fullscreen = False
 
 
 @pytest.fixture
 def native_window(api, monkeypatch):
     form = Form()
-    api._window = SimpleNamespace(native=form)
+    api._window = SimpleNamespace(native=form, toggle_fullscreen=form.toggle_fullscreen)
     work = Rect(-1920, 0, 1920, 1040)
     monkeypatch.setitem(sys.modules, 'System.Drawing', SimpleNamespace(Rectangle=Rect))
     monkeypatch.setitem(sys.modules, 'System.Windows.Forms', SimpleNamespace(
         FormWindowState=SimpleNamespace(Maximized='maximized', Normal='normal'),
-        Screen=SimpleNamespace(FromHandle=lambda handle: SimpleNamespace(WorkingArea=work))))
+        Screen=SimpleNamespace(FromHandle=lambda handle: SimpleNamespace(WorkingArea=work, Bounds=Rect(-1920, 0, 1920, 1080)))))
     monkeypatch.setattr('core.api.sys.platform', 'win32')
     pending = []
     monkeypatch.setattr(api, '_deferred_window_op', lambda delay, fn: pending.append(fn))
@@ -101,4 +112,20 @@ def test_windows_restore_clears_maximize_resize_guard(api, native_window):
     form, work, pending = native_window
     api._is_maximized = True
     api._on_window_resized(1100, 800)
+    assert api._is_maximized is False
+
+
+def test_toggle_fullscreen_covers_entire_display_and_restores(api, native_window):
+    form, work, pending = native_window
+    api.toggle_fullscreen()
+    pending.pop(0)()
+    assert (form.Bounds.Width, form.Bounds.Height) == (1920, 1080)
+    assert api._is_fullscreen is True
+    assert api._is_maximized is True
+    api.toggle_fullscreen()
+    pending.pop(0)()
+    assert form.WindowState == 'normal'
+    assert (form.Bounds.X, form.Bounds.Y, form.Bounds.Width, form.Bounds.Height) == (-1700, 90, 1100, 800)
+    assert (form.webview.Width, form.webview.Height) == (1100, 800)
+    assert api._is_fullscreen is False
     assert api._is_maximized is False

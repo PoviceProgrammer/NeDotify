@@ -314,12 +314,19 @@ class CatalogService(BaseMusicService):
                 except Exception:
                     result['catalog_status'] = 'unavailable'
             return result
-        key = ('album', source, sid, name_key(title), name_key(artist), repr(artist_aliases(self.settings)))
+        wanted_ids = {str(p.get('id') or p.get('browseId')) for p in album.get('artists') or []
+                      if isinstance(p, dict) and (p.get('id') or p.get('browseId'))}
+        if album.get('artist_channel_id'):
+            wanted_ids = {str(album['artist_channel_id'])}
+        key = ('album', source, sid, name_key(title), name_key(artist), tuple(sorted(wanted_ids)),
+               repr(artist_aliases(self.settings)))
         def fetch():
             if source == 'deezer':
                 from services.deezer_service import DeezerService
                 result = self._call(lambda: DeezerService(self.settings).collection('album', sid), deadline, is_current)
-                return {'status': 'found', 'verified': True, 'album': dict(album, title=result['name']),
+                details = dict(album, title=result['name'])
+                details.update(result.get('album') or {})
+                return {'status': 'found', 'verified': True, 'album': details,
                         'tracks': result['tracks']}
             if source in ('spotify', 'itunes'):
                 collection = sid.removeprefix('spotify_album_')
@@ -340,7 +347,10 @@ class CatalogService(BaseMusicService):
                     tracks.append({'id': 'spotify_' + str(h['trackId']), 'source': 'spotify', 'source_id': f'ytsearch1: {person} - {song}',
                                    'title': song, 'artist': person, 'album': actual_title, 'duration': (h.get('trackTimeMillis') or 0) / 1000,
                                    'cover_url': (h.get('artworkUrl100') or '').replace('100x100bb', '600x600bb')})
-                details = dict(album, source_id=collection, title=actual_title, artist=actual_artist, type='album')
+                details = dict(album, source_id=collection, title=actual_title, artist=actual_artist, type='album',
+                    year=str(raw.get('releaseDate') or '')[:4], release_date=raw.get('releaseDate') or '',
+                    album_type=raw.get('collectionType') or 'Album', track_count=len(tracks),
+                    cover_url=(raw.get('artworkUrl100') or '').replace('100x100bb', '600x600bb') or album.get('cover_url') or '')
             elif source == 'youtube':
                 yt = getattr(self.youtube, '_ytmusic', None)
                 if not yt:
@@ -359,24 +369,27 @@ class CatalogService(BaseMusicService):
                 actual_title = raw['title']
                 people = raw.get('artists') or []
                 actual_artist = ', '.join(h.get('name', '') for h in people)
-                wanted_ids = {str(p.get('id') or p.get('browseId')) for p in album.get('artists') or [] if p.get('id') or p.get('browseId')}
-                if album.get('artist_channel_id'):
-                    wanted_ids = {str(album['artist_channel_id'])}
                 offered_ids = {str(p.get('id') or p.get('browseId')) for p in people if p.get('id') or p.get('browseId')}
                 if wanted_ids and offered_ids and not wanted_ids.intersection(offered_ids):
                     return {'status': 'not_found', 'error': 'Альбом принадлежит другому исполнителю', 'tracks': []}
-                if (title and similarity(title, actual_title) < .85) or (artist and not artist_matches(artist, people, self.settings)):
+                verified_artist = bool(wanted_ids.intersection(offered_ids))
+                if (title and similarity(title, actual_title) < .85) or (artist and not verified_artist and not artist_matches(artist, people, self.settings)):
                     return {'status': 'not_found', 'error': 'Название или исполнитель альбома не совпадают', 'tracks': []}
-                tracks = []
+                tracks, seen = [], set()
                 for h in raw['tracks']:
                     video = h.get('videoId')
-                    if not video or h.get('isAvailable') is False:
+                    if not video or video in seen or h.get('isAvailable') is False:
                         continue
+                    seen.add(video)
                     thumbs = h.get('thumbnails') or raw.get('thumbnails') or []
                     tracks.append({'id': 'yt_' + video, 'source': 'youtube', 'source_id': video, 'title': h.get('title', ''),
                                    'artist': ', '.join(p.get('name', '') for p in h.get('artists') or people), 'artists': h.get('artists') or people,
                                    'album': actual_title, 'duration': h.get('duration_seconds') or 0, 'cover_url': thumbs[-1].get('url', '') if thumbs else ''})
-                details = dict(album, title=actual_title, artist=actual_artist, source_id=browse, type='album')
+                thumbnails = raw.get('thumbnails') or []
+                details = dict(album, title=actual_title, artist=actual_artist, source_id=browse, type='album',
+                    year=raw.get('year') or album.get('year') or '',
+                    album_type=raw.get('type') or album.get('album_type') or 'Album', track_count=len(tracks),
+                    cover_url=(thumbnails[-1].get('url') if thumbnails else '') or album.get('cover_url') or '')
             else:
                 return {'status': 'not_found', 'error': 'Источник не содержит подтверждённого альбома', 'tracks': []}
             return {'status': 'found', 'verified': True, 'album': details, 'tracks': tracks}

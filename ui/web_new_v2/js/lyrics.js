@@ -2,6 +2,9 @@
 import { getCurrentTrack, getLyricsPlaybackClock, seekTo } from './player.js';
 import { renderIcons } from './utils.js';
 import { normalizedTimedLines, WordPainter } from './lyrics-word-engine.js';
+import { initLyricsSettingsPopover, openLyricsSettingsPopover, applyLyricsDisplaySettings } from './lyrics-settings-popover.js';
+import { initLyricsSearchModal, openLyricsSearchModal } from './lyrics-search-modal.js';
+import { initLyricsCustomModal, openLyricsCustomModal } from './lyrics-custom-modal.js';
 
 let parsedLyrics = [];
 let currentLineIndex = -1;
@@ -299,6 +302,31 @@ export function adjustLyricsOffset(deltaMs) {
     updateLyricsPosition(lastPosMs);
 }
 
+export function invalidateLyricsKineticLayout() {
+    getContainers().forEach(track => {
+        const st = track._kinetic;
+        if (!st) return;
+        st.dirty = true;
+        st.measured = false;
+        measureViewport(st);
+        if (st.activeEl) {
+            focusActiveLine(st, false);
+        }
+    });
+}
+
+export function reloadCurrentTrackLyrics(forceNetwork = true) {
+    if (lastLoadedTrackKey) {
+        lyricsMemoryCache.delete(lastLoadedTrackKey);
+    }
+    lastLyricsData = null;
+    loadCurrentTrackLyrics(0, forceNetwork);
+}
+
+export function getCurrentLyricsData() {
+    return lastLyricsData;
+}
+
 function resumeDeferredLyrics() {
     const pending = deferredLyricsRequest;
     if (!pending) return;
@@ -327,6 +355,16 @@ export function initLyrics() {
     window.NeDotify.resetLyricsOffset = resetLyricsOffset;
     window.NeDotify.setOffsetControlsEnabled = setOffsetControlsEnabled;
     window.NeDotify.toggleTranslation = toggleTranslation;
+    window.NeDotify.invalidateLyricsKineticLayout = invalidateLyricsKineticLayout;
+    window.NeDotify.reloadCurrentTrackLyrics = reloadCurrentTrackLyrics;
+    window.NeDotify.getCurrentLyricsData = getCurrentLyricsData;
+    window.NeDotify.openLyricsSettingsPopover = openLyricsSettingsPopover;
+    window.NeDotify.openLyricsSearchModal = openLyricsSearchModal;
+    window.NeDotify.openLyricsCustomModal = openLyricsCustomModal;
+
+    initLyricsSettingsPopover();
+    initLyricsSearchModal();
+    initLyricsCustomModal();
 
     // Purge stale unbounded global offset from previous buggy sessions
     try { localStorage.removeItem('nedotify_lyrics_offset_current'); } catch(e) {}

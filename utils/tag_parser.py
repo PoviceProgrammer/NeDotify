@@ -122,8 +122,29 @@ def parse_tags(filepath: str) -> dict:
     return result
 
 
+def find_sidecar_lrc_file(filepath: str):
+    """Look for sidecar .lrc or .synced.lrc in the same directory as audio file."""
+    if not filepath or not os.path.isfile(filepath):
+        return None
+    try:
+        base, _ = os.path.splitext(filepath)
+        for ext in ('.lrc', '.synced.lrc', '.LRC'):
+            candidate = base + ext
+            if os.path.isfile(candidate):
+                with open(candidate, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read().strip()
+                if content:
+                    return content
+    except Exception:
+        pass
+    return None
+
+
 def extract_embedded_lyrics(filepath: str) -> str:
-    """Return embedded lyrics text (ID3 USLT, Vorbis LYRICS, MP4 ©lyr), or '' if none."""
+    """Return lyrics from sidecar file, ID3 SYLT/USLT, Vorbis LYRICS, or MP4 ©lyr."""
+    sidecar = find_sidecar_lrc_file(filepath)
+    if sidecar:
+        return sidecar
     if not HAS_MUTAGEN:
         return ""
     try:
@@ -133,6 +154,24 @@ def extract_embedded_lyrics(filepath: str) -> str:
             return ""
         texts = []
         if ext == '.mp3':
+            for key in audio.tags:
+                if key.startswith('SYLT'):
+                    sylt = audio.tags[key]
+                    if hasattr(sylt, 'text') and sylt.text:
+                        lrc_lines = []
+                        for item in sylt.text:
+                            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                                line_text, t = str(item[0] or ''), item[1]
+                                try:
+                                    t_ms = int(t)
+                                    m = t_ms // 60000
+                                    s = (t_ms % 60000) // 1000
+                                    cs = (t_ms % 1000) // 10
+                                    lrc_lines.append(f"[{m:02d}:{s:02d}.{cs:02d}]{line_text}")
+                                except (ValueError, TypeError):
+                                    pass
+                        if lrc_lines:
+                            return "\n".join(lrc_lines)
             for key in audio.tags:
                 if key.startswith('USLT'):
                     texts.append(audio.tags[key].text)

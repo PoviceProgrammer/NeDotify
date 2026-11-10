@@ -64,6 +64,9 @@
     <link rel="stylesheet" href="css/components/audio-tools.css">
 <link rel="stylesheet" href="css/components/notifications.css">
 <link rel="stylesheet" href="css/components/navigation-motion.css">
+<link rel="stylesheet" href="css/components/recommendation-controls.css">
+<link rel="stylesheet" href="css/components/playlist-recommendations.css">
+<link rel="stylesheet" href="css/components/track-wave.css">
 </head>
 <body>
 
@@ -110,9 +113,25 @@
 
 <!-- Shared top notification stack: transient messages and stream status. -->
 <div id="notification-stack">
+<div id="update-banner" class="update-banner hidden" role="status" aria-live="polite">
+    <div class="update-banner-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v8M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h8M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+    </div>
+    <div class="update-banner-content">
+        <span class="update-banner-text">Доступно обновление NeDotify <strong id="update-banner-version"></strong></span>
+    </div>
+    <div class="update-banner-actions">
+        <button type="button" class="update-banner-btn update-btn-primary" id="update-banner-action-btn">Обновить</button>
+        <button type="button" class="update-banner-btn update-btn-secondary" id="update-banner-details-btn">Подробнее</button>
+        <button type="button" class="update-banner-close" id="update-banner-close-btn" aria-label="Закрыть">×</button>
+    </div>
+</div>
 <div id="network-banner" class="network-banner hidden" role="status" aria-live="polite">
     <i data-lucide="wifi-off" aria-hidden="true"></i>
     <span id="network-banner-text">Нет подключения к сети</span>
+    <button id="network-banner-close" type="button" aria-label="Закрыть уведомление">×</button>
 </div>
 <div id="toast-container" role="status" aria-live="polite"></div>
 </div>
@@ -227,6 +246,7 @@
 
             <section class="feed-section" id="home-for-you-section" aria-labelledby="home-for-you-title">
                 <div class="home-section-header"><h2 class="feed-title" id="home-for-you-title">Для тебя</h2><button id="home-refresh-mixes" class="glass-btn" type="button" aria-label="Обновить подборки для тебя"><i data-lucide="refresh-cw"></i> Обновить</button></div>
+                <div id="home-recommendation-controls"></div>
                 <div class="feed-scroll" id="home-mixes"><div class="empty-state">Миксы на основе ваших предпочтений</div></div>
             </section>
             <!-- Playlists -->
@@ -280,10 +300,8 @@
                             <button class="platform-item" data-source="deezer" title="Deezer — каталог; аудио из YouTube / SoundCloud" aria-label="Источник поиска: Deezer">
                                 <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#A238FF" aria-hidden="true"><path d="M2 14h3v8H2zm5-5h3v13H7zm5-7h3v20h-3zm5 9h3v11h-3z"/></svg>
                             </button>
-                            <button class="platform-item" data-source="spotify" title="Spotify" aria-label="Источник поиска: Spotify">
-                                <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#1DB954">
-                                    <path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.02 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.48-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.3 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.18-1.2-.18-1.38-.72-.18-.6.18-1.2.72-1.38 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-                                </svg>
+                            <button class="platform-item" data-source="spotify" title="Apple Music / iTunes — каталог; аудио из YouTube" aria-label="Источник поиска: Apple Music / iTunes">
+                                <svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18V5l12-2v13M9 8l12-2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
                             </button>
                         </div>
                     </div>
@@ -554,6 +572,7 @@
                             <button id="btn-lyrics-offset-minus-page" class="lyrics-offset-btn" title="Задержать текст на 0.5s (назад)">-0.5s</button>
                             <button id="btn-lyrics-offset-reset-page" class="lyrics-offset-btn" title="Сбросить смещение в 0.0s" style="font-size:11px;min-width:38px;padding:4px 8px;">0.0s</button>
                             <button id="btn-lyrics-offset-plus-page" class="lyrics-offset-btn" title="Ускорить текст на 0.5s (вперёд)">+0.5s</button>
+                            <button id="btn-lyrics-settings-page" class="lyrics-btn-pill" title="Оформление текста" aria-label="Оформление текста"><i data-lucide="sliders-horizontal" style="width:13px;height:13px;"></i></button>
                             <button id="pp-btn-expand" class="icon-btn player-macos-action" title="Развернуть плеер" aria-label="Развернуть плеер" aria-pressed="false"><i data-lucide="maximize-2"></i></button>
                         </div>
                     </div>
@@ -576,6 +595,7 @@
                     <button id="btn-lyrics-offset-minus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Задержать текст на 0.5s (назад)">-0.5s</button>
                     <button id="btn-lyrics-offset-reset" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;font-size:11px;min-width:38px;" title="Сбросить смещение в 0.0s">0.0s</button>
                     <button id="btn-lyrics-offset-plus" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;" title="Ускорить текст на 0.5s (вперёд)">+0.5s</button>
+                    <button id="btn-lyrics-settings-overlay" class="btn-sm text-xs" style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:var(--text-sec);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;" title="Оформление текста" aria-label="Оформление текста"><i data-lucide="sliders-horizontal" style="width:14px;height:14px;"></i></button>
                 </div>
             </div>
             <div class="lyrics-scroll-container lyrics-viewport" id="lyrics-container">
@@ -679,6 +699,12 @@
                     <button class="settings-nav-btn" data-panel="import">
                         <i data-lucide="download-cloud" style="width:16px;height:16px"></i>
                         Импорт плейлистов
+                    </button>
+
+                    <div class="settings-nav-section-label" style="margin-top: 10px;">ПРИЛОЖЕНИЕ</div>
+                    <button class="settings-nav-btn" data-panel="about">
+                        <i data-lucide="info" style="width:16px;height:16px"></i>
+                        О приложении
                     </button>
 
                     <div class="settings-nav-section-label" style="margin-top: 10px;">БЕЗОПАСНОСТЬ И СЕТЬ</div>
@@ -1601,6 +1627,28 @@
                         </div>
                     </div>
 
+                    <!-- About / Updates Panel -->
+                    <div id="settings-about" class="settings-panel">
+                        <section class="settings-section">
+                            <h2 class="settings-section-title">NeDotify Desktop</h2>
+                            <p class="settings-section-desc">Музыкальный плеер для Windows с открытым исходным кодом.</p>
+                            <div class="setting-row">
+                                <div>
+                                    <div class="setting-label">Версия приложения: <span id="app-version-badge" style="color:var(--primary); font-weight:700;">v2.5.6</span></div>
+                                    <div class="setting-desc" id="app-update-status-text">Проверка обновлений не выполнялась</div>
+                                </div>
+                                <button id="btn-check-app-updates" class="home-pill" type="button">Проверить обновления</button>
+                            </div>
+                            <div class="setting-row" style="margin-top: 12px;">
+                                <div>
+                                    <div class="setting-label">GitHub репозиторий</div>
+                                    <div class="setting-desc">Исходный код, новые версии и список изменений</div>
+                                </div>
+                                <button id="btn-open-github-repo" class="home-pill" type="button">Открыть страницу</button>
+                            </div>
+                        </section>
+                    </div>
+
                     <div id="settings-auth" class="settings-panel">
                         <section class="settings-section" aria-labelledby="lastfm-settings-title">
                             <h2 id="lastfm-settings-title" class="settings-section-title">Last.fm</h2>
@@ -1628,29 +1676,9 @@
                             </div>
                             <details id="lastfm-disclosure" class="settings-hint">
                                 <summary>Какие данные уходят на Last.fm</summary>
-                                <div class="setting-sublabel">Last.fm получает имя пользователя, название трека, исполнителя и альбом из вашей истории недавних треков, а также отметки «любимое». Локальная библиотека, пароли и ключи API не передаются.</div>
+                                <div class="setting-sublabel">Для поиска похожей музыки передаются название трека и исполнитель; для запроса топа — указанное имя пользователя. API-ключ передаётся самому Last.fm для авторизации запросов. Альбомы, отметки «любимое» и локальные аудиофайлы не отправляются. Запись прослушиваний (scrobbling) не реализована.</div>
                             </details>
                         </section>
-                        <div class="settings-section" style="display:none !important;">
-                            <div class="settings-section-title">Яндекс Музыка</div>
-                            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px; border-bottom: none;">
-                                <div>
-                                    <div class="setting-label">Токен авторизации</div>
-                                    <div class="setting-sublabel">Нужен для полного доступа (без ограничения 30 сек). Вставьте вручную или нажмите «Получить токен»</div>
-                                </div>
-                                <input type="password" class="settings-input" id="input-yandex-token" aria-label="Токен авторизации Яндекс Музыки" placeholder="Введите yandex_token...">
-                                <div style="display:flex;gap:8px;align-items:center;width:100%;margin-top:4px">
-                                    <button id="btn-yandex-auth" style="padding:8px 16px;border-radius:8px;background:var(--primary);color:var(--bg-main);border:none;cursor:pointer;font-weight:600;font-size:13px;white-space:nowrap">
-                                        🔑 Получить токен
-                                    </button>
-                                    <div id="yandex-device-status" style="font-size:12px;color:var(--text-sec);display:none;flex:1;word-break:break-all"></div>
-                                </div>
-                                <div id="yandex-auth-warning" class="warning-box" style="display: none;">
-                                    <i data-lucide="alert-triangle" style="width:16px;height:16px"></i>
-                                    <span>Ошибка авторизации Яндекс Музыка. Доступ ограничен 30 сек.</span>
-                                </div>
-                            </div>
-                        </div>
                         <div class="settings-section">
                             <div class="settings-section-title">YouTube Music (Скоро)</div>
                             <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px; border-bottom: none;">
@@ -1868,13 +1896,17 @@
                                     <div class="setting-label">Режим обхода</div>
                                     <div class="setting-sublabel">Выберите стратегию обхода DPI для YouTube и музыкальных сервисов (TCP 80/443)</div>
                                 </div>
-                                <select class="settings-select" id="select-zapret-mode" aria-label="Режим обхода Zapret">
+                                <div class="zapret-mode-picker">
+                                <button type="button" id="zapret-mode-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="zapret-mode-menu">Режим обхода</button>
+                                <div id="zapret-mode-menu" role="listbox" aria-label="Режим обхода" hidden></div>
+                                <select class="settings-select" id="select-zapret-mode" aria-label="Режим обхода Zapret" hidden>
                                     <option value="youtube_discord">YouTube и музыкальные сервисы (рекомендуется)</option>
                                     <option value="standard">Стандартный (fake,split2)</option>
                                     <option value="aggressive">Disorder2 (для строгого DPI)</option>
                                     <option value="multisplit">Multisplit (альтернативный)</option>
                                     <option value="tcp_udp">TCP + QUIC/UDP 443 (экспериментальный)</option>
                                 </select>
+                                </div>
                             </div>
                             <div class="setting-row">
                                 <div>
@@ -2187,7 +2219,7 @@
                 <button type="button" data-ob-step="2"><span>2</span>Эффекты</button>
                 <button type="button" data-ob-step="3"><span>3</span>Звук</button>
                 <button type="button" data-ob-step="4"><span>4</span>Медиатека</button>
-                <button type="button" data-ob-step="5"><span>5</span>Источники</button>
+                <button type="button" data-ob-step="5"><span>5</span>Артисты</button>
                 <button type="button" data-ob-step="6"><span>6</span>Готово</button>
             </nav>
             <progress id="ob-progress" max="6" value="1" aria-label="Ход настройки"></progress>
@@ -2230,7 +2262,7 @@
                     <div class="ob-tip"><i data-lucide="library"></i><p>Добавлять плейлисты и музыку с компьютера можно в любое время.</p></div>
                 </section>
                 <section class="onboarding-step" data-step="5" aria-labelledby="ob-title-5" hidden>
-                    <h2 id="ob-title-5" tabindex="-1">Музыка без границ</h2><p class="ob-lead">Выбери, где искать новые треки и как сохранять их для прослушивания без сети.</p>
+                    <h2 id="ob-title-5" tabindex="-1">Кого вы слушаете?</h2><p class="ob-lead">Выберите хотя бы трёх исполнителей. На их основе соберём «Мою волну» и рекомендации для вас.</p>
                 </section>
                 <section class="onboarding-step" data-step="6" aria-labelledby="ob-title-6" hidden>
                     <h2 id="ob-title-6" tabindex="-1">Всё готово к прослушиванию</h2><p class="ob-lead">Проверь свой выбор и последние два параметра.</p>
@@ -2284,8 +2316,129 @@
 <script src="js/tooltip.js?v=20261023_tips"></script>
 <script src="js/boot.js?v=20261005_rail"></script>
 <script type="module" src="js/main.js?v=20261012_catalog_lyrics"></script>
+    <!-- ─── LYRICS DISPLAY SETTINGS POPOVER (Screenshot #1) ─── -->
+    <div id="lyrics-display-settings-popover" class="lyrics-settings-popover hidden" role="region" aria-label="Настройки отображения текста">
+        <div class="lsp-header">
+            <span class="lsp-title"><i data-lucide="type" style="width:15px;height:15px;"></i> Оформление текста</span>
+            <button id="btn-close-lsp" class="icon-btn lsp-close-btn" aria-label="Закрыть"><i data-lucide="x" style="width:14px;height:14px;"></i></button>
+        </div>
+        <div class="lsp-body">
+            <div class="lsp-row">
+                <div class="lsp-label-group">
+                    <span class="lsp-label">Размер текста</span>
+                    <span class="lsp-val" id="val-lyrics-font-size">24px</span>
+                </div>
+                <input type="range" id="slider-lyrics-font-size" class="lsp-slider" min="14" max="36" step="1" value="24">
+            </div>
+            <div class="lsp-row">
+                <div class="lsp-label-group">
+                    <span class="lsp-label">Толщина шрифта</span>
+                    <span class="lsp-val" id="val-lyrics-font-weight">700</span>
+                </div>
+                <input type="range" id="slider-lyrics-font-weight" class="lsp-slider" min="400" max="800" step="100" value="700">
+            </div>
+            <div class="lsp-row">
+                <div class="lsp-label-group">
+                    <span class="lsp-label">Межстрочный интервал</span>
+                    <span class="lsp-val" id="val-lyrics-line-height">1.45</span>
+                </div>
+                <input type="range" id="slider-lyrics-line-height" class="lsp-slider" min="1.1" max="2.2" step="0.05" value="1.45">
+            </div>
+            <div class="lsp-row">
+                <span class="lsp-label" style="display:block;margin-bottom:6px;">Выравнивание</span>
+                <div class="lsp-segmented-control">
+                    <button id="btn-lyrics-align-left" class="lsp-segment-btn" type="button" title="Выравнивание по левому краю">
+                        <i data-lucide="align-left" style="width:14px;height:14px;"></i> Слева
+                    </button>
+                    <button id="btn-lyrics-align-center" class="lsp-segment-btn active" type="button" title="Выравнивание по центру">
+                        <i data-lucide="align-center" style="width:14px;height:14px;"></i> По центру
+                    </button>
+                </div>
+            </div>
+            <div class="lsp-divider"></div>
+            <div class="lsp-actions">
+                <button id="btn-lsp-action-research" class="lsp-action-btn" type="button">
+                    <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Искать заново
+                </button>
+                <button id="btn-lsp-action-pick-version" class="lsp-action-btn" type="button">
+                    <i data-lucide="list-music" style="width:14px;height:14px;"></i> Выбрать другую версию
+                </button>
+                <button id="btn-lsp-action-custom" class="lsp-action-btn" type="button">
+                    <i data-lucide="pencil" style="width:14px;height:14px;"></i> Добавить свой текст
+                </button>
+                <button id="btn-lsp-action-reset" class="lsp-action-btn lsp-reset-btn" type="button">
+                    <i data-lucide="rotate-ccw" style="width:14px;height:14px;"></i> Сбросить настройки
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── LYRICS SEARCH MODAL (Screenshot #2) ─── -->
+    <div id="modal-lyrics-search" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="lyrics-search-title">
+        <div class="glass-modal-card" style="max-width: 660px; width: 92%; max-height: 85vh; display: flex; flex-direction: column;">
+            <div class="glass-modal-header" style="display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+                <h3 class="glass-modal-title" id="lyrics-search-title"><i data-lucide="search" style="width:18px;height:18px;margin-right:6px;"></i> Поиск текста</h3>
+                <button class="glass-modal-close" id="btn-close-lyrics-search" aria-label="Закрыть"><i data-lucide="x"></i></button>
+            </div>
+            <div class="lyrics-search-input-row" style="display:flex; gap:10px; margin: 12px 0 16px 0; flex-shrink:0;">
+                <input type="text" id="input-lyrics-search-query" class="glass-modal-input" placeholder="Введите название песни или исполнителя..." style="flex:1;" autocomplete="off">
+                <button id="btn-lyrics-search-submit" class="btn-primary" style="display:flex; align-items:center; gap:6px; padding: 8px 20px; white-space:nowrap; cursor:pointer;">
+                    <i data-lucide="search" style="width:15px;height:15px;"></i> Найти
+                </button>
+            </div>
+            <div id="lyrics-search-results-list" class="lyrics-search-results-list" style="flex:1; overflow-y:auto; min-height: 250px; max-height: 55vh; padding-right: 4px;">
+                <div class="empty-state" style="padding: 40px 0; text-align:center; color:var(--text-sec); font-size:13px;">
+                    Введите поисковый запрос и нажмите «Найти»
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── CUSTOM LYRICS MODAL ─── -->
+    <div id="modal-custom-lyrics" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="custom-lyrics-title">
+        <div class="glass-modal-card" style="max-width: 640px; width: 92%; max-height: 85vh; display:flex; flex-direction:column;">
+            <div class="glass-modal-header" style="display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+                <h3 class="glass-modal-title" id="custom-lyrics-title"><i data-lucide="pencil" style="width:18px;height:18px;margin-right:6px;"></i> Текст песни</h3>
+                <button class="glass-modal-close" id="btn-close-custom-lyrics" aria-label="Закрыть"><i data-lucide="x"></i></button>
+            </div>
+            <p style="font-size:12px; color:var(--text-sec); margin: 8px 0 12px 0; line-height: 1.4; flex-shrink:0;">
+                Вставьте текст композиции. Поддерживаются обычные строки и тайминги в формате <code>[mm:ss.xx]</code> (LRC).
+            </p>
+            <textarea id="textarea-custom-lyrics" class="glass-modal-input" style="flex:1; min-height:240px; font-family: monospace; font-size:13px; line-height:1.5; resize:none; white-space:pre;" placeholder="[00:12.50] Первая строка...&#10;[00:15.20] Вторая строка..."></textarea>
+            <div id="custom-lyrics-preview-box" class="custom-lyrics-preview hidden" style="flex:1; min-height:240px; max-height:300px; overflow-y:auto; padding:12px; background:rgba(0,0,0,0.3); border-radius:8px;"></div>
+            <div class="glass-modal-footer" style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; flex-shrink:0;">
+                <div style="display:flex; gap:8px;">
+                    <button id="btn-custom-lyrics-preview-toggle" class="filter-btn" type="button" style="padding:6px 14px; font-size:12px;">Предпросмотр</button>
+                    <button id="btn-custom-lyrics-delete" class="filter-btn" type="button" style="color:var(--color-danger, #ef4444); border-color:rgba(239,68,68,0.3); padding:6px 14px; font-size:12px;">Удалить текст</button>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button id="btn-custom-lyrics-cancel" class="filter-btn" type="button">Отмена</button>
+                    <button id="btn-custom-lyrics-save" class="btn-primary" type="button" style="padding:8px 18px;">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <dialog id="profile-edit-dialog" class="profile-edit-dialog" aria-labelledby="profile-edit-title">
         <form id="profile-edit-form"><h2 id="profile-edit-title">Редактировать профиль</h2><label for="profile-name-input">Ваше имя</label><input id="profile-name-input" name="nickname" type="text" autocomplete="off" maxlength="100" required placeholder="Как к вам обращаться…"><button type="button" id="profile-edit-avatar" class="home-pill"><i data-lucide="image"></i>Изменить аватар</button><p id="profile-edit-error" role="status"></p><div class="profile-edit-actions"><button type="button" id="profile-edit-cancel" class="home-pill">Отмена</button><button type="submit" id="btn-save-nickname" class="profile-save-button">Сохранить</button></div></form>
+    </dialog>
+    <dialog id="update-modal" class="glass-modal update-dialog" aria-labelledby="update-modal-title">
+        <div class="update-modal-header">
+            <div class="update-modal-title-group">
+                <span class="update-modal-badge" id="update-modal-badge">v2.5.2</span>
+                <span class="update-modal-time" id="update-modal-time"></span>
+                <h2 id="update-modal-title">Вышло обновление NeDotify</h2>
+            </div>
+            <button id="update-modal-close" type="button" class="icon-btn update-modal-close" aria-label="Закрыть"><i data-lucide="x"></i></button>
+        </div>
+        <div class="update-modal-body">
+            <div class="update-modal-notes" id="update-modal-notes"></div>
+        </div>
+        <div class="update-modal-footer">
+            <button type="button" class="home-pill" id="update-modal-ignore-btn">Не напоминать</button>
+            <button type="button" class="home-pill" id="update-modal-web-btn">GitHub Релиз</button>
+            <button type="button" class="profile-save-button" id="update-modal-download-btn">Скачать обновление</button>
+        </div>
     </dialog>
 </body>
 </html>

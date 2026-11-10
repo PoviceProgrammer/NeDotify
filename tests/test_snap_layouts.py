@@ -339,3 +339,50 @@ def test_frame_update_failure_restores_original_proc_then_style(install_native):
     assert calls[-2] == ('proc', previous)
     assert calls[-1] == ('style', 0x80000000)
     assert snap._proc is None
+
+
+def test_fullscreen_covers_entire_monitor_including_taskbar(snap):
+    import ctypes
+    from ctypes import wintypes
+    user32 = ctypes.windll.user32
+    user32.zoomed = False
+    user32.MonitorFromWindow = lambda hwnd, flags: 5
+    def info(monitor, ptr):
+        assert monitor == 5
+        ptr._obj.rcMonitor = wintypes.RECT(0, 0, 1920, 1080)
+        ptr._obj.rcWork = wintypes.RECT(0, 0, 1920, 1022)
+        return 1
+    user32.GetMonitorInfoW = info
+    snap._is_fullscreen = lambda: True
+    rect = wintypes.RECT(0, 0, 1920, 1080)
+    assert snap._wndproc(1234, 0x0083, 1, ctypes.addressof(rect)) == 0
+    # Must use full monitor (1080), not work area (1022)
+    assert (rect.left, rect.top, rect.right, rect.bottom) == (0, 0, 1920, 1080)
+
+
+def test_fullscreen_outer_bounds_cover_entire_monitor(snap, monkeypatch):
+    import ctypes
+    from ctypes import wintypes
+    from core.snap_layouts import MINMAXINFO
+    user32 = ctypes.windll.user32
+    user32.MonitorFromWindow = lambda hwnd, flags: 5
+    def info(handle, ptr):
+        ptr._obj.rcMonitor = wintypes.RECT(0, 0, 1920, 1080)
+        ptr._obj.rcWork = wintypes.RECT(0, 0, 1920, 1022)
+        return 1
+    user32.GetMonitorInfoW = info
+    snap._is_fullscreen = lambda: True
+    limits = MINMAXINFO()
+    monkeypatch.setattr('core.snap_layouts._def_window_proc', lambda *args: 0)
+    assert snap._wndproc(1234, 0x0024, 0, ctypes.addressof(limits)) == 0
+    # Fullscreen max size should be the full monitor (1920x1080) with (0,0) position
+    assert (limits.ptMaxPosition.x, limits.ptMaxPosition.y) == (0, 0)
+    assert (limits.ptMaxSize.x, limits.ptMaxSize.y) == (1920, 1080)
+    assert (limits.ptMaxTrackSize.x, limits.ptMaxTrackSize.y) == (1920, 1080)
+
+
+def test_fullscreen_disables_edge_resize_grips(snap):
+    from core.snap_layouts import HTCLIENT
+    snap._is_fullscreen = lambda: True
+    # Grip at (0, 0) would normally report HTTOPLEFT, but in fullscreen should be HTCLIENT
+    assert snap._wndproc(1234, 0x0084, 0, 0) == HTCLIENT

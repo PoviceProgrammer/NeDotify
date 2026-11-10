@@ -191,7 +191,15 @@ class DeezerService(BaseMusicService):
                 raise DeezerError('Не удалось получить полный плейлист Deezer')
         if not tracks:
             raise DeezerError('В плейлисте Deezer нет доступных треков')
-        return {'name': metadata.get('title') or 'Deezer', 'source': 'deezer', 'tracks': tracks}
+        result = {'name': metadata.get('title') or 'Deezer', 'source': 'deezer', 'tracks': tracks}
+        if kind == 'album':
+            result['album'] = {'source': 'deezer', 'source_id': sid, 'type': 'album',
+                'title': metadata.get('title') or '', 'artist': (metadata.get('artist') or {}).get('name') or '',
+                'release_date': metadata.get('release_date') or '',
+                'year': str(metadata.get('release_date') or '')[:4],
+                'album_type': metadata.get('record_type') or 'album', 'track_count': len(tracks),
+                'cover_url': metadata.get('cover_xl') or metadata.get('cover_big') or metadata.get('cover_medium') or ''}
+        return result
 
     def get_playlist_tracks(self, playlist_id, limit=50, callback=None, error_callback=None):
         def run():

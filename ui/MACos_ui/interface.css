@@ -449,3 +449,28 @@ html[data-ui-style="macos"] .artist-albums-grid .artist-album-card:hover {
     background: var(--mac-hover);
     box-shadow: var(--mac-shadow);
 }
+
+html[data-ui-style="macos"] #sidebar.is-collapsed { align-items:center; }
+html[data-ui-style="macos"] #sidebar.is-collapsed .nav-item { margin-left:auto; margin-right:auto; }
+html[data-ui-style="macos"] #sidebar.is-collapsed #macos-profile-row { width:100%; padding-left:0; padding-right:0; justify-content:center; }
+html[data-ui-style="macos"] #sidebar.is-collapsed #macos-sidebar-profile { flex:0 0 auto; justify-content:center; }
+html[data-ui-style="macos"] #sidebar.is-collapsed #macos-profile-row { margin-left:0; margin-right:0; }
+
+
+/* Riff-style connected update droplet in macOS presentation pack */
+html[data-ui-style="macos"] #update-banner {
+    --toast-bg: var(--mac-raised, #232228);
+    background: var(--toast-bg) !important;
+    color: var(--mac-text, #ffffff) !important;
+    border: none !important;
+    border-radius: 0 0 22px 22px !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45) !important;
+}
+html[data-ui-style="macos"] #update-banner .update-btn-primary {
+    background: var(--primary) !important;
+    color: var(--primary-fg, #000000) !important;
+    border-radius: 999px !important;
+}
+html[data-ui-style="macos"] #update-banner .update-btn-secondary {
+    border-radius: 999px !important;
+}

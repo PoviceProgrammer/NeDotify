@@ -755,6 +755,7 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
     item._trackIndex = index;
     const isCurrentlyPlaying = currentTrack && isSameTrack(track, currentTrack);
     item.className = `track-item${isCurrentlyPlaying ? ' playing' : ''}`;
+    if (track.recommendation_reason) item.classList.add('has-recommendation-reason');
     if (selectedTracksMap.has(String(track.source_id || track.id || `track_${index}`))) item.classList.add('selected');
     item.style.animationDelay = `${Math.min(index * 0.03, 0.5)}s`;
     item.dataset.trackSourceId = String(track.source_id || track.id || '');
@@ -789,11 +790,12 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
             <div class="track-cover-overlay">
                 <i data-lucide="play" style="width:16px;height:16px;color:white"></i>
             </div>
-            ${track.source && !isHiddenSource(track.source) ? `<div class="source-badge source-${escapeHtml(track.source)}" title="${escapeHtml(track.source)}">${getSourceIcon(track.source)}</div>` : ''}
+            ${track.source && !isHiddenSource(track.source) ? `<div class="source-badge source-${escapeHtml(track.source)}" title="${escapeHtml(track.source === 'spotify' ? 'Apple Music / iTunes — аудио из YouTube' : track.source)}">${getSourceIcon(track.source)}</div>` : ''}
         </div>
         <div class="track-info">
             <div class="track-title">${escapeHtml(track.title || 'Unknown')}</div>
             <div class="track-artist">${formatArtistNames(track.artist || 'Unknown')}</div>
+            ${track.recommendation_reason ? `<span class="recommendation-reason" title="${escapeHtml(track.recommendation_reason)}">${escapeHtml(track.recommendation_reason)}</span>` : ''}
         </div>
         <div class="track-actions">
             <button class="icon-btn download-btn ${track.is_downloaded || track.source === 'local' ? 'downloaded' : ''}" title="${track.is_downloaded || track.source === 'local' ? 'Скачан' : 'Скачать'}">

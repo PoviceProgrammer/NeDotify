@@ -51,7 +51,7 @@ export function openHomeDialog(title, render) {
 
 function showCollection(kind) {
     const list = kind === 'top' ? collections.top : collections.history;
-    openHomeDialog(kind === 'top' ? 'Топ треков (Local Last.fm)' : 'История прослушивания', content => {
+    openHomeDialog(kind === 'top' ? 'Топ треков' : 'История прослушивания', content => {
         if (!list.length) {
             content.innerHTML = '<div class="home-empty"><i data-lucide="headphones"></i><h3>Здесь будет ваша музыка</h3><p>Включите трек — история и личный топ появятся после прослушивания.</p></div>';
         } else list.forEach((track, index) => content.appendChild(createTrackElement({...track,id:track.track_id || track.id}, index, list, getCurrentTrack())));

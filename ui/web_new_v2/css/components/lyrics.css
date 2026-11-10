@@ -67,12 +67,26 @@
     transition: none !important;
 }
 
+:root {
+    --lyrics-font-size: 24px;
+    --lyrics-font-weight: 700;
+    --lyrics-line-height: 1.45;
+    --lyrics-text-align: center;
+}
+
 /* ─── 3. Kinetic Lyric Line States ─── */
+.lyric-line,
+.lyric-line.lyric-plain,
+.lyric-orig-text,
+.lyric-word {
+    font-size: var(--lyrics-font-size, 24px) !important;
+}
+
 .lyric-line {
     font-family: var(--font-display, 'Sora', sans-serif);
-    font-size: var(--font-size-xl, 24px);
-    font-weight: 700;
-    line-height: 1.4;
+    font-size: var(--lyrics-font-size, 24px) !important;
+    font-weight: var(--lyrics-font-weight, 700);
+    line-height: var(--lyrics-line-height, 1.45);
     /* Alpha lives in the colour so `opacity` stays free for the past/active
        states to stack on top of it without darkening the glyph twice. */
     color: rgba(255, 255, 255, 0.32);
@@ -126,7 +140,7 @@
        alters text metrics, so every following line re-wraps and re-lays out and
        the offsetTop values the engine just measured go stale. Emphasis is
        carried entirely by composited properties (scale, blur, colour, glow). */
-    font-weight: 700;
+    font-weight: var(--lyrics-font-weight, 700);
     /* Soft white bloom, tinted by the active theme so themes keep their accent. */
     text-shadow: 0 0 18px rgba(255, 255, 255, 0.32),
                  0 0 44px var(--color-primary-glow, var(--accent-glow, rgba(244, 63, 94, 0.28)));
@@ -146,7 +160,7 @@
 }
 
 .lyric-orig-text {
-    text-align: center;
+    text-align: var(--lyrics-text-align, center);
     width: 100%;
     word-break: break-word;
 }
@@ -275,9 +289,9 @@ html[data-ui-style="macos"] #view-player #player-lyrics-scroll .lyric-line:has(.
 /* No timestamps means no active line: no scaling, no blur, no depth. */
 .lyric-plain {
     font-family: var(--font-body, 'DM Sans', sans-serif);
-    font-size: var(--font-size-lg, 20px);
-    font-weight: 500;
-    line-height: 1.6;
+    font-size: var(--lyrics-font-size, 20px) !important;
+    font-weight: var(--lyrics-font-weight, 500);
+    line-height: var(--lyrics-line-height, 1.6);
     color: var(--color-text-main, #ffffff);
     opacity: 0.85;
     filter: none !important;
@@ -602,4 +616,406 @@ html[data-ui-style="macos"] #view-player #player-lyrics-scroll .lyric-line:has(.
 [data-theme="light"] .perf-medium #player-lyrics-scroll .lyric-line:not(.active),
 [data-theme="light"] .battery-saver-active #player-lyrics-scroll .lyric-line:not(.active) {
     color: var(--text-faint) !important;
+}
+
+
+/* ==========================================================================
+   12. Lyrics Customization UI (Screenshots #1 & #2 + Custom Lyrics)
+   ========================================================================== */
+
+/* ─── Alignment Variants ─── */
+.lyrics-viewport[data-align="left"] .lyrics-track {
+    align-items: flex-start !important;
+    text-align: left !important;
+    padding-left: calc(var(--space-lg, 24px) + 20px);
+    padding-right: calc(var(--space-lg, 24px) + 20px);
+}
+.lyrics-viewport[data-align="left"] .lyric-line {
+    text-align: left !important;
+    transform-origin: left center !important;
+}
+.lyrics-viewport[data-align="left"] .lyric-orig-text,
+.lyrics-viewport[data-align="left"] .lyric-translation {
+    text-align: left !important;
+}
+
+.lyrics-viewport[data-align="center"] .lyrics-track {
+    align-items: center !important;
+    text-align: center !important;
+}
+.lyrics-viewport[data-align="center"] .lyric-line {
+    text-align: center !important;
+    transform-origin: center center !important;
+}
+.lyrics-viewport[data-align="center"] .lyric-orig-text,
+.lyrics-viewport[data-align="center"] .lyric-translation {
+    text-align: center !important;
+}
+
+/* ─── Lyrics Display Settings Popover (Screenshot #1) ─── */
+.lyrics-settings-popover {
+    position: fixed;
+    z-index: 10001;
+    width: 320px;
+    background: rgba(20, 18, 24, 0.95);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 18px;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.65), 0 0 25px rgba(244, 63, 94, 0.15);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    color: #ffffff;
+    user-select: none;
+    animation: lspFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+}
+
+@keyframes lspFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.lsp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 2px;
+}
+
+.lsp-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    letter-spacing: -0.2px;
+}
+
+.lsp-close-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    color: rgba(255, 255, 255, 0.65);
+    border-radius: 50%;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.lsp-close-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+    transform: scale(1.08);
+}
+
+.lsp-body {
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+}
+
+.lsp-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.lsp-label-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.lsp-label {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.lsp-val {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--color-primary, #f43f5e);
+    background: rgba(244, 63, 94, 0.14);
+    border: 1px solid rgba(244, 63, 94, 0.25);
+    padding: 1px 7px;
+    border-radius: 6px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Custom Sleek Slider */
+.lsp-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.12);
+    outline: none;
+    margin: 5px 0;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.lsp-slider:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.lsp-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid var(--color-primary, #f43f5e);
+    box-shadow: 0 0 10px rgba(244, 63, 94, 0.45);
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.lsp-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.18);
+    box-shadow: 0 0 14px rgba(244, 63, 94, 0.7);
+}
+
+/* Segmented Control */
+.lsp-segmented-control {
+    display: flex;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 9px;
+    padding: 3px;
+    gap: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.lsp-segment-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.65);
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.lsp-segment-btn:hover {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.lsp-segment-btn.active {
+    background: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.lsp-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.09);
+    margin: 3px 0;
+}
+
+/* Action Buttons */
+.lsp-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.lsp-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.88);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    text-align: left;
+    width: 100%;
+}
+
+.lsp-action-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+}
+
+.lsp-reset-btn {
+    color: rgba(255, 255, 255, 0.55);
+    margin-top: 2px;
+    background: transparent;
+    border-color: transparent;
+}
+
+.lsp-reset-btn:hover {
+    color: var(--color-primary, #f43f5e);
+    background: rgba(244, 63, 94, 0.1);
+    border-color: rgba(244, 63, 94, 0.25);
+}
+
+/* ─── Lyrics Search Modal (Screenshot #2) ─── */
+.lyrics-search-results-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.lyrics-search-results-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.lyrics-search-results-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+
+.lyrics-search-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lyrics-search-item:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.lyrics-search-item.active {
+    border-color: var(--color-primary, #f43f5e);
+    background: rgba(244, 63, 94, 0.12);
+}
+
+.lsi-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    overflow: hidden;
+    padding-right: 12px;
+}
+
+.lsi-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lsi-sub {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lsi-bullet {
+    opacity: 0.35;
+    font-size: 10px;
+}
+
+.lsi-tags {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.badge-source {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.75);
+    background: rgba(255, 255, 255, 0.08);
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.badge-synced {
+    font-size: 11px;
+    font-weight: 600;
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.16);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    padding: 3px 9px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.badge-plain {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 3px 8px;
+    border-radius: 12px;
+}
+
+/* ─── Custom Lyrics Modal ─── */
+.custom-lyrics-preview {
+    font-family: var(--font-display, 'Sora', sans-serif);
+    font-size: 14px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.85);
+    white-space: pre-wrap;
+    user-select: text;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cl-line {
+    padding: 3px 0;
+}
+
+.cl-timestamp {
+    color: var(--color-primary, #f43f5e);
+    font-weight: 600;
+    font-family: monospace;
+    font-size: 12px;
+    margin-right: 8px;
+    opacity: 0.85;
 }

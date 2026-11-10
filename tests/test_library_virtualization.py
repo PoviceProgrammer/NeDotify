@@ -214,6 +214,7 @@ for (const id of ['lib-active-title','lib-active-sub','lib-empty-selection','lib
 let favoriteCount = null;
 context.updateLibraryFavoriteCount = count => { favoriteCount = count; };
 context.updateLibraryHero = () => {};
+context.initPlaylistRecommendations = context.showPlaylistRecommendations = context.hidePlaylistRecommendations = () => {};
 load(LIBRARY);
 """
 

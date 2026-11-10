@@ -27,7 +27,7 @@ class FakeProc:
 
     def __init__(self, pid=5555):
         self.pid = pid
-        self.handle = 0
+        self._handle = 0
         self.returncode = None
         self._dead = threading.Event()
         self.terminated = False
@@ -714,7 +714,7 @@ def test_unreadable_path_fallback_requires_the_recorded_creation_time(svc, monke
     assert svc._is_our_winws_process(999) is False
 
 
-def test_signature_verified_short_circuit_skips_the_second_scan(svc, monkeypatch):
+def test_matching_arguments_alone_cannot_authorize_process_ownership(svc, monkeypatch):
     scans = []
 
     def fake_scan(self, sig):
@@ -726,10 +726,9 @@ def test_signature_verified_short_circuit_skips_the_second_scan(svc, monkeypatch
     monkeypatch.setattr(ZapretService, "_is_winws_process", lambda self, pid: True)
     monkeypatch.setattr(ZapretService, "_get_process_exe_path", lambda self, pid: None)
 
-    assert svc._is_our_winws_process(7, "sig", signature_verified=True) is True
-    assert scans == [], "a caller that just matched the signature must not rescan"
-    assert svc._is_our_winws_process(7, "sig") is True
-    assert len(scans) == 1
+    assert svc._is_our_winws_process(7, "sig", signature_verified=True) is False
+    assert svc._is_our_winws_process(7, "sig") is False
+    assert scans == [], "shared arguments are not identity evidence"
 
 
 # ─── Job Object (BUG-023) ───────────────────────────────────────────────────
@@ -986,6 +985,7 @@ def test_toggle_on_failure_reports_enabled_consistently():
     settings = _Settings()
     zapret = types.SimpleNamespace(
         start=lambda **kw: (False, "нет winws.exe"),
+        select_strategy=lambda **kw: (False, "нет winws.exe", "youtube_discord"),
         stop=lambda: (True, "остановлен"),
         is_running=lambda: False,
     )

@@ -26,7 +26,7 @@ Audit-v2 lifecycle contract (A1):
 - Lock scope: self._lock covers fast state mutations only. UAC (ShellExecuteW),
   PID scans and binary downloads run OUTSIDE the lock (BUG-007).
 - Ownership: a process counts as "ours" via strict exe-path prefixes
-  (os.sep-terminated), the cmdline signature, or — only when the path is
+  (os.sep-terminated), or — only when the path is
   unreadable — a pidfile record carrying our instance uid AND the recorded
   process creation time (anti PID-reuse, BUG-005/047).
 - State files (run.pid, run.cmd, version.json) are written atomically
@@ -71,6 +71,7 @@ import sys
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from typing import Dict, Any, Tuple, List, Optional, Sequence, Set
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ ZAPRET_ZIP_URL = f"https://github.com/bol-van/zapret/releases/download/{ZAPRET_V
 # SHA-256 of the pinned release archive, verified before extraction.
 # If it ever mismatches, the bundle is refused (no extraction, no launch).
 ZAPRET_ZIP_SHA256 = "c493e33a0dc4eba23a8686efdaba55f59755ad6ade3564aebd9d13f4c65e2e0c"
+_REQUIRED_BUNDLE_FILES = ("winws.exe", "WinDivert.dll", "WinDivert64.sys", "cygwin1.dll")
 
 
 def _verify_zip_sha256(zip_bytes: bytes, expected_sha256: str = ZAPRET_ZIP_SHA256) -> bool:
@@ -958,6 +960,11 @@ def _probe_covered_host(timeout: float = 1.5) -> Optional[bool]:
 class ZapretService:
     def __init__(self, settings_manager=None):
         self.settings = settings_manager
+        self._selection_cancel = threading.Event()
+        self._selection_active = False
+        self._selection_owner = None
+        self._binary_update_owner = None
+        self._start_owner = None
         self.process = None
         self._log_handle = None
         self._lock = threading.RLock()
@@ -977,6 +984,7 @@ class ZapretService:
         # Instance marker written into the pidfile record and required by the
         # restricted ownership fallback (BUG-047).
         self._known_uid = ""
+        self._volatile_pid_record = None
         # Handle of the kill-on-close Job Object binding our non-elevated
         # child to this process (BUG-023). Must stay open while the child
         # lives; closing it kills the child.
@@ -994,14 +1002,12 @@ class ZapretService:
         self._launch_confirm_window = 2.0
         # How long _launch_elevated scans for the elevated child's PID (BUG-040).
         self._elevation_scan_window = 5.0
-        # BUG-040: set when an elevated launch was dispatched (ShellExecuteW
-        # returned success) but no PID could be attributed. The bypass is then
-        # most likely running while is_running()'s hard evidence (Popen handle,
-        # pidfile) is absent; report it as running until a stop() or a later
-        # positive identification resolves the uncertainty. Without this, the
-        # UI showed «Zapret отключен» right after a successful toggle and a
-        # repeated start() could not see the (probable) first instance.
+        # A dispatched UAC launch without an attributable PID is UNKNOWN,
+        # never evidence of a running bypass. Retain this guard separately
+        # from liveness so a retry cannot launch a second driver.
         self._elevation_pid_unknown = False
+        self._elevation_inflight = None
+        self._elevation_dispatched = False
 
         self.app_dir = os.path.join(os.path.expanduser("~"), ".nedotify", "zapret")
         self.logs_dir = os.path.join(os.path.expanduser("~"), ".nedotify", "logs")
@@ -1042,6 +1048,8 @@ class ZapretService:
         # Z-5: status cache (built in background, never blocks get_status)
         self._status_cache: Dict[str, Any] = None
         self._status_cache_time = 0.0
+        self._status_epoch = 0
+        self._lifecycle_watch_key = None
         self._status_ttl = 2.5
         self._status_thread = None
         # BUG-042: the TTL above compares against time.monotonic(), not
@@ -1106,21 +1114,20 @@ class ZapretService:
     @staticmethod
     def _record_pids(record: Optional[Dict[str, Any]]) -> List[int]:
         """All PIDs stored in a pidfile record (primary first, deduplicated)."""
-        if not record:
+        if not isinstance(record, dict):
             return []
         out: List[int] = []
-        try:
-            primary = int(record.get("pid"))
-            if primary > 0:
-                out.append(primary)
-        except (TypeError, ValueError):
-            pass
-        for value in record.get("pids") or []:
+        values = record.get("pids")
+        if not isinstance(values, (list, tuple)):
+            values = []
+        for value in [record.get('pid'), *values]:
+            if isinstance(value, bool) or not isinstance(value, (int, str)):
+                continue
             try:
                 pid = int(value)
             except (TypeError, ValueError):
                 continue
-            if pid > 0 and pid not in out:
+            if 0 < pid <= 0xFFFFFFFF and pid not in out:
                 out.append(pid)
         return out
 
@@ -1166,20 +1173,7 @@ class ZapretService:
 
     def _write_pidfile(self, pid: int, pids: Optional[Sequence[int]] = None, uid: str = ""):
         """Persist the pidfile record atomically (BUG-014/046)."""
-        all_pids: List[int] = []
-        try:
-            primary = int(pid)
-            if primary > 0:
-                all_pids.append(primary)
-        except (TypeError, ValueError):
-            pass
-        for value in pids or []:
-            try:
-                extra = int(value)
-            except (TypeError, ValueError):
-                continue
-            if extra > 0 and extra not in all_pids:
-                all_pids.append(extra)
+        all_pids = self._record_pids({'pid': pid, 'pids': pids})
         if not all_pids:
             return
         record: Dict[str, Any] = {"pid": all_pids[0], "uid": uid or ""}
@@ -1192,11 +1186,20 @@ class ZapretService:
                 created[str(known_pid)] = stamp
         if created:
             record["created"] = created
-        self._atomic_write_text(self.pid_file, json.dumps(record))
+        persisted = self._atomic_write_text(self.pid_file, json.dumps(record))
+        with self._lock:
+            # Retain identity while this instance is alive even when disk/AV
+            # prevents persistence. Otherwise an elevated child vanishes from
+            # is_running()/stop() immediately after successful discovery.
+            self._volatile_pid_record = None if persisted else record
 
     def _read_pidfile_record(self) -> Optional[Dict[str, Any]]:
         """Read the pidfile as a record dict; legacy single-int files get
         {"pid": <int>, "uid": ""} so old layouts keep working (BUG-046)."""
+        with self._lock:
+            volatile = self._volatile_pid_record
+            if volatile:
+                return dict(volatile)
         try:
             if not os.path.exists(self.pid_file):
                 return None
@@ -1228,6 +1231,8 @@ class ZapretService:
         return pids[0] if pids else None
 
     def _clear_pidfile(self):
+        with self._lock:
+            self._volatile_pid_record = None
         try:
             if os.path.exists(self.pid_file):
                 os.remove(self.pid_file)
@@ -1438,9 +1443,8 @@ class ZapretService:
         """Verify that the process with the given PID is winws.exe AND belongs to this application.
         Prevents adopting or terminating foreign winws.exe processes (AUDIT #04).
 
-        ``signature_verified`` lets a caller that has just matched the pid by
-        cmdline signature skip the redundant second scan (BUG-007: scans are
-        seconds-long and must not run twice per stop).
+        Command-line matches only discover candidates. The legacy signature
+        parameters are retained for callers, but never authorize ownership.
         """
         if not pid or pid <= 0 or not self._pid_alive(pid):
             return False
@@ -1461,20 +1465,12 @@ class ZapretService:
             # the repo checkout; cwd is kept for the historical dev layout.
             if self._path_under_root(norm_exe, self.base_dir):
                 return True
-            if self._path_under_root(norm_exe, os.getcwd()):
-                return True
             # Executable path is known and does NOT belong to our app
             return False
 
-        # 2. Check launch command line signature if available
-        if signature:
-            if signature_verified:
-                return True
-            matching = self._scan_pids_with(signature)
-            if pid in matching:
-                return True
-
-        # 3. Restricted last resort (BUG-047): the exe path is unreadable
+        # A common argument string discovers candidates, but cannot prove
+        # ownership of an elevated process whose path Windows hides.
+        # 2. Restricted last resort (BUG-047): the exe path is unreadable
         #    (typically an elevated process). A bare `saved_pid == pid` could
         #    adopt a foreign elevated winws on PID reuse, so the pidfile must
         #    record THIS pid with OUR instance uid AND the creation time
@@ -1486,7 +1482,10 @@ class ZapretService:
             return False
         if not self._known_uid or (record.get("uid") or "") != self._known_uid:
             return False
-        expected_created = (record.get("created") or {}).get(str(pid))
+        created = record.get("created")
+        if not isinstance(created, dict):
+            return False
+        expected_created = created.get(str(pid))
         if not expected_created:
             return False
         return self._get_process_creation_time(pid) == expected_created
@@ -1679,7 +1678,7 @@ class ZapretService:
                     return row[0].strip()
         return None
 
-    def _kill_pid(self, pid: int) -> bool:
+    def _kill_pid(self, pid: int, *, allow_elevation: bool = False) -> bool:
         """Kill exactly one verified PID via taskkill (graceful first, /F fallback).
 
         BUG-039: the image-name filter uses the ACTUAL executable name of the
@@ -1745,6 +1744,20 @@ class ZapretService:
                 if not self._pid_alive(pid):
                     return True
 
+                if allow_elevation and self._is_our_winws_process(pid):
+                    # Explicit toggle-off only; cleanup never prompts for UAC.
+                    import ctypes
+                    system_dir = ctypes.create_unicode_buffer(32768)
+                    if ctypes.windll.kernel32.GetSystemDirectoryW(system_dir, len(system_dir)):
+                        taskkill = os.path.join(system_dir.value, "taskkill.exe")
+                        result = self._shell_execute_elevated(
+                            taskkill, f'/F {filter_part}/PID {pid}', system_dir.value)
+                        if result > 32:
+                            deadline = time.time() + 3.0
+                            while time.time() < deadline:
+                                if not self._pid_alive(pid):
+                                    return True
+                                time.sleep(0.15)
                 # Shutdown must never surprise the user with another UAC dialog.
                 logger.warning('Cannot stop elevated Zapret PID %s with current rights', pid)
             else:
@@ -1765,8 +1778,24 @@ class ZapretService:
 
     # ─── binary discovery ───
 
+    def _binary_directory(self) -> str:
+        """Keep downloaded code in the existing installer-verified UAC root.
+
+        State and version files remain in the user's profile. Source runs and
+        portable executables never gain an elevation root through this method.
+        """
+        if getattr(sys, "frozen", False):
+            install_root = _query_registry_install_location()
+            if install_root:
+                root = os.path.normcase(os.path.realpath(install_root))
+                base = os.path.normcase(os.path.realpath(self.base_dir))
+                if root == base and _app_runs_from_install_location(root):
+                    return os.path.join(self.base_dir, "zapret")
+        return self.app_dir
+
     def find_binary(self, custom_path=None) -> str | None:
         """Find path to winws.exe, zapret.exe or winws binary."""
+        self._rejected_binary_path = None
         if custom_path:
             if validate_zapret_binary(custom_path, self.app_dir, extra_roots=[self.base_dir]):
                 return custom_path
@@ -1781,6 +1810,10 @@ class ZapretService:
             os.path.join(self.base_dir, "bin", "winws.exe"),
             os.path.join(self.base_dir, "zapret", "winws.exe")
         ]
+        bundle_dir = self._binary_directory()
+        if bundle_dir != self.app_dir:
+            candidates = [os.path.join(bundle_dir, "winws.exe"),
+                          os.path.join(bundle_dir, "zapret.exe")] + candidates
 
         for c in candidates:
             if validate_zapret_binary(c, self.app_dir, extra_roots=[self.base_dir]):
@@ -1791,22 +1824,12 @@ class ZapretService:
     # ─── liveness (Z-5) ───
 
     def is_running(self) -> bool:
-        """Fast check: own Popen handle, saved pidfile PID, or running winws process.
-
-        BUG-040: also True while an elevated launch was dispatched but its PID
-        could not be attributed — the process is most likely running, and
-        reporting "not running" invited a second elevated winws and desynced
-        the UI toggle from the reported success. Cleared by stop() and by any
-        later positive identification."""
+        """Return only process evidence, never a successful UAC dispatch."""
         with self._lock:
             if self.process and self.process.poll() is None:
                 return True
-            if self._elevation_pid_unknown:
-                return True
-        pid = self._read_pidfile()
-        if pid and self._pid_alive(pid) and self._is_our_winws_process(pid):
-            return True
-        return False
+        return any(self._pid_alive(pid) and self._is_our_winws_process(pid)
+                   for pid in self._read_pidfile_pids())
 
     # ─── stderr log & crash analysis (Z-3) ───
 
@@ -1967,13 +1990,16 @@ class ZapretService:
             if not entries:
                 # Nothing usable inside; callers detect this via find_binary()
                 # and keep version.json honest (no phantom install).
-                return
+                raise ValueError('Архив Zapret не содержит исполняемых файлов')
 
-            parent = os.path.dirname(self.app_dir) or "."
+            destination = self._binary_directory()
+            os.makedirs(destination, exist_ok=True)
+            parent = os.path.dirname(destination) or "."
             tmp_dir = os.path.join(
                 parent, f".zapret_extract_{os.getpid()}_{uuid.uuid4().hex[:8]}")
             os.makedirs(tmp_dir)
             staged: List[Tuple[str, str]] = []  # (staged_path, target_path)
+            preserve_recovery = False
             try:
                 # Phase 1: unpack and validate EVERYTHING away from app_dir.
                 for name, filename in entries:
@@ -1982,7 +2008,12 @@ class ZapretService:
                         f.write(z.read(name))
                     if not is_valid_windows_binary(staged_path):
                         raise ValueError('В архиве найден повреждённый исполняемый файл')
-                    staged.append((staged_path, os.path.join(self.app_dir, filename)))
+                    staged.append((staged_path, os.path.join(destination, filename)))
+
+                required = {name.lower() for name in _REQUIRED_BUNDLE_FILES}
+                missing = required - {os.path.basename(p).lower() for p, _ in staged}
+                if missing:
+                    raise ValueError("Неполный пакет Zapret: отсутствуют " + ", ".join(sorted(missing)))
 
                 # Phase 2: swap in. Existing originals are copied into the
                 # temp dir first so a mid-swap failure (a running exe locks
@@ -2003,21 +2034,48 @@ class ZapretService:
                         os.replace(staged_path, target_path)
                         moved.append(target_path)
                 except Exception:
-                    # Undo everything the swap already did. Fresh-install
-                    # targets have no backup: nothing existed to mix with, so
-                    # the (validated) files already moved stay.
-                    for target_path in moved:
+                    # Restore the exact previous set, including removal of
+                    # files introduced by the failed transaction.
+                    for target_path in reversed(moved):
                         backup_path = backups.get(target_path)
-                        if not backup_path:
-                            continue
                         try:
-                            os.replace(backup_path, target_path)
+                            if backup_path:
+                                os.replace(backup_path, target_path)
+                            else:
+                                os.remove(target_path)
                         except OSError:
+                            preserve_recovery = True
                             logger.error("Zapret update rollback failed for %s",
                                          target_path, exc_info=True)
                     raise
             finally:
-                shutil.rmtree(tmp_dir, ignore_errors=True)
+                if not preserve_recovery:
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+                else:
+                    logger.error('Zapret recovery files retained at %s', tmp_dir)
+
+    def _bundle_complete(self):
+        directory = self._binary_directory()
+        return all(is_valid_windows_binary(os.path.join(directory, name))
+                   for name in _REQUIRED_BUNDLE_FILES)
+
+    @contextmanager
+    def _bundle_install_guard(self):
+        owner = threading.get_ident()
+        with self._lock:
+            previous = self._binary_update_owner
+            if previous is not None and previous != owner:
+                raise RuntimeError('Файлы Zapret уже обновляются')
+            if (self._elevation_inflight is not None or self._elevation_pid_unknown
+                    or self._state == _STATE_STOPPING
+                    or (self._state == _STATE_STARTING and self._start_owner != owner)):
+                raise RuntimeError('Дождитесь завершения запуска или остановки Zapret')
+            self._binary_update_owner = owner
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._binary_update_owner = previous
 
     def _write_version_info(self, version: str, **extra):
         version_file = os.path.join(self.app_dir, "version.json")
@@ -2025,7 +2083,8 @@ class ZapretService:
         data.update(extra)
         # Atomic write (BUG-014): a truncated version.json used to read as
         # version '' and announce phantom updates (BUG-016's trigger).
-        self._atomic_write_text(version_file, json.dumps(data, indent=2))
+        if not self._atomic_write_text(version_file, json.dumps(data, indent=2)):
+            raise OSError('Не удалось сохранить версию установленного Zapret')
 
     # ─── version.json metadata (audit C1: BUG-004/016) ───
     #
@@ -2135,17 +2194,20 @@ class ZapretService:
                     self._emit_event("zapret_download_failed", {"message": msg})
                     return False, msg
 
-                self._extract_zip(zip_bytes)
-                if not self.find_binary():
-                    # Archive layout changed or nothing usable inside: never bump
-                    # version.json in this case, otherwise the app would believe
-                    # it is "installed" with no winws.exe on disk.
-                    msg = f"Архив {ZAPRET_VERSION} не содержит winws.exe — установка отменена."
-                    logger.error(msg)
-                    self._emit_event("zapret_download_failed", {"message": msg})
-                    return False, msg
-                self._write_version_info(ZAPRET_VERSION)
-                logger.info("Zapret binaries successfully extracted to %s", self.app_dir)
+                with self._bundle_install_guard():
+                    if self.is_running():
+                        raise RuntimeError("Остановите Zapret перед заменой его файлов")
+                    self._extract_zip(zip_bytes)
+                    if not self._bundle_complete():
+                        # Archive layout changed or nothing usable inside: never bump
+                        # version.json in this case, otherwise the app would believe
+                        # it is "installed" with no winws.exe on disk.
+                        msg = f"Архив {ZAPRET_VERSION} не содержит winws.exe — установка отменена."
+                        logger.error(msg)
+                        self._emit_event("zapret_download_failed", {"message": msg})
+                        return False, msg
+                    self._write_version_info(ZAPRET_VERSION)
+                logger.info("Zapret binaries successfully extracted to %s", self._binary_directory())
                 msg = "Файлы Zapret успешно загружены!"
                 self._emit_event("zapret_download_finished", {
                     "message": msg, "version": ZAPRET_VERSION})
@@ -2284,7 +2346,7 @@ class ZapretService:
             # only wastes bandwidth and can race a concurrent start()). A
             # pending marker for it is stale — drop it, otherwise every
             # start() would keep paying a GitHub call for a no-op (BUG-004).
-            if latest_tag == current_ver and self.find_binary():
+            if latest_tag == current_ver and self._bundle_complete():
                 self._clear_pending_update()
                 return True, f"У вас уже установлена последняя версия Zapret ({current_ver})"
 
@@ -2309,77 +2371,88 @@ class ZapretService:
                     logger.error(msg)
                     return False, msg
 
-                was_running = self.is_running()
-                if was_running:
-                    stopped, stop_msg = self.stop()
-                    time.sleep(1.0)
-                    if not stopped:
-                        # BUG-008: never unpack over a live winws.exe — the
-                        # swap would fail midway and leave a mixture of old
-                        # and new binaries with the process still running.
-                        msg = (f"Обновление отменено: не удалось остановить Zapret ({stop_msg}) — "
-                               "нельзя заменять файлы работающего процесса. Остановите Zapret "
-                               "и повторите обновление.")
-                        logger.warning(msg)
-                        return False, msg
+                with self._bundle_install_guard():
+                    was_running = self.is_running()
+                    restart_generation = None
+                    if was_running:
+                        stopped, stop_msg = self.stop()
+                        with self._lock:
+                            restart_generation = self._generation
+                        time.sleep(1.0)
+                        if not stopped:
+                            # BUG-008: never unpack over a live winws.exe — the
+                            # swap would fail midway and leave a mixture of old
+                            # and new binaries with the process still running.
+                            msg = (f"Обновление отменено: не удалось остановить Zapret ({stop_msg}) — "
+                                   "нельзя заменять файлы работающего процесса. Остановите Zapret "
+                                   "и повторите обновление.")
+                            logger.warning(msg)
+                            return False, msg
 
-                try:
-                    self._extract_zip(zip_bytes)
-                except Exception as exc:
-                    note = self._restore_after_failed_update() if was_running else ""
-                    raise RuntimeError(f"{exc}.{note}") from None
-                if not self.find_binary():
-                    # Extraction produced no usable binary (e.g. release layout
-                    # changed): keep the old version.json so the next attempt
-                    # still reports an update instead of a phantom install.
-                    note = self._restore_after_failed_update() if was_running else ""
-                    msg = (f"Архив {latest_tag} не содержит winws.exe — обновление отменено, "
-                           f"предыдущая версия сохранена.{note}")
-                    logger.error(msg)
-                    return False, msg
-                # Rewriting version.json drops any pending_update flag and any
-                # failure timestamp (BUG-004): success is the only moment a
-                # version value is fabricated.
-                self._write_version_info(latest_tag)
-                logger.info("Zapret successfully updated to %s", latest_tag)
-
-                message = f"Zapret успешно обновлен до версии {latest_tag}!"
-                if was_running:
-                    mode = "youtube_discord"
-                    custom_args = ""
-                    bin_path = None
-                    if self.settings:
-                        mode = self.settings.get("zapret", "mode", "youtube_discord")
-                        custom_args = self.settings.get("zapret", "custom_args", "")
-                        bin_path = self.settings.get("zapret", "binary_path", "")
-                    # BUG-008 honesty: the binaries ARE updated at this point,
-                    # but the user asked for an update of a RUNNING bypass. A
-                    # failed restart used to be swallowed — the UI showed a
-                    # success while the bypass was left off with enabled=true.
                     try:
-                        restarted, start_msg = self.start(
-                            mode=mode, custom_args=custom_args, binary_path=bin_path)
-                    except Exception as start_exc:
-                        logger.warning("Zapret restart after update raised",
-                                       exc_info=True)
-                        restarted, start_msg = False, str(start_exc)
-                    if not restarted:
-                        message += (f" Но запустить обновлённый Zapret не удалось: "
-                                    f"{start_msg} — включите его повторно.")
-                        logger.warning("Zapret update succeeded but the restart "
-                                       "failed: %s", start_msg)
+                        self._extract_zip(zip_bytes)
+                    except Exception as exc:
+                        note = self._restore_after_failed_update(restart_generation) if was_running else ""
+                        raise RuntimeError(f"{exc}.{note}") from None
+                    if not self._bundle_complete():
+                        # Extraction produced no usable binary (e.g. release layout
+                        # changed): keep the old version.json so the next attempt
+                        # still reports an update instead of a phantom install.
+                        note = self._restore_after_failed_update(restart_generation) if was_running else ""
+                        msg = (f"Архив {latest_tag} не содержит winws.exe — обновление отменено, "
+                               f"предыдущая версия сохранена.{note}")
+                        logger.error(msg)
+                        return False, msg
+                    # Rewriting version.json drops any pending_update flag and any
+                    # failure timestamp (BUG-004): success is the only moment a
+                    # version value is fabricated.
+                    self._write_version_info(latest_tag)
+                    logger.info("Zapret successfully updated to %s", latest_tag)
 
-                return True, message
+                    message = f"Zapret успешно обновлен до версии {latest_tag}!"
+                    if was_running:
+                        with self._lock:
+                            if restart_generation != self._generation:
+                                return True, message + ' Автоперезапуск отменён новой командой остановки.'
+                        mode = "youtube_discord"
+                        custom_args = ""
+                        bin_path = None
+                        if self.settings:
+                            mode = self.settings.get("zapret", "mode", "youtube_discord")
+                            custom_args = self.settings.get("zapret", "custom_args", "")
+                            bin_path = self.settings.get("zapret", "binary_path", "")
+                        # BUG-008 honesty: the binaries ARE updated at this point,
+                        # but the user asked for an update of a RUNNING bypass. A
+                        # failed restart used to be swallowed — the UI showed a
+                        # success while the bypass was left off with enabled=true.
+                        try:
+                            restarted, start_msg = self.start(
+                                mode=mode, custom_args=custom_args, binary_path=bin_path,
+                                expected_generation=restart_generation)
+                        except Exception as start_exc:
+                            logger.warning("Zapret restart after update raised",
+                                           exc_info=True)
+                            restarted, start_msg = False, str(start_exc)
+                        if not restarted:
+                            message += (f" Но запустить обновлённый Zapret не удалось: "
+                                        f"{start_msg} — включите его повторно.")
+                            logger.warning("Zapret update succeeded but the restart "
+                                           "failed: %s", start_msg)
+
+                    return True, message
             except Exception as e:
                 logger.error("Failed to update Zapret: %s", e)
                 return False, f"Ошибка при обновлении Zapret: {e}"
 
-    def _restore_after_failed_update(self) -> str:
+    def _restore_after_failed_update(self, expected_generation=None) -> str:
         """Best-effort restart of the bypass after a failed update that had to
         stop it (BUG-008): the previous bundle is intact thanks to the
         transactional extraction, so a failed update must not silently turn
         into a disabled Zapret. Returns a user-facing note about the outcome."""
         try:
+            with self._lock:
+                if expected_generation is not None and expected_generation != self._generation:
+                    return ' Перезапуск отменён новой командой остановки.'
             mode = "youtube_discord"
             custom_args = ""
             bin_path = None
@@ -2387,7 +2460,8 @@ class ZapretService:
                 mode = self.settings.get("zapret", "mode", "youtube_discord")
                 custom_args = self.settings.get("zapret", "custom_args", "")
                 bin_path = self.settings.get("zapret", "binary_path", "")
-            ok, msg = self.start(mode=mode, custom_args=custom_args, binary_path=bin_path)
+            ok, msg = self.start(mode=mode, custom_args=custom_args, binary_path=bin_path,
+                                 expected_generation=expected_generation)
             if ok:
                 logger.info("Zapret restarted on the previous binaries after a failed update")
                 return " Zapret перезапущен на предыдущей версии."
@@ -2495,7 +2569,103 @@ class ZapretService:
 
     # ─── start / stop (Z-2, Z-3; state machine, lock only around transitions) ───
 
-    def start(self, mode="youtube_discord", custom_args="", binary_path=None) -> Tuple[bool, str]:
+    def select_strategy(self, preferred="youtube_discord", binary_path=None):
+        """First-use strategy selection, verified by a real audio download."""
+        with self._lock:
+            if self._binary_update_owner not in (None, threading.get_ident()):
+                return False, 'Дождитесь завершения обновления файлов Zapret', preferred
+            if self._selection_active:
+                return False, "Подбор уже выполняется", preferred
+            if preferred not in PRESET_STRATEGIES:
+                return False, "Неизвестная стратегия Zapret", preferred
+            self._selection_active = True
+            self._selection_owner = threading.get_ident()
+            self._selection_cancel.clear()
+        modes = list(dict.fromkeys([preferred] + list(PRESET_STRATEGIES)))
+        result = (False, "Подбор отменён", preferred)
+        started = False
+        generation = None
+        try:
+            for attempt, mode in enumerate(modes, 1):
+                if self._selection_cancel.is_set():
+                    break
+                self._emit_event('zapret_selection_progress', {
+                    'attempt': attempt, 'total': len(modes), 'mode': mode,
+                    'message': f'Подбор стратегий: попытка {attempt} из {len(modes)} ({mode}). Проверяем YouTube…'})
+                ok, message = self.start(mode=mode, binary_path=binary_path, interactive=True)
+                if not ok:
+                    result = (False, message, mode)
+                    break
+                started = True
+                with self._lock:
+                    generation = self._generation
+                result = (False, "Подбор отменён", mode)
+                if self._selection_cancel.is_set():
+                    break
+                reachable = self._probe_selection_youtube()
+                with self._lock:
+                    if self._selection_cancel.is_set() or generation != self._generation:
+                        break
+                    if reachable and self.is_running():
+                        result = (True, "Стратегия подобрана: тестовый аудиофайл YouTube успешно скачан. Другие треки могут иметь ограничения доступа.", mode)
+                        break
+                started = False  # this stop owns the cleanup, even if UAC is refused
+                ok, message = self._stop_impl(bump_generation=True, allow_elevation=True)
+                if not ok:
+                    result = (False, message, mode)
+                    break
+            else:
+                result = (False, "Ни одна стратегия не прошла проверку YouTube. Проверьте сеть и отключите VPN перед повторным подбором.", preferred)
+        except Exception:
+            logger.exception("Zapret strategy selection failed")
+            # start() may raise after creating its process (for example while
+            # recording state). The selection still owns that process.
+            with self._lock:
+                if not self._selection_cancel.is_set() and self.is_running():
+                    started = True
+                    generation = self._generation
+            result = (False, "Ошибка проверки стратегии Zapret. Повторите подбор.", result[2])
+        finally:
+            try:
+                with self._lock:
+                    owns_process = generation == self._generation
+                if started and not result[0] and owns_process:
+                    ok, message = self._stop_impl(bump_generation=True, allow_elevation=True)
+                    if not ok:
+                        result = (False, message, result[2])
+            finally:
+                with self._lock:
+                    self._selection_active = False
+                    self._selection_owner = None
+                    self._status_cache = None
+                    self._status_epoch += 1
+        return result
+
+    def cancel_selection(self):
+        """Signal the selecting worker; it alone stops its current attempt."""
+        with self._lock:
+            if not self._selection_active:
+                return False
+            self._selection_cancel.set()
+            return True
+
+    def _probe_selection_youtube(self):
+        import requests
+        with requests.Session() as session:
+            session.trust_env = False
+            for url in ('https://www.youtube.com/generate_204', 'https://music.youtube.com/'):
+                if self._selection_cancel.is_set():
+                    return False
+                try:
+                    with session.get(url, timeout=(4, 4), stream=True, allow_redirects=False) as response:
+                        if response.status_code not in (200, 204):
+                            return False
+                except requests.RequestException:
+                    return False
+        from services.zapret_probe import probe_youtube_audio
+        return probe_youtube_audio(self._selection_cancel.is_set)
+
+    def start(self, mode="youtube_discord", custom_args="", binary_path=None, expected_generation=None, interactive=False) -> Tuple[bool, str]:
         """Start Zapret process with specified strategy. Returns (success, status_message).
         If winws is already running with DIFFERENT arguments (mode switched while
         active), it is restarted with the new strategy instead of a silent no-op.
@@ -2507,6 +2677,19 @@ class ZapretService:
         no longer resurrect winws after a toggle-off or during shutdown
         (BUG-002/003)."""
         with self._lock:
+            if expected_generation is not None and expected_generation != self._generation:
+                return False, _START_CANCELLED_MSG
+            if self._binary_update_owner not in (None, threading.get_ident()):
+                return False, 'Дождитесь завершения обновления файлов Zapret'
+            if self._selection_active:
+                if self._selection_owner != threading.get_ident():
+                    return False, "Дождитесь завершения подбора стратегий или отмените его"
+                if self._selection_cancel.is_set():
+                    return False, "Подбор отменён"
+            if self._elevation_inflight is not None or self._elevation_pid_unknown:
+                return False, ("Не удалось подтвердить PID после запроса UAC. "
+                               "Проверьте winws.exe в диспетчере задач и перезапустите "
+                               "NeDotify перед повторным включением, чтобы не запустить второй экземпляр.")
             if self._storage_unavailable:
                 # BUG-017: the data directory could not be created; launching
                 # would produce untracked processes with no pidfile at all.
@@ -2516,8 +2699,11 @@ class ZapretService:
                 return False, "Zapret сейчас останавливается — повторите попытку через мгновение"
             self._generation += 1
             gen = self._generation
+            self._start_owner = threading.get_ident()
             self._state = _STATE_STARTING
         try:
+            if interactive:
+                return self._start_with_generation(gen, mode, custom_args, binary_path, allow_elevation_stop=True)
             return self._start_with_generation(gen, mode, custom_args, binary_path)
         finally:
             # Safety net for exception paths: never leave a stale STARTING
@@ -2525,8 +2711,14 @@ class ZapretService:
             with self._lock:
                 if gen == self._generation and self._state == _STATE_STARTING:
                     self._state = _STATE_RUNNING if self.is_running() else _STATE_STOPPED
+                if gen == self._generation:
+                    self._start_owner = None
+                self._status_cache = None
+                self._status_cache_time = 0.0
+                self._status_epoch += 1
+            self._ensure_lifecycle_watcher()
 
-    def _start_with_generation(self, gen: int, mode, custom_args, binary_path) -> Tuple[bool, str]:
+    def _start_with_generation(self, gen: int, mode, custom_args, binary_path, allow_elevation_stop=False) -> Tuple[bool, str]:
         # BUG-031 (D2 ordering fix): the mode/args validation below used to sit
         # AFTER find_binary() and the auto-download — an unknown mode saved in
         # the settings DB (the exact stale-value scenario) made autostart pay
@@ -2564,6 +2756,15 @@ class ZapretService:
                            f"Доступные режимы: {available}.")
 
         exe = self.find_binary(binary_path)
+        bundle_dir = self._binary_directory()
+        if exe and not binary_path and bundle_dir != self.app_dir and not self.is_running():
+            # Recover a previous first-run download in the profile, or a
+            # partial installed bundle. Never copy unverified cached files
+            # into an elevation root: re-fetch the SHA-256-pinned archive.
+            if (os.path.normcase(os.path.dirname(exe)) != os.path.normcase(bundle_dir)
+                    or any(not is_valid_windows_binary(os.path.join(bundle_dir, name))
+                           for name in _REQUIRED_BUNDLE_FILES)):
+                exe = None
         if not exe:
             # A user-configured path that failed validation used to be dropped
             # silently, so the user saw only "winws.exe not found" and had no
@@ -2578,7 +2779,7 @@ class ZapretService:
             logger.info("Zapret binary not found. Attempting automatic download...")
             ok, dl_msg = self.download_binaries()
             exe = self.find_binary(binary_path)
-            if not exe:
+            if not ok or not exe:
                 msg = f"Файл winws.exe не найден. {dl_msg}"
                 logger.warning(msg)
                 return False, msg
@@ -2638,6 +2839,10 @@ class ZapretService:
             else:
                 logger.info("Applying pending Zapret update %s before launch...", pending)
                 ok, upd_msg = self.update_zapret(force=True)
+                if ok:
+                    exe = self.find_binary(binary_path)
+                    if not exe:
+                        return False, 'Обновление не установило исполняемый файл Zapret'
                 if not ok:
                     # Transient failure (network, extraction): keep the
                     # pending marker but rate-limit the next attempt.
@@ -2665,7 +2870,7 @@ class ZapretService:
                     # change": with a live process and no recorded signature
                     # there is nothing to restart — report the active process.
                     current_cmd = (self._last_args or self._read_cmd_file()).strip()
-                    if not current_cmd or current_cmd == raw_args.strip():
+                    if current_cmd == raw_args.strip() or (not current_cmd and not self._selection_active and not allow_elevation_stop):
                         self._state = _STATE_RUNNING
                         return True, "Zapret активен"
                     restart_needed = True
@@ -2702,7 +2907,7 @@ class ZapretService:
                         # running the old strategy. Restart precisely instead:
                         # the kill runs outside the state lock, right below.
                         recorded = self._read_cmd_file().strip()
-                        if recorded and recorded != raw_args.strip():
+                        if recorded != raw_args.strip() and (recorded or self._selection_active or allow_elevation_stop):
                             restart_orphan_pid = orphan_pid
                         else:
                             self._known_uid = uuid.uuid4().hex[:16]
@@ -2719,7 +2924,9 @@ class ZapretService:
                 # taskkill batch stays outside the state lock (BUG-007).
                 logger.info("Orphaned Zapret (PID %s) runs a different strategy than "
                             "requested; restarting it with the new one", restart_orphan_pid)
-                if not self._kill_pid(restart_orphan_pid) or self._pid_alive(restart_orphan_pid):
+                killed = (self._kill_pid(restart_orphan_pid, allow_elevation=True) if allow_elevation_stop
+                          else self._kill_pid(restart_orphan_pid))
+                if not killed or self._pid_alive(restart_orphan_pid):
                     with self._lock:
                         if gen == self._generation:
                             self._state = _STATE_STOPPED
@@ -2754,7 +2961,7 @@ class ZapretService:
                 # The internal stop does not bump the generation: this start is
                 # the newest command and must not cancel itself.
                 logger.info("Zapret strategy changed — restarting with new arguments")
-                stopped, stop_msg = self._stop_impl(bump_generation=False)
+                stopped, stop_msg = self._stop_impl(bump_generation=False, allow_elevation=allow_elevation_stop)
                 if not stopped:
                     return False, f"Не удалось применить новую стратегию: {stop_msg}"
 
@@ -2762,6 +2969,11 @@ class ZapretService:
                 if gen != self._generation:
                     return False, _START_CANCELLED_MSG
                 kind, proc, launch_msg = self._launch(exe, raw_args)
+                if kind == 'elevate':
+                    # Reserve the launch before releasing the machine guard:
+                    # stop can cancel it, but no second start may bypass UAC.
+                    self._elevation_inflight = gen
+                    self._elevation_dispatched = False
         finally:
             _global_zapret_guard_release(guard)
 
@@ -2777,9 +2989,6 @@ class ZapretService:
             with self._lock:
                 if gen == self._generation:
                     self._state = _STATE_RUNNING if ok else _STATE_STOPPED
-            if ok and gen != self._generation:
-                logger.warning("Zapret finished an elevated launch while a newer "
-                               "stop/start command arrived; repeat the stop if unwanted")
             return ok, msg
         return self._confirm_launch(proc, gen)
 
@@ -2873,7 +3082,7 @@ class ZapretService:
             self._close_job_handle()
             job = _win32_create_kill_on_close_job()
             if job is not None:
-                if _win32_assign_process_to_job(job, int(self.process.handle)):
+                if _win32_assign_process_to_job(job, int(self.process._handle)):
                     self._job_handle = job
                 else:
                     _win32_close_handle(job)
@@ -2944,25 +3153,19 @@ class ZapretService:
                     if gen != self._generation:
                         return False, _START_CANCELLED_MSG
                     self._state = _STATE_RUNNING
-                threading.Thread(
-                    target=self._watch_child_lifecycle, args=(proc, gen),
-                    name="ZapretLifecycleWatch", daemon=True).start()
                 return True, "Zapret активен"
             time.sleep(0.25)
 
         # The child died inside the confirmation window.
         with self._lock:
-            cancelled = gen != self._generation
+            if gen != self._generation:
+                return False, _START_CANCELLED_MSG
             if self.process is proc:
                 # Only tear down handles we still own: a newer epoch may have
                 # already launched its own child with its own log/job handles.
                 self.process = None
                 self._close_log_handle()
                 self._close_job_handle()
-        if cancelled:
-            # An intentional stop owns this outcome; it has already reported.
-            return False, _START_CANCELLED_MSG
-        with self._lock:
             self._clear_pidfile()
             self._clear_cmd_file()
             self._last_args = ""
@@ -2972,6 +3175,9 @@ class ZapretService:
         if rc is not None:
             msg = f"{msg} Код завершения: {rc}"
         logger.warning("Zapret exited during the launch confirmation window: %s", msg)
+        with self._lock:
+            if gen != self._generation:
+                return False, _START_CANCELLED_MSG
         self._emit_event("zapret_crashed", {"message": msg, "returncode": rc, "late": False})
         return False, msg
 
@@ -2988,6 +3194,8 @@ class ZapretService:
             return
         with self._lock:
             cancelled = gen != self._generation or self._state in (_STATE_STOPPING, _STATE_STOPPED)
+            if cancelled:
+                return  # A newer command owns this process and its state files.
             if self.process is proc:
                 self.process = None
                 self._close_log_handle()
@@ -2997,6 +3205,9 @@ class ZapretService:
                 self._last_args = ""
             if not cancelled:
                 self._state = _STATE_STOPPED
+                self._status_cache = None
+                self._status_cache_time = 0.0
+                self._status_epoch += 1
         if cancelled:
             return
         tail = self._read_log_tail()
@@ -3004,6 +3215,59 @@ class ZapretService:
         logger.warning("Zapret process exited unexpectedly: %s", msg)
         self._emit_event("zapret_crashed", {
             "message": msg, "returncode": getattr(proc, "returncode", None), "late": True})
+
+    def _ensure_lifecycle_watcher(self) -> None:
+        """Rearm the lifecycle watcher for either a child or detached PID."""
+        with self._lock:
+            if self._state != _STATE_RUNNING:
+                return
+            proc = self.process
+            identity = proc if proc is not None else self._read_pidfile()
+            key = (identity, self._generation)
+            if identity is None or self._lifecycle_watch_key == key:
+                return
+            self._lifecycle_watch_key = key
+            threading.Thread(
+                target=self._watch_child_lifecycle if proc is not None else self._watch_elevated_lifecycle,
+                args=key, name="ZapretLifecycleWatch", daemon=True).start()
+
+    def _watch_elevated_lifecycle(self, pid: int, gen: int) -> None:
+        """Resync the UI when the elevated process exits after PID discovery."""
+        record = self._read_pidfile_record() or {}
+        timestamps = record.get('created')
+        created = timestamps.get(str(pid)) if isinstance(timestamps, dict) else None
+        while True:
+            with self._lock:
+                if gen != self._generation or self._state != _STATE_RUNNING:
+                    return
+            alive = self._pid_alive(pid)
+            if alive and created:
+                current = self._get_process_creation_time(pid)
+                alive = current is None or current == created
+            if not alive:
+                break
+            time.sleep(0.5)
+        with self._lock:
+            if gen != self._generation or self._state != _STATE_RUNNING:
+                return
+            survivors = [other for other in self._record_pids(record)
+                         if other != pid and self._pid_alive(other) and self._is_our_winws_process(other)]
+            if survivors:
+                self._write_pidfile(survivors[0], pids=survivors, uid=record.get('uid', ''))
+                self._status_cache = None
+                self._status_epoch += 1
+                self._ensure_lifecycle_watcher()
+                return
+            self._state = _STATE_STOPPED
+            self._clear_pidfile()
+            self._clear_cmd_file()
+            self._last_args = ""
+            self._status_cache = None
+            self._status_cache_time = 0.0
+            self._status_epoch += 1
+        self._emit_event("zapret_crashed", {
+            "message": self._analyze_crash(self._read_log_tail()),
+            "returncode": None, "late": True})
 
     def set_event_callback(self, callback) -> None:
         """Register the UI event hook, e.g. for late-crash reports (BUG-025).
@@ -3092,6 +3356,37 @@ class ZapretService:
                     logger.warning("Could not restore player window after UAC", exc_info=True)
 
     def _launch_elevated(self, exe: str, raw_args: str) -> Tuple[bool, str]:
+        """Coordinate UAC, PID discovery by scanning, and stale-launch cleanup."""
+        with self._lock:
+            launch_gen = self._elevation_inflight
+            if launch_gen is None:
+                launch_gen = self._generation
+                self._elevation_inflight = launch_gen
+                self._elevation_dispatched = False
+        try:
+            with self._lock:
+                if launch_gen != self._generation:
+                    return False, _START_CANCELLED_MSG
+            ok, message = self._launch_elevated_attempt(exe, raw_args)
+            with self._lock:
+                stale = launch_gen != self._generation
+            if stale:
+                if ok:
+                    stopped, stop_message = self._stop_impl(bump_generation=True, allow_elevation=True)
+                    if not stopped:
+                        return False, stop_message
+                return False, _START_CANCELLED_MSG
+            return ok, message
+        except Exception:
+            logger.exception('Elevated Zapret launch or PID discovery failed')
+            return False, 'Не удалось подтвердить запуск Zapret. Проверьте PID winws.exe перед повторным включением.'
+        finally:
+            with self._lock:
+                if not self._elevation_dispatched:
+                    self._elevation_pid_unknown = False
+                self._elevation_inflight = None
+
+    def _launch_elevated_attempt(self, exe: str, raw_args: str) -> Tuple[bool, str]:
         """Elevation required (WinError 740 / missing rights) — use ShellExecuteW 'runas'.
         Launches an elevated cmd.exe that redirects winws stdout/stderr to zapret.log (AUDIT #05),
         in APPEND mode (BUG-028) so a launch never truncates the previous session's log.
@@ -3121,6 +3416,9 @@ class ZapretService:
             logger.warning("Elevation denied for %s: not a verified installation root "
                            "(Program Files or installer-verified InstallLocation)", exe)
             return False, msg
+        if any(character in str(path) for path in (exe, self.log_file)
+               for character in ('%', '"', '\r', '\n')):
+            return False, 'Путь Zapret или его журнала содержит символы, небезопасные для запуска через cmd.exe.'
         try:
             tokens = sanitize_zapret_args(raw_args)
         except ValueError as exc:
@@ -3144,9 +3442,15 @@ class ZapretService:
         if not ctypes.windll.kernel32.GetSystemDirectoryW(system_dir, len(system_dir)):
             return False, 'Не удалось определить системный каталог Windows'
         comspec = os.path.join(system_dir.value, 'cmd.exe')
-        cmd_params = f'/d /c ""{exe}" {params} >> "{self.log_file}" 2>&1"'
+        cmd_params = f'/d /v:off /c ""{exe}" {params} >> "{self.log_file}" 2>&1"'
 
+        with self._lock:
+            self._elevation_dispatched = True
+            self._elevation_pid_unknown = True
         ret = self._shell_execute_elevated(comspec, cmd_params, os.path.dirname(exe))
+        if ret <= 32:
+            with self._lock:
+                self._elevation_dispatched = False
         if ret == 5:
             msg = "Запуск отменён: требуются права Администратора для драйвера WinDivert (UAC отклонён)."
             logger.warning(msg)
@@ -3207,24 +3511,19 @@ class ZapretService:
 
         tail = self._read_log_tail(offset=log_offset)
         if not tail:
-            # BUG-040: ShellExecuteW dispatched the launch (ret > 32) but every
-            # PID scan failed and the freshly appended log is empty. The old
-            # "не запустился" invited an immediate relaunch — a SECOND elevated
-            # winws over the live one. The process is most likely running:
-            # report success with an explicit warning instead, and keep
-            # is_running() consistent with that report through the presumption
-            # flag (cleared by the next stop() or positive identification).
+            # Dispatch is not proof of process liveness. Keep the duplicate
+            # launch guard, but do not report success or turn the switch on.
             with self._lock:
                 self._elevation_pid_unknown = True
-            msg = ("Zapret запущен, но не удалось определить его PID "
-                   "(проверьте диспетчер задач). Не включайте Zapret повторно — "
-                   "будет запущен второй экземпляр.")
+            msg = ("Не удалось подтвердить запуск Zapret: PID не определён. "
+                   "Проверьте winws.exe в диспетчере задач и перезапустите NeDotify "
+                   "перед повторным включением, чтобы не запустить второй экземпляр.")
             logger.warning("Elevated launch dispatched (ret=%s) but PID discovery "
-                           "failed; reporting warning-success", ret)
-            return True, msg
+                           "failed; launch state is unknown", ret)
+            return False, msg
         msg = self._analyze_crash(tail)
         logger.warning("Elevated launch failed; log analysis: %s", msg)
-        return False, msg
+        return False, 'PID Zapret не подтверждён. ' + msg
 
     def stop(self) -> Tuple[bool, str]:
         """Stop only the Zapret process started by this app (Z-2).
@@ -3232,9 +3531,29 @@ class ZapretService:
         If termination fails, pidfile is preserved to prevent orphaned WinDivert driver lock.
         Every call opens a new STOPPING epoch (the generation counter arbitrates
         against in-flight starts, BUG-002/003)."""
-        return self._stop_impl(bump_generation=True)
+        self._selection_cancel.set()
+        try:
+            return self._stop_impl(bump_generation=True)
+        finally:
+            with self._lock:
+                self._status_cache = None
+                self._status_cache_time = 0.0
+                self._status_epoch += 1
+            self._ensure_lifecycle_watcher()
 
-    def _stop_impl(self, bump_generation: bool = True) -> Tuple[bool, str]:
+    def stop_interactive(self) -> Tuple[bool, str]:
+        """User-requested stop; may elevate termination of our verified PID."""
+        self._selection_cancel.set()
+        try:
+            return self._stop_impl(bump_generation=True, allow_elevation=True)
+        finally:
+            with self._lock:
+                self._status_cache = None
+                self._status_cache_time = 0.0
+                self._status_epoch += 1
+            self._ensure_lifecycle_watcher()
+
+    def _stop_impl(self, bump_generation: bool = True, *, allow_elevation: bool = False) -> Tuple[bool, str]:
         """Shared stop logic. ``bump_generation=False`` is for the internal
         restart path in start(): the running start IS the newest command and
         must not cancel itself."""
@@ -3246,10 +3565,13 @@ class ZapretService:
         with self._lock:
             if bump_generation:
                 self._generation += 1
+            stop_gen = self._generation
             self._state = _STATE_STOPPING
-            # BUG-040: a stop command resolves the "launched but PID unknown"
-            # uncertainty — this stop either kills the (probable) process via
-            # the signature scan or establishes that nothing is running.
+            # An in-flight wrapper may already have discovered and then
+            # stopped its child. Only pre-dispatch or truly unresolved UAC
+            # must retain the unknown guard; never resurrect it after stop.
+            was_unknown = self._elevation_pid_unknown or (
+                self._elevation_inflight is not None and not self._elevation_dispatched)
             self._elevation_pid_unknown = False
             if self.process:
                 try:
@@ -3262,12 +3584,33 @@ class ZapretService:
                     self.process.wait(timeout=2.0)
                 except Exception:
                     logger.debug("stop: child did not exit within 2s after terminate", exc_info=True)
-                self.process = None
+                if self.process.poll() is not None:
+                    self.process = None
             self._close_log_handle()
 
         guard = _global_zapret_guard_acquire()
         try:
             try:
+                # A Popen handle is authoritative even if pidfile creation or
+                # command-line discovery failed. Never discard a live child.
+                with self._lock:
+                    if stop_gen != self._generation:
+                        return False, 'Остановка отменена новой командой Zapret'
+                    child = self.process
+                    self._close_job_handle()
+                if child and child.poll() is None:
+                    try:
+                        child.kill()
+                        child.wait(timeout=1.0)
+                    except Exception:
+                        logger.debug('Child survived the stop fallback', exc_info=True)
+                    if child.poll() is None:
+                        with self._lock:
+                            self._state = _STATE_RUNNING
+                        return False, f'Не удалось остановить дочерний процесс Zapret (PID {child.pid}). Повторите остановку.'
+                    with self._lock:
+                        if self.process is child:
+                            self.process = None
                 record = self._read_pidfile_record()
                 pid = self._read_pidfile()
                 target_pids = set()
@@ -3295,6 +3638,13 @@ class ZapretService:
                             target_pids.add(p)
 
                 # If no active target PIDs found:
+                if was_unknown and not target_pids:
+                    with self._lock:
+                        self._elevation_pid_unknown = True
+                        self._state = _STATE_STOPPED
+                    return False, ("PID Zapret не определён — остановка не подтверждена. "
+                                   "Проверьте winws.exe в диспетчере задач перед перезапуском NeDotify.")
+
                 if not target_pids:
                     if pid and not self._pid_alive(pid):
                         self._clear_pidfile()
@@ -3316,7 +3666,8 @@ class ZapretService:
                 failed_pids = []
                 for p in sorted(target_pids):
                     if self._pid_alive(p):
-                        killed = self._kill_pid(p)
+                        killed = (self._kill_pid(p, allow_elevation=True) if allow_elevation
+                                  else self._kill_pid(p))
                         if not killed or self._pid_alive(p):
                             failed_pids.append(p)
 
@@ -3366,7 +3717,9 @@ class ZapretService:
             # The kill-on-close job outlives the child but never the stop
             # request: closing it also kills a child that survived terminate()
             # — the last-resort fallback (BUG-023).
-            self._close_job_handle()
+            with self._lock:
+                if stop_gen == self._generation:
+                    self._close_job_handle()
             _global_zapret_guard_release(guard)
 
     # ─── status (Z-5: instant via cache, refreshed in background) ───
@@ -3380,18 +3733,19 @@ class ZapretService:
         with self._lock:
             if self._status_cache and (now - self._status_cache_time) < self._status_ttl:
                 return dict(self._status_cache)
-        if self._status_cache is None:
-            self._status_cache = {
-                "binary_found": False,
-                "binary_path": "",
-                "running": False,
-                "has_internet": True,
-                "version": "",
-                "message": "Определение статуса...",
-                "pending_update": ""
-            }
+            if self._status_cache is None:
+                self._status_cache = {
+                    "binary_found": False,
+                    "binary_path": "",
+                    "running": False,
+                    "has_internet": True,
+                    "version": "",
+                    "message": "Определение статуса...",
+                    "pending_update": ""
+                }
+            result = dict(self._status_cache)
         self._refresh_status_async()
-        return dict(self._status_cache)
+        return result
 
     def _refresh_status_async(self):
         with self._lock:
@@ -3400,7 +3754,7 @@ class ZapretService:
             self._status_thread = threading.Thread(target=self._build_status, daemon=True)
             self._status_thread.start()
 
-    def _track_network_state(self, running: bool, has_net: bool) -> None:
+    def _track_network_state(self, running: bool, has_net: bool, snapshot=None) -> None:
         """BUG-036: emit 'zapret_network_issue' ONCE per True->False transition.
 
         Fires only while the bypass is running and only on the transition
@@ -3415,6 +3769,8 @@ class ZapretService:
         strategy re-resolves the current adapter anyway on the next launch.
         """
         with self._lock:
+            if snapshot is not None and snapshot != (self._generation, self._status_epoch):
+                return
             previous = self._last_network_ok
             if not running:
                 # Nothing to watch while stopped; the next start re-arms the
@@ -3430,6 +3786,8 @@ class ZapretService:
             self._emit_event("zapret_network_issue", {"message": msg, "running": running})
 
     def _build_status(self):
+        with self._lock:
+            snapshot = (self._generation, self._status_epoch)
         try:
             exe = self.find_binary()
             running = self.is_running()
@@ -3437,19 +3795,16 @@ class ZapretService:
             # BUG-036: one-shot transition event; must run before anything can
             # fail below so a lost network is reported even if the rest of the
             # build throws.
-            self._track_network_state(running, has_net)
             cur_version = self.get_local_version()
             pending = self._get_pending_update()
 
-            if not exe:
+            if self._elevation_pid_unknown:
+                message = ("Состояние Zapret неизвестно: PID не определён. "
+                           "Проверьте winws.exe в диспетчере задач перед перезапуском NeDotify.")
+            elif not exe:
                 message = "Файл winws.exe не найден. Нажмите 'Обновить Zapret'."
             elif not running:
                 message = "Zapret отключен"
-            elif self._elevation_pid_unknown:
-                # BUG-040: running via the unattributed-elevated-launch
-                # presumption — say so instead of a plain "активен (версия)".
-                message = ("Zapret запущен (PID не определён — проверьте "
-                           "диспетчер задач; выключение Zapret остановит его)")
             elif pending:
                 if pending == ZAPRET_VERSION:
                     message = f"Доступно обновление {pending} (применится при следующем запуске)"
@@ -3484,14 +3839,18 @@ class ZapretService:
                 "binary_found": bool(exe),
                 "binary_path": exe or "",
                 "running": running,
+                "state_unknown": self._elevation_pid_unknown,
                 "has_internet": has_net,
                 "version": cur_version,
                 "message": message,
                 "pending_update": pending
             }
             with self._lock:
+                if snapshot != (self._generation, self._status_epoch):
+                    return
                 self._status_cache = status
                 self._status_cache_time = time.monotonic()
+            self._track_network_state(running, has_net, snapshot=snapshot)
         except Exception as e:
             logger.debug("Zapret status refresh error: %s", e)
             # BUG-041: this path used to patch only two keys onto whatever the
@@ -3500,6 +3859,8 @@ class ZapretService:
             # fields, so rebuild from the full template and only carry over
             # what a previous build actually knew.
             with self._lock:
+                if snapshot != (self._generation, self._status_epoch):
+                    return
                 previous = self._status_cache if isinstance(self._status_cache, dict) else {}
                 try:
                     running = self.is_running()

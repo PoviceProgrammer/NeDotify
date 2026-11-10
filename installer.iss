@@ -6,9 +6,9 @@
 [Setup]
 AppId={{8F56F2A1-90E1-4A0A-AB89-24A326E6D371}
 AppName=NeDotify
-AppVersion=2.5.1
-VersionInfoVersion=2.5.1
-VersionInfoProductVersion=2.5.1
+AppVersion=2.5.6
+VersionInfoVersion=2.5.6
+VersionInfoProductVersion=2.5.6
 AppPublisher=The pAura Team
 AppCopyright=Copyright (C) 2024 The pAura Team
 DefaultDirName={localappdata}\Programs\NeDotify
@@ -19,12 +19,15 @@ OutputBaseFilename=NeDotify_Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 PrivilegesRequired=lowest
+; The bundled CPython 3.14 and native wheels are Windows 10+ AMD64.
+MinVersion=10.0
+ArchitecturesAllowed=x64os
 DisableProgramGroupPage=no
 WizardStyle=modern
 WizardSizePercent=120
 DisableWelcomePage=no
 DisableReadyPage=no
-UninstallDisplayName=NeDotify 2.5.1
+UninstallDisplayName=NeDotify 2.5.6
 UninstallDisplayIcon={app}\NeDotify.exe
 CreateUninstallRegKey=yes
 CloseApplications=yes
@@ -51,9 +54,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 ; location the elevation gate (_protected_elevation_path → Inno
 ; InstallLocation) accepts outside Program Files. This closes the installer
 ; half of BUG-001 WITHOUT breaking builds that do not ship the bundle: the
-; #if guard skips the entry entirely, and the app falls back to downloading
-; the SHA-256-pinned archive into ~/.nedotify/zapret at runtime (that
-; location stays forbidden for elevation by design — user-writable storage).
+; #if guard skips the entry entirely. On first use the installed app downloads
+; the SHA-256-pinned archive into this same installer-verified {app}\zapret
+; directory. PID/version state stays in ~/.nedotify/zapret. Source/portable
+; runs still download into the profile, which is not an elevation root.
 ; SHIPPED-BINARY POLICY (deliberate decision, not an oversight): upstream
 ; bol-van/zapret is MIT-licensed, but redistributing third-party binaries
 ; inside the installer (hash pinning of the *bundle*, review, update path)
@@ -107,8 +111,8 @@ russian.AutostartTask=Запускать NeDotify при запуске Windows
 english.AutostartTask=Start NeDotify when Windows starts
 russian.AutostartGroup=Автозапуск:
 english.AutostartGroup=Startup:
-russian.WelcomeBody=Добро пожаловать в установщик NeDotify 2.5.1.%n%nNeDotify — современный музыкальный плеер с поддержкой онлайн-сервисов, тем и горячих клавиш.%n%nНажмите «Далее», чтобы продолжить, или «Отмена», чтобы выйти.
-english.WelcomeBody=Welcome to the NeDotify 2.5.1 setup.%n%nNeDotify is a modern music player with online services, themes, and keyboard shortcuts.%n%nClick Next to continue, or Cancel to exit.
+russian.WelcomeBody=Добро пожаловать в установщик NeDotify 2.5.6.%n%nNeDotify — современный музыкальный плеер с поддержкой онлайн-сервисов, тем и горячих клавиш.%n%nНажмите «Далее», чтобы продолжить, или «Отмена», чтобы выйти.
+english.WelcomeBody=Welcome to the NeDotify 2.5.6 setup.%n%nNeDotify is a modern music player with online services, themes, and keyboard shortcuts.%n%nClick Next to continue, or Cancel to exit.
 
 [Code]
 const
@@ -149,7 +153,6 @@ end;
 function InstallWebView2(): Boolean;
 var
   InstallerPath: String;
-  DownloadCmd: String;
   ResultCode: Integer;
 begin
   Result := True;
@@ -157,14 +160,16 @@ begin
     Exit;
 
   InstallerPath := ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe');
-  DownloadCmd := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ' +
-    '"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ' +
-    '(New-Object System.Net.WebClient).DownloadFile('''' + WV2_BOOTSTRAP_URL + '''', '''' + InstallerPath + '''')"';
-
   Log('WebView2 runtime not detected. Downloading Evergreen bootstrapper...');
-  if not Exec('powershell.exe', DownloadCmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) or not FileExists(InstallerPath) then
+  try
+    DownloadTemporaryFile(WV2_BOOTSTRAP_URL, 'MicrosoftEdgeWebview2Setup.exe', '', nil);
+  except
+    Log('Failed to download WebView2 bootstrapper: ' + GetExceptionMessage);
+    Result := False;
+    Exit;
+  end;
+  if not FileExists(InstallerPath) then
   begin
-    Log('Failed to download WebView2 bootstrapper via PowerShell.');
     Result := False;
     Exit;
   end;
@@ -188,6 +193,10 @@ begin
     if not InstallWebView2() then
     begin
       Log('WebView2 runtime installation could not be completed.');
+      if ActiveLanguage = 'russian' then
+        Result := 'Не удалось установить WebView2. Проверьте подключение к интернету и повторите установку NeDotify.'
+      else
+        Result := 'WebView2 installation failed. Check your internet connection and retry NeDotify setup.';
     end;
   end;
 end;

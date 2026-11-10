@@ -812,6 +812,7 @@ class ArtistService(BaseMusicService):
                                'catalog_partial':bool(albums) or bool(catalog_state.get('pending')), 'catalog_state':catalog_state}
                 elif source == 'deezer':
                     from services.deezer_service import DeezerService
+                    avatar = raw.get('picture_xl') or raw.get('picture_big') or raw.get('picture') or ''
                     tracks = []
                     try:
                         data = self.catalog._call(lambda: self.catalog._deezer_get('artist/' + sid + '/top', limit=50), deadline, is_current)
@@ -833,10 +834,16 @@ class ArtistService(BaseMusicService):
                                 seen.add(track['source_id'])
                     except Exception:
                         logger.debug('Deezer artist top tracks unavailable')
+                    avatar, bio_raw = self._resolve_metadata_fallback(
+                        actual_name, avatar_url=avatar, deadline=deadline, is_current=is_current)
+                    bio_ru, bio_original = (self._translate_bio(bio_raw, deadline=deadline)
+                        if bio_raw and time.monotonic() < deadline else (bio_raw, bio_raw))
                     profile = {'status': 'found', 'verified': True, 'name': actual_name,
                                'source': source, 'source_id': sid,
-                               'avatar_url': raw.get('picture_xl') or raw.get('picture_big') or raw.get('picture') or '',
-                               'fans': raw.get('nb_fan') or 0, 'bio': '', 'tracks': tracks,
+                               'avatar_url': avatar,
+                               'fans': raw.get('nb_fan') or 0, 'bio': bio_ru or bio_original,
+                               'bio_ru': bio_ru, 'bio_original': bio_original,
+                               'bio_en': bio_original, 'tracks': tracks,
                                'albums': [], 'tracks_has_more': True, 'catalog_partial': True,
                                'catalog_state': {'next_index':0, 'track_offsets':{}}}
                 else:

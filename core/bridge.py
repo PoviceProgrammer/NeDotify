@@ -4,10 +4,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 PUBLIC_METHODS = frozenset({
+    'get_personal_wave',
+    'replace_personal_wave_tail',
     'get_setup_status',
     'repair_setup_tools',
     'cancel_setup',
     'configure_setup',
+    'check_for_updates',
     'check_setup_updates',
     'select_setup_directory',
     'cancel_download',
@@ -41,6 +44,7 @@ PUBLIC_METHODS = frozenset({
     'frontend_heartbeat',
     'find_duplicate_tracks',
     'get_album_details',
+    'get_app_version',
     'get_artist_profile',
     'get_artist_tracks_page',
     'get_canonical_artist_names',
@@ -60,9 +64,16 @@ PUBLIC_METHODS = frozenset({
     'get_listening_comparison',
     'get_lyrics',
     'get_lyrics_translation',
+    'search_lyrics',
+    'apply_lyrics_candidate',
+    'save_custom_lyrics',
+    'delete_custom_lyrics',
+    'get_lyrics_display_settings',
+    'save_lyrics_display_settings',
     'get_next_track',
     'get_offline_library',
     'get_playlist_tracks',
+    'get_playlist_recommendations',
     'get_playlists',
     'get_popular_tracks',
     'get_profile_stats',
@@ -86,6 +97,7 @@ PUBLIC_METHODS = frozenset({
     'minimize_window',
     'next_track',
     'open_local_file',
+    'open_release_page',
     'pause_download',
     'play_next',
     'play_pause',
@@ -116,6 +128,7 @@ PUBLIC_METHODS = frozenset({
     'set_volume',
     'toggle_discord_rpc',
     'toggle_favorite',
+    'toggle_fullscreen',
     'toggle_mini_player',
     'toggle_mute',
     'toggle_repeat',
@@ -124,7 +137,6 @@ PUBLIC_METHODS = frozenset({
     'ui_ready',
     'update_track_tags',
     'update_zapret',
-    'yandex_device_auth',
 })
 _INTERNAL_METHODS = frozenset({'pywebviewMoveWindow', 'pywebviewEventHandler', 'pywebviewAsyncCallback'})
 

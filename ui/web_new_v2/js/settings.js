@@ -515,11 +515,6 @@ export function applySettingsFromBackend(settings) {
     document.dispatchEvent(new CustomEvent('nedotify:settings_applied', { detail: window.settings }));
 
     if (settings.auth) {
-        const inputYandexToken = document.getElementById('input-yandex-token');
-        if (inputYandexToken) {
-            inputYandexToken.value = '';
-            inputYandexToken.placeholder = settings.auth.has_yandex_token ? 'Токен сохранён (введите новый, чтобы заменить)' : 'Введите yandex_token...';
-        }
         const selectBrowserCookies = document.getElementById('select-browser-cookies');
         if (selectBrowserCookies && settings.auth.browser_cookies !== undefined) {
             selectBrowserCookies.value = settings.auth.browser_cookies;
@@ -562,17 +557,6 @@ export function applySettingsFromBackend(settings) {
             }
         }
         
-        // Yandex auth errors arrive as a dedicated event; token values stay
-        // backend-only and are never copied into this form.
-    }
-}
-
-// The backend sends only an invalid flag, never the credential itself.
-export function setYandexWarning(visible) {
-    const warning = document.getElementById('yandex-auth-warning');
-    if (warning) {
-        warning.style.display = visible ? 'flex' : 'none';
-        renderIcons();
     }
 }
 

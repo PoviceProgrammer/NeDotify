@@ -131,13 +131,14 @@ def _dpi_scale(hwnd):
 class SnapLayouts:
     """Installs native sizing and Snap handlers on one frameless window."""
 
-    def __init__(self, hwnd, js_button_selector="#btn-maximize", can_resize=None):
+    def __init__(self, hwnd, js_button_selector="#btn-maximize", can_resize=None, is_fullscreen=None):
         self.hwnd = int(hwnd) if hwnd else 0
         self.js_button_selector = js_button_selector
         self._old_wndproc = None
         self._old_proc = None
         self._old_style = None
         self._can_resize = can_resize
+        self._is_fullscreen = is_fullscreen
         self._installed = False
         # Client-relative rect of the maximise button, filled by JS.
         self._btn_rect = None
@@ -249,6 +250,14 @@ class SnapLayouts:
         # NCCALCSIZE_PARAMS starts with the proposed client RECT in screen px.
         # In the normal case keep it untouched: the whole window is client area.
         user32 = ctypes.windll.user32
+        if self._is_fullscreen and self._is_fullscreen():
+            monitor = user32.MonitorFromWindow(self.hwnd, 2)  # nearest
+            info = MONITORINFO(cbSize=ctypes.sizeof(MONITORINFO))
+            if monitor and user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                rect = ctypes.cast(lparam, ctypes.POINTER(wintypes.RECT)).contents
+                rect.left, rect.top = info.rcMonitor.left, info.rcMonitor.top
+                rect.right, rect.bottom = info.rcMonitor.right, info.rcMonitor.bottom
+            return 0
         if user32.IsZoomed(self.hwnd):
             # Native maximize can extend the outer frame beyond the monitor.
             # Keep WebView content inside this monitor's work area/taskbar.
@@ -269,10 +278,18 @@ class SnapLayouts:
         info = MONITORINFO(cbSize=ctypes.sizeof(MONITORINFO))
         if monitor and user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
             limits = ctypes.cast(lparam, ctypes.POINTER(MINMAXINFO)).contents
-            limits.ptMaxPosition.x = info.rcWork.left - info.rcMonitor.left
-            limits.ptMaxPosition.y = info.rcWork.top - info.rcMonitor.top
-            limits.ptMaxSize.x = info.rcWork.right - info.rcWork.left
-            limits.ptMaxSize.y = info.rcWork.bottom - info.rcWork.top
+            if self._is_fullscreen and self._is_fullscreen():
+                limits.ptMaxPosition.x = 0
+                limits.ptMaxPosition.y = 0
+                limits.ptMaxSize.x = info.rcMonitor.right - info.rcMonitor.left
+                limits.ptMaxSize.y = info.rcMonitor.bottom - info.rcMonitor.top
+                limits.ptMaxTrackSize.x = limits.ptMaxSize.x
+                limits.ptMaxTrackSize.y = limits.ptMaxSize.y
+            else:
+                limits.ptMaxPosition.x = info.rcWork.left - info.rcMonitor.left
+                limits.ptMaxPosition.y = info.rcWork.top - info.rcMonitor.top
+                limits.ptMaxSize.x = info.rcWork.right - info.rcWork.left
+                limits.ptMaxSize.y = info.rcWork.bottom - info.rcWork.top
 
     def _hit_test(self, lparam):
         x = ctypes.c_short(lparam & 0xFFFF).value
@@ -294,7 +311,7 @@ class SnapLayouts:
 
         # 2) Edge grips, so a frameless window can still be resized by its
         #    borders (there is no visible frame to grab otherwise).
-        if user32.IsZoomed(self.hwnd) or (self._can_resize and not self._can_resize()):
+        if (self._is_fullscreen and self._is_fullscreen()) or user32.IsZoomed(self.hwnd) or (self._can_resize and not self._can_resize()):
             return HTCLIENT
         g = max(1, int(round(EDGE_GRIP_CSS * scale)))
         try:

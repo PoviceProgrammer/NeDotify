@@ -10,6 +10,20 @@
         if (!panel || !panel.isConnected || reduced() || !document.startViewTransition || document.hidden) {
             update(); return;
         }
+        // Top-layer elements (native <dialog> and [popover]) are obscured by document-level View Transitions.
+        if (panel.closest('dialog, [popover]')) {
+            update();
+            if (panel.animate) {
+                try {
+                    panel.getAnimations?.().forEach(a => a.cancel());
+                    panel.animate([
+                        { opacity: 0, transform: 'translateY(6px)' },
+                        { opacity: 1, transform: 'none' }
+                    ], { duration: 160, easing: 'cubic-bezier(.2,.75,.2,1)' });
+                } catch (_) {}
+            }
+            return;
+        }
         const previous = panel.style.viewTransitionName;
         panel.style.viewTransitionName = 'panel-content';
         owner = {panel, previous};

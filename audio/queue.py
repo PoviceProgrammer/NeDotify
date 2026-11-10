@@ -46,6 +46,20 @@ class PlaybackQueue:
                 return self._tracks[self._current_index]
             return None
 
+    def replace_personal_wave_tail(self, tracks, token, expected_entry_id):
+        """Keep the playing entry and past entries; atomically refresh future music."""
+        with self._lock:
+            current = self.current_track
+            if not current or current.get('entry_id') != expected_entry_id or current.get('_personal_wave_session') != token:
+                return False
+            offset = max(0, self._current_index - 99)
+            prefix = self._tracks[offset:self._current_index + 1]
+            self._current_index -= offset
+            self._history_stack = [i-offset for i in self._history_stack if i >= offset]
+            self._tracks = prefix + [self._make_entry(dict(track), force_copy=True) for track in tracks]
+            self._original_order = list(self._tracks)
+            return True
+
     def update_current(self, track: dict):
         """Update the currently playing track."""
         with self._lock:

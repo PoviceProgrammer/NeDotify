@@ -51,7 +51,7 @@ const PLATFORM_SVGS = {
     all: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`,
     youtube: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="10" fill="#FF0000"/><polygon points="9.5,7.5 16.5,12 9.5,16.5" fill="#FFFFFF"/></svg>`,
     soundcloud: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#FF5500"><path d="M11.56 8.87c-.24 0-.47.02-.7.06A6.17 6.17 0 0 0 5 13.5c0 .17.01.34.03.51A4.24 4.24 0 0 0 1 18.25 4.25 4.25 0 0 0 5.25 22.5h13.5A5.25 5.25 0 0 0 24 17.25a5.24 5.24 0 0 0-4.05-5.11 6.17 6.17 0 0 0-8.39-3.27z"/></svg>`,
-    spotify: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#1DB954"><path d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.02 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.48-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.3 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.18-1.2-.18-1.38-.72-.18-.6.18-1.2.72-1.38 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>`
+    spotify: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`
 };
 
 export function initSearch() {
@@ -158,7 +158,7 @@ export function initSearch() {
         });
     }
 
-    // Platform Dropdown Selection (YouTube, SoundCloud, Spotify, All)
+    // Platform Dropdown Selection (YouTube, SoundCloud, Apple catalogue, All)
     function onSelectPlatform(selectedSource, targetBtn) {
         if (!selectedSource || !PLATFORM_SVGS[selectedSource]) return;
         clearTimeout(searchDebounce);
@@ -187,7 +187,7 @@ export function initSearch() {
                 all: 'Поиск треков, исполнителей, альбомов…',
                 youtube: 'Поиск в YouTube Music...',
                 soundcloud: 'Поиск в SoundCloud...',
-                spotify: 'Поиск в Spotify...',
+                spotify: 'Поиск в Apple Music / iTunes...',
                 deezer: 'Поиск в Deezer...'
             };
             input.placeholder = placeholders[selectedSource] || 'Поиск...';
@@ -765,17 +765,17 @@ export async function openAlbumModal(album) {
     modal.innerHTML = `
         <div style="background:var(--bg-card, #181818); border:1px solid rgba(255,255,255,0.12); border-radius:20px; width:100%; max-width:680px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.6);">
             <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid rgba(255,255,255,0.08);">
-                <span style="font-weight:700; font-size:15px; color:var(--text-main);">Альбом</span>
+                <span data-album-detail-kind style="font-weight:700; font-size:15px; color:var(--text-main);">Альбом</span>
                 <button id="close-album-modal" style="background:none; border:none; color:var(--text-sec); cursor:pointer; padding:4px;">
                     <i data-lucide="x" style="width:20px;height:20px"></i>
                 </button>
             </div>
             <div style="padding:20px; display:flex; gap:20px; align-items:center; background:linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%);">
-                <img src="${escapeHtml(album.cover_url || album.cover || album.cover_path || '')}" alt="" loading="lazy" decoding="async" data-hide-on-error="1" style="width:110px; height:110px; border-radius:12px; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+                <img data-album-detail-cover src="${escapeHtml(album.cover_url || album.cover || album.cover_path || '')}" alt="" loading="lazy" decoding="async" data-hide-on-error="1" style="width:110px; height:110px; border-radius:12px; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
                 <div style="display:flex; flex-direction:column; gap:6px; flex:1; overflow:hidden;">
-                    <div style="font-size:20px; font-weight:800; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(album.title || 'Альбом')}</div>
-                    <div style="font-size:14px; color:var(--text-sec);">${escapeHtml(album.artist || 'Исполнитель')}</div>
-                    <div style="font-size:12px; color:var(--text-sec); opacity:0.8;">${album.year ? escapeHtml(String(album.year)) + ' г. • ' : ''}${album.track_count ? escapeHtml(String(album.track_count)) + ' треков' : 'Альбом'}</div>
+                    <div data-album-detail-title style="font-size:20px; font-weight:800; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(album.title || 'Альбом')}</div>
+                    <div data-album-detail-artist style="font-size:14px; color:var(--text-sec);">${escapeHtml(album.artist || 'Исполнитель')}</div>
+                    <div data-album-detail-info style="font-size:12px; color:var(--text-sec); opacity:0.8;">${album.year ? escapeHtml(String(album.year)) + ' г. • ' : ''}${album.track_count ? escapeHtml(String(album.track_count)) + ' треков' : 'Альбом'}</div>
                     <div style="margin-top:8px; display:flex; gap:10px;">
                         <button id="btn-play-full-album" style="padding:8px 18px; border-radius:24px; border:none; background:var(--primary); color:#fff; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;">
                             <i data-lucide="play" style="width:14px;height:14px;fill:currentColor"></i> Слушать всё
@@ -811,6 +811,19 @@ export async function openAlbumModal(album) {
         return;
     }
     const albumTracks = result.tracks || [];
+    const details = {...album, ...(result.album || {})};
+    const kind = String(details.album_type || details.type || 'album').toLowerCase();
+    const releaseLabel = {single:'Сингл', ep:'EP', compilation:'Сборник'}[kind] || 'Альбом';
+    const summary = {
+        title: details.title || 'Альбом', artist: details.artist || 'Исполнитель', kind: releaseLabel,
+        info: `${details.year ? String(details.year) + ' г. • ' : ''}${albumTracks.length} треков`,
+    };
+    for (const [field, text] of Object.entries(summary)) {
+        const element = modal.querySelector(`[data-album-detail-${field}]`);
+        if (element) element.textContent = text;
+    }
+    const cover = modal.querySelector('[data-album-detail-cover]');
+    if (cover && details.cover_url) { cover.src = details.cover_url; cover.style.display = ''; }
     if (!albumTracks.length) {
         tracksContainer.innerHTML = '<div class="empty-state">Альбом подтверждён, но его треклист недоступен</div>';
         return;

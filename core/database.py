@@ -1424,6 +1424,8 @@ class DatabaseManager:
 
 
 
+        self._init_lyrics_overrides_table(cursor)
+
         self._init_availability_tracking(cursor)
 
 
@@ -1461,6 +1463,32 @@ class DatabaseManager:
         cursor.execute('INSERT INTO schema_migrations(version) VALUES (?)', (version,))
 
 
+
+    def _init_lyrics_overrides_table(self, cursor):
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS track_lyrics_overrides (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                track_id INTEGER,
+                identity_key TEXT NOT NULL UNIQUE,
+                override_type TEXT NOT NULL,
+                source_name TEXT NOT NULL,
+                source_id TEXT,
+                synced_lyrics TEXT,
+                plain_lyrics TEXT NOT NULL,
+                sync_type TEXT NOT NULL,
+                offset_ms INTEGER DEFAULT 0,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_lyrics_overrides_key ON track_lyrics_overrides(identity_key)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_lyrics_overrides_track_id ON track_lyrics_overrides(track_id)"
+        )
 
     def _init_availability_tracking(self, cursor):
 
@@ -5441,6 +5469,107 @@ class DatabaseManager:
                 logger.warning(f"Transparent migration failed for all settings: {e}")
         return result
 
+
+    def set_track_lyrics_override(
+        self,
+        identity_key: str,
+        override_type: str,
+        source_name: str,
+        plain_lyrics: str,
+        synced_lyrics: Optional[str] = None,
+        sync_type: str = "plain",
+        source_id: Optional[str] = None,
+        track_id: Optional[int] = None,
+        offset_ms: int = 0,
+    ) -> bool:
+        """Store or update a user-chosen or custom lyric override for a track."""
+        if not identity_key or not plain_lyrics:
+            return False
+        now = time.time()
+        with self._write_lock:
+            with self.conn:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO track_lyrics_overrides (
+                        track_id, identity_key, override_type, source_name, source_id,
+                        synced_lyrics, plain_lyrics, sync_type, offset_ms, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(identity_key) DO UPDATE SET
+                        track_id = COALESCE(excluded.track_id, track_lyrics_overrides.track_id),
+                        override_type = excluded.override_type,
+                        source_name = excluded.source_name,
+                        source_id = excluded.source_id,
+                        synced_lyrics = excluded.synced_lyrics,
+                        plain_lyrics = excluded.plain_lyrics,
+                        sync_type = excluded.sync_type,
+                        offset_ms = excluded.offset_ms,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        track_id,
+                        identity_key,
+                        override_type,
+                        source_name,
+                        source_id,
+                        synced_lyrics,
+                        plain_lyrics,
+                        sync_type,
+                        offset_ms,
+                        now,
+                        now,
+                    ),
+                )
+                return True
+
+    def get_track_lyrics_override(
+        self,
+        identity_key: Optional[str] = None,
+        track_id: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Retrieve a lyric override by persistent identity_key or library track_id."""
+        cursor = self.conn.cursor()
+        if identity_key:
+            cursor.execute(
+                "SELECT * FROM track_lyrics_overrides WHERE identity_key = ?",
+                (identity_key,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+        if track_id is not None and track_id > 0:
+            cursor.execute(
+                "SELECT * FROM track_lyrics_overrides WHERE track_id = ?",
+                (track_id,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+        return None
+
+    def delete_track_lyrics_override(
+        self,
+        identity_key: Optional[str] = None,
+        track_id: Optional[int] = None,
+    ) -> bool:
+        """Remove a lyric override by identity_key or library track_id."""
+        with self._write_lock:
+            with self.conn:
+                cursor = self.conn.cursor()
+                deleted = False
+                if identity_key:
+                    cursor.execute(
+                        "DELETE FROM track_lyrics_overrides WHERE identity_key = ?",
+                        (identity_key,),
+                    )
+                    deleted = deleted or (cursor.rowcount > 0)
+                if track_id is not None and track_id > 0:
+                    cursor.execute(
+                        "DELETE FROM track_lyrics_overrides WHERE track_id = ?",
+                        (track_id,),
+                    )
+                    deleted = deleted or (cursor.rowcount > 0)
+                return deleted
 
     def set_cached_file(self, source: str, source_id: str, file_path: str) -> None:
 

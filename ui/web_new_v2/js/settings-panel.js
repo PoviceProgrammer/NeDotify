@@ -410,13 +410,6 @@ export function initSettings() {
     }
 
     // Auth inputs/select bindings
-    const inputYandexToken = document.getElementById('input-yandex-token');
-    if (inputYandexToken) {
-        inputYandexToken.addEventListener('change', (e) => {
-            if (!e.target.value) return;
-            saveSetting('yandex_token', e.target.value, 'auth');
-        });
-    }
     const selectBrowserCookies = document.getElementById('select-browser-cookies');
     if (selectBrowserCookies) {
         selectBrowserCookies.addEventListener('change', (e) => {
@@ -461,65 +454,6 @@ export function initSettings() {
         btnYtmusicOauth.addEventListener('click', (e) => {
             e.preventDefault();
             showToast('YouTube Music OAuth находится в разработке', 'info');
-        });
-    }
-
-    // Yandex Device Auth button
-    const btnYandexAuth = document.getElementById('btn-yandex-auth');
-    if (btnYandexAuth) {
-        btnYandexAuth.addEventListener('click', async () => {
-            await window.awaitBridge();
-            if (!window.pywebview?.api) return;
-            const statusEl = document.getElementById('yandex-device-status');
-            if (statusEl) {
-                statusEl.style.display = 'block';
-                statusEl.innerHTML = '⏳ Запрос кода авторизации...';
-                statusEl.style.color = 'var(--text-sec)';
-            }
-            btnYandexAuth.disabled = true;
-            if (window.pywebview && window.pywebview.api && window.pywebview.api.yandex_device_auth) {
-                window.pywebview.api.yandex_device_auth().then(res => {
-                    if (res && !res.success) {
-                        if (statusEl) {
-                            statusEl.style.display = 'none';
-                        }
-                        btnYandexAuth.disabled = false;
-                        showToast(res.message || 'Ошибка авторизации Яндекс Музыки', 'error');
-                    }
-                }).catch(() => {
-                    if (statusEl) {
-                        statusEl.style.display = 'none';
-                    }
-                    btnYandexAuth.disabled = false;
-                });
-            } else {
-                showToast('Функция пока недоступна (Yandex Auth)', 'info');
-                if (statusEl) {
-                    statusEl.style.display = 'none';
-                }
-                btnYandexAuth.disabled = false;
-            }
-        });
-
-        document.addEventListener('nedotify:yandex_device_auth_code', (e) => {
-            const statusEl = document.getElementById('yandex-device-status');
-            const data = e.detail || {};
-            if (statusEl) {
-                statusEl.style.display = 'block';
-                statusEl.innerHTML = `🔑 Код авторизации: <b style="color:var(--primary);font-weight:800;letter-spacing:2px;">${escapeHtml(data.user_code || '')}</b><br><span style="font-size:11px;">Откройте ${escapeHtml(data.verification_url || 'passport.yandex.ru/device')} и введите код</span>`;
-                statusEl.style.color = 'var(--text-sec)';
-            }
-        });
-
-        document.addEventListener('nedotify:yandex_device_auth_result', (e) => {
-            const statusEl = document.getElementById('yandex-device-status');
-            const data = e.detail || {};
-            if (statusEl) {
-                statusEl.style.display = 'block';
-                statusEl.innerHTML = escapeHtml(data.message || '');
-                statusEl.style.color = data.success ? 'var(--primary)' : 'var(--danger, #f87171)';
-            }
-            btnYandexAuth.disabled = false;
         });
     }
 
@@ -725,6 +659,68 @@ function setupZapretPanel() {
     const toggleAutoStart = document.getElementById('toggle-zapret-autostart');
     const chkAutoStart = document.getElementById('zapret-auto-start');
     const selectZapretMode = document.getElementById('select-zapret-mode');
+    const modeTrigger = document.getElementById('zapret-mode-trigger');
+    const modeMenu = document.getElementById('zapret-mode-menu');
+    function closeModeMenu() {
+        if (!modeMenu || !modeTrigger) return;
+        modeMenu.hidden = true;
+        modeTrigger.setAttribute('aria-expanded', 'false');
+    }
+    function syncModePicker() {
+        if (!modeTrigger || !modeMenu || !selectZapretMode) return;
+        const options = Array.from(selectZapretMode.options);
+        modeTrigger.textContent = options.find(o => o.value === selectZapretMode.value)?.textContent || 'Выберите режим';
+        modeMenu.replaceChildren();
+        options.forEach(option => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.setAttribute('role', 'option');
+            button.setAttribute('aria-selected', String(option.value === selectZapretMode.value));
+            button.textContent = option.textContent;
+            button.addEventListener('click', () => {
+                if (selectZapretMode.disabled) return;
+                selectZapretMode.value = option.value;
+                selectZapretMode.dispatchEvent(new Event('change', {bubbles:true}));
+                syncModePicker();
+                closeModeMenu();
+                modeTrigger.focus();
+            });
+            modeMenu.appendChild(button);
+        });
+    }
+    if (modeTrigger && modeMenu && !modeTrigger._pickerReady) {
+        modeTrigger._pickerReady = true;
+        modeTrigger.addEventListener('click', () => {
+            if (modeTrigger.disabled) return;
+            const opening = modeMenu.hidden;
+            syncModePicker();
+            modeMenu.hidden = !opening;
+            modeTrigger.setAttribute('aria-expanded', String(opening));
+            if (opening) modeMenu.querySelector('[aria-selected="true"]')?.focus();
+        });
+        modeMenu.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                closeModeMenu();
+                modeTrigger.focus();
+                return;
+            }
+            const items = Array.from(modeMenu.querySelectorAll('button'));
+            const index = items.indexOf(document.activeElement);
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+            }
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !modeMenu.hidden) { event.preventDefault(); closeModeMenu(); modeTrigger.focus(); }
+        });
+        document.addEventListener('click', event => {
+            if (!modeTrigger.parentElement.contains(event.target)) closeModeMenu();
+        });
+    }
+    syncModePicker();
     const toggleAutoUpdate = document.getElementById('toggle-zapret-autoupdate');
     const btnUpdateZapret = document.getElementById('btn-update-zapret');
     const btnCheckZapretUpdate = document.getElementById('btn-check-zapret-update');
@@ -754,6 +750,7 @@ function setupZapretPanel() {
         zapretPanelBusy = Boolean(busy);
         if (toggleZapret) toggleZapret.disabled = zapretPanelBusy;
         if (selectZapretMode) selectZapretMode.disabled = zapretPanelBusy;
+        if (modeTrigger) { modeTrigger.disabled = zapretPanelBusy; if (zapretPanelBusy) closeModeMenu(); }
         if (btnUpdateZapret) {
             btnUpdateZapret.disabled = zapretPanelBusy;
             btnUpdateZapret.style.opacity = zapretPanelBusy ? '0.6' : '1';
@@ -827,6 +824,7 @@ function setupZapretPanel() {
             if (selectZapretMode.value !== status.mode) ensureModeOption(status.mode);
             selectZapretMode.value = status.mode;
             pruneInjectedModeOptions(status.mode);
+            syncModePicker();
         }
         if (versionBadge && status.version) versionBadge.textContent = status.version;
         savedCustomArgs = status.custom_args || '';
@@ -909,6 +907,20 @@ function setupZapretPanel() {
         zapretStatusRevision++;      // supersede pending refresh applications
         zapretApplyInFlight = true;  // BUG-021
         setZapretPanelBusy(true);    // BUG-052
+        if (enable) setStatusText('Включение Zapret. При первом включении подбор стратегий может занять несколько минут. Windows может запросить права администратора.');
+        const cancelSelection = document.createElement('button');
+        cancelSelection.type = 'button';
+        cancelSelection.className = 'btn btn-secondary';
+        cancelSelection.textContent = 'Отменить включение';
+        cancelSelection.onclick = async () => {
+            cancelSelection.disabled = true;
+            setStatusText('Отмена подбора…');
+            try {
+                const result = await window.pywebview.api.toggle_zapret(false, selectedMode, customArgs, binPath);
+                if (!result.success) showToast(result.message || result.error, 'warning');
+            } catch { showToast('Не удалось отменить включение', 'error'); }
+        };
+        if (enable) updateStatus?.parentElement?.appendChild(cancelSelection);
         try {
             if (!window.pywebview?.api?.toggle_zapret) throw new Error('Bridge unavailable');
             const res = await window.pywebview.api.toggle_zapret(enable, selectedMode, customArgs, binPath);
@@ -931,6 +943,7 @@ function setupZapretPanel() {
             setSwitchState(toggleZapret, !enable);
             showToast('Не удалось изменить состояние Zapret. Повторите действие.', 'error');
         } finally {
+            cancelSelection.remove();
             zapretApplyInFlight = false;
             setZapretPanelBusy(false);
             // BUG-021: one authoritative status read once the apply settles,
@@ -966,7 +979,7 @@ function setupZapretPanel() {
                 if (result.latest_version) versionBadge.textContent = result.latest_version;
                 else if (result.current_version) versionBadge.textContent = result.current_version;
             }
-            if (zapretUpdateHold) return;
+            if (zapretUpdateHold || zapretApplyInFlight) return;
             if (result.error) {
                 setStatusText('Не удалось проверить обновления');
                 showToast('Не удалось проверить обновления Zapret', 'error');
@@ -1173,6 +1186,9 @@ function setupZapretPanel() {
             const data = event.detail || {};
             showToast(data.message || 'Не удалось автоматически запустить Zapret', 'warning');
             refreshZapretStatus();
+        });
+        window.addEventListener('nedotify:zapret_selection_progress', event => {
+            setStatusText(event.detail?.message || 'Подбор стратегий…');
         });
         window.addEventListener('nedotify:zapret_download_started', event => {
             const data = event.detail || {};

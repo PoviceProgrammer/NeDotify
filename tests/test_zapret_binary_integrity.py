@@ -189,7 +189,7 @@ class _FakeProc:
 
     def __init__(self, pid=4321):
         self.pid = pid
-        self.handle = 0
+        self._handle = 0
         self.returncode = None
 
     def poll(self):
@@ -312,10 +312,11 @@ def test_extract_skips_empty_entries(svc):
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("zapret/x86_64/bin/winws.exe", b"")
         z.writestr("zapret/x86_64/bin/cygwin1.dll", _pe())
-    svc._extract_zip(buf.getvalue())
+    with pytest.raises(ValueError, match='Неполный пакет'):
+        svc._extract_zip(buf.getvalue())
 
     assert not os.path.isfile(os.path.join(svc.app_dir, "winws.exe"))
-    assert is_valid_windows_binary(os.path.join(svc.app_dir, "cygwin1.dll"))
+    assert not os.path.isfile(os.path.join(svc.app_dir, "cygwin1.dll"))
 
 
 def test_extract_never_replaces_a_working_binary_with_an_empty_one(svc):
@@ -327,7 +328,8 @@ def test_extract_never_replaces_a_working_binary_with_an_empty_one(svc):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("zapret/x86_64/winws.exe", b"")
-    svc._extract_zip(buf.getvalue())
+    with pytest.raises(ValueError):
+        svc._extract_zip(buf.getvalue())
 
     assert os.path.getsize(target) == good_size
     assert is_valid_windows_binary(target)
@@ -350,6 +352,8 @@ def test_extract_replaces_a_stub_that_merely_looks_valid(svc):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("zapret/x86_64/winws.exe", real)
+        for dependency in ('WinDivert.dll', 'WinDivert64.sys', 'cygwin1.dll'):
+            z.writestr('zapret/x86_64/' + dependency, _pe())
     svc._extract_zip(buf.getvalue())
 
     with open(target, "rb") as f:
@@ -419,6 +423,8 @@ def test_extract_writes_real_content_atomically(svc):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("zapret/x86_64/bin/winws.exe", payload)
+        for dependency in ('WinDivert.dll', 'WinDivert64.sys', 'cygwin1.dll'):
+            z.writestr('zapret/x86_64/bin/' + dependency, _pe())
     svc._extract_zip(buf.getvalue())
 
     target = os.path.join(svc.app_dir, "winws.exe")

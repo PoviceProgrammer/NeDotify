@@ -14,15 +14,17 @@ const elements = new Map(), storage = new Map(), calls = [], toasts = [];
 function element(id, min=0, max=100, value=0) {
     const classes = new Set(), listeners = new Map(), props = new Map(), attributes = new Map();
     const item = {id,min,max,value,disabled:false,style:{setProperty:(k,v)=>props.set(k,v),getPropertyValue:k=>props.get(k),removeProperty:k=>props.delete(k)},
+      children:[],appendChild(child){this.children.push(child);return child;},
       classList:{contains:k=>classes.has(k),add:(...ks)=>ks.forEach(k=>classes.add(k)),remove:(...ks)=>ks.forEach(k=>classes.delete(k)),toggle(k,on=!classes.has(k)){on?classes.add(k):classes.delete(k);return on}},
       addEventListener:(k,fn)=>listeners.set(k,fn),removeEventListener:k=>listeners.delete(k),
       fire:async k=>listeners.get(k)?.({target:item}),querySelectorAll:()=>[],setAttribute:(k,v)=>attributes.set(k,String(v)),getAttribute:k=>attributes.get(k)??null};
     elements.set(id,item);return item;
 }
 const root = element('root');root.dataset={};
-const context=vm.createContext({console,Promise,Number,Math,JSON,Date,getComputedStyle:()=>({getPropertyValue:()=>''}),
+const context=vm.createContext({console,Promise,Number,Math,JSON,Date,setTimeout:()=>0,clearTimeout(){},getComputedStyle:()=>({getPropertyValue:()=>''}),
     window:{settings:{},addEventListener(){},dispatchEvent(){},pywebview:{api:{save_setting:(...args)=>{calls.push(args);return true}}}},
     document:{documentElement:root,body:root,getElementById:id=>elements.get(id)||null,
+      createElement:tag=>({tagName:tag,remove(){}}),
       querySelector:selector=>elements.get(selector.match(/data-resource="(.*?)"/)?.[1])||null,
       querySelectorAll:()=>[],addEventListener(){},dispatchEvent(){}},
     localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
@@ -267,7 +269,8 @@ def test_privacy_controls_are_present_in_their_settings_panels():
     assert parser.controls["input-lastfm-api-key"][1].get("type") == "password"
     disclosure = " ".join(" ".join(parser.disclosure).split()).lower()
     assert "last.fm" in disclosure
-    assert "исполнителя" in disclosure and "недавних треков" in disclosure
+    assert "исполнитель" in disclosure and "трек" in disclosure
+    assert "api-ключ передаётся самому last.fm" in disclosure
     assert "имя пользователя" in disclosure
 
 

@@ -88,6 +88,21 @@ def test_same_origin_bridge_callback_is_available(ui_server):
     assert calls == [payload]
 
 
+def test_denied_small_posts_receive_http_error_without_connection_reset(ui_server):
+    calls = []
+    ui_server.js_callback['window'] = lambda body: calls.append(body) or {'ok': True}
+    payload = json.dumps({'uid': 'window', 'funcName': 'get_queue'}).encode()
+    for _ in range(20):
+        with pytest.raises(urllib.error.HTTPError) as error:
+            request(ui_server.address, headers={'Origin': 'https://foreign.example'})
+        assert error.value.code == 403
+        with pytest.raises(urllib.error.HTTPError) as error:
+            request(ui_server.js_api_endpoint,
+                    headers={'Origin': 'https://foreign.example'}, data=payload)
+        assert error.value.code == 403
+    assert calls == []
+
+
 def test_bridge_rejects_malformed_json(ui_server):
     with pytest.raises(urllib.error.HTTPError) as error:
         request(ui_server.js_api_endpoint, data=b'[]')

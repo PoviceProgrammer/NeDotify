@@ -1,7 +1,7 @@
 <p align="center"><img src="screenshots/banner.png" width="100%" alt="NeDotify — Your music space"></p>
 
 <h1 align="center">NeDotify</h1>
-<p align="center"><b>NeDotify 2.5.1 для Windows 10 / 11</b><br>Локальная библиотека, онлайн-источники, тексты песен и оформление под себя.</p>
+<p align="center"><b>NeDotify 2.5.6 для Windows 10 / 11</b><br>Локальная библиотека, онлайн-источники, тексты песен и оформление под себя.</p>
 <p align="center">
   <a href="https://github.com/PoviceProgrammer/NeDotify/releases/latest"><img src="https://img.shields.io/badge/СКАЧАТЬ_ДЛЯ_WINDOWS-8b5cf6?style=for-the-badge&logo=windows&logoColor=white" alt="Скачать"></a>
   <a href="https://github.com/PoviceProgrammer/NeDotify/releases"><img src="https://img.shields.io/badge/ВСЕ_РЕЛИЗЫ-24292f?style=for-the-badge&logo=github" alt="Релизы"></a>
@@ -39,16 +39,15 @@
 
 ---
 
-## Что нового в 2.5.1
+## Что нового в 2.5.6
 
-Очередь с историей воспроизведения, исправление видимости её кнопки и плавные
-анимации окон, меню и переключения разделов в обоих оформлениях. [Полный список изменений](CHANGELOG.md).
+Персональная волна, выбор артистов при первом запуске, исправления воспроизведения, поиска артистов и управления Zapret. [Полный список изменений](CHANGELOG.md).
 
 ## Возможности
 
 **Источники**
 
-- Стриминг с YouTube Music, Spotify, SoundCloud и Яндекс.Музыки
+- Стриминг с YouTube Music и SoundCloud; каталог Apple Music / iTunes с подбором подходящей записи на YouTube. Прямое воспроизведение защищённых потоков Spotify и импорт его плейлистов по ссылке не поддерживаются.
 - Офлайн-треки: плейлисты импортируются и качаются на диск
 - Чтение тегов из локальных файлов, эквалайзер на 10 полос
 
@@ -77,9 +76,11 @@
 ## Установка
 
 Установщик `.exe` ставит ярлыки на рабочий стол и в меню «Пуск».
-Актуальная сборка — **2.5.1**, файл `NeDotify_Setup.exe` на странице релизов:
+Актуальная сборка — **2.5.6**, файл `NeDotify_Setup.exe` на странице релизов:
 
 **[Скачать на GitHub Releases](https://github.com/PoviceProgrammer/NeDotify/releases)**
+
+Для пошагового запуска см. [установку, подключение VPN и воспроизведение первого трека](docs/TUTORIAL_WINDOWS_INSTALL_VPN_PLAYBACK.md).
 
 Собрать самому (имя выходного файла задаёт `OutputBaseFilename` в `installer.iss`):
 

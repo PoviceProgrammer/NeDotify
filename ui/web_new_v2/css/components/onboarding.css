@@ -265,3 +265,23 @@
 #onboarding-wizard .ob-stage-audio span { animation-play-state:paused; }
 #onboarding-wizard:is([data-motion-step="2"],[data-motion-step="3"]) .ob-stage-audio span { animation-play-state:running; }
 #onboarding-wizard[data-document-hidden="true"] * { animation-play-state:paused !important; }
+
+/* Taste onboarding: four portrait columns, independent of source settings. */
+#onboarding-wizard .ob-artist-picker { margin:0 0 28px; }
+#onboarding-wizard .ob-artist-picker input { width:100%; height:42px; border:1px solid var(--ob-edge); background:var(--ob-surface); color:var(--ob-ink); border-radius:9px; padding:0 14px; }
+#onboarding-wizard .ob-artist-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:22px 14px; padding:14px 3px; }
+#onboarding-wizard .ob-artist { display:flex; flex-direction:column; align-items:center; gap:10px; padding:0; border:0; background:transparent; color:var(--ob-muted); font-size:12px; text-align:center; min-width:0; }
+#onboarding-wizard .ob-artist img { width:100%; max-width:96px; aspect-ratio:1; object-fit:cover; border-radius:50%; transition:box-shadow .2s,transform .2s; }
+#onboarding-wizard .ob-artist[aria-pressed="true"] { color:var(--ob-ink); }
+#onboarding-wizard .ob-artist[aria-pressed="true"] img { box-shadow:0 0 0 3px var(--ob-accent); transform:scale(.93); }
+#onboarding-wizard .ob-artist.photo-unavailable::before { content:'♪'; display:grid; place-items:center; width:80px; aspect-ratio:1; border-radius:50%; background:var(--ob-surface); color:var(--ob-muted); font-size:28px; }
+#onboarding-wizard .ob-artist-selected { display:flex; flex-wrap:wrap; gap:6px; }
+#onboarding-wizard .ob-artist-selected button { background:var(--ob-surface); color:var(--ob-ink); border:1px solid var(--ob-edge); padding:5px 9px; border-radius:16px; font-size:11px; }
+#onboarding-wizard #ob-artist-count,#onboarding-wizard #ob-artist-empty { color:var(--ob-muted); font-size:12px; }
+#onboarding-wizard .ob-sr-label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+
+@media(min-width:761px) {
+    #onboarding-wizard[data-motion-step="5"] .ob-shell { grid-template-columns:minmax(0,1fr) minmax(270px,40%); }
+    #onboarding-wizard[data-motion-step="5"] .ob-main { order:1; }
+    #onboarding-wizard[data-motion-step="5"] .ob-intro { order:2; border-right:0; border-left:1px solid var(--ob-edge); }
+}

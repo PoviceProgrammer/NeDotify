@@ -22,7 +22,7 @@
      * `stat-playlists` — количество созданных/импортированных плейлистов.
      * `stat-favorites` — количество треков в «Избранном».
   4. `home-history` — горизонтальная лента недавно прослушанных треков (`.feed-scroll`).
-  5. `home-top-tracks` — горизонтальная лента «Топ треков (Local Last.fm)».
+  5. `home-top-tracks` — горизонтальная лента «Топ треков» на основе локальной истории.
   6. `home-top-artists` — горизонтальная лента «Топ исполнителей».
   7. `section-nedotify-wrapped` — блок персональной аналитики прослушиваний (NeDotify Wrapped):
      * Переключатель периода (`#wrapped-period-btns`): «Неделя», «Месяц», «Всё время».
@@ -52,7 +52,7 @@
   * Логика: `ui/web_new/js/search.js`, `ui/web_new/js/artist_profile.js`
 * **Блоки и секции**:
   1. `search-capsule` — строка поиска с иконкой лупы, текстовым полем `#search-input`, кнопкой очистки `#search-clear` и выпадающим меню платформ `#search-platform-btn`.
-  2. `search-platform-dropdown` — выпадающий селектор площадки поиска: «Все площадки» (`all`), «YouTube Music» (`youtube`), «SoundCloud» (`soundcloud`), «Spotify» (`spotify`).
+  2. `search-platform-dropdown` — выпадающий селектор площадки поиска: «Все площадки» (`all`), «YouTube Music» (`youtube`), «SoundCloud» (`soundcloud`), «Apple Music / iTunes» (совместимый внутренний ключ `spotify`; звук подбирается на YouTube).
   3. `search-type-filters` — панель переключения типов сущностей: «Все» (`all`), «Треки» (`tracks`), «Плейлисты» (`playlists`), «Альбомы» (`albums`), «Артисты» (`artists`).
   4. `search-results` — контейнер выдачи результатов:
      * Пустое состояние (`.empty-state`).
@@ -245,14 +245,14 @@
       * Кнопка полной очистки кэша `#btn-clear-storage`.
       * Сканер и удаление дубликатов треков медиатеки `#btn-scan-duplicates`.
   11. **Импорт плейлистов (`#settings-import`)**:
-      * Импорт по URL (YouTube Music, Spotify, Яндекс Музыка).
+      * Импорт по URL (YouTube Music, SoundCloud, Deezer).
   12. **Zapret (Обход DPI) (`#settings-zapret`)**:
       * Тумблер включения обхода `#toggle-zapret-enabled`.
       * Тумблер автозапуска сервиса с приложением `#toggle-zapret-autostart`.
       * Выбор режима обхода `#select-zapret-mode` (YouTube + Discord, General, Custom).
       * Автообновление бинарников winws и кнопка ручного обновления `#btn-update-zapret`.
   13. **Авторизация (`#settings-auth`)**:
-      * Статус интеграции Яндекс Музыки и привязки аккаунтов.
+      * Настройки cookies и прокси; отдельное подключение Last.fm.
 * **Доступные действия**:
   * Закрытие окна кликом по фону оверлея или нажатием `Escape`.
   * Мгновенное применение всех визуальных и звуковых настроек без перезагрузки приложения.
@@ -679,7 +679,7 @@
   * Номер трека или иконка перетаскивания `.drag-handle`.
   * Обложка трека (40x40px) с fallback SVG-нотой.
   * Блок названия и автора с кликабельным исполнителем `.clickable-artist`.
-  * Иконка источника (YouTube / SoundCloud / Spotify / Local).
+  * Иконка источника (YouTube / SoundCloud / Apple Music / iTunes / Local).
   * Кнопка скачивания `.download-btn` со статусами: обычная, `.downloading` (спиннер), `.downloaded` (зеленая галочка).
   * Кнопка добавления в любимые `.like-btn`.
   * Кнопка вызова меню `.track-more-btn` (`...`).

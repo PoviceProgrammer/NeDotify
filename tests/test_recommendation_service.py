@@ -62,6 +62,10 @@ def test_feed_uses_history_related_tracks_without_lastfm_key(recommendations):
 
 
 def test_local_tracks_keep_id_and_file_path_even_offline(recommendations, tmp_path):
+    # Library fallback is an explicit familiar-mode choice. The default feed
+    # now reserves its results for discoveries outside the saved library.
+    recommendations.settings = SimpleNamespace(get=lambda category, key, default=None:
+        'familiar' if key == 'recommendation_mode' else default)
     audio = tmp_path / 'liked.mp3'
     audio.write_bytes(b'audio')
     favorite = track('17', 'Local favorite', source='local', id=17,
