@@ -6,9 +6,9 @@
 [Setup]
 AppId={{8F56F2A1-90E1-4A0A-AB89-24A326E6D371}
 AppName=NeDotify
-AppVersion=2.5.6
-VersionInfoVersion=2.5.6
-VersionInfoProductVersion=2.5.6
+AppVersion=2.5.7
+VersionInfoVersion=2.5.7
+VersionInfoProductVersion=2.5.7
 AppPublisher=The pAura Team
 AppCopyright=Copyright (C) 2024 The pAura Team
 DefaultDirName={localappdata}\Programs\NeDotify
@@ -27,7 +27,7 @@ WizardStyle=modern
 WizardSizePercent=120
 DisableWelcomePage=no
 DisableReadyPage=no
-UninstallDisplayName=NeDotify 2.5.6
+UninstallDisplayName=NeDotify 2.5.7
 UninstallDisplayIcon={app}\NeDotify.exe
 CreateUninstallRegKey=yes
 CloseApplications=yes
@@ -111,8 +111,8 @@ russian.AutostartTask=Запускать NeDotify при запуске Windows
 english.AutostartTask=Start NeDotify when Windows starts
 russian.AutostartGroup=Автозапуск:
 english.AutostartGroup=Startup:
-russian.WelcomeBody=Добро пожаловать в установщик NeDotify 2.5.6.%n%nNeDotify — современный музыкальный плеер с поддержкой онлайн-сервисов, тем и горячих клавиш.%n%nНажмите «Далее», чтобы продолжить, или «Отмена», чтобы выйти.
-english.WelcomeBody=Welcome to the NeDotify 2.5.6 setup.%n%nNeDotify is a modern music player with online services, themes, and keyboard shortcuts.%n%nClick Next to continue, or Cancel to exit.
+russian.WelcomeBody=Добро пожаловать в установщик NeDotify 2.5.7.%n%nNeDotify — современный музыкальный плеер с поддержкой онлайн-сервисов, тем и горячих клавиш.%n%nНажмите «Далее», чтобы продолжить, или «Отмена», чтобы выйти.
+english.WelcomeBody=Welcome to the NeDotify 2.5.7 setup.%n%nNeDotify is a modern music player with online services, themes, and keyboard shortcuts.%n%nClick Next to continue, or Cancel to exit.
 
 [Code]
 const

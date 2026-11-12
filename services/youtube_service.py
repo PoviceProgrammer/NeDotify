@@ -588,6 +588,11 @@ class YouTubeService(BaseMusicService):
                             "cover_url": cover_url,
                             "album": item.get("album", {}).get("name", "") if isinstance(item.get("album"), dict) else "",
                             "artists": artists_list,
+                            "_catalogue_available": (
+                                False if item.get("isAvailable") is False or item.get("isPlayable") is False
+                                else True if item.get("isPlayable") is True
+                                else None
+                            ),
                         })
 
                 self.set_search_cache(cache_key, tracks)

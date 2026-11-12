@@ -181,7 +181,8 @@ class StreamResolver:
                 logger.debug(f"DB stream cache lookup failed: {e}")
         return None
 
-    def resolve(self, source: str, source_id, resolver_fn: Callable[[], Tuple[Optional[str], Optional[str]]]) -> Optional[str]:
+    def resolve(self, source: str, source_id, resolver_fn: Callable[[], Tuple[Optional[str], Optional[str]]],
+                cancel_token: Optional[Callable[[], bool]] = None) -> Optional[str]:
         """Return a stream URL for (source, source_id).
 
         resolver_fn runs the network cascade and returns (url, error).
@@ -255,7 +256,14 @@ class StreamResolver:
             # A provider may block before invoking its callback. A daemon owns
             # that call so every caller still gets the same finite deadline.
             threading.Thread(target=run_owner, name="StreamResolve", daemon=True).start()
-        if not flight.event.wait(timeout=max(0.0, flight.deadline - time.monotonic())):
+        while cancel_token and not flight.event.is_set():
+            if cancel_token():
+                return None
+            remaining = flight.deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            flight.event.wait(timeout=min(0.1, remaining))
+        if not flight.event.wait(timeout=max(0.0, flight.deadline - time.monotonic()) if not cancel_token else 0):
             with self._lock:
                 if self._inflight.get(key) is flight:
                     self._inflight.pop(key, None)

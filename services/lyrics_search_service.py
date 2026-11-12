@@ -17,7 +17,7 @@ import urllib.request
 from typing import Any, Dict, List, Optional
 
 from services.lyrics_formats import parse_lyrics, plain_text, to_lrc
-from services.music_matching import normalize, similarity
+from services.music_matching import credits, normalize, similarity
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,14 @@ class LyricsSearchService:
             clean_query = f"{artist} {title}".strip()
         if not clean_query:
             return []
+
+        generated_query = clean_query in (f"{artist} - {title}", f"{artist} {title}".strip())
+        clean_query = re.sub(r"\bf[*＊]{1,3}k\b", "fuck", clean_query, flags=re.IGNORECASE)
+        lookup_title = re.sub(r"\bf[*＊]{1,3}k\b", "fuck", title or "", flags=re.IGNORECASE)
+        if generated_query and lookup_title != title and lookup_title:
+            artists = credits(artist)
+            clean_query = f"{artists[0]} {lookup_title}" if artists else lookup_title
+        title = lookup_title
 
         providers = [
             ("LRCLIB", self._search_lrclib),

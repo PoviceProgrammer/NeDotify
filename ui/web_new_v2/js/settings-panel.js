@@ -71,26 +71,15 @@ export function initSettings() {
         btn.addEventListener('click', (e) => {
             e.preventDefault();
             const panelName = btn.dataset.panel;
-            if (!panelName) return;
-
-            const change = () => {
-            document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            document.querySelectorAll('.settings-panel').forEach(p => {
-                p.classList.remove('active');
-                p.style.display = 'none';
-            });
-
             const target = document.getElementById('settings-' + panelName);
-            if (target) {
-                target.classList.add('active');
-                target.style.display = 'block';
-            }
-            document.querySelector('#view-settings .settings-panels').scrollTop = 0;
+            if (!target) return;
 
-            };
-            if (window.NeDotifyMotion) window.NeDotifyMotion.swap(document.querySelector('#view-settings .settings-panels'), change); else change();
+            document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.toggle('active', b === btn));
+            document.querySelectorAll('.settings-panel').forEach(p => {
+                p.classList.toggle('active', p === target);
+                p.style.display = p === target ? 'block' : 'none';
+            });
+            document.querySelector('#view-settings .settings-panels').scrollTop = 0;
 
             if (panelName === 'icons') setupIconsPanel();
             if (panelName === 'workshop') setupWorkshopPanel();

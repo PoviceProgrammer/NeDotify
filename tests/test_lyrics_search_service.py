@@ -58,3 +58,19 @@ def test_resolve_candidate_lrclib():
     assert res["syncedLyrics"] == payload["syncedLyrics"]
     assert res["plainLyrics"] == payload["plainLyrics"]
     assert res["syncType"] == "line"
+
+
+def test_player_query_expands_censored_title_and_uses_primary_artist(monkeypatch):
+    service = LyricsSearchService()
+    calls = []
+
+    def provider(query, artist, title, duration_sec):
+        calls.append((query, title, duration_sec))
+        return []
+
+    for name in ('lrclib', 'kugou', 'netease', 'qq', 'genius'):
+        monkeypatch.setattr(service, f'_search_{name}', provider)
+
+    service.search_candidates('XXXTENTACION & Trippie Redd - F**k Love',
+                              'XXXTENTACION & Trippie Redd', 'F**k Love', duration_sec=146)
+    assert calls == [('XXXTENTACION fuck Love', 'fuck Love', 146)] * 5

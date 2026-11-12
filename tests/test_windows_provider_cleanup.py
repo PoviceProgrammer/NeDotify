@@ -1,5 +1,6 @@
 """Windows source settings must not expose a retired connection flow."""
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,12 +25,12 @@ def test_readme_describes_the_actual_metadata_catalogue():
     assert 'iTunes' in readme
 
 
-def test_catalogue_selector_does_not_promise_a_spotify_audio_source():
+def test_search_offers_categories_without_a_platform_selector():
     html = (ROOT / 'ui/web_new_v2/index.html').read_text(encoding='utf-8')
-    import re
-    selector = re.search(r'<button[^>]+data-source="spotify"[^>]*>', html).group(0)
-    assert 'Apple Music / iTunes' in selector
-    assert 'YouTube' in selector
+    assert 'search-platform-btn' not in html
+    assert 'search-platform-dropdown' not in html
+    categories = re.findall(r'<button class="type-filter-btn[^"]*" data-type="([^"]+)"', html)
+    assert categories == ['all', 'tracks', 'artists', 'albums', 'playlists']
 
 
 def test_lastfm_disclosure_does_not_claim_credentials_are_never_sent_to_lastfm():

@@ -22,7 +22,7 @@ import webbrowser
 import webview
 from utils.stream_urls import stream_url_expired
 from utils.cache_manager import stream_cache_stem
-from core.offline import offline_library
+from core.offline import available_track, offline_library
 from core.updater import AppUpdater
 from core.user_errors import describe_error
 from utils.url_safety import safe_public_url, guarded_open_url
@@ -224,6 +224,7 @@ class AppApi:
         # Dedicated search executor for non-blocking provider and DB searches
         from concurrent.futures import ThreadPoolExecutor
         self._search_executor = ThreadPoolExecutor(max_workers=6, thread_name_prefix="SearchWorker")
+        self._search_audio_executor = ThreadPoolExecutor(max_workers=12, thread_name_prefix="SearchAudio")
         self._search_lock = threading.Lock()
         self._search_generation = 0
         # Warming a stream can wait for a provider; never queue it behind search
@@ -344,7 +345,7 @@ class AppApi:
             events.put_nowait(None)
         for timer in list(getattr(self, '_search_timers', ())):
             timer.cancel()
-        for name in ('_search_executor', '_prefetch_executor', '_playback_executor', '_metadata_executor', '_lyrics_request_executor'):
+        for name in ('_search_executor', '_search_audio_executor', '_prefetch_executor', '_playback_executor', '_metadata_executor', '_lyrics_request_executor'):
             executor = getattr(self, name, None)
             shutdown = getattr(executor, 'shutdown', None)
             if callable(shutdown):
@@ -1000,6 +1001,36 @@ class AppApi:
             except (TypeError, ValueError, OSError):
                 continue
         return None
+
+    def _ensure_startup_window_visible(self):
+        """Recover a hidden native host once WebView2 has loaded."""
+        hwnd = self._get_hwnd()
+        if not hwnd:
+            return
+
+        def show_if_hidden():
+            if getattr(self, '_closed', False) or self._get_hwnd() != hwnd:
+                return
+            import ctypes
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+            visible = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND)(('IsWindowVisible', user32))
+            iconic = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND)(('IsIconic', user32))
+            if visible(hwnd) or iconic(hwnd):
+                return
+            try:
+                self._window.native.Show()
+                if not visible(hwnd):
+                    # WinForms can still consider the form visible after Windows hides its HWND.
+                    show = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, ctypes.c_int)(('ShowWindow', user32))
+                    show(hwnd, 8)  # SW_SHOWNA
+                if visible(hwnd):
+                    logger.info('[startup] restored hidden NeDotify window')
+                    threading.Thread(target=self._on_restored, name='WindowRestored', daemon=True).start()
+            except Exception:
+                logger.warning('[startup] could not restore hidden NeDotify window', exc_info=True)
+
+        self._on_window_ui_thread(self._window, show_if_hidden)
 
     def _change_maximized_state(self, maximized=None):
         target_win = self._window
@@ -1961,7 +1992,7 @@ class AppApi:
 
         def is_current():
             with self._search_lock:
-                return generation == self._search_generation
+                return not self._closed and generation == self._search_generation
 
         DISABLED_UI_PROVIDERS = {"vk", "vkontakte", "zeno", "yandex"}
         if source == "all":
@@ -2011,7 +2042,14 @@ class AppApi:
                     for provider in ('youtube', 'deezer'):
                         batch = [track for track in tracks if track.get('source') == provider]
                         if batch:
-                            emit_results(batch, provider)
+                            key = ('lyrics', provider)
+                            with pending_lock:
+                                pending_providers.add(key)
+                            try:
+                                publish_results(batch, provider, key)
+                            except Exception:
+                                mark_done(key)
+                                raise
             except Exception as exc:
                 logger.debug('Lyric search unavailable: %s', type(exc).__name__)
             finally:
@@ -2019,6 +2057,7 @@ class AppApi:
 
         def mark_done(provider_name):
             start_lyrics = False
+            complete = False
             with pending_lock:
                 pending_providers.discard(provider_name)
                 if not pending_providers and not completion_emitted[0]:
@@ -2031,10 +2070,11 @@ class AppApi:
                         start_lyrics = True
                     else:
                         completion_emitted[0] = True
-                        if is_current():
-                            self._emit("search_completed", {"query": query, "source": source, "type": result_type, "request_id": request_id})
+                        complete = True
             if start_lyrics:
                 submit(lyric_fallback)
+            elif complete and is_current():
+                self._emit("search_completed", {"query": query, "source": source, "type": result_type, "request_id": request_id})
 
         if not requested_providers:
             # All providers filtered out (e.g. DISABLED_UI_PROVIDERS): do not hang,
@@ -2042,16 +2082,115 @@ class AppApi:
             self._emit("search_completed", {"query": query, "source": source, "type": result_type, "request_id": request_id})
             return {"query": query, "tracks": []}
 
-        def submit(fn, *values):
-            future = self._search_executor.submit(fn, *values)
-            if future is not None:
-                with self._search_lock:
+        def submit(fn, *values, executor=None):
+            with self._search_lock:
+                if self._closed or generation != self._search_generation:
+                    return None
+                try:
+                    future = (executor or self._search_executor).submit(fn, *values)
+                except RuntimeError:
+                    if self._closed:
+                        return None
+                    raise
+                if future is not None:
                     self._search_futures.add(future)
+            if future is not None:
                 def finished(done):
                     with self._search_lock:
                         self._search_futures.discard(done)
                 future.add_done_callback(finished)
             return future
+
+        entity_types = {'album', 'artist', 'playlist'}
+        tracks_requested = result_type not in entity_types and result_type not in ('albums', 'artists', 'playlists')
+
+        def publish_results(results, name, pending_key):
+            """Emit entities and local audio immediately, then stream verified matches."""
+            if not is_current():
+                return
+            ready, candidates = [], []
+            resolver = getattr(self._core, 'resolver', None)
+            use_cached_streams = resolver is not None and all(
+                self._core.settings.get('services', provider + '_enabled', True)
+                for provider in ('youtube', 'soundcloud')
+            )
+            for item in results or []:
+                if not isinstance(item, dict):
+                    continue
+                if item.get('type') in entity_types:
+                    ready.append(item)
+                elif tracks_requested:
+                    if name == 'local' or item.get('source') == 'local':
+                        local = available_track(self._core.db, item)
+                        if local:
+                            ready.append(local)
+                            continue
+                        if source == 'local' or item.get('source') == 'local':
+                            continue
+                    if item.get('source') and item.get('source_id'):
+                        track = dict(item)
+                        catalogue_available = track.pop('_catalogue_available', None)
+                        known_unavailable = resolver is not None and resolver.is_unavailable(
+                            track['source'], track['source_id'])
+                        if catalogue_available is False or known_unavailable:
+                            continue
+                        if catalogue_available is True or (
+                            use_cached_streams and resolver.get_cached_url(track['source'], track['source_id'])
+                        ):
+                            ready.append(track)
+                        else:
+                            candidates.append(track)
+
+            if ready or not candidates:
+                emit_results(ready, name)
+            if not candidates:
+                mark_done(pending_key)
+                return
+
+            remaining = len(candidates)
+            batch_lock = threading.Lock()
+
+            def cancelled():
+                return not is_current()
+
+            def check(track):
+                if cancelled():
+                    return None
+                local = available_track(self._core.db, track, stored_tracks={})
+                if local:
+                    return local if not cancelled() else None
+                remote = dict(track)
+                remote.pop('file_path', None)
+                probe = dict(remote)
+                probe.pop('id', None)  # Playback can update a library row's metadata.
+                url = self._core.engine.resolve_stream_url(probe, cancel_token=cancelled)
+                if url and not cancelled():
+                    return remote
+                return None
+
+            def checked(future):
+                nonlocal remaining
+                track = None
+                try:
+                    if future is not None and not future.cancelled():
+                        track = future.result()
+                except Exception as exc:
+                    logger.debug('%s search audio check failed: %s', name, type(exc).__name__)
+                finally:
+                    if track and not cancelled():
+                        emit_results([track], name)
+                    with batch_lock:
+                        remaining -= 1
+                        finished = remaining == 0
+                    if finished:
+                        mark_done(pending_key)
+
+            for track in candidates:
+                future = submit(check, track, executor=self._search_audio_executor)
+                if future is None:
+                    checked(None)
+                else:
+                    future.add_done_callback(checked)
 
         # Local DB Search
         if "local" in requested_providers:
@@ -2084,11 +2223,10 @@ class AppApi:
                                               name=item.get('artist') or item.get('name') or '',
                                               title=item.get('artist') or item.get('name') or '')
                                          for item in local_results]
-                    emit_results(local_results, "local")
+                    publish_results(local_results, "local", "local")
                 except Exception as exc:
                     logger.error("Local search failed: %s", type(exc).__name__)
                     emit_results([], "local")
-                finally:
                     mark_done("local")
 
             if source == "local":
@@ -2137,8 +2275,11 @@ class AppApi:
                             self._search_timers.discard(timer)
                     except Exception:
                         logger.debug("search timer cancel failed", exc_info=True)
-                    emit_results(tracks or [], name)
-                    mark_done(name)
+                    try:
+                        publish_results(tracks, name, name)
+                    except Exception as exc:
+                        logger.debug('%s search results could not be processed: %s', name, type(exc).__name__)
+                        mark_done(name)
 
                 def _on_success(tracks):
                     _finish(tracks)
@@ -4580,12 +4721,13 @@ class AppApi:
     def cancel_search(self):
         with self._search_lock:
             self._search_generation += 1
-            for future in self._search_futures:
-                future.cancel()
+            futures = tuple(self._search_futures)
             self._search_futures.clear()
             for timer in self._search_timers:
                 timer.cancel()
             self._search_timers.clear()
+        for future in futures:
+            future.cancel()
         return True
 
     def _playback_guard(self):

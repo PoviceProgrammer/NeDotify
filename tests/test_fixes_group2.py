@@ -186,8 +186,11 @@ def test_convert_layout_mixed_or_invalid():
     assert convert_layout(None) == ""
 
 
-def test_local_search_fallback_with_convert_layout(api, tmp_db):
-    tmp_db.add_track(title="Судно", artist="Молчат Дома", source="local", source_id="loc_molchat")
+def test_local_search_fallback_with_convert_layout(api, tmp_db, tmp_path):
+    audio = tmp_path / 'song.mp3'
+    audio.write_bytes(b'audio')
+    tmp_db.add_track(title="Судно", artist="Молчат Дома", source="local", source_id="loc_molchat",
+                     file_path=str(audio))
     emitted = []
     api._emit = lambda event, data: emitted.append((event, data))
 

@@ -3,7 +3,7 @@ import { renderIcons, showToast, escapeHtml, formatTime } from './utils.js';
 import { getCurrentTrack } from './player.js';
 
 let modalInitialized = false;
-let currentCandidates = [];
+let searchGeneration = 0;
 
 export function openLyricsSearchModal(initialQuery = null) {
     const modal = document.getElementById('modal-lyrics-search');
@@ -47,6 +47,7 @@ export function openLyricsSearchModal(initialQuery = null) {
 }
 
 export function closeLyricsSearchModal() {
+    searchGeneration++;
     const modal = document.getElementById('modal-lyrics-search');
     if (modal) {
         modal.classList.add('hidden');
@@ -71,7 +72,7 @@ export function executeLyricsSearch(queryText) {
     `;
 
     const track = getCurrentTrack();
-    const durationMs = track?.duration ? (track.duration > 50000 ? track.duration : track.duration * 1000) : 0;
+    const durationSec = Number(track?.duration) || 0;
     const artist = track?.artist || '';
     const title = track?.title || '';
 
@@ -84,30 +85,31 @@ export function executeLyricsSearch(queryText) {
         return;
     }
 
-    window.pywebview.api.search_lyrics(query, durationMs, artist, title)
+    const generation = ++searchGeneration;
+    window.pywebview.api.search_lyrics(query, artist, title, durationSec)
         .then(res => {
-            if (!res || !res.success || !Array.isArray(res.results) || res.results.length === 0) {
+            if (generation !== searchGeneration) return;
+            if (!res?.success) throw new Error(res?.error || 'Поисковый сервис недоступен');
+            if (!res.candidates?.length) {
                 resultsList.innerHTML = `
                     <div class="empty-state" style="padding: 45px 0; text-align:center; color:var(--text-sec); font-size:13px;">
                         Ничего не найдено по запросу «${escapeHtml(query)}».<br>
                         Попробуйте изменить название или исполнителя.
                     </div>
                 `;
-                currentCandidates = [];
                 return;
             }
 
-            currentCandidates = res.results;
-            renderSearchResults(res.results, resultsList);
+            renderSearchResults(res.candidates, resultsList);
         })
         .catch(err => {
+            if (generation !== searchGeneration) return;
             console.error('Lyrics search failed:', err);
             resultsList.innerHTML = `
                 <div class="empty-state" style="padding: 40px 0; text-align:center; color:var(--color-danger, #ef4444); font-size:13px;">
                     Ошибка при поиске текста: ${escapeHtml(err.message || String(err))}
                 </div>
             `;
-            currentCandidates = [];
         });
 }
 
@@ -121,13 +123,13 @@ function renderSearchResults(results, container) {
         itemEl.className = 'lyrics-search-item';
         itemEl.dataset.index = String(idx);
 
-        const title = item.title || track?.title || 'Без названия';
-        const artist = item.artist || track?.artist || 'Неизвестный исполнитель';
-        const album = item.album || '';
-        const durationSec = Number(item.duration) || 0;
+        const title = item.trackName || track?.title || 'Без названия';
+        const artist = item.artistName || track?.artist || 'Неизвестный исполнитель';
+        const album = item.albumName || '';
+        const durationSec = Number(item.durationSeconds) || 0;
         const durationStr = durationSec > 0 ? formatTime(durationSec) : '';
         const source = (item.source || 'lrclib').toUpperCase();
-        const isSynced = Boolean(item.is_synced || item.has_synced || item.synced_lyrics);
+        const isSynced = Boolean(item.hasTiming);
 
         itemEl.innerHTML = `
             <div class="lsi-meta">

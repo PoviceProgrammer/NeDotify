@@ -24,19 +24,19 @@ html body #view-settings.view-page.settings-overlay.active .settings-modal-card 
 ::view-transition-new(panel-content) { animation:panelMotionIn 240ms cubic-bezier(.2,.75,.2,1) both; }
 @keyframes panelMotionOut { to { opacity:0; transform:translateY(-6px); } }
 @keyframes panelMotionIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
-html body :is(.search-platform-dropdown,.search-suggestions-dropdown,.custom-glass-dropdown-menu) {
+html body :is(.search-suggestions-dropdown,.custom-glass-dropdown-menu) {
     opacity:1; transform:none;
     transition:opacity 140ms ease,transform 180ms cubic-bezier(.2,.75,.2,1),display 180ms allow-discrete;
 }
-html body :is(.search-platform-dropdown,.search-suggestions-dropdown,.custom-glass-dropdown-menu).hidden {
+html body :is(.search-suggestions-dropdown,.custom-glass-dropdown-menu).hidden {
     opacity:0; transform:translateY(-5px) scale(.985);
 }
 @starting-style {
-    html body :is(.search-platform-dropdown,.search-suggestions-dropdown,.custom-glass-dropdown-menu):not(.hidden) { opacity:0; transform:translateY(-5px) scale(.985); }
+    html body :is(.search-suggestions-dropdown,.custom-glass-dropdown-menu):not(.hidden) { opacity:0; transform:translateY(-5px) scale(.985); }
 }
 @media(prefers-reduced-motion:reduce) {
     html body dialog,html body dialog::backdrop,html body #view-settings.view-page.settings-overlay,
     html body #view-settings.view-page.settings-overlay .settings-modal-card,
-    html body :is(.search-platform-dropdown,.search-suggestions-dropdown,.custom-glass-dropdown-menu) { transition:none; }
+    html body :is(.search-suggestions-dropdown,.custom-glass-dropdown-menu) { transition:none; }
     ::view-transition-group(panel-content),::view-transition-old(panel-content),::view-transition-new(panel-content) { animation:none; }
 }

@@ -174,8 +174,10 @@ def test_failed_import_writes_nothing(api, tmp_db, monkeypatch):
     assert 'неполный плейлист' in result['error']
 
 
-def test_deezer_search_crosses_bridge(api, emitted):
+def test_deezer_search_crosses_bridge(api, emitted, monkeypatch):
     api._core.deezer = SimpleNamespace(search=lambda query, callback, **kw: callback([candidate('deezer')]))
+    monkeypatch.setattr(api._core.engine, 'resolve_stream_url',
+                        lambda track, **kwargs: 'https://example.com/audio')
     api.search('Song', source='deezer', request_id='dz')
     from tests.test_api_search import _wait_for
     assert _wait_for(emitted, 'search_completed')

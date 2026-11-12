@@ -60,10 +60,11 @@ await page.evaluate(async()=>{
  document.getElementById('view-home').classList.remove('active');document.getElementById('view-search').classList.add('active');
 });
 await page.locator('#search-input').fill('Artist');
-await page.locator('.platform-item[data-source="youtube"]').dispatchEvent('click');
+assert.equal(await page.locator('#search-platform-btn').count(),0);
+await page.locator('.type-filter-btn[data-type="tracks"]').click();
 await page.waitForTimeout(400);
-assert.equal(await page.evaluate(()=>window.searchCalls.length),1,'source change must cancel pending typing search');
-console.log('PASS switching source while typing issues one request');
+assert.deepEqual(await page.evaluate(()=>window.searchCalls.map(args=>args.slice(0,3))),[['Artist','all','tracks']]);
+console.log('PASS switching category while typing issues one combined search');
 await page.evaluate(async()=>{
  window.feature=await import('/js/feature-controls.js');
  window.longExplanation='Проверьте доступ к папке. '.repeat(40);

@@ -350,8 +350,8 @@ def test_base_refresh_conflicts_match_the_reviewed_allowlist():
     # Native dialogs animate on open and disable that motion when requested.
     # Atmosphere owns reduced-motion lifecycle; the retired particle display
     # override no longer hides a still-running canvas through CSS.
-    assert len(current) == 221
-    assert sum(item["reason"] == "conditional-cascade-override" for item in current) == 220
+    assert len(current) == 220
+    assert sum(item["reason"] == "conditional-cascade-override" for item in current) == 219
     assert sum(item["reason"] == "state-selector-override" for item in current) == 1
     assert not any(item["reason"] == "unconditional-conflict" for item in current)
 

@@ -185,13 +185,15 @@ class AudioEngine:
                 return cached
 
             def _network():
-                if cancel_token and cancel_token():
-                    return None, "cancelled"
                 try:
-                    return self._resolve_via_network(track, cancel_token=cancel_token), None
+                    # A playback request may join this shared resolution after
+                    # a search stops waiting for it.
+                    return self._resolve_via_network(track), None
                 except Exception as e:
                     return None, str(e)
 
+            if cancel_token:
+                return resolver.resolve(source, source_id, _network, cancel_token=cancel_token)
             return resolver.resolve(source, source_id, _network)
 
         return self._resolve_via_network(track, cancel_token=cancel_token)

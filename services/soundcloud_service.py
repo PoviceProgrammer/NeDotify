@@ -418,6 +418,14 @@ class SoundCloudService(BaseMusicService):
                                 artist = user_info.get('username') or user_info.get('full_name') or 'SoundCloud Artist'
                                 duration = int((item.get('duration') or 0) / 1000)
                                 waveform_url = item.get('waveform_url') or ''
+                                policy = item.get('policy')
+                                transcodings = (item.get('media') or {}).get('transcodings') or []
+                                full_audio = any(
+                                    isinstance(tc, dict) and tc.get('url')
+                                    and not _is_drm_transcoding(tc) and not tc.get('snipped')
+                                    and not str(tc.get('preset', '')).startswith('abr_')
+                                    for tc in transcodings
+                                )
                                 
                                 track = {
                                     'title': item.get('title', 'Unknown Title'),
@@ -428,6 +436,11 @@ class SoundCloudService(BaseMusicService):
                                     'source_url': item.get('permalink_url') or f"https://soundcloud.com/{item.get('permalink', item.get('id'))}",
                                     'cover_url': artwork,
                                     'waveform_url': waveform_url,
+                                    '_catalogue_available': (
+                                        False if policy in ('BLOCK', 'SNIP') or item.get('streamable') is False
+                                        else True if policy == 'ALLOW' and full_audio
+                                        else None
+                                    ),
                                 }
                                 tracks.append(track)
                                 

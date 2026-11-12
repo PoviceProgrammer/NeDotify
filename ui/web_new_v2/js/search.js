@@ -11,7 +11,6 @@ import {
 } from './artist_profile.js';
 
 let searchDebounce = null;
-let currentSource = 'all'; // Default source is 'Все площадки'
 let currentType = 'all'; // The discovery page starts with all catalog results.
 let allResults = [];
 let currentSearchQuery = '';   // Track the latest query sent
@@ -45,21 +44,9 @@ function setSearchLayout(hasQuery) {
     syncSearchHeaderHeight();
 }
 
-// Platform SVGs map for updating button icon dynamically
-const PLATFORM_SVGS = {
-    deezer: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#A238FF"><path d="M2 14h3v8H2zm5-5h3v13H7zm5-7h3v20h-3zm5 9h3v11h-3z"/></svg>`,
-    all: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`,
-    youtube: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="10" fill="#FF0000"/><polygon points="9.5,7.5 16.5,12 9.5,16.5" fill="#FFFFFF"/></svg>`,
-    soundcloud: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="#FF5500"><path d="M11.56 8.87c-.24 0-.47.02-.7.06A6.17 6.17 0 0 0 5 13.5c0 .17.01.34.03.51A4.24 4.24 0 0 0 1 18.25 4.25 4.25 0 0 0 5.25 22.5h13.5A5.25 5.25 0 0 0 24 17.25a5.24 5.24 0 0 0-4.05-5.11 6.17 6.17 0 0 0-8.39-3.27z"/></svg>`,
-    spotify: `<svg class="platform-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`
-};
-
 export function initSearch() {
     const input = document.getElementById('search-input');
     const clearBtn = document.getElementById('search-clear');
-    const platformBtn = document.getElementById('search-platform-btn');
-    const platformDropdown = document.getElementById('search-platform-dropdown');
-    const activeIconSpan = document.getElementById('search-platform-active-icon');
 
     const searchHeader = document.querySelector('.search-header-container');
     if (searchHeader && typeof ResizeObserver !== 'undefined') {
@@ -142,79 +129,6 @@ export function initSearch() {
             showPlaceholder();
         });
     }
-
-    // Toggle Platform Dropdown
-    if (platformBtn && platformDropdown) {
-        platformBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            platformDropdown.classList.toggle('hidden');
-        });
-
-        // Close on outside click
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.search-platform-wrapper')) {
-                platformDropdown.classList.add('hidden');
-            }
-        });
-    }
-
-    // Platform Dropdown Selection (YouTube, SoundCloud, Apple catalogue, All)
-    function onSelectPlatform(selectedSource, targetBtn) {
-        if (!selectedSource || !PLATFORM_SVGS[selectedSource]) return;
-        clearTimeout(searchDebounce);
-        cancelArtistProfileRequests();
-
-        // Any explicit source switch is a new search intent -> leave artist profile
-        isViewingArtistProfile = false;
-        currentSource = selectedSource;
-
-        // Update active icon on platform button
-        if (activeIconSpan) {
-            activeIconSpan.innerHTML = PLATFORM_SVGS[selectedSource];
-        }
-
-        // Update active state in dropdown
-        document.querySelectorAll('.platform-item').forEach(b => {
-            b.classList.toggle('active', b.dataset.source === selectedSource);
-        });
-
-        // Hide dropdown
-        if (platformDropdown) platformDropdown.classList.add('hidden');
-
-        // Update input placeholder for the selected source
-        if (input) {
-            const placeholders = {
-                all: 'Поиск треков, исполнителей, альбомов…',
-                youtube: 'Поиск в YouTube Music...',
-                soundcloud: 'Поиск в SoundCloud...',
-                spotify: 'Поиск в Apple Music / iTunes...',
-                deezer: 'Поиск в Deezer...'
-            };
-            input.placeholder = placeholders[selectedSource] || 'Поиск...';
-        }
-
-        // Re-trigger search if query exists
-        const query = input?.value.trim();
-        if (query && query.length > 0) {
-            isViewingArtistProfile = false;
-            allResults = [];
-            currentSearchQuery = query;
-            showLoading();
-            runSearchQuery(query);
-        }
-    }
-
-    if (platformDropdown) {
-        platformDropdown.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const btn = e.target.closest('.platform-item');
-            if (btn) {
-                onSelectPlatform(btn.dataset.source, btn);
-            }
-        });
-    }
-    // De-duplicated: per-button listeners removed — delegated listener above is enough.
-    // Keeping this comment to prevent re-adding a second dispatch that doubled api('search').
 
     // Sub-type Filters: Все, Треки, Плейлисты, Альбомы, Артисты
     document.querySelectorAll('.type-filter-btn[data-type]').forEach(btn => {
@@ -376,14 +290,8 @@ export function onSearchResults(data) {
     if (data.query && data.query !== currentSearchQuery) {
         return; // Stale result — ignore
     }
-    if (currentSource !== 'all' && data.source && data.source !== currentSource && !(data.offline === true && data.source === 'local')) return;
     if (data.type && currentType !== 'all' && data.type !== currentType) return;
-    // The reset key identifies the *request*, so it must use the source the user
-    // picked (currentSource), never data.source: with source='all' the backend
-    // streams one chunk per provider (local/youtube/soundcloud/spotify) and a
-    // provider-derived key would clear allResults on every chunk, leaving only
-    // the last provider that answered.
-    const resultKey = `${data.query || ''}|${currentSource}|${data.type || currentType}`;
+    const resultKey = `${data.query || ''}|${data.type || currentType}`;
     if (resultKey !== lastResultKey) {
         lastResultKey = resultKey;
         allResults = [];
@@ -400,12 +308,8 @@ export function onSearchResults(data) {
                     allResults.push(t);
                 }
             }
-            // BUG-S4-011: with source='all' the merged list must not depend on
-            // which provider answered first. Rank deterministically: exact
-            // title(-artist) match, then title substring, then artist match,
-            // stable by previous order inside each tier. Single-source results
-            // keep provider ranking untouched.
-            if ((currentSource || 'all') === 'all' && currentSearchQuery) {
+            // Rank exact matches ahead of title and artist matches.
+            if (currentSearchQuery) {
                 const fold = (s) => String(s || '').toLowerCase().replace(/ё/g, 'е');
                 const query = fold(currentSearchQuery);
                 const rank = (t) => {
@@ -1154,14 +1058,14 @@ function startSuggestedSearch(query, original = null) {
 
 async function offerSearchCorrections() {
     if (currentType === 'artists' || currentType === 'genres') return;
-    const query = currentSearchQuery, source = currentSource, type = currentType;
-    const key = `${query}|${source}|${type}`;
+    const query = currentSearchQuery, type = currentType;
+    const key = `${query}|${type}`;
     if (suggestionRequestKey === key) return;
     suggestionRequestKey = key;
     const generation = searchSuggestionGeneration;
     try {
         const suggestions = await window.pywebview?.api?.get_search_suggestions?.(query);
-        if (generation !== searchSuggestionGeneration || query !== currentSearchQuery || source !== currentSource || type !== currentType || allResults.length) return;
+        if (generation !== searchSuggestionGeneration || query !== currentSearchQuery || type !== currentType || allResults.length) return;
         const container = document.getElementById('search-results');
         if (!container || !Array.isArray(suggestions) || !suggestions.length) return;
         const alternatives = document.createElement('div');
@@ -1189,16 +1093,16 @@ function runSearchQuery(query, keepCorrection = false) {
     if (!keepCorrection) correctionContext = null;
     if (currentType === 'genres') {currentType='tracks';syncTypeButtons();}
     if (currentType === 'artists') {searchArtistProfile(query, null, { require_candidates: true });return;}
-    const type=currentType, source=currentSource;
+    const type=currentType;
     visibleSearchCount = 12;
     searchPending = true;
     const requestId = activeSearchRequestId = `search-${++searchRequestGeneration}`;
-    Promise.resolve().then(()=>api('search',query,source,type==='all'?null:type,requestId)).catch(()=>{
-        if(requestId!==activeSearchRequestId || query!==currentSearchQuery || type!==currentType || source!==currentSource) return;
+    Promise.resolve().then(()=>api('search',query,'all',type==='all'?null:type,requestId)).catch(()=>{
+        if(requestId!==activeSearchRequestId || query!==currentSearchQuery || type!==currentType) return;
         searchPending = false;
         const container=document.getElementById('search-results');
         if(!container) return;
-        container.innerHTML='<div class="search-discovery-empty"><strong>Не удалось выполнить поиск</strong><p>Проверьте подключение или выберите другую площадку.</p><button class="home-pill">Повторить</button></div>';
+        container.innerHTML='<div class="search-discovery-empty"><strong>Не удалось выполнить поиск</strong><p>Проверьте подключение и попробуйте снова.</p><button class="home-pill">Повторить</button></div>';
         container.querySelector('button').onclick=()=>{showLoading();runSearchQuery(query);};
     });
 }

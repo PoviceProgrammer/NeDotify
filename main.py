@@ -351,6 +351,8 @@ def main():
                 logging.info("[startup] window reload detected; autostart/watchdog already running")
                 return
             _window_loaded_handled.set()
+            if not _INTENTIONAL_CLOSE.is_set():
+                api._ensure_startup_window_visible()
             app_core.setup.maybe_auto_update()
             # Playback restoration is published only after the frontend has
             # installed its subscribers and acknowledged api.ui_ready().

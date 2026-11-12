@@ -15,14 +15,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 4764,
+          "line": 4677,
           "value": "homeColorDrift 24s ease-in-out infinite alternate",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 4771,
+          "line": 4684,
           "value": "none",
           "at_rules": [
             "@media (prefers-reduced-motion: reduce)"
@@ -38,14 +38,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 4764,
+          "line": 4677,
           "value": "background-color 2s ease",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 4771,
+          "line": 4684,
           "value": "none",
           "at_rules": [
             "@media (prefers-reduced-motion: reduce)"
@@ -431,7 +431,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1992,
+          "line": 1905,
           "value": "12px 12px 160px 12px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -516,14 +516,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2604,
+          "line": 2517,
           "value": "width 220ms ease,border-radius 220ms ease",
           "at_rules": [],
           "important": true
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2617,
+          "line": 2530,
           "value": "none",
           "at_rules": [
             "@media (prefers-reduced-motion: reduce)"
@@ -987,7 +987,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1978,
+          "line": 1891,
           "value": "color-mix(in srgb, var(--bg-surface) 90%, transparent)",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1010,7 +1010,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1975,
+          "line": 1888,
           "value": "0",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1033,7 +1033,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1980,
+          "line": 1893,
           "value": "0 -4px 20px rgba(0,0,0,0.5)",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1056,7 +1056,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1974,
+          "line": 1887,
           "value": "row",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1079,7 +1079,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1913,
+          "line": 1826,
           "value": "12px 0 calc(var(--player-bar-height, 84px) + var(--player-bar-offset, 20px) + 24px) 12px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -1088,7 +1088,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1973,
+          "line": 1886,
           "value": "0",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1111,7 +1111,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1911,
+          "line": 1824,
           "value": "70px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -1134,7 +1134,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1912,
+          "line": 1825,
           "value": "30px 0 20px 0",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -1143,7 +1143,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1976,
+          "line": 1889,
           "value": "0",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1166,7 +1166,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1910,
+          "line": 1823,
           "value": "70px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -1175,7 +1175,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1971,
+          "line": 1884,
           "value": "100%",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1198,7 +1198,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1977,
+          "line": 1890,
           "value": "100",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1924,7 +1924,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 88,
+          "line": 84,
           "value": "56px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1947,7 +1947,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 89,
+          "line": 85,
           "value": "12px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1970,7 +1970,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 89,
+          "line": 85,
           "value": "0 8px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1993,7 +1993,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 91,
+          "line": 87,
           "value": "18px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2016,31 +2016,8 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 91,
+          "line": 87,
           "value": "18px",
-          "at_rules": [
-            "@media (max-width: 600px)"
-          ],
-          "important": false
-        }
-      ]
-    },
-    {
-      "selector": "#view-search .search-platform-btn",
-      "property": "width",
-      "reason": "conditional-cascade-override",
-      "variants": [
-        {
-          "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 19,
-          "value": "32px",
-          "at_rules": [],
-          "important": false
-        },
-        {
-          "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 92,
-          "value": "26px",
           "at_rules": [
             "@media (max-width: 600px)"
           ],
@@ -2055,14 +2032,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 23,
+          "line": 19,
           "value": "10px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 72,
+          "line": 68,
           "value": "8px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -2071,7 +2048,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 93,
+          "line": 88,
           "value": "6px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2087,14 +2064,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 23,
+          "line": 19,
           "value": "28px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 72,
+          "line": 68,
           "value": "22px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -2110,7 +2087,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 73,
+          "line": 69,
           "value": "11px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -2119,7 +2096,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 94,
+          "line": 89,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2135,14 +2112,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 24,
+          "line": 20,
           "value": "8px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 94,
+          "line": 89,
           "value": "6px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2158,14 +2135,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 24,
+          "line": 20,
           "value": "40px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 94,
+          "line": 89,
           "value": "36px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2181,14 +2158,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 24,
+          "line": 20,
           "value": "10px 17px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 73,
+          "line": 69,
           "value": "9px 13px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -2197,7 +2174,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 94,
+          "line": 89,
           "value": "8px 10px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2213,14 +2190,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 25,
+          "line": 21,
           "value": "16px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 95,
+          "line": 90,
           "value": "14px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2236,14 +2213,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 25,
+          "line": 21,
           "value": "16px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 95,
+          "line": 90,
           "value": "14px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2266,7 +2243,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 70,
+          "line": 66,
           "value": "20px 24px 28px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -2275,7 +2252,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 81,
+          "line": 77,
           "value": "16px 18px 28px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2851,7 +2828,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2887,
+          "line": 2800,
           "value": "none",
           "at_rules": [],
           "important": false
@@ -2881,7 +2858,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2886,
+          "line": 2799,
           "value": "var(--bg-main)",
           "at_rules": [],
           "important": false
@@ -2911,7 +2888,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2929,
+          "line": 2842,
           "value": "scale(1) translateY(0)",
           "at_rules": [],
           "important": false
@@ -2957,7 +2934,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1954,
+          "line": 1867,
           "value": "repeat(auto-fill, minmax(130px, 1fr))",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -2966,7 +2943,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1996,
+          "line": 1909,
           "value": "repeat(auto-fill, minmax(110px, 1fr))",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3936,7 +3913,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1988,
+          "line": 1901,
           "value": "0",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3959,7 +3936,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1947,
+          "line": 1860,
           "value": "44px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3968,7 +3945,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1989,
+          "line": 1902,
           "value": "100%",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3991,7 +3968,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1944,
+          "line": 1857,
           "value": "center",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4007,7 +3984,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1948,
+          "line": 1861,
           "value": "0 auto 8px auto",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4016,7 +3993,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1987,
+          "line": 1900,
           "value": "0",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4039,7 +4016,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1945,
+          "line": 1858,
           "value": "0",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4062,7 +4039,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1946,
+          "line": 1859,
           "value": "44px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4078,14 +4055,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 3257,
+          "line": 3170,
           "value": "repeat(5, 1fr)",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 3262,
+          "line": 3175,
           "value": "repeat(3, 1fr)",
           "at_rules": [
             "@media (max-width: 768px)"
@@ -4301,7 +4278,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 71,
+          "line": 67,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4324,7 +4301,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 71,
+          "line": 67,
           "value": "24px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4333,7 +4310,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 83,
+          "line": 79,
           "value": "18px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4356,7 +4333,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 71,
+          "line": 67,
           "value": "16px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4365,7 +4342,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 83,
+          "line": 79,
           "value": "12px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4381,7 +4358,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 76,
+          "line": 72,
           "value": "18px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4390,7 +4367,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 103,
+          "line": 98,
           "value": "16px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4406,14 +4383,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 31,
+          "line": 27,
           "value": "8px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 104,
+          "line": 99,
           "value": "5px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4429,14 +4406,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 49,
+          "line": 45,
           "value": "repeat(2,minmax(0,1fr))",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 105,
+          "line": 100,
           "value": "1fr",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4459,7 +4436,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 85,
+          "line": 81,
           "value": "20px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4475,7 +4452,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 74,
+          "line": 70,
           "value": "31px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4484,7 +4461,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 86,
+          "line": 82,
           "value": "29px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4507,7 +4484,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 75,
+          "line": 71,
           "value": "12px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4530,7 +4507,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 87,
+          "line": 83,
           "value": "0 auto",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4546,14 +4523,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 40,
+          "line": 36,
           "value": "30px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 101,
+          "line": 96,
           "value": "24px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4569,14 +4546,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 40,
+          "line": 36,
           "value": "30px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 101,
+          "line": 96,
           "value": "24px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4592,14 +4569,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 35,
+          "line": 31,
           "value": "14px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 97,
+          "line": 92,
           "value": "12px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4615,14 +4592,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 35,
+          "line": 31,
           "value": "12px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 77,
+          "line": 73,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4631,7 +4608,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 97,
+          "line": 92,
           "value": "9px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4647,14 +4624,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 35,
+          "line": 31,
           "value": "10px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 97,
+          "line": 92,
           "value": "9px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4670,14 +4647,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 36,
+          "line": 32,
           "value": "9px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 98,
+          "line": 93,
           "value": "7px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4693,14 +4670,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 39,
+          "line": 35,
           "value": "11px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 100,
+          "line": 95,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4716,14 +4693,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 38,
+          "line": 34,
           "value": "13px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 99,
+          "line": 94,
           "value": "11px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4739,14 +4716,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 34,
+          "line": 30,
           "value": "14px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 96,
+          "line": 91,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4762,14 +4739,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 34,
+          "line": 30,
           "value": "repeat(4,minmax(0,1fr))",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 66,
+          "line": 62,
           "value": "repeat(2,minmax(0,1fr))",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -4792,7 +4769,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 90,
+          "line": 86,
           "value": "34px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4815,7 +4792,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 90,
+          "line": 86,
           "value": "4px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4838,7 +4815,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 90,
+          "line": 86,
           "value": "34px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4861,7 +4838,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1938,
+          "line": 1851,
           "value": "center",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4884,7 +4861,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1941,
+          "line": 1854,
           "value": "20px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4907,7 +4884,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1939,
+          "line": 1852,
           "value": "0",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4930,7 +4907,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1940,
+          "line": 1853,
           "value": "100%",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4946,14 +4923,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 4756,
+          "line": 4669,
           "value": "transform .16s cubic-bezier(.2,.8,.2,1), background-color .16s",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 4760,
+          "line": 4673,
           "value": "none",
           "at_rules": [
             "@media (prefers-reduced-motion: reduce)"
@@ -5415,14 +5392,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2386,
+          "line": 2299,
           "value": "nativeDialogIn .2s cubic-bezier(.22,1,.36,1)",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2390,
+          "line": 2303,
           "value": "none",
           "at_rules": [
             "@media (prefers-reduced-motion: reduce)"
@@ -5438,14 +5415,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1844,
+          "line": 1757,
           "value": "#1a1a1a",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1849,
+          "line": 1762,
           "value": "var(--bg-main)",
           "at_rules": [
             "@supports (background-color: var(--bg-main))"
@@ -5461,14 +5438,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1845,
+          "line": 1758,
           "value": "var(--color-text-main, #ffffff)",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1850,
+          "line": 1763,
           "value": "var(--text-main)",
           "at_rules": [
             "@supports (background-color: var(--bg-main))"

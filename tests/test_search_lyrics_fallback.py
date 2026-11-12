@@ -80,6 +80,8 @@ def test_general_search_lyrics_fallback_emits_before_completion(api, emitted, mo
         lyric_calls.append(query)
         return [{'title':'Verified Song','artist':'Artist','source':'youtube','source_id':'song'}]
     monkeypatch.setattr(lyrics_search, 'find_lyric_tracks', lyric)
+    monkeypatch.setattr(api._core.engine, 'resolve_stream_url',
+                        lambda track, **kwargs: 'https://example.com/audio')
     api.search('we are walking through the night', request_id='line-request')
     assert _wait_for(emitted, 'search_completed')
     assert lyric_calls == ['we are walking through the night']
@@ -121,6 +123,8 @@ def test_ordinary_track_search_never_calls_lyrics_provider(api, emitted, monkeyp
     def unexpected(*args):
         raise AssertionError('ordinary title search doubled by lyric discovery')
     monkeypatch.setattr(lyrics_search, 'find_lyric_tracks', unexpected)
+    monkeypatch.setattr(api._core.engine, 'resolve_stream_url',
+                        lambda track, **kwargs: 'https://example.com/audio')
     api.search('A Very Long Real Song Title')
     assert _wait_for(emitted, 'search_completed', timeout=1)
     assert not any(t.get('matched_by') == 'lyrics' for e,d in emitted if e == 'search_results' for t in d['tracks'])

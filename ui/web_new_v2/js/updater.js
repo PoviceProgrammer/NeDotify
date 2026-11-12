@@ -4,7 +4,7 @@
  * and display a Riff-style connected top notification banner.
  */
 
-let currentAppVersion = '2.5.6';
+let currentAppVersion = '2.5.7';
 let latestUpdateInfo = null;
 let isCheckingUpdates = false;
 
