@@ -3,12 +3,15 @@
 ; emitted three byte-identical setup exes plus a second, competing uninstaller.
 ; Build order: pyinstaller setup_pyinstaller.spec  ->  dist\NeDotify.exe
 ;               iscc installer.iss                   ->  dist\NeDotify_Setup.exe
+#ifndef NEDOTIFY_APP_BINARY
+#define NEDOTIFY_APP_BINARY "dist\NeDotify.exe"
+#endif
 [Setup]
 AppId={{8F56F2A1-90E1-4A0A-AB89-24A326E6D371}
 AppName=NeDotify
-AppVersion=2.5.7
-VersionInfoVersion=2.5.7
-VersionInfoProductVersion=2.5.7
+AppVersion=2.5.8
+VersionInfoVersion=2.5.8
+VersionInfoProductVersion=2.5.8
 AppPublisher=The pAura Team
 AppCopyright=Copyright (C) 2024 The pAura Team
 DefaultDirName={localappdata}\Programs\NeDotify
@@ -27,7 +30,10 @@ WizardStyle=modern
 WizardSizePercent=120
 DisableWelcomePage=no
 DisableReadyPage=no
-UninstallDisplayName=NeDotify 2.5.7
+UninstallDisplayName=NeDotify 2.5.8
+#ifdef NEDOTIFY_BETA_NOTICE
+InfoBeforeFile={#NEDOTIFY_BETA_NOTICE}
+#endif
 UninstallDisplayIcon={app}\NeDotify.exe
 CreateUninstallRegKey=yes
 CloseApplications=yes
@@ -78,7 +84,7 @@ Name: "startmenuicon"; Description: "{cm:StartMenuIconTask}"; GroupDescription: 
 Name: "autostart"; Description: "{cm:AutostartTask}"; GroupDescription: "{cm:AutostartGroup}"; Flags: unchecked
 
 [Files]
-Source: "dist\NeDotify.exe"; DestDir: "{app}"; DestName: "NeDotify.exe"; Flags: ignoreversion
+Source: "{#NEDOTIFY_APP_BINARY}"; DestDir: "{app}"; DestName: "NeDotify.exe"; Flags: ignoreversion
 Source: "dist\ffprobe.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 #ifdef ZapretBundleReady
 ; Staged zapret bundle (see the policy note above the #define): installed

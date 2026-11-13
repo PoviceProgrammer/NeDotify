@@ -46,6 +46,7 @@ export function initAdditionalSettings({save, read, applyRadius}) {
         section.append(heading, controls);
         player.prepend(section);
         mountRecommendationControls(controls);
+        mountRecommendationCollection(section);
     }
     const appearance = document.getElementById('settings-appearance');
     if (appearance && !document.getElementById('settings-radius')) {
@@ -84,6 +85,51 @@ export function initAdditionalSettings({save, read, applyRadius}) {
             });
         }
     }
+}
+
+async function mountRecommendationCollection(section) {
+    const api = window.pywebview?.api;
+    if (!api?.get_recommendation_collection) return;
+    let state;
+    try { state = await api.get_recommendation_collection(); }
+    catch { return; }
+    if (!state?.available) return;
+    const row = document.createElement('div');
+    row.className = 'setting-row';
+    const label = document.createElement('span');
+    label.className = 'setting-label';
+    label.id = 'recommendation-collection-label';
+    label.textContent = state.remote ? 'Отправлять события теста рекомендаций на сервер NeDotify'
+        : 'Отправлять события теста рекомендаций на этот ПК';
+    const button = document.createElement('button');
+    button.className = 'toggle-switch';
+    button.type = 'button';
+    button.setAttribute('role', 'switch');
+    button.setAttribute('aria-labelledby', label.id);
+    button.innerHTML = '<span class="toggle-dot"></span>';
+    const status = document.createElement('p');
+    status.className = 'settings-section-desc';
+    status.setAttribute('role', 'status');
+    const paint = () => {
+        button.classList.toggle('on', state.enabled);
+        button.setAttribute('aria-checked', String(state.enabled));
+    };
+    paint();
+    button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+            const next = await api.set_recommendation_collection(!state.enabled);
+            if (!next?.success) throw new Error('Save failed');
+            state = next;
+            status.textContent = '';
+            paint();
+            window.dispatchEvent(new Event('nedotify:recommendation_collection_changed'));
+        } catch {
+            status.textContent = 'Не удалось сохранить настройку сбора событий.';
+        } finally { button.disabled = false; }
+    });
+    row.append(label, button);
+    section.append(row, status);
 }
 
 export function initSettingsView({resetPalette, backgrounds, themeBackgrounds = [], chooseBackground}) {

@@ -871,6 +871,9 @@ class AppApi:
         return {"success": True, "message": "Window closing..."}
 
     def shutdown(self):
+        events = getattr(self, '_recommendation_events', None)
+        if events:
+            events.close()
         snap = getattr(self, '_snap_layouts', None)
         if snap is not None:
             try:
@@ -1345,7 +1348,9 @@ class AppApi:
             self._discord_sync('stopped')
             self._emit('queue_ended', {'reason': 'queue_exhausted', 'playback_epoch': self._playback_epoch})
 
-    def _on_audio_error(self, err):
+    def _on_audio_error(self, err, track=None):
+        self._record_recommendation_outcome(track if track is not None else getattr(self, '_current_track', None),
+                                            'playback_error')
         self._discord_sync('error')
         details = describe_error(err, 'playback')
         details['playback_epoch'] = self._playback_epoch
@@ -1386,6 +1391,12 @@ class AppApi:
             self._core.db.update_history_duration(session.history_id, session.seconds, session.completed,
                                                  media_listened=session.media_seconds, session_finished=session.closed)
             session.last_saved = measured
+        if session.history_id is not None and session.media_seconds > 0:
+            self._record_recommendation_outcome(session.track, 'started')
+            duration = _as_float(session.track.get('duration')) or 0
+            if duration > 0 and session.media_seconds >= duration * .7:
+                self._record_recommendation_outcome(session.track, 'completed',
+                                                    min(1, session.media_seconds / duration))
 
     def flush_listening(self):
         with self._window_op_lock:
@@ -1580,7 +1591,7 @@ class AppApi:
                     tid = selected.get('id') or selected.get('track_id')
                     if tid and hasattr(self._core.db, 'invalidate_offline_track'):
                         self._core.db.invalidate_offline_track(tid)
-                    self._on_audio_error('Аудиофайл не найден')
+                    self._on_audio_error('Аудиофайл не найден', selected)
                     return {'success': False, 'code': 'file_missing'}
                 selected['file_path'] = valid_path
             self._restoring_session = False
@@ -1708,6 +1719,13 @@ class AppApi:
 
     def next_track(self, force_advance: bool = True):
         with self._playback_guard():
+            session = self._listening_sessions.get(self._active_listening_token)
+            if force_advance and session is not None and session.audible and not session.closed:
+                session.tick()
+                duration = _as_float(session.track.get('duration')) or 0
+                if duration > 0 and 0 < session.seconds < 10 and session.media_seconds / duration < .1:
+                    self._persist_listening(session)
+                    self._record_recommendation_outcome(session.track, 'skipped', session.media_seconds / duration)
             self._restoring_session = False
             self._playback_epoch += 1
             self._cancel_stale_resolutions()
@@ -2611,6 +2629,7 @@ class AppApi:
         track_id = self._core.db.ensure_track_exists(track_data)
         res = self._core.db.add_to_playlist(playlist_id, track_id)
         if res:
+            self._record_recommendation_outcome(track_data, 'added')
             self._emit("playlist_changed", {"playlist_id": playlist_id})
         return res
 
@@ -2713,6 +2732,7 @@ class AppApi:
         self._emit("favorites_updated", self.get_favorite_tracks())
         result = {"success": True, "is_favorite": status}
         if status:
+            self._record_recommendation_outcome(track_data, 'liked')
             # Only on the way in: un-liking must never delete anything.
             try:
                 auto = self._auto_save_favorite(track_data, track_id)
@@ -3176,6 +3196,8 @@ class AppApi:
                     values.append({'artist': str(track['artist']).strip()[:200], 'title': str(track['title']).strip()[:300]})
             if not self._store_setting('personalization', key, values[-1000:]):
                 return {'success': False, 'error': 'Не удалось сохранить предпочтение'}
+            if kind == 'track' and blocked is True:
+                self._record_recommendation_outcome(track, 'hidden')
         return {'success': True, **self.get_recommendation_feedback(track)}
 
     def set_artist_alias(self, alias, canonical):
@@ -4244,14 +4266,141 @@ class AppApi:
             publish([], exc)
         return {"request_id": str(request_id), "status": "pending"} if request_id is not None else []
 
+    def _recommendation_collector(self):
+        from services.recommendation_events import configured_server
+
+        server_url = configured_server()
+        if not server_url and not os.getenv('NEDOTIFY_DISCOVERY_PREVIEW_CATALOG'):
+            return None
+        with self._window_op_lock:
+            if not hasattr(self, '_recommendation_events'):
+                from pathlib import Path
+                from services.recommendation_events import RecommendationEvents
+
+                path = Path(self._core.db.db_path).with_name('recommendation_outbox.db')
+                filename = 'recommendation_remote_outbox.db' if server_url else 'recommendation_outbox.db'
+                self._recommendation_events = RecommendationEvents(path.with_name(filename), server_url)
+                self._recommendation_impressions = {}
+            return self._recommendation_events
+
+    def get_recommendation_collection(self):
+        import sqlite3
+
+        try:
+            collector = self._recommendation_collector()
+            return {'available': collector is not None, 'enabled': bool(collector and collector.installation()),
+                    'remote': bool(collector and collector.remote)}
+        except (OSError, sqlite3.Error, ValueError):
+            return {'available': False, 'enabled': False}
+
+    def set_recommendation_collection(self, enabled):
+        import sqlite3
+
+        if type(enabled) is not bool:
+            return {'success': False}
+        try:
+            with self._window_op_lock:
+                collector = self._recommendation_collector()
+                if collector is None:
+                    return {'success': False}
+                active = collector.set_enabled(enabled)
+                if not active:
+                    self._recommendation_impressions.clear()
+                return {'success': True, 'enabled': active}
+        except (OSError, sqlite3.Error, ValueError):
+            return {'success': False}
+
+    def report_recommendation_impression(self, impression_id):
+        if not isinstance(impression_id, str):
+            return False
+        with self._window_op_lock:
+            impression = getattr(self, '_recommendation_impressions', {}).get(impression_id)
+            if impression is None:
+                return False
+            if impression['shown']:
+                return True
+            shown = [dict(track, kind='shown') for track in impression['tracks'].values()]
+            if self._enqueue_recommendation_events(impression['installation'], shown):
+                impression['shown'] = True
+            return impression['shown']
+
+    def _enqueue_recommendation_events(self, installation, events):
+        import sqlite3
+
+        try:
+            return self._recommendation_events.enqueue(installation, events)
+        except (OSError, sqlite3.Error):
+            logger.debug('Recommendation event outbox unavailable', exc_info=True)
+            return False
+
+    def _record_recommendation_outcome(self, track, kind, fraction=None):
+        if not isinstance(track, dict) or not isinstance(track.get('recommendation_impression_id'), str):
+            return
+        with self._window_op_lock:
+            impression = getattr(self, '_recommendation_impressions', {}).get(track['recommendation_impression_id'])
+            if not impression or not impression['shown']:
+                return
+            identity = self._listening_identity(track)
+            event = impression['tracks'].get(identity)
+            key = (identity, kind)
+            if event is None or key in impression['outcomes']:
+                return
+            payload = dict(event, kind=kind)
+            if fraction is not None:
+                payload['listened_fraction'] = fraction
+            if self._enqueue_recommendation_events(impression['installation'], [payload]):
+                impression['outcomes'].add(key)
+
+    def _register_recommendation_impressions(self, mixes, installation):
+        import uuid
+
+        if not installation:
+            return mixes
+        with self._window_op_lock:
+            if self._recommendation_events.installation() != installation:
+                return mixes
+            result = []
+            for mix in mixes:
+                context = mix.get('recommendation_event_context')
+                if not context:
+                    result.append(mix)
+                    continue
+                impression_id = uuid.uuid4().hex
+                tracks, entries = [], {}
+                for position, track in enumerate(mix['tracks'], 1):
+                    recording = track.get('recommendation_recording_id')
+                    if recording:
+                        track = dict(track, recommendation_impression_id=impression_id)
+                        entries[self._listening_identity(track)] = dict(context, impression_id=impression_id,
+                                                                       recording_id=recording, position=position)
+                    tracks.append(track)
+                if entries:
+                    self._recommendation_impressions[impression_id] = dict(
+                        tracks=entries, installation=installation, shown=False, outcomes=set())
+                    if len(self._recommendation_impressions) > 128:
+                        self._recommendation_impressions.pop(next(iter(self._recommendation_impressions)))
+                    result.append(dict(mix, tracks=tracks, recommendation_impression_id=impression_id))
+                else:
+                    result.append(mix)
+            return result
+
     def get_home_mixes(self, max_results: int = 10, request_id=None, refresh=False):
         """Request generated mixes and publish a request-tagged fallback on failure."""
+        import sqlite3
+
         max_results = max(0, min(100, int(max_results)))
         if refresh is True:
             self._core.recommendations.reset_service()
         history = self._core.db.get_history(limit=30) or []
+        installation = None
+        try:
+            collector = self._recommendation_collector()
+            installation = collector.installation() if collector else None
+        except (OSError, sqlite3.Error, ValueError):
+            logger.debug('Recommendation collection unavailable', exc_info=True)
         def publish(tracks, error=None):
             items = (tracks or [])[:max_results]
+            items = self._register_recommendation_impressions(items, installation)
             payload = {"request_id": str(request_id), "tracks": items} if request_id is not None else items
             if error and isinstance(payload, dict):
                 payload['error'] = describe_error(error, 'recommendations')['message']

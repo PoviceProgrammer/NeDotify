@@ -295,7 +295,8 @@ class RecommendationService(BaseMusicService):
             return 'Знакомый исполнитель'
         return ''
 
-    def _rank_tracks(self, tracks, profile, limit, exclude_tracks=(), exclude_ids=(), *, maximum=50):
+    def _rank_tracks(self, tracks, profile, limit, exclude_tracks=(), exclude_ids=(), *, maximum=50,
+                     audio_catalog=None, event_context=None):
         limit = max(0, min(maximum, int(limit)))
         if not limit:
             return []
@@ -355,8 +356,26 @@ class RecommendationService(BaseMusicService):
                 score -= 1
             formatted = self._format_ui_track(track)
             formatted['recommendation_reason'] = self._recommendation_reason(track, profile, known, reason_names)
-            ranked.append((score, index, formatted, key in known))
+            ranked.append((score, index, formatted, key in known, track))
         ranked.sort(key=lambda item: (-item[0], item[1]))
+        if audio_catalog and ranked:
+            try:
+                from services.embedding_ranker import AudioDiscoveryRanker
+
+                ranker = AudioDiscoveryRanker.load_local_preview(audio_catalog, int(time.time()) // 60)
+                order = ranker.order([item[4] for item in ranked], novelty_mode=mode)
+                ranked = [ranked[index] for index in order]
+                if event_context is not None:
+                    from services.embedding_ranker import RANKER_VERSION
+
+                    event_context.update(catalog_version=ranker.catalog.version,
+                                         ranker_version='mlp_preview' if ranker.model else RANKER_VERSION)
+                    for _, _, formatted, _, original in ranked:
+                        recording = ranker.catalog.match(original)
+                        if recording and recording.vector_index is not None:
+                            formatted['recommendation_recording_id'] = recording.id
+            except (OSError, ValueError, TypeError, KeyError, AttributeError, ImportError, EOFError) as exc:
+                self.logger.warning('Audio discovery preview unavailable: %s', type(exc).__name__)
         result, deferred, artist_counts = [], [], {}
         familiar_count, familiar_cap = 0, max(1, round(limit * {'familiar': .8, 'balanced': .3, 'discovery': .1}[mode]))
         artist_cap = max(2, math.ceil(limit / 5))
@@ -366,7 +385,7 @@ class RecommendationService(BaseMusicService):
         if mode != 'balanced':
             configured_ratio = 0 if mode == 'familiar' else .4
         discovery_count = round(limit * min(.4, self._bounded_score(configured_ratio))) if known_artists else 0
-        for _, _, track, familiar in ranked:
+        for _, _, track, familiar, _ in ranked:
             artist = self._artist_key(track)
             if discovery_count <= 0:
                 break
@@ -374,7 +393,7 @@ class RecommendationService(BaseMusicService):
                 result.append(track)
                 artist_counts[artist] = artist_counts.get(artist, 0) + 1
                 discovery_count -= 1
-        for _, _, track, familiar in ranked:
+        for _, _, track, familiar, _ in ranked:
             if track in result:
                 continue
             artist = self._artist_key(track)
@@ -922,6 +941,11 @@ class RecommendationService(BaseMusicService):
         return [artists[index::count] for index in range(count)]
 
     def get_mixes(self, history=None, personalization=None, max_results=10, callback=None, error_callback=None):
+        from services.recommendation_events import configured_server, provider_recording_id
+
+        audio_catalog = os.environ.get('NEDOTIFY_DISCOVERY_PREVIEW_CATALOG')
+        server_url = configured_server()
+
         def task():
             deadline = time.monotonic() + 17.0
             profile = self._profile(history)
@@ -932,7 +956,15 @@ class RecommendationService(BaseMusicService):
             known = self._known_content_keys(profile)
             buckets = self._daily_artist_buckets(profile)
             candidates = self._daily_mix_candidates(profile, buckets, feed, known, deadline)
-            discoveries = self._rank_tracks([t for t in candidates if self._content_key(t) not in known], profile, 20)
+            event_context = {}
+            discoveries = self._rank_tracks([t for t in candidates if self._content_key(t) not in known], profile, 20,
+                                            audio_catalog=audio_catalog, event_context=event_context)
+            if server_url and not event_context:
+                event_context.update(catalog_version='provider_ids_v1', ranker_version='baseline')
+                for track in discoveries:
+                    recording_id = provider_recording_id(track)
+                    if recording_id:
+                        track['recommendation_recording_id'] = recording_id
             mixes = []
             def add_mix(title, tracks, discovery_first=False):
                 if discovery_first:
@@ -948,6 +980,8 @@ class RecommendationService(BaseMusicService):
             if include_familiar:
                 add_mix('Любимые и знакомые', familiar)
             add_mix('Открытия для вас', discoveries)
+            if discoveries and event_context:
+                mixes[-1]['recommendation_event_context'] = event_context
             for index,artists in enumerate(buckets,1):
                 keys={self._artist_key(artist) for artist in artists}
                 related = [t for t in candidates if self._belongs_to_daily_bucket(t, keys)]
@@ -962,7 +996,7 @@ class RecommendationService(BaseMusicService):
             if not mixes and profile.is_empty() and not profile.recent_history:
                 add_mix('Первое знакомство', self._rank_tracks(CURATED_WELCOME_TRACKS, profile, 12))
             return mixes[:max(0, min(10, int(max_results)))]
-        return self._async_recommendation('recommendation:pending-mixes:' + repr((history, personalization, max_results, self._preference_signature())),
+        return self._async_recommendation('recommendation:pending-mixes:' + repr((history, personalization, max_results, self._preference_signature(), audio_catalog)),
                                           task, callback, error_callback)
 
     def _belongs_to_daily_bucket(self, track, artist_keys):

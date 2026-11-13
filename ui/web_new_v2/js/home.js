@@ -128,6 +128,10 @@ document.addEventListener('click', event => {
     requestHomeSection('home-mixes', 'get_home_mixes', [6], true);
 });
 
+window.addEventListener('nedotify:recommendation_collection_changed', () => {
+    requestHomeSection('home-mixes', 'get_home_mixes', [6], true);
+});
+
 function backfillHomeCovers(currentGen) {
     // Artwork may involve dozens of network lookups. Keep it outside the feed
     // critical path and do not repeat a failed scan on every track change.
@@ -714,13 +718,22 @@ function createFeedCard(track, trackList = null, trackIndex = 0, options = {}) {
     if (track.type === 'custom_playlist') {
         const covers=(track.tracks||[]).slice(0,4).map(t=>({src:getCoverUrl(t),coverUrl:t.cover_url,sourceId:t.source_id,source:t.source}));
         card.innerHTML=`<div class="feed-card-cover">${renderPlaylistCoverCollage(covers)}<div class="feed-card-overlay"><button class="feed-card-play" aria-label="Слушать микс"><i data-lucide="play"></i></button></div></div><div class="feed-card-title">${escapeHtml(track.title)}</div><div class="feed-card-sub">${escapeHtml(track.artist||'На ваш вкус')}</div>`;
-        const play=()=>window.pywebview.api.play_track(track.tracks[0],track.tracks,0);
+        const reportShown = async () => {
+            if (!track.recommendation_impression_id) return;
+            try { await window.pywebview.api.report_recommendation_impression(track.recommendation_impression_id); }
+            catch { /* Playback still works if the local collector is unavailable. */ }
+        };
+        const play=async()=>{
+            await reportShown();
+            return window.pywebview.api.play_track(track.tracks[0],track.tracks,0);
+        };
         card.querySelector('.feed-card-play').onclick=e=>{e.stopPropagation();play().catch(()=>showToast('Не удалось включить микс','error'));};
         card.addEventListener('click',()=>openHomeDialog(track.title,content=>{
             const save=document.createElement('button');save.className='home-pill';save.textContent='Сохранить плейлист';
             save.onclick=async()=>{save.disabled=true;try{const tracks=track.tracks.map(t=>({...t,id:/^\d+$/.test(String(t.id||''))?t.id:undefined}));const id=await window.pywebview.api.create_local_playlist(track.title,tracks);if(!id||id?.success===false)throw Error();save.textContent='Сохранено';showToast('Плейлист сохранён','success');}catch{save.disabled=false;showToast('Не удалось сохранить плейлист','error');}};
             content.append(save);
             (track.tracks||[]).forEach((t,index)=>content.append(createTrackElement(t,index,track.tracks,null)));
+            void reportShown();
         }));
         return card;
     }

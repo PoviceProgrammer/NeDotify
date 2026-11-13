@@ -62,6 +62,9 @@ extra_datas = [
     (os.path.join(ROOT, 'ui', 'MACos_ui'), 'ui/MACos_ui'),
     (os.path.join(ROOT, 'icon.ico'), '.'),
 ] + ui_datas + collect_data_files('ytmusicapi')
+recommendation_config = os.environ.get('NEDOTIFY_RECOMMENDATION_CONFIG')
+if recommendation_config:
+    extra_datas.append((recommendation_config, '.'))
 extra_datas.extend(validate_native_inputs(
     ROOT, release_mode=release_mode_from_environment()))
 
