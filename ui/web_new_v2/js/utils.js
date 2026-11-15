@@ -1219,6 +1219,7 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
 
     const coverUrl = getCoverUrl(track);
     const isFav = !!track.is_favorite;
+    const momentActions = window.NeDotify?.getTrackMomentActions?.(track) || [];
     // Validated separately: inside url('...') the HTML escaping is not the
     // grammar that matters.
     const coverBgUrl = safeCssImageUrl(coverUrl);
@@ -1281,6 +1282,12 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
             <i data-lucide="download" style="width:16px;height:16px"></i>
             <span>Скачать</span>
         </button>
+        ${momentActions.map((action, index) => `
+            <button class="rich-menu-item" data-action="track_moment" data-moment-index="${index}">
+                <i data-lucide="${escapeHtml(action.icon)}" style="width:16px;height:16px"></i>
+                <span>${escapeHtml(action.label)}</span>
+            </button>
+        `).join('')}
         <button class="rich-menu-item" data-action="cache">
             <i data-lucide="hard-drive" style="width:16px;height:16px"></i>
             <span>Подготовить воспроизведение</span>
@@ -1425,6 +1432,9 @@ export function showTrackContextMenu(track, e, tracksArray, index) {
                     window.pywebview.api.download_track(track);
                 }
                 showToast(`Загрузка '${track.title || ''}' начата`, 'info');
+                break;
+            case 'track_moment':
+                momentActions[Number(itemBtn.dataset.momentIndex)]?.run();
                 break;
             case 'cache':
                 Promise.resolve().then(() => window.pywebview.api.prefetch_track(track)).then(ready => {

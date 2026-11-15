@@ -5,7 +5,7 @@ import { initProfileComparison } from './profile-comparison.js';
 import { initHomeShell } from './home-shell.js';
 import { initTrackWave, startTrackWave } from './track-wave.js';
 // NeDotify - Main Entry Point
-import { initPlayer, applySettings, playTrack, getAtmosphereAudioSource } from './player.js';
+import { initPlayer, applySettings, playTrack, getAtmosphereAudioSource, getTrackMomentActions } from './player.js';
 import { initPages, showPage } from './pages.js';
 import { initSearch, searchArtistProfile } from './search.js';
 import { loadHome } from './home.js';
@@ -110,6 +110,7 @@ window.NeDotify = {
     loadSettings: loadSettings,
     handleImageError: handleImageError,
     showTrackContextMenu: showTrackContextMenu,
+    getTrackMomentActions,
     showPage: showPage,
     searchArtistProfile: searchArtistProfile,
     playTrack: playTrack,

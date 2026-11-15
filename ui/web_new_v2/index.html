@@ -153,6 +153,7 @@
                     <canvas id="mp-waveform-canvas" class="waveform-canvas hidden"></canvas>
                     <div class="progress-fill" id="mp-progress-fill" style="transform:scaleX(0)"></div>
                     <span class="seek-thumb" aria-hidden="true"></span>
+                    <span class="track-moment-pin" id="mp-moment-pin" aria-hidden="true" hidden></span>
                 </div>
                 <span id="mp-time-total" class="mp-time">0:00</span>
             </div>
@@ -486,6 +487,7 @@
                         <div class="progress-track" id="pp-progress-track" role="slider" aria-label="Позиция воспроизведения" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" style="position: relative;">
                             <canvas id="pp-waveform-canvas" class="waveform-canvas hidden"></canvas>
                             <div class="progress-fill" id="pp-progress-fill" style="transform: scaleX(0)"></div><span class="seek-thumb" aria-hidden="true"></span>
+                            <span class="track-moment-pin" id="pp-moment-pin" aria-hidden="true" hidden></span>
                         </div>
                         <span class="pb-time" id="pp-time-total">0:00</span>
                     </div>
@@ -1915,6 +1917,7 @@
         <div class="progress-track" id="pb-progress-track" role="slider" aria-label="Позиция воспроизведения" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
             <canvas id="pb-waveform-canvas" class="waveform-canvas hidden"></canvas>
             <div class="progress-fill" id="pb-progress-fill" style="transform: scaleX(0)"></div><span class="seek-thumb" aria-hidden="true"></span>
+            <span class="track-moment-pin" id="pb-moment-pin" aria-hidden="true" hidden></span>
         </div>
         <span class="pb-time" id="pb-time-total">0:00</span>
     </div>
@@ -1995,6 +1998,7 @@
     <button class="context-menu-item" id="track-options-download">
         <i data-lucide="download" style="width:14px;height:14px"></i> Скачать
     </button>
+    <div id="track-options-moment-items"></div>
     <button class="context-menu-item" id="track-options-open-player">
         <i data-lucide="maximize-2" style="width:14px;height:14px"></i> Открыть плеер
     </button>

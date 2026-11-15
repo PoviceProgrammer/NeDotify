@@ -16,6 +16,9 @@ const playbackState = {
     positionMs: 0,
     lastAnimTimestamp: 0,
 };
+let trackMoment = { key: '', positionMs: null, loading: false };
+const momentWrites = new Map();
+const progressPrefixes = ['pb', 'pp', 'mp'];
 let animFrameId = null;
 let currentVolume = 70;
 let isMuted = false;
@@ -170,6 +173,118 @@ function trackPlaybackKey(track) {
     if (track.source_id) return `${track.source || ''}|${track.source_id}`;
     if (track.id !== undefined && track.id !== null) return `id|${track.id}`;
     return `${track.source || ''}|${track.artist || ''}|${track.title || ''}`;
+}
+
+function trackMomentKey(track) {
+    if (track?.source && track.source_id != null && String(track.source_id)) {
+        return JSON.stringify([track.source, String(track.source_id)]);
+    }
+    const id = track?.id || track?.track_id;
+    return id ? JSON.stringify(['id', String(id)]) : '';
+}
+
+function momentFitsTimeline(positionMs) {
+    return positionMs !== null && playbackState.durationMs > 0 && positionMs <= playbackState.durationMs;
+}
+
+function renderTrackMoment() {
+    const { positionMs } = trackMoment;
+    const visible = momentFitsTimeline(positionMs);
+    for (const prefix of progressPrefixes) {
+        const pin = document.getElementById(`${prefix}-moment-pin`);
+        if (!pin) continue;
+        const slider = pin.parentElement;
+        pin.hidden = !visible;
+        if (visible) {
+            const time = formatTime(positionMs / 1000);
+            pin.style.setProperty('--track-moment-position', `${100 * positionMs / playbackState.durationMs}%`);
+            pin.title = `Лучший момент · ${time}`;
+            slider.setAttribute('aria-keyshortcuts', 'Enter');
+            slider.setAttribute('aria-description', `${pin.title}. Нажмите Enter, чтобы перейти.`);
+        } else {
+            slider.removeAttribute('aria-keyshortcuts');
+            slider.removeAttribute('aria-description');
+        }
+    }
+}
+
+async function syncTrackMoment(track) {
+    const key = trackMomentKey(track);
+    if (key === trackMoment.key) {
+        renderTrackMoment();
+        return;
+    }
+    const request = { key, positionMs: null, loading: Boolean(key) };
+    trackMoment = request;
+    renderTrackMoment();
+    if (!key) return;
+    const pending = momentWrites.get(key);
+    if (pending) await pending;
+    const saved = await api('get_track_moment', key);
+    if (trackMoment !== request) return;
+    request.positionMs = Number.isSafeInteger(saved) && saved >= 0 ? saved : null;
+    request.loading = false;
+    renderTrackMoment();
+}
+
+async function writeTrackMoment(key, positionMs) {
+    if (!key || trackMoment.key !== key || trackMoment.loading || momentWrites.has(key)) return;
+    const pending = api('set_track_moment', key, positionMs);
+    momentWrites.set(key, pending);
+    const saved = await pending;
+    momentWrites.delete(key);
+    if (saved !== true) {
+        showToast('Не удалось сохранить изменение', 'error');
+        return;
+    }
+    if (trackMoment.key === key) {
+        trackMoment.positionMs = positionMs;
+        renderTrackMoment();
+    }
+    showToast(positionMs === null ? 'Метка удалена' : `Лучший момент сохранён · ${formatTime(positionMs / 1000)}`, 'success');
+}
+
+function jumpToTrackMoment(key) {
+    if (key === trackMoment.key && momentFitsTimeline(trackMoment.positionMs)) seekTo(trackMoment.positionMs);
+}
+
+export function getTrackMomentActions(track) {
+    const { key, positionMs, loading } = trackMoment;
+    if (!key || key !== trackMomentKey(track) || loading || momentWrites.has(key)) return [];
+    if (positionMs !== null) {
+        const remove = { icon: 'trash-2', label: 'Удалить лучший момент', run: () => writeTrackMoment(key, null) };
+        return momentFitsTimeline(positionMs) ? [
+            { icon: 'bookmark', label: `К лучшему моменту · ${formatTime(positionMs / 1000)}`, run: () => jumpToTrackMoment(key) },
+            remove,
+        ] : [remove];
+    }
+    if (!activeAudio.src || activeAudio.readyState < 1 || playbackState.durationMs <= 0) return [];
+    // Capture the playhead when the user opens the menu, while audio can keep playing.
+    const captured = Math.round(activeAudio.currentTime * 1000);
+    if (!Number.isSafeInteger(captured) || captured < 0 || !momentFitsTimeline(captured)) return [];
+    return [{ icon: 'bookmark', label: `Отметить лучший момент · ${formatTime(captured / 1000)}`, run: () => writeTrackMoment(key, captured) }];
+}
+
+function bindTrackMomentPins() {
+    for (const prefix of progressPrefixes) {
+        const pin = document.getElementById(`${prefix}-moment-pin`);
+        if (!pin) continue;
+        pin.addEventListener('click', event => {
+            event.stopPropagation();
+            jumpToTrackMoment(trackMoment.key);
+        });
+        pin.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            writeTrackMoment(trackMoment.key, null);
+        });
+        pin.parentElement.addEventListener('keydown', event => {
+            if (event.key !== 'Enter' || pin.hidden) return;
+            event.preventDefault();
+            event.stopPropagation();
+            jumpToTrackMoment(trackMoment.key);
+        });
+    }
 }
 
 function releaseAudio(audio) {
@@ -667,6 +782,7 @@ function setupAudioEvents(audio) {
                 const audioDurMs = Math.round(audio.duration * 1000);
                 if (audioDurMs > 0 && Math.abs(playbackState.durationMs - audioDurMs) > 2000) {
                     playbackState.durationMs = audioDurMs;
+                    renderTrackMoment();
                     setElText('pb-time-total', formatTime(playbackState.durationMs / 1000));
                     setElText('pp-time-total', formatTime(playbackState.durationMs / 1000));
                 }
@@ -860,6 +976,7 @@ export function playTrack(track, streamUrl, options = {}) {
 
     const dur = track.duration || parsedDuration;
     playbackState.durationMs = normalizeDurationMs(dur);
+    syncTrackMoment(track);
     pendingResume = Number(options.resumeMs) > 0 ? {key: trackIdKey, ms: Number(options.resumeMs)} : null;
 
     loadAudioSource(newAudio, streamUrl);
@@ -1050,6 +1167,7 @@ export function togglePlayPause() {
 }
 
 export function initPlayer() {
+    bindTrackMomentPins();
     // Reserve the largest morph width so transport neighbours never move.
     for (const prefix of ['pb', 'pp']) {
         const button = document.getElementById(`${prefix}-btn-play`);
@@ -1341,6 +1459,22 @@ export function initPlayer() {
             const header = document.getElementById('track-options-header');
             if (header && playbackState.track) {
                 header.textContent = playbackState.track.title || 'ОПЦИИ ТРЕКА';
+            }
+            const momentItems = document.getElementById('track-options-moment-items');
+            if (momentItems) {
+                momentItems.replaceChildren(...getTrackMomentActions(playbackState.track).map(action => {
+                    const button = document.createElement('button');
+                    button.className = 'context-menu-item';
+                    const icon = document.createElement('i');
+                    icon.dataset.lucide = action.icon;
+                    button.append(icon, action.label);
+                    button.onclick = () => {
+                        optMenu.classList.remove('visible');
+                        action.run();
+                    };
+                    return button;
+                }));
+                if (momentItems.childElementCount) renderIcons(momentItems);
             }
 
             // Load playlists into menu
@@ -1676,6 +1810,7 @@ export function onTrackChanged(track) {
     }
     
     playbackState.durationMs = normalizeDurationMs(track.duration);
+    syncTrackMoment(track);
     
     paintPlaybackProgress();
 
@@ -2020,9 +2155,13 @@ export function onPositionChanged(posMs, durationMs) {
         }
 
         const mediaDuration = activeAudio?.duration;
-        playbackState.durationMs = Number.isFinite(mediaDuration) && mediaDuration > 0
+        const duration = Number.isFinite(mediaDuration) && mediaDuration > 0
             ? Math.round(mediaDuration * 1000)
             : (Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 0);
+        if (playbackState.durationMs !== duration) {
+            playbackState.durationMs = duration;
+            renderTrackMoment();
+        }
         playbackState.positionMs = Number.isFinite(posMs) ? Math.max(0, posMs) : 0;
         paintPlaybackProgress();
     } catch(e) {
@@ -2247,7 +2386,7 @@ function setupDragBar(trackId, { onDrag, onRelease, onCancel }, {pointerEnabled 
     if (!track) return;
     const feedback = document.getElementById(feedbackId) || track;
     const isProgress = !trackId.includes('volume');
-    const excluded = 'button, a, input, select, textarea, [contenteditable="true"], [role="button"], .clickable-artist' + (isProgress ? ', .volume-track, .volume-wrap' : '');
+    const excluded = 'button, a, input, select, textarea, [contenteditable="true"], [role="button"], .clickable-artist' + (isProgress ? ', .volume-track, .volume-wrap, .track-moment-pin' : '');
     const canSeek = () => !isProgress || (Number.isFinite(playbackState.durationMs) && playbackState.durationMs > 0);
     const preview = (pct) => {
         if (!isProgress) return;

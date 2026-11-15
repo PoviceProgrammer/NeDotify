@@ -4066,6 +4066,19 @@ class AppApi:
             publish(error=e)
         return []
 
+    def get_track_moment(self, track_key: str):
+        if not isinstance(track_key, str) or not 0 < len(track_key) <= 2048:
+            return None
+        return self._core.db.get_track_moment(track_key)
+
+    def set_track_moment(self, track_key: str, position_ms: int | None):
+        if not isinstance(track_key, str) or not 0 < len(track_key) <= 2048:
+            return False
+        if position_ms is not None and (type(position_ms) is not int or not 0 <= position_ms <= 2**53 - 1):
+            return False
+        self._core.db.set_track_moment(track_key, position_ms)
+        return True
+
     def get_waveform(self, track_data):
         if not isinstance(track_data, dict):
             return []

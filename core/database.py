@@ -1428,6 +1428,12 @@ class DatabaseManager:
 
 
         self._init_lyrics_overrides_table(cursor)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS track_moments (
+                track_key TEXT NOT NULL PRIMARY KEY,
+                position_ms INTEGER NOT NULL CHECK(position_ms >= 0)
+            )
+        ''')
 
         self._init_availability_tracking(cursor)
 
@@ -5531,6 +5537,22 @@ class DatabaseManager:
                     ),
                 )
                 return True
+
+    def get_track_moment(self, track_key: str) -> Optional[int]:
+        row = self.conn.execute(
+            'SELECT position_ms FROM track_moments WHERE track_key = ?', (track_key,),
+        ).fetchone()
+        return row[0] if row else None
+
+    def set_track_moment(self, track_key: str, position_ms: Optional[int]) -> None:
+        with self._write_lock, self.conn:
+            if position_ms is None:
+                self.conn.execute('DELETE FROM track_moments WHERE track_key = ?', (track_key,))
+            else:
+                self.conn.execute('''
+                    INSERT INTO track_moments (track_key, position_ms) VALUES (?, ?)
+                    ON CONFLICT(track_key) DO UPDATE SET position_ms = excluded.position_ms
+                ''', (track_key, position_ms))
 
     def get_track_lyrics_override(
         self,
