@@ -1,131 +1,101 @@
-"""Download startup avoids duplicate provider work; no live network required."""
-import logging
-import threading
+"""Provider downloads use the shared CLI and retain recording identity."""
 from types import SimpleNamespace
 
 import pytest
 
+from core.download_processing import ToolExecutionError
+from core.download_transfer import DownloadContext
+
 
 @pytest.mark.parametrize('cached_id', ['dQw4w9WgXcQ', '', 'https://invalid.example'])
 def test_catalogue_download_reuses_only_valid_resolved_video_id(monkeypatch, tmp_path, cached_id):
-    import services.youtube_service as module
-    service = module.YouTubeService.__new__(module.YouTubeService)
+    from services.youtube_service import YouTubeService
+
+    service = YouTubeService.__new__(YouTubeService)
     service.settings = None
-    service.logger = logging.getLogger(__name__)
-    service._ydl_lock = threading.Lock()
-    service._get_ydl_opts = lambda *a, **k: {}
     service.get_from_cache = lambda key: {'source_id': cached_id}
     targets = []
     output = tmp_path / 'audio.webm'
+    output.write_bytes(b'audio' * 1024)
 
-    class Ydl:
-        def __init__(self, opts):
-            pass
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            pass
-        def extract_info(self, target, download):
-            targets.append(target)
-            assert download
-            output.write_bytes(b'audio' * 1024)
-            return {'ext': 'webm', 'acodec': 'opus'}
-        def prepare_filename(self, info):
-            return str(output)
+    def transfer(self, target, directory):
+        targets.append(target)
+        assert directory == str(tmp_path)
+        return str(output)
 
-    monkeypatch.setattr(module, 'HAS_YTDLP', True)
-    monkeypatch.setattr(module.yt_dlp, 'YoutubeDL', Ydl)
+    monkeypatch.setattr(DownloadContext, 'download_executable', transfer)
     query = 'ytsearch1: Artist - Song'
     assert service.download_audio_sync(query, str(tmp_path)) == str(output)
     expected = f'https://www.youtube.com/watch?v={cached_id}' if cached_id == 'dQw4w9WgXcQ' else query
     assert targets == [expected]
 
 
-def test_soundcloud_download_extracts_once_and_keeps_resume_hooks(monkeypatch, tmp_path):
-    import services.soundcloud_service as module
-    from core.download_transfer import DownloadContext
-    service = module.SoundCloudService.__new__(module.SoundCloudService)
-    service.logger = logging.getLogger(__name__)
+def test_soundcloud_download_uses_one_process_and_excludes_previews(monkeypatch, tmp_path):
+    import sys
+    from services.soundcloud_service import SoundCloudService
+
+    service = SoundCloudService.__new__(SoundCloudService)
     service.settings = SimpleNamespace(get=lambda section, key, default='':
                                       'http://127.0.0.1:8080' if key == 'proxy_url' else default)
-    calls, options, progress = [], [], []
-    info = {'id': '123', 'title': 'Song', 'ext': 'mp3', 'url': 'https://cdn.sndcdn.com/full.mp3'}
-    output = tmp_path / 'audio.mp3'
+    calls, progress = [], []
     context = DownloadContext(1, 'soundcloud', '123', lambda: None,
-                              lambda done, total: progress.append((done, total)))
+                              lambda done, total: progress.append((done, total)), service.settings)
+    output = tmp_path / (context.stem + '_123.mp3')
 
-    class Ydl:
-        def __init__(self, opts):
-            self.opts = opts
-            options.append(opts)
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            pass
-        def extract_info(self, target, download):
-            calls.append(target)
-            assert not download, 'duplicate extraction during transfer'
-            return info
-        def process_ie_result(self, payload, download):
-            assert payload is info and download
-            assert self.opts['continuedl'] and not self.opts['overwrites']
-            output.write_bytes(b'audio' * 1024)
-            for hook in self.opts['progress_hooks']:
-                hook({'downloaded_bytes': 5, 'total_bytes': 5})
-            return payload
-        def prepare_filename(self, payload):
-            return str(output)
+    def run(args, checkpoint, timeout, on_line):
+        calls.append(args)
+        assert args[:3] == [sys.executable, '-m', 'yt_dlp']
+        assert args[-2:] == ['--', 'https://api-v2.soundcloud.com/tracks/123']
+        assert args[args.index('-f') + 1] == 'bestaudio[format_id!*=preview]'
+        assert args[args.index('--proxy') + 1] == 'http://127.0.0.1:8080'
+        assert '--continue' in args and '--no-overwrites' in args
+        output.write_bytes(b'audio' * 1024)
+        on_line('nd-progress:5:5')
+        on_line('nd-file:' + str(output))
 
-    monkeypatch.setattr(module, 'HAS_YTDLP', True)
-    monkeypatch.setattr(module.yt_dlp, 'YoutubeDL', Ydl)
+    monkeypatch.setattr('core.download_processing.run_tool', run)
     assert service.download_audio_sync('123', str(tmp_path), context) == str(output)
-    assert calls == ['https://api-v2.soundcloud.com/tracks/123']
-    assert all(opts['proxy'] == 'http://127.0.0.1:8080' for opts in options)
+    assert len(calls) == 1
     assert progress == [(5, 5)]
 
 
-def test_soundcloud_probe_timeout_reaches_queue_retry_policy(monkeypatch, tmp_path):
-    import services.soundcloud_service as module
-    service = module.SoundCloudService.__new__(module.SoundCloudService)
+def test_soundcloud_transfer_timeout_reaches_queue_retry_policy(monkeypatch, tmp_path):
+    from services.soundcloud_service import SoundCloudService
+
+    service = SoundCloudService.__new__(SoundCloudService)
     service.settings = None
-    service.logger = logging.getLogger(__name__)
-    class Ydl:
-        def __init__(self, options):
-            pass
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            pass
-        def extract_info(self, *args, **kwargs):
-            raise TimeoutError('connection timed out')
-    monkeypatch.setattr(module.yt_dlp, 'YoutubeDL', Ydl)
+
+    def transfer(*args, **kwargs):
+        raise TimeoutError('connection timed out')
+
+    monkeypatch.setattr(DownloadContext, 'download_executable', transfer)
     with pytest.raises(TimeoutError):
         service.download_audio_sync('123', str(tmp_path))
 
 
-def test_soundcloud_preview_fallback_verifies_recording(monkeypatch, tmp_path):
-    import services.soundcloud_service as module
-    import services.youtube_service as yt_module
-    service = module.SoundCloudService.__new__(module.SoundCloudService)
-    service.settings = None
-    service.logger = logging.getLogger(__name__)
-    class Ydl:
-        def __init__(self, options):
-            pass
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            pass
-        def extract_info(self, *args, **kwargs):
-            return {'title': 'Song', 'uploader': 'Artist', 'duration': 180,
-                    'url': 'https://cdn.sndcdn.com/preview/song.mp3'}
+@pytest.mark.parametrize('youtube_enabled', [True, False])
+def test_soundcloud_preview_fallback_verifies_recording(monkeypatch, tmp_path, youtube_enabled):
+    from services.soundcloud_service import SoundCloudService
+
+    service = SoundCloudService.__new__(SoundCloudService)
+    service.settings = SimpleNamespace(get=lambda section, key, default=True: youtube_enabled)
+    service.get_from_cache = lambda key: {'title': 'Song', 'artist': 'Artist', 'duration': 180}
     calls = []
     provider = SimpleNamespace(
         search_sync=lambda *args, **kw: [
             {'source_id': 'wrong', 'title': 'Song (Live)', 'artist': 'Artist', 'duration': 180},
             {'source_id': 'right', 'title': 'Song', 'artist': 'Artist', 'duration': 180}],
         download_audio_sync=lambda sid, *args, **kw: (calls.append(sid), 'audio.mp3')[1])
-    monkeypatch.setattr(module.yt_dlp, 'YoutubeDL', Ydl)
-    monkeypatch.setattr(yt_module, 'YouTubeService', lambda settings: provider)
-    assert service.download_audio_sync('123', str(tmp_path)) == 'audio.mp3'
-    assert calls == ['right']
+    service._get_youtube_fallback = lambda: provider
+
+    def transfer(*args, **kwargs):
+        raise ToolExecutionError(1, 'Requested format is not available')
+
+    monkeypatch.setattr(DownloadContext, 'download_executable', transfer)
+    if youtube_enabled:
+        assert service.download_audio_sync('123', str(tmp_path)) == 'audio.mp3'
+        assert calls == ['right']
+    else:
+        with pytest.raises(ToolExecutionError):
+            service.download_audio_sync('123', str(tmp_path))
+        assert calls == []

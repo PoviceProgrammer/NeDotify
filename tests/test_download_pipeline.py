@@ -133,7 +133,7 @@ def test_tool_lease_spans_provider_and_postprocessing(downloader, tmp_db, core_n
     def lease(**options):
         leased.append(True)
         try:
-            yield {'yt_dlp_module':True}
+            yield {}
         finally:
             leased.pop()
     core_ns.setup = SimpleNamespace(acquire_download_tools=lease)

@@ -31,7 +31,7 @@ _MAX_WORKERS = 4
 # Sources ``_download_worker`` knows how to fetch. Anything else (e.g. 'vk',
 # which has no download provider yet) fails with a source-specific error
 # instead of the generic "returned None or file missing" one.
-_SUPPORTED_SOURCES = frozenset({'youtube', 'soundcloud', 'yandex', 'spotify', 'spotify_album', 'deezer'})
+_SUPPORTED_SOURCES = frozenset({'youtube', 'soundcloud', 'yandex', 'spotify', 'spotify_album', 'deezer', 'lmusic'})
 
 # A downloaded file that is not one of these, is below the floor, or is a
 # leftover .part is not audio. Providers can hand back such a path, and
@@ -234,21 +234,6 @@ class DownloadManager:
 
     def _call_provider(self, provider, source_id, download_dir):
         context = getattr(self._worker_context, 'context', None)
-        tools = getattr(context, 'tools', {}) if context else {}
-        if tools.get('yt_dlp_path') and (tools.get('prefer_executable') or not tools.get('yt_dlp_module', True)):
-            if provider is getattr(self._core, 'youtube', None):
-                from services.youtube_service import _is_allowed_youtube_target
-                target = str(source_id)
-                if target.startswith('http') and not _is_allowed_youtube_target(target):
-                    raise ValueError('Недопустимый адрес YouTube')
-                if not target.startswith(('http', 'ytsearch')):
-                    target = 'https://www.youtube.com/watch?v=' + target
-                return context.download_executable(target, download_dir)
-            if provider is getattr(self._core, '_soundcloud', None):
-                target = str(source_id)
-                if not target.startswith('http'):
-                    target = ('https://api-v2.soundcloud.com/tracks/' if target.isdigit() else 'https://soundcloud.com/') + target
-                return context.download_executable(target, download_dir)
         method = provider.download_audio_sync
         try:
             accepts_context = 'download_context' in inspect.signature(method).parameters
@@ -854,6 +839,8 @@ class DownloadManager:
             if sc_url.startswith('http') and not is_safe_media_url(sc_url):
                 raise Exception('Unsafe media URL rejected')
             file_path = self._call_provider(self._core.soundcloud, sc_url, download_dir)
+        elif source == 'lmusic':
+            file_path = self._call_provider(getattr(self._core, source), source_id, download_dir)
         elif source == 'yandex':
             file_path = self._call_provider(self._core.yandex, source_id, download_dir)
         elif source == 'deezer':
@@ -925,9 +912,9 @@ class DownloadManager:
         self._worker_context.context = DownloadContext(
             track_id, item['source'], item['source_id'], checkpoint,
             lambda downloaded, total: self._record_progress(track_id, downloaded, total),
+            settings=getattr(self._core, 'settings', None),
         )
         self._worker_context.context.policy = OutputPolicy.from_settings(getattr(self._core, 'settings', None))
-        self._worker_context.context.settings = getattr(self._core, 'settings', None)
         try:
             saved = json.loads(self._store.get(track_id).get('options') or '{}')
             if isinstance(saved, dict) and saved:

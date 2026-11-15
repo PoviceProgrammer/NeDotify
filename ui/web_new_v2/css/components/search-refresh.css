@@ -166,3 +166,147 @@ html[data-ui-style="macos"][data-macos-transparency="false"] #search-discovery .
 /* The capsule already supplies a visible focus ring for keyboard input. */
 #view-search .search-capsule .search-input:focus-visible { outline: 0; box-shadow: none; }
 html[data-ui-style="macos"] #view-search .search-suggestions-dropdown { border-radius: 18px; }
+.search-hit-meta { display: none; }
+#view-search .search-hit-meta { display: block; color: var(--text-sec); font-size: 12px; }
+#view-search.search-active .search-type-filters {
+    justify-content: flex-start;
+    border-bottom: 1px solid var(--home-edge);
+    overflow-x: auto;
+    gap: 0;
+}
+#view-search.search-active .type-filter-btn {
+    flex: 0 0 auto;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    box-shadow: none;
+    color: var(--text-sec);
+    padding-inline: clamp(12px, 3vw, 26px);
+}
+#view-search.search-active .type-filter-btn svg { display: none; }
+#view-search.search-active .type-filter-btn.active { color: var(--text-main); border-bottom-color: currentColor; }
+.search-result-section { margin: 0 0 34px; }
+.search-result-section > header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+.search-result-section h2 { color: var(--text-main); font-size: clamp(20px, 2.6vw, 27px); margin: 0; }
+.search-result-section header button, .search-profile-result, .search-collection-result {
+    border: 0;
+    background: transparent;
+    color: var(--text-main);
+    font: inherit;
+    cursor: pointer;
+}
+.search-result-section header button { color: var(--text-sec); white-space: nowrap; }
+.search-profile-result, .search-collection-result {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 58px minmax(0, 1fr);
+    align-items: center;
+    gap: 14px;
+    padding: 9px 10px;
+    text-align: left;
+    border-radius: 10px;
+}
+.search-profile-result { margin-top: 10px; }
+.search-profile-result:hover, .search-collection-result:hover { background: color-mix(in srgb, var(--text-main) 7%, transparent); }
+.search-profile-result > :first-child, .search-collection-cover {
+    width: 58px;
+    height: 58px;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    background: var(--bg-surface);
+}
+.search-profile-result > :first-child { border-radius: 50%; }
+.search-collection-cover { border-radius: 7px; }
+.search-collection-cover img { width: 100%; height: 100%; object-fit: cover; }
+.search-profile-result strong, .search-collection-result strong,
+.search-profile-result small, .search-collection-result small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.search-profile-result small, .search-collection-result small { color: var(--text-sec); margin-top: 4px; }
+#view-search .search-hit-row .track-number,
+#view-search .search-hit-row .track-duration { display: none; }
+#view-search .search-hit-row .track-cover-wrap { width: 58px; height: 58px; }
+#view-search .search-hit-row {
+    min-height: 74px;
+    gap: 14px;
+    padding-inline: 10px;
+}
+#view-search .search-top-result .search-hit-row .track-cover-wrap { width: 68px; height: 68px; }
+
+#view-search.search-active {
+    --search-content-width: 980px;
+    --search-panel: #202830;
+    --search-card-hover: #2b3946;
+    --search-card-text: #f7f9fc;
+    --search-card-muted: #c4cfd9;
+    --search-card-edge: rgb(226 238 250 / 22%);
+}
+[data-theme="light"] #view-search.search-active {
+    --search-panel: #f4f7fa;
+    --search-card-hover: #e5edf5;
+    --search-card-text: #182430;
+    --search-card-muted: #4b5a69;
+    --search-card-edge: rgb(36 54 72 / 25%);
+}
+#view-search.search-active :is(.search-header-container, #search-results) {
+    max-width: var(--search-content-width);
+}
+#view-search.search-active #search-results {
+    --search-card: transparent;
+    --search-card-edge: transparent;
+    padding: clamp(12px, 2.5vw, 24px);
+    background: var(--search-panel);
+    border-radius: 16px;
+    color: var(--search-card-text);
+}
+#view-search.search-active #search-results .search-result-section:last-child { margin-bottom: 0; }
+#view-search.search-active .search-type-filters {
+    flex-wrap: nowrap;
+    background: var(--search-panel);
+    border: 1px solid var(--search-card-edge);
+    border-radius: 12px;
+}
+#view-search.search-active .search-type-filters .type-filter-btn {
+    color: var(--search-card-muted);
+}
+#view-search.search-active .search-type-filters .type-filter-btn.active {
+    color: var(--search-card-text);
+}
+#view-search .search-result-section > header button {
+    padding: 6px 12px;
+    border-radius: 10px;
+    color: var(--search-card-text);
+}
+#view-search .search-result-section h2 { color: var(--search-card-text); }
+#view-search #search-results .track-list { gap: 2px; }
+#view-search #search-results :is(.search-hit-row, .search-profile-result, .search-collection-result) {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: var(--search-card-text);
+}
+#view-search #search-results :is(.search-hit-row, .search-profile-result, .search-collection-result):is(:hover, :focus-within) {
+    background: var(--search-card-hover);
+}
+#view-search #search-results .search-hit-row.playing {
+    background: color-mix(in srgb, var(--primary) 16%, var(--search-panel));
+}
+#view-search #search-results .search-hit-row :is(.track-title, .track-more-btn) {
+    color: var(--search-card-text);
+}
+#view-search #search-results :is(.track-artist, .search-hit-meta, .search-profile-result small, .search-collection-result small) {
+    color: var(--search-card-muted);
+}
+#view-search #search-results .search-collection-result + .search-collection-result { margin-top: 8px; }
+#view-search #search-results .search-hit-row .track-cover-wrap { flex-shrink: 0; }

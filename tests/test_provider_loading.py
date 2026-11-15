@@ -134,58 +134,45 @@ def test_soundcloud_absolute_url_is_not_prefixed_again():
 
 @pytest.mark.parametrize('require_auth', [False, True])
 def test_public_download_skips_cookies_but_gated_download_uses_them(youtube, monkeypatch, tmp_path, require_auth):
-    import services.youtube_service as module
+    from pathlib import Path
+    from core.download_processing import ToolExecutionError
+
     youtube.settings = SimpleNamespace(get=lambda category, key, default=None:
                                        'firefox' if key == 'browser_cookies' else default)
-    calls = []
-    class Downloader:
-        def __init__(self, opts):
-            self.opts = opts
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            pass
-        def extract_info(self, target, download):
-            calls.append(target)
-            assert download and self.opts['http_chunk_size'] <= 1048576
-            if require_auth and 'cookiesfrombrowser' not in self.opts:
-                raise Exception('Sign in to confirm your age')
-            if not require_auth:
-                assert 'cookiesfrombrowser' not in self.opts
-            self.path = self.opts['outtmpl'].replace('%(ext)s', 'webm')
-            with open(self.path, 'wb') as f:
-                f.write(b'x' * 8192)
-            return {'ext': 'webm', 'acodec': 'opus'}
-        def prepare_filename(self, info):
-            return self.opts['outtmpl'].replace('%(ext)s', info['ext'])
-    monkeypatch.setattr(module.yt_dlp, 'YoutubeDL', Downloader)
+    cookie_sources = []
+
+    def run(args, checkpoint, timeout, on_line):
+        browser = args[args.index('--cookies-from-browser') + 1] if '--cookies-from-browser' in args else None
+        cookie_sources.append(browser)
+        assert args[args.index('--http-chunk-size') + 1] == '1M'
+        if require_auth and not browser:
+            raise ToolExecutionError(1, 'Sign in to confirm your age')
+        template = args[args.index('-o') + 1]
+        output = Path(template.replace('%(id)s', 'dQw4w9WgXcQ').replace('%(ext)s', 'webm'))
+        output.write_bytes(b'x' * 8192)
+        on_line('nd-file:' + str(output))
+
+    monkeypatch.setattr('core.download_processing.run_tool', run)
     result = youtube.download_audio_sync('dQw4w9WgXcQ', str(tmp_path))
-    assert tmp_path.joinpath(result).exists()
-    assert len(calls) == (2 if require_auth else 1)
-    if not require_auth:
-        assert youtube._get_ydl_opts('bestaudio/best')['cookiesfrombrowser'] == ('firefox',)
+    assert Path(result).exists()
+    assert cookie_sources == ([None, 'firefox'] if require_auth else [None])
+    assert youtube._get_ydl_opts('bestaudio/best')['cookiesfrombrowser'] == ('firefox',)
 
 
 def test_download_without_ffprobe_prefers_mutagen_supported_container(youtube, monkeypatch, tmp_path):
-    import services.youtube_service as module
+    from pathlib import Path
+
     monkeypatch.setattr('utils.audio_validation.ffprobe_path', lambda: None)
     formats = []
-    class Downloader:
-        def __init__(self, opts):
-            self.opts = opts
-            formats.append(opts['format'])
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            pass
-        def extract_info(self, target, download):
-            self.path = self.opts['outtmpl'].replace('%(ext)s', 'm4a')
-            with open(self.path, 'wb') as file:
-                file.write(b'audio' * 1024)
-            return {'ext': 'm4a', 'acodec': 'aac'}
-        def prepare_filename(self, info):
-            return self.path
-    monkeypatch.setattr(module.yt_dlp, 'YoutubeDL', Downloader)
+
+    def run(args, checkpoint, timeout, on_line):
+        formats.append(args[args.index('-f') + 1])
+        template = args[args.index('-o') + 1]
+        output = Path(template.replace('%(id)s', 'dQw4w9WgXcQ').replace('%(ext)s', 'm4a'))
+        output.write_bytes(b'audio' * 1024)
+        on_line('nd-file:' + str(output))
+
+    monkeypatch.setattr('core.download_processing.run_tool', run)
     output = youtube.download_audio_sync('dQw4w9WgXcQ', str(tmp_path))
     assert output.endswith('.m4a')
     assert formats[0].split('/')[0] == 'bestaudio[ext=m4a]'

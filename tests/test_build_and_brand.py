@@ -146,7 +146,7 @@ def test_installer_output_name_matches_readme():
     if not os.path.exists(ISS):
         pytest.skip("installer.iss not present")
     text = open(ISS, encoding="utf-8").read()
-    assert "OutputBaseFilename=NeDotify_Setup" in text
+    assert "OutputBaseFilename=Soneth_Setup" in text
 
 
 def test_installer_zapret_bundle_is_conditionally_gated():
@@ -224,7 +224,7 @@ def test_readme_advertises_the_canonical_setup_exe():
     text = _read(README)
     assert "NeDotify_Setup.exe" in text, (
         "README must name the file the release actually contains; "
-        "installer.iss OutputBaseFilename=NeDotify_Setup"
+        "installer.iss OutputBaseFilename=Soneth_Setup"
     )
 
 

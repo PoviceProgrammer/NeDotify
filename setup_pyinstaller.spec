@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = SPECPATH
 sys.path.insert(0, ROOT)
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, copy_metadata
 from tools.packaging.native_manifest import (
     release_mode_from_environment,
     validate_native_inputs,
@@ -61,7 +61,7 @@ extra_datas = [
     (os.path.join(ROOT, 'licenses'), 'licenses'),
     (os.path.join(ROOT, 'ui', 'MACos_ui'), 'ui/MACos_ui'),
     (os.path.join(ROOT, 'icon.ico'), '.'),
-] + ui_datas + collect_data_files('ytmusicapi')
+] + ui_datas + collect_data_files('ytmusicapi') + copy_metadata('yt-dlp')
 recommendation_config = os.environ.get('NEDOTIFY_RECOMMENDATION_CONFIG')
 if recommendation_config:
     extra_datas.append((recommendation_config, '.'))

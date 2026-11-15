@@ -99,7 +99,7 @@ async function mountRecommendationCollection(section) {
     const label = document.createElement('span');
     label.className = 'setting-label';
     label.id = 'recommendation-collection-label';
-    label.textContent = state.remote ? 'Отправлять события теста рекомендаций на сервер NeDotify'
+    label.textContent = state.remote ? 'Отправлять события теста рекомендаций на сервер Soneth'
         : 'Отправлять события теста рекомендаций на этот ПК';
     const button = document.createElement('button');
     button.className = 'toggle-switch';
@@ -154,7 +154,7 @@ export function initSettingsView({resetPalette, backgrounds, themeBackgrounds = 
     syncControls();
     const nav=document.querySelector('#view-settings .settings-nav');
     const heading=document.createElement('div');heading.className='settings-nav-heading';
-    heading.innerHTML='<h1>Настройки</h1><p>Персонализируй свой NeDotify</p>';nav.prepend(heading);
+    heading.innerHTML='<h1>Настройки</h1><p>Персонализируй свой Soneth</p>';nav.prepend(heading);
     const title=document.getElementById('settings-current-title');
     const descriptions={appearance:'Цвета, шрифты и фон приложения',audio:'Звучание и переходы между треками',player:'Оформление и поведение плеера',background:'Ваше фоновое изображение',workshop:'Каталог фонов',icons:'Стиль значков и логотипа',atmosphere:'Погода и мягкая реакция на музыку',optimization:'Производительность и расход ресурсов',keybinds:'Управление с клавиатуры',storage:'Загрузки, место и кэш',import:'Перенос музыкальных коллекций',zapret:'Настройки обхода DPI',auth:'Подключение музыкальных сервисов',about:'Информация о приложении и обновления'};
     const updateHeading=button=>{

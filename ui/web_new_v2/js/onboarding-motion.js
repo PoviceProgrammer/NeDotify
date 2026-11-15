@@ -2,7 +2,7 @@
 export function mountOnboardingMotion(wizard, {signal}) {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
     const running = new Set();
-    const beats = ['Твоё настроение', 'Твой темп', 'Твоё звучание', 'Твоя коллекция', 'Твои открытия', 'Твой NeDotify'];
+    const beats = ['Твоё настроение', 'Твой темп', 'Твоё звучание', 'Твоя коллекция', 'Твои открытия', 'Твой Soneth'];
     const icons = ['palette', 'sparkles', 'headphones', 'library', 'radio', 'check'];
     const steps = [...wizard.querySelectorAll('.onboarding-step')];
     wizard.querySelectorAll('[data-ob-motion]').forEach(node => node.remove());

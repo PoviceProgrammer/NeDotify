@@ -278,7 +278,7 @@ assert.match(statusEl.textContent,/Обновить/);
 // manual update required: honest app-update text
 await btnCheck.fire('click');await tick();
 await fireWindow('nedotify:zapret_update_checked',{request_id:'zapret-check:2',update_available:true,manual_update_required:true,latest_version:'v99.0'});
-assert.match(statusEl.textContent,/обновите приложение NeDotify/i);
+assert.match(statusEl.textContent,/обновите приложение Soneth/i);
 assert.doesNotMatch(statusEl.textContent,/Нажмите «Обновить»/);
 // version unknown
 await btnCheck.fire('click');await tick();

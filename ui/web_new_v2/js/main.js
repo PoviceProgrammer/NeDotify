@@ -688,7 +688,7 @@ async function init() {
 
         setupProfileAndGreeting();
 
-        console.log('NeDotify initialized successfully');
+        console.log('Soneth initialized successfully');
     } catch (e) {
         console.error("Init Error:", e);
         try {
@@ -732,7 +732,7 @@ function setupProfileAndGreeting() {
         } else if (hour >= 23 || hour < 5) {
             greetingText = 'Доброй ночи';
         }
-        const nickname = (window.settings?.personalization?.nickname) || 'Пользователь NeDotify';
+        const nickname = (window.settings?.personalization?.nickname) || 'Пользователь Soneth';
         greetingEl.textContent = `${greetingText}, ${nickname}`;
     };
     updateGreeting();

@@ -1,7 +1,6 @@
 """Persistent queue controls and real partial-transfer resume without network I/O."""
 
 import json
-import logging
 import os
 import threading
 import time
@@ -331,71 +330,49 @@ def test_http_pause_closes_response_and_preserves_partial(tmp_path, monkeypatch)
     assert response.closed
 
 
-def test_yt_dlp_resume_template_stable_and_progress_interruptible(tmp_path):
-    progress = []
-    interrupted = []
+def test_youtube_cli_keeps_its_partial_across_pause_and_resume(tmp_path, monkeypatch):
+    from services.youtube_service import YouTubeService
+
+    target = 'jNQXAC9IVRw'
+    service = YouTubeService.__new__(YouTubeService)
+    service.settings = None
+    templates, progress = [], []
+    paused = False
 
     def checkpoint():
-        if interrupted:
+        if paused:
             raise DownloadInterrupted()
 
-    first = DownloadContext(44, 'youtube', 'a/b?unsafe', checkpoint, lambda *values: progress.append(values))
-    second = DownloadContext(44, 'youtube', 'a/b?unsafe', checkpoint, lambda *values: None)
-    options = first.ydl_options(str(tmp_path))
-    assert options['outtmpl'] == second.ydl_options(str(tmp_path))['outtmpl']
-    assert options['continuedl'] is True
-    assert options['overwrites'] is False
-    options['progress_hooks'][0]({'downloaded_bytes': 25, 'total_bytes': 100})
-    assert progress == [(25, 100)]
-    interrupted.append(True)
+    def run(args, checkpoint, timeout, on_line):
+        nonlocal paused
+        checkpoint()
+        assert '--continue' in args and '--no-overwrites' in args
+        assert '--abort-on-unavailable-fragments' in args
+        template = args[args.index('-o') + 1]
+        templates.append(template)
+        path = template.replace('%(id)s', target).replace('%(ext)s', 'm4a')
+        partial = path + '.part'
+        if not os.path.isfile(partial):
+            with open(partial, 'wb') as audio:
+                audio.write(b'a' * 8192)
+            on_line('nd-progress:8192:16384')
+            paused = True
+            on_line('nd-progress:8192:16384')
+            pytest.fail('paused progress was accepted')
+        assert os.path.getsize(partial) == 8192
+        with open(partial, 'ab') as audio:
+            audio.write(b'b' * 8192)
+        os.replace(partial, path)
+        on_line('nd-progress:16384:16384')
+        on_line('nd-file:' + path)
+
+    monkeypatch.setattr('core.download_processing.run_tool', run)
+    first = DownloadContext(1, 'youtube', target, checkpoint, lambda *values: progress.append(values))
     with pytest.raises(DownloadInterrupted):
-        options['progress_hooks'][0]({'downloaded_bytes': 30})
-
-
-def test_youtube_provider_keeps_yt_dlp_partial_across_calls(tmp_path, monkeypatch):
-    import services.youtube_service as youtube_module
-
-    options_seen = []
-
-    class FakeYoutubeDL:
-        def __init__(self, options):
-            self.options = options
-            options_seen.append(options)
-            self.path = options['outtmpl'].replace('%(id)s', 'recording').replace('%(ext)s', 'm4a')
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def extract_info(self, url, download):
-            partial = self.path + '.part'
-            if not os.path.isfile(partial):
-                with open(partial, 'wb') as audio_file:
-                    audio_file.write(b'a' * 8192)
-                raise DownloadInterrupted()
-            assert os.path.getsize(partial) == 8192
-            with open(partial, 'ab') as audio_file:
-                audio_file.write(b'b' * 8192)
-            os.replace(partial, self.path)
-            return {'id': 'recording', 'ext': 'm4a', 'acodec': 'mp4a'}
-
-        def prepare_filename(self, info):
-            return self.path
-
-    monkeypatch.setattr(youtube_module, 'yt_dlp', type('YDLModule', (), {'YoutubeDL': FakeYoutubeDL}))
-    monkeypatch.setattr(youtube_module, 'HAS_YTDLP', True)
-    service = youtube_module.YouTubeService.__new__(youtube_module.YouTubeService)
-    service.settings = None
-    service.logger = logging.getLogger('test-download')
-    service._ydl_lock = threading.Lock()
-    service._get_ydl_opts = lambda *args, **kwargs: {}
-    first_context = DownloadContext(1, 'youtube', 'recording', lambda: None, lambda *args: None)
-    with pytest.raises(DownloadInterrupted):
-        service.download_audio_sync('recording', str(tmp_path), download_context=first_context)
-    resumed_context = DownloadContext(1, 'youtube', 'recording', lambda: None, lambda *args: None)
-    path = service.download_audio_sync('recording', str(tmp_path), download_context=resumed_context)
+        service.download_audio_sync(target, str(tmp_path), download_context=first)
+    paused = False
+    second = DownloadContext(1, 'youtube', target, checkpoint, lambda *values: progress.append(values))
+    path = service.download_audio_sync(target, str(tmp_path), download_context=second)
     assert os.path.getsize(path) == 16384
-    assert options_seen[0]['outtmpl'] == options_seen[1]['outtmpl']
-    assert all(options['continuedl'] and not options['overwrites'] for options in options_seen)
+    assert templates[0] == templates[1]
+    assert progress == [(8192, 16384), (16384, 16384)]

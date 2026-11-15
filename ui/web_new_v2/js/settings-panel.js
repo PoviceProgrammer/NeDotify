@@ -1,3 +1,4 @@
+import { importPlaylist } from './playlist-import-progress.js';
 // Settings panel controls and catalogues, loaded after the interactive shell.
 import { renderIcons, escapeHtml, compressBackgroundImage, showToast, openModalFocusTrap, closeModalFocusTrap } from './utils.js';
 import { initAtmosphereSettings } from './atmosphere-settings.js';
@@ -378,11 +379,8 @@ export function initSettings() {
 
             try {
                 if (window.pywebview?.api?.import_external_playlist) {
-                    const res = await window.pywebview.api.import_external_playlist(url, name);
+                    const res = await importPlaylist(url, name);
                     if (res && res.success) {
-                        const plName = res.playlist_name || res.name || 'Импортированный';
-                        const count = res.imported_count ?? res.count ?? 0;
-                        window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `Импортирован плейлист "${plName}" (${count} треков)`, type: 'success' } }));
                         inputImportUrl.value = '';
                         if (inputImportName) inputImportName.value = '';
                     } else {
@@ -419,6 +417,19 @@ export function initSettings() {
     }
 
 
+
+    const spotifyToken = document.getElementById('input-spotify-token');
+    spotifyToken?.addEventListener('change', async () => {
+        const token = spotifyToken.value.trim();
+        if (!token) return;
+        try {
+            const result = await window.pywebview.api.save_setting('spotify_token', token, 'auth');
+            if (result === true || result?.success) {
+                spotifyToken.value = '';
+                spotifyToken.placeholder = 'Токен сохранён';
+            }
+        } catch {}
+    });
 
     const selectRegion = document.getElementById('select-region');
     if (selectRegion) {
@@ -976,8 +987,8 @@ function setupZapretPanel() {
                 setStatusText('Не удалось определить последнюю доступную версию');
             } else if (result.manual_update_required) {
                 setStatusText(result.latest_version
-                    ? `Доступна версия Zapret ${result.latest_version} — обновите приложение NeDotify`
-                    : 'Доступна новая версия Zapret — обновите приложение NeDotify');
+                    ? `Доступна версия Zapret ${result.latest_version} — обновите приложение Soneth`
+                    : 'Доступна новая версия Zapret — обновите приложение Soneth');
             } else if (result.update_available) {
                 setStatusText(result.current_version
                     ? `Установлена ${result.current_version} → доступна ${result.latest_version || '?'}. Нажмите «Обновить».`

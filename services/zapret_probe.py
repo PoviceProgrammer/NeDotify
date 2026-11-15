@@ -9,28 +9,24 @@ import time
 
 
 def probe_youtube_audio(cancelled):
+    from core.download_transfer import DownloadContext
     from services.youtube_service import YouTubeService
 
     deadline = time.monotonic() + 30
 
-    class ProbeContext:
-        def checkpoint(self):
-            if cancelled() or time.monotonic() >= deadline:
-                raise TimeoutError('YouTube strategy probe cancelled or timed out')
+    def checkpoint():
+        if cancelled() or time.monotonic() >= deadline:
+            raise TimeoutError('YouTube strategy probe cancelled or timed out')
 
-        def ydl_options(self, directory):
-            return {'socket_timeout': 4, 'retries': 0, 'fragment_retries': 0,
-                    'extractor_retries': 0, 'proxy': '', 'cachedir': False,
-                    'progress_hooks': [lambda data: self.checkpoint()]}
-
-    context = ProbeContext()
+    source_id = 'dQw4w9WgXcQ'
+    context = DownloadContext('probe', 'youtube', source_id, checkpoint, lambda done, total: None, probe=True)
     try:
         context.checkpoint()
         provider = YouTubeService(settings=None)
         with tempfile.TemporaryDirectory(prefix='nedotify-zapret-probe-') as directory:
             # A stable public recording. The provider checks the downloaded
             # container/audio before returning its path, not just HTTP 200.
-            provider.download_audio_sync('dQw4w9WgXcQ', directory, download_context=context)
+            provider.download_audio_sync(source_id, directory, download_context=context)
             context.checkpoint()
         return True
     except Exception:

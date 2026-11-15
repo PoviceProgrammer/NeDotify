@@ -126,7 +126,7 @@ class TrayIcon:
             is_fav = bool(current_track.get('is_favorite', False))
             fav_text = "💔 Удалить из любимых" if is_fav else "❤️ В любимые"
         else:
-            status_text = "NeDotify (Остановлено)"
+            status_text = "Soneth (Остановлено)"
             fav_text = "❤️ В любимые"
 
         play_pause_label = "⏸ Пауза" if is_playing else "▶ Воспроизведение"
@@ -139,7 +139,7 @@ class TrayIcon:
             item("⏮ Предыдущий трек", self.on_prev),
             item(fav_text, self.on_toggle_favorite),
             Menu.SEPARATOR,
-            item("🗔 Открыть NeDotify", self.on_show),
+            item("🗔 Открыть Soneth", self.on_show),
             item("❌ Выход", self.on_exit)
         ]
         return Menu(*menu_items)
@@ -180,7 +180,7 @@ class TrayIcon:
                     image = self.create_image()
                     if image is None or self._stop_requested.is_set():
                         return
-                    self.icon = OwnedIcon('NeDotify', image, 'NeDotify', self._build_menu())
+                    self.icon = OwnedIcon('NeDotify', image, 'Soneth', self._build_menu())
                     self.icon.run(setup=setup)
                 except Exception:
                     logger.warning('System tray failed', exc_info=True)

@@ -1002,134 +1002,46 @@ class SoundCloudService(BaseMusicService):
                 return
         self._playback_executor.submit(_extract)
     def download_audio_sync(self, sc_url: str, output_dir: str, download_context=None) -> str:
-        """Download audio synchronously, falling back to YouTube if SoundCloud gives preview."""
-        import os, time
-        if not HAS_YTDLP:
-            raise Exception('yt-dlp is missing')
+        """Transfer full SoundCloud audio or find the same recording on YouTube."""
+        from core.download_processing import ToolExecutionError
+        from core.download_transfer import DownloadContext
+        from core.playback_recovery import same_recording
 
-        # Single timestamp for every filename derived from this call, otherwise
-        # output_path and outtmpl drift apart by a second and the existence
-        # fallback below can never match the real download.
-        ts = int(time.time())
+        target = str(sc_url or '').strip()
+        if not target:
+            raise ValueError('Недопустимый адрес SoundCloud')
+        if not target.startswith(('http://', 'https://')):
+            target = (f'https://api-v2.soundcloud.com/tracks/{target}' if target.isdigit()
+                      else f'https://soundcloud.com/{target.lstrip("/")}')
+        parsed = urllib_parse.urlsplit(target)
+        host = parsed.hostname or ''
+        if (host != 'soundcloud.com' and not host.endswith('.soundcloud.com')) or parsed.username or parsed.password:
+            raise ValueError('Недопустимый адрес SoundCloud')
 
-        raw_input = str(sc_url).strip()
-        sc_url_str = raw_input
-        if not sc_url_str.startswith('http'):
-            if sc_url_str.isdigit():
-                # Bare numeric track id: yt-dlp cannot fetch a permalink from it,
-                # the api-v2 track URL is the only resolvable form.
-                sc_url_str = f'https://api-v2.soundcloud.com/tracks/{sc_url_str}'
-            else:
-                # Permalink slug such as "artist/track": qualify it. A value that
-                # already contains a slash is used as-is after the host prefix;
-                # a bare slug without slash is also prefixed (best effort).
-                sc_url_str = f'https://soundcloud.com/{sc_url_str.lstrip("/")}'
-
-        file_name = f'sc_{ts}.mp3'
-        output_path = os.path.join(output_dir, file_name)
-
-        ydl_opts = {
-            'quiet': True, 'no_warnings': True, 'format': 'bestaudio/best',
-            'socket_timeout': 10, 'extractor_retries': 1,
-        }
-        if self.settings:
-            proxy = normalize_proxy_url(self.settings.get('auth', 'proxy_url', ''))
-            if proxy:
-                ydl_opts['proxy'] = proxy
-            cookie_file = self.settings.get('auth', 'cookies_file_path', '')
-            if cookie_file and os.path.isfile(cookie_file):
-                ydl_opts['cookiefile'] = cookie_file
-        if download_context:
-            download_context.checkpoint()
-
+        context = download_context or DownloadContext.standalone('soundcloud', sc_url, self.settings)
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(sc_url_str, download=False)
-        except Exception as e:
-            self.logger.debug(f'SoundCloud metadata probe failed for {sc_url_str}: {e}', exc_info=True)
-            if not _is_unplayable_error(e):
-                # A timeout must reach the queue's retry policy. Turning it
-                # into missing metadata made an ordinary disconnect permanent.
+            return context.download_executable(target, output_dir, youtube=False, authenticated=True)
+        except ToolExecutionError as exc:
+            if exc.drm_protected or not (exc.format_unavailable or exc.media_unavailable):
                 raise
-            info = None
-        if download_context:
-            download_context.checkpoint()
-            
-        is_preview = False
-        if info:
-            url_candidate = info.get('url', '')
-            if 'preview' in url_candidate or re.search(r'/playlist/0/30/', url_candidate):
-                is_preview = True
-                
-        if not info or is_preview:
-            yt = self._get_youtube_fallback()
-            title = info.get('title', 'Unknown') if info else 'Unknown'
-            artist = info.get('uploader', 'Unknown') if info else 'Unknown'
-            query = f'{artist} - {title}'.strip(' -')
-            if not query or query == 'Unknown - Unknown':
-                # Try getting cached metadata
-                cached = (self.get_from_cache(f"soundcloud:{sc_url}")
-                          or self.get_from_cache(f"soundcloud:{sc_url_str}")
-                          or self.get_track_metadata(sc_url_str))
-                if cached:
-                    title = cached.get('title', 'Unknown')
-                    artist = cached.get('artist', 'Unknown')
-                    query = f'{artist} - {title}'.strip(' -')
-                    info = {'duration': cached.get('duration', 0)}
-                if not query or query == 'Unknown - Unknown':
-                    raise Exception('Cannot extract metadata for YouTube fallback')
-
-            from core.playback_recovery import same_recording
-            wanted = {'title': title, 'artist': artist, 'duration': (info or {}).get('duration', 0)}
-            candidates = yt.search_sync(query, limit=5)
-            if download_context:
-                download_context.checkpoint()
+            if self.settings and self.settings.get('services', 'youtube_enabled', True) is False:
+                raise
+            context.checkpoint()
+            track = (self.get_from_cache(f'soundcloud:{sc_url}')
+                     or self.get_from_cache(f'soundcloud:{target}')
+                     or self.get_track_metadata(target))
+            title = track.get('title')
+            artist = track.get('artist')
+            if not title or not artist:
+                raise
+            youtube = self._get_youtube_fallback()
+            candidates = youtube.search_sync(f'{artist} - {title}', limit=5)
+            context.checkpoint()
             match = next((item for item in candidates or [] if item.get('source_id')
-                          and same_recording(wanted, item)), None)
+                          and same_recording(track, item)), None)
             if match is None:
-                raise Exception('Резервный источник не содержит подходящей версии трека')
-            return yt.download_audio_sync(match['source_id'], output_dir, download_context=download_context)
-                
-        else:
-            dl_opts = {
-                **ydl_opts,
-                'quiet': True,
-                'no_warnings': True,
-                'format': 'bestaudio/best',
-                'outtmpl': os.path.join(output_dir, f'sc_{ts}.%(ext)s'),
-                # Same throughput settings as the YouTube path: without them
-                # yt-dlp fetches one connection with a small buffer, which is
-                # the slowest configuration available.
-                'concurrent_fragment_downloads': 4,
-                'http_chunk_size': 10 * 1024 * 1024,
-                'buffersize': 1024 * 1024,
-                'retries': 10,
-                'extractor_retries': 3,
-                'fragment_retries': 10,
-                'file_access_retries': 3,
-                'socket_timeout': 30,
-            }
-            if download_context:
-                dl_opts.update(download_context.ydl_options(output_dir))
-            with yt_dlp.YoutubeDL(dl_opts) as sc_ydl:
-                # The preview check just extracted the complete format list.
-                # Reprocess it with download options instead of repeating the
-                # page/API/manifest requests before transferring any bytes.
-                sc_info = sc_ydl.process_ie_result(info, download=True)
-                if sc_info:
-                    sc_file = sc_ydl.prepare_filename(sc_info)
-                    if os.path.exists(sc_file):
-                        return sc_file
-            if os.path.exists(output_path):
-                return output_path
-            # Check directory for sc_ file
-            for f in os.listdir(output_dir):
-                if f.startswith(download_context.stem if download_context else f'sc_{ts}') and not f.endswith('.part'):
-                    return os.path.join(output_dir, f)
-            # A missing file is a hard failure, not a path (the old silent
-            # `return output_path` made the loader blame a "missing" provider
-            # response instead of the failed extraction).
-            raise Exception('Провайдер soundcloud не создал аудиофайл')
+                raise RuntimeError('Резервный источник не содержит подходящей версии трека') from exc
+            return youtube.download_audio_sync(match['source_id'], output_dir, download_context=context)
 
     def get_related_tracks_sync(self, track_id_or_urn: str, limit: int = 15) -> list:
         """Fetch related tracks from SoundCloud API v2 with caching and graceful failover."""

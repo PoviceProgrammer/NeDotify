@@ -81,12 +81,11 @@ is inline at the point a name is constructed.
 - **Stream-cache names** are reduced to `[A-Za-z0-9_-]` with
   `re.sub(r'[^a-zA-Z0-9_-]', '_', …)`, one call site each: `core/api.py` (two
   on-disk cache lookups), `core/proxy.py` (proxy side).
-- **YouTube download names** are built by the same substitution into
-  `yt_<safe_id>_<ts>.<ext>`, as a yt-dlp `outtmpl` in
-  `services/youtube_service.py`. The *directory* is supplied separately by
-  `core/downloader.py`.
-- **Downloads** land in `~/.nedotify/downloads` (`core/downloader.py`) and are
-  named by id and timestamp, not by title.
+- **YouTube and SoundCloud partials** use the stable track identity in
+  `core/download_transfer.py::DownloadContext` so a paused job can resume.
+- **Finished downloads** land in the configured folder, defaulting to
+  `~/.nedotify/downloads`. `core/download_processing.py::safe_filename`
+  sanitizes the display name and adds the track id before publication.
 - `services/zapret_service.py: sanitize_zapret_args()` sanitises the *zapret
   command line*, not filenames. It is not a model for filename handling.
 

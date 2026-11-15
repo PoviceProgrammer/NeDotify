@@ -156,7 +156,7 @@ class DeezerService(BaseMusicService):
         if self.submit(run) is None:
             failure('Сервис остановлен')
 
-    def collection(self, kind, collection_id, limit=2000, require_complete=False):
+    def collection(self, kind, collection_id, limit=2000, require_complete=False, on_progress=None):
         if kind not in ('album', 'playlist'):
             raise DeezerError('Неизвестный тип коллекции Deezer')
         sid = self._id(collection_id)
@@ -182,6 +182,8 @@ class DeezerService(BaseMusicService):
                     seen.add(track['source_id'])
                     tracks.append(track)
                     fresh += 1
+                    if on_progress:
+                        on_progress(len(tracks))
             offset += len(items)
             if not page.get('next'):
                 if require_complete and offset < expected:

@@ -226,6 +226,9 @@ class AudioEngine:
                 if evt.wait(timeout=min(0.15, rem)):
                     return True
             return evt.is_set()
+        if source in ('hitmos', 'lmusic'):
+            service = getattr(self.app_core, source, None)
+            return service.resolve_audio(source_id) if service else None
         if source == "youtube":
             import threading
             url = None

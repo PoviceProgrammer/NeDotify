@@ -30,7 +30,7 @@ def test_search_offers_categories_without_a_platform_selector():
     assert 'search-platform-btn' not in html
     assert 'search-platform-dropdown' not in html
     categories = re.findall(r'<button class="type-filter-btn[^"]*" data-type="([^"]+)"', html)
-    assert categories == ['all', 'tracks', 'artists', 'albums', 'playlists']
+    assert categories == ['all', 'tracks', 'artists', 'playlists', 'albums']
 
 
 def test_lastfm_disclosure_does_not_claim_credentials_are_never_sent_to_lastfm():

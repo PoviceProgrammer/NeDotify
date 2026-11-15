@@ -99,8 +99,12 @@ def run():
     context = DownloadContext('diagnostic', 'soundcloud', report['source_id'], checkpoint, lambda *args: None)
     t = time.monotonic()
     if is_hls:
-        options = context.ydl_options(str(scratch))
-        options.update(quiet=True, no_warnings=True, logger=SilentLogger(), noplaylist=True)
+        options = {
+            'outtmpl': str(scratch / 'diagnostic.%(ext)s'),
+            'quiet': True, 'no_warnings': True, 'logger': SilentLogger(),
+            'skip_unavailable_fragments': False, 'socket_timeout': 10, 'fragment_retries': 2,
+            'progress_hooks': [lambda data: checkpoint()],
+        }
         with yt_dlp.YoutubeDL(options) as ydl:
             info = {'id': report['source_id'], 'title': 'route diagnostic', 'url': url,
                     'ext': 'm4a', 'protocol': 'm3u8_native'}

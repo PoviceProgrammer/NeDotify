@@ -155,7 +155,7 @@
 
     function syncProfile() {
         const name = document.getElementById('macos-profile-name');
-        if (name) name.textContent = window.settings?.personalization?.nickname || 'NeDotify';
+        if (name) name.textContent = window.settings?.personalization?.nickname || 'Soneth';
         const source = document.getElementById('home-avatar-img');
         const target = document.getElementById('macos-profile-avatar');
         if (target && source) {

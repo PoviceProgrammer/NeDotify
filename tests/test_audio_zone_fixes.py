@@ -406,31 +406,25 @@ def test_get_next_track_uses_the_queue_snapshot(api, core_ns):
 
 def test_youtube_download_steps_validate_the_file(tmp_path, monkeypatch):
     """A 0-byte file that matches the expected name must not be returned."""
-    import services.youtube_service as ytsvc
-    service = ytsvc.YouTubeService.__new__(ytsvc.YouTubeService)
+    from pathlib import Path
+    from core.download_transfer import IncompleteDownload
+    from services.youtube_service import YouTubeService
+
+    service = YouTubeService.__new__(YouTubeService)
     service.settings = None
-    service.logger = ytsvc.logger
+    files = []
 
-    class _Ydl:
-        def __init__(self, *a, **k):
-            pass
-        def __enter__(self):
-            return self
-        def __exit__(self, *a):
-            return False
-        def extract_info(self, url, download):
-            return {"id": "dQw4w9WgXcQ", "ext": "m4a", "title": "T"}
-        def prepare_filename(self, info):
-            path = str(tmp_path / "yt_dQw4w9WgXcQ_1.m4a")
-            open(path, "wb").close()  # 0 bytes
-            return path
+    def run(args, checkpoint, timeout, on_line):
+        template = args[args.index('-o') + 1]
+        output = Path(template.replace('%(id)s', 'dQw4w9WgXcQ').replace('%(ext)s', 'm4a'))
+        output.touch()
+        files.append(output)
+        on_line('nd-file:' + str(output))
 
-    monkeypatch.setattr(ytsvc, "_has_ytdlp", lambda: True)
-    monkeypatch.setattr(ytsvc, "_ytdlp", lambda: SimpleNamespace(YoutubeDL=_Ydl))
-    service._get_ydl_opts = lambda *a, **k: {}
-
-    with pytest.raises(Exception):
-        service.download_audio_sync("dQw4w9WgXcQ", str(tmp_path))
+    monkeypatch.setattr('core.download_processing.run_tool', run)
+    with pytest.raises(IncompleteDownload):
+        service.download_audio_sync('dQw4w9WgXcQ', str(tmp_path))
+    assert files and not files[0].exists()
 
 
 # --------------------------------------------------------------------------- #

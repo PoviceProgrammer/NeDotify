@@ -76,7 +76,7 @@ def test_complete_audio_cache_is_reused_before_conversion(downloader, tmp_db, co
     @contextmanager
     def lease(**options):
         assert options['require_yt_dlp'] is False, 'Cached audio must also work without an extractor'
-        yield {'ffmpeg_path': ffmpeg, 'yt_dlp_module': True}
+        yield {'ffmpeg_path': ffmpeg}
     core_ns.setup = SimpleNamespace(acquire_download_tools=lease)
     assert downloader.queue_download(track_id, 'youtube', 'cached')
     downloader._download_worker(downloader._queue.pop(0))

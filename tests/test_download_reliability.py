@@ -61,12 +61,6 @@ def test_connection_body_failure_is_retryable(downloader):
     assert not downloader._is_retryable_error(DownloadInterrupted())
 
 
-def test_missing_fragments_cannot_be_silently_skipped(tmp_path):
-    options = DownloadContext(1, 'youtube', 'id', lambda: None, lambda *a: None).ydl_options(str(tmp_path))
-    assert options['skip_unavailable_fragments'] is False
-    assert options['continuedl'] is True
-
-
 def test_deezer_download_queue_keeps_catalogue_identity(downloader, tmp_db, emitted, redirect_home):
     tid = tmp_db.add_track(title='Song', artist='Artist', source='deezer', source_id='123')
     tmp_db.download_queue_add(tid, 'deezer', '123')

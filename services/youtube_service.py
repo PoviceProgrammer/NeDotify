@@ -1183,128 +1183,41 @@ class YouTubeService(BaseMusicService):
         self.invalidate_stream_cache_keys(*keys)
 
     def download_audio_sync(self, source_id: str, output_dir: str, download_context=None) -> str:
-        """Download audio synchronously from YouTube via yt-dlp."""
-        import os
-        import time
-        if not _has_ytdlp():
-            raise Exception("yt-dlp не установлен")
+        """Download audio through the same CLI worker as the download queue."""
+        from core.download_processing import ToolExecutionError
+        from core.download_transfer import DownloadContext
 
-        clean_id = re.sub(r'[^a-zA-Z0-9_-]', '_', str(source_id))
-        ts = int(time.time())
-        out_template = os.path.join(output_dir, f"yt_{clean_id}_{ts}.%(ext)s")
-
-        if str(source_id).startswith("http") and not _is_allowed_youtube_target(source_id):
-            raise Exception("Недопустимый адрес YouTube")
-        url = source_id if str(source_id).startswith("http") or str(source_id).startswith("ytsearch") else f"https://www.youtube.com/watch?v={source_id}"
-
-        # Playback already resolved this catalogue query to a recording. Reuse
-        # its identity, but extract fresh formats for a full-quality download.
-        if str(source_id).startswith('ytsearch'):
-            cached = self.get_from_cache(_yt_cache_key(source_id)) or {}
+        target = str(source_id or '').strip()
+        if not _is_allowed_youtube_target(target):
+            raise ValueError('Недопустимый адрес YouTube')
+        if target.startswith('ytsearch1:'):
+            cached = self.get_from_cache(_yt_cache_key(target)) or {}
             resolved_id = str(cached.get('source_id') or '')
             if _YT_VIDEO_ID_RE.fullmatch(resolved_id):
-                url = f'https://www.youtube.com/watch?v={resolved_id}'
+                target = resolved_id
+        if _YT_VIDEO_ID_RE.fullmatch(target):
+            target = f'https://www.youtube.com/watch?v={target}'
 
-        ydl_opts = self._get_ydl_opts("bestaudio/best", fallback=True)
-        from utils.audio_validation import ffprobe_path
-        if not ffprobe_path():
-            # Standalone installs need a container that the bundled Mutagen
-            # can validate. Preserve the best available bitrate within it.
-            ydl_opts['format'] = 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio[ext=opus]/bestaudio[ext=ogg]/bestaudio/best'
-        ydl_opts.update({
-            "outtmpl": out_template,
-            "skip_download": False,
-            # File transfers can take longer than stream URL resolution.
-            "socket_timeout": 30,
-            "retries": 5,
-            "fragment_retries": 5,
-            "quiet": True,
-            # Keep yt-dlp's own warnings off the console but let the logger see
-            # them. With no_warnings alone the "Unable to fetch GVS PO Token"
-            # and "no PO token extracted" messages that explain
-            # "The page needs to be reloaded" never appear anywhere.
-            "no_warnings": False,
-            "logger": self.logger,
-            # A previous partial download of the same id must not be reused:
-            # yt-dlp skips an existing file by default, so a 0-byte or
-            # truncated leftover silently became "the download".
-            "overwrites": True,
-        })
-        if download_context:
-            ydl_opts.update(download_context.ydl_options(output_dir))
-
-        # Anonymous access is the fastest path for public downloads too.
-        # Retain configured credentials for content that actually needs them.
-        authenticated_opts = ydl_opts.copy()
-        if self.settings:
-            browser = self.settings.get('auth', 'browser_cookies', 'none')
-            cookie_file = self.settings.get('auth', 'cookies_file_path', '')
-            if browser and browser != 'none':
-                authenticated_opts['cookiesfrombrowser'] = (browser,)
-            if cookie_file and os.path.exists(cookie_file):
-                authenticated_opts['cookiefile'] = cookie_file
-        ydl_opts.pop('cookiesfrombrowser', None)
-        ydl_opts.pop('cookiefile', None)
-
-        with _youtube_downloader(ydl_opts) as ydl:
-            try:
-                info = ydl.extract_info(url, download=True)
-                if info:
-                    with self._ydl_lock:
-                        pass  # Anonymous preference applies only to this request
-            except Exception as exc:
-                has_cookies = 'cookiesfrombrowser' in authenticated_opts or 'cookiefile' in authenticated_opts
-                retryable = any(mark in str(exc).lower() for mark in
-                                (*_YT_GATING_MARKS, 'database', 'locked', 'sqlite', 'profile'))
-                if not has_cookies or not retryable:
-                    raise _yt_gating_error(exc) from exc
+        context = download_context or DownloadContext.standalone('youtube', source_id, self.settings)
+        try:
+            path = context.download_executable(target, output_dir)
+        except ToolExecutionError as exc:
+            browser = self.settings.get('auth', 'browser_cookies', 'none') if self.settings else None
+            cookies = self.settings.get('auth', 'cookies_file_path', '') if self.settings else None
+            if (exc.authentication_required or exc.format_unavailable) and (
+                (browser and browser != 'none') or (cookies and os.path.isfile(cookies))
+            ):
                 try:
-                    with _youtube_downloader(authenticated_opts) as clean_ydl:
-                        info = clean_ydl.extract_info(url, download=True)
-                except Exception as clean_exc:
-                    raise _yt_gating_error(clean_exc) from clean_exc
-            if not info:
-                raise Exception("Не удалось извлечь информацию о треке YouTube")
-            if download_context:
-                download_context.checkpoint()
-            if info.get('entries'):
-                info = next((entry for entry in info['entries'] if entry), None)
-                if not info:
-                    raise Exception("Не удалось найти запись YouTube")
-            if _is_storyboards_only(info):
-                raise Exception(_YT_GATED_MSG)
-
-            # 1. Check prepare_filename
-            downloaded_file = ydl.prepare_filename(info)
-            if os.path.exists(downloaded_file):
-                # Uniform validation on every file-return path (BUG-A1-018):
-                # steps 1-3 used to hand back whatever matched the name.
-                _require_audio_file(downloaded_file)
-                return downloaded_file
-
-            # 2. Check info ext
-            ext = info.get('ext', 'm4a')
-            cand = os.path.join(output_dir, f"yt_{clean_id}_{ts}.{ext}")
-            if os.path.exists(cand):
-                _require_audio_file(cand)
-                return cand
-
-            # 3. Check common audio extensions
-            for e in (".mp3", ".m4a", ".webm", ".opus", ".aac", ".ogg"):
-                cand = os.path.join(output_dir, f"yt_{clean_id}_{ts}{e}")
-                if os.path.exists(cand):
-                    _require_audio_file(cand)
-                    return cand
-
-            # 4. Check directory for file starting with prefix
-            prefix = download_context.stem if download_context else f"yt_{clean_id}_{ts}"
-            for fname in os.listdir(output_dir):
-                if fname.startswith(prefix) and not fname.endswith('.part'):
-                    found = os.path.join(output_dir, fname)
-                    _require_audio_file(found)
-                    return found
-
-            raise Exception("Файл не был найден после загрузки с YouTube")
+                    path = context.download_executable(target, output_dir, authenticated=True)
+                except ToolExecutionError as auth_error:
+                    if auth_error.authentication_required or auth_error.format_unavailable:
+                        raise RuntimeError(_YT_GATED_MSG) from auth_error
+                    raise
+            elif exc.authentication_required or exc.format_unavailable:
+                raise RuntimeError(_YT_GATED_MSG) from exc
+            else:
+                raise
+        return _require_audio_file(path)
 
     def download_audio(self, *args, **kwargs):
         """Deprecated. Kept for API compatibility; see download_audio_sync.
@@ -1315,7 +1228,5 @@ class YouTubeService(BaseMusicService):
         download_audio_sync instead.
         """
         raise NotImplementedError(
-            "download_audio() is deprecated: use download_audio_sync(), which "
-            "shares _get_ydl_opts() with the streaming path and verifies the "
-            "downloaded file."
+            "download_audio() is deprecated: use download_audio_sync()."
         )

@@ -322,7 +322,7 @@ export function onSearchResults(data) {
                 };
                 allResults = allResults
                     .map((t, i) => [t, i])
-                    .sort((a, b) => (rank(a[0]) - rank(b[0])) || (a[1] - b[1]))
+                    .sort((a, b) => (rank(a[0]) - rank(b[0])) || (Number(Boolean(a[0].external_only)) - Number(Boolean(b[0].external_only))) || (a[1] - b[1]))
                     .map(([t]) => t);
             }
             renderResults(allResults);
@@ -346,13 +346,18 @@ function renderResults(tracks) {
         return;
     }
 
+    if (currentType === 'all') {
+        renderSearchOverview(container, tracks);
+        return;
+    }
+
     const renderKey = `${lastResultKey}|${currentType}`;
     const trackList = container.querySelector('.track-list');
     const isSameRequest = container._renderKey === renderKey;
     container._renderKey = renderKey;
 
 
-    if (['all', 'tracks'].includes(currentType) && isSameRequest && trackList) {
+    if (currentType === 'tracks' && isSameRequest && trackList) {
         const children = trackList.children;
         let canAppend = children.length > 0 && children.length <= tracks.length;
         if (canAppend) {
@@ -417,26 +422,105 @@ function renderResults(tracks) {
     }
     if (currentType === 'artists') return;
 
-    // Suggestion banner for artist profile in 'all' view
-    if (currentType === 'all' && currentSearchQuery) {
-        const artistSuggest = document.createElement('div');
-        artistSuggest.style.cssText = 'padding: 12px 16px; margin-bottom: 16px; border-radius: 14px; background: rgba(var(--primary-rgb), 0.08); border: 1px solid rgba(var(--primary-rgb), 0.15); display: flex; justify-content: space-between; align-items: center; animation: fadeIn 0.3s ease;';
-        artistSuggest.innerHTML = `
-            <div style="display:flex; align-items:center; gap:10px; font-size:13px; color:var(--text-main)">
-                <i data-lucide="user" style="width:16px;height:16px;color:var(--primary)"></i>
-                <span>Посмотреть профиль исполнителя <strong>"${escapeHtml(currentSearchQuery)}"</strong></span>
-            </div>
-            <button class="type-filter-btn active" style="margin: 0; padding: 4px 12px; font-size:11px;">Открыть</button>
-        `;
-        artistSuggest.querySelector('button').addEventListener('click', () => {
-            // S4-001: the banner invites a profile for a free-text query, so the
-            // click must go through the candidate confirmation, not auto-open.
-            searchArtistProfile(currentSearchQuery, null, { require_candidates: true });
+    renderSearchResultsBatch(container, displayTracks.filter(item => !item.type || item.type === 'track'));
+}
+
+function searchSection(container, title, category) {
+    const section = document.createElement('section');
+    section.className = 'search-result-section';
+    const header = document.createElement('header');
+    const heading = document.createElement('h2');
+    heading.textContent = title;
+    header.appendChild(heading);
+    if (category) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = 'Смотреть все';
+        button.addEventListener('click', () => {
+            document.querySelector(`.type-filter-btn[data-type="${category}"]`)?.click();
         });
-        container.appendChild(artistSuggest);
+        header.appendChild(button);
+    }
+    section.appendChild(header);
+    container.appendChild(section);
+    return section;
+}
+
+function renderSearchOverview(container, results) {
+    container.innerHTML = '';
+    renderCorrectionContext(container);
+    renderOfflineSearchNote(container);
+    const tracks = results.filter(item => !item.type || item.type === 'track');
+    const top = tracks[0];
+    const ordered = top ? [top, ...tracks.filter(item => item !== top)] : [];
+    const playOrder = ordered.filter(item => !item.external_only);
+
+    function appendTracks(section, rows) {
+        const list = document.createElement('div');
+        list.className = 'track-list';
+        rows.forEach((track, index) => {
+            const queueIndex = playOrder.indexOf(track);
+            const row = createTrackElement(track, queueIndex < 0 ? index : queueIndex, playOrder, getCurrentTrack());
+            row.classList.add('search-hit-row');
+            list.appendChild(row);
+        });
+        section.appendChild(list);
     }
 
-    renderSearchResultsBatch(container, displayTracks);
+    if (top) {
+        const section = searchSection(container, 'Лучший результат');
+        section.classList.add('search-top-result');
+        appendTracks(section, [top]);
+        const artist = top.artists?.[0];
+        const name = String((typeof artist === 'string' ? artist : artist?.name) || top.artist || '').trim();
+        if (/[\p{L}\p{N}]/u.test(name) && !/^(unknown|неизвестный)(\s|$)/i.test(name)) {
+            const profile = document.createElement('button');
+            profile.type = 'button';
+            profile.className = 'search-profile-result';
+            profile.innerHTML = `${artistAvatarHtml(name)}<span><strong>${escapeHtml(name)}</strong><small>Исполнитель</small></span>`;
+            profile.addEventListener('click', () => searchArtistProfile(name, null, { require_candidates: true }));
+            section.appendChild(profile);
+        }
+    }
+
+    const more = ordered.slice(1);
+    if (more.length) appendTracks(searchSection(container, 'Треки', 'tracks'), more.slice(0, 3));
+
+    for (const [kind, title, open] of [
+        ['playlist', 'Плейлисты', openPlaylistModal],
+        ['album', 'Альбомы', openAlbumModal],
+    ]) {
+        const items = results.filter(item => item.type === kind);
+        if (!items.length) continue;
+        const section = searchSection(container, title, kind + 's');
+        items.slice(0, 3).forEach(item => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'search-collection-result';
+            const cover = item.cover_url || item.cover_path || item.cover || '';
+            button.innerHTML = `<span class="search-collection-cover">${cover ? `<img src="${escapeHtml(cover)}" alt="" loading="lazy">` : '<i data-lucide="disc"></i>'}</span>
+                <span><strong>${escapeHtml(item.title || item.name)}</strong><small>${escapeHtml(item.author || item.artist || '')}${item.track_count ? ` · ${Number(item.track_count)} треков` : ''}</small></span>`;
+            button.addEventListener('click', () => open(item));
+            section.appendChild(button);
+        });
+    }
+
+    if (more.length > 3) {
+        const section = searchSection(container, 'Другие результаты');
+        appendTracks(section, more.slice(3, visibleSearchCount));
+        if (visibleSearchCount < more.length) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'home-pill search-more-results';
+            button.textContent = 'Показать ещё';
+            button.addEventListener('click', () => {
+                visibleSearchCount += SEARCH_BATCH_SIZE;
+                renderSearchOverview(container, results);
+            });
+            section.appendChild(button);
+        }
+    }
+    renderIcons(container);
 }
 
 const SEARCH_BATCH_SIZE = 12;
@@ -464,7 +548,11 @@ function renderSearchResultsBatch(container, displayTracks, replace = false) {
     list.replaceChildren();
     const fragment = document.createDocumentFragment();
     const end = Math.min(displayTracks.length, visibleSearchCount);
-    for (let index = 0; index < end; index++) fragment.appendChild(createTrackElement(displayTracks[index], index, displayTracks, getCurrentTrack()));
+    for (let index = 0; index < end; index++) {
+        const row = createTrackElement(displayTracks[index], index, displayTracks, getCurrentTrack());
+        row.classList.add('search-hit-row');
+        fragment.appendChild(row);
+    }
     list.appendChild(fragment);
     renderIcons(list);
     if (end < displayTracks.length) {
@@ -474,31 +562,7 @@ function renderSearchResultsBatch(container, displayTracks, replace = false) {
         more.addEventListener('click',()=>{visibleSearchCount += SEARCH_BATCH_SIZE;renderSearchResultsBatch(container,displayTracks);});
         container.appendChild(more);
     }
-    if (currentType === 'all') {
-        const artists = new Map();
-        for (const track of displayTracks) {
-            const people = track.artists?.length ? track.artists : [{name:track.artist}];
-            for (const person of people) {
-                const name = typeof person === 'string' ? person : person.name;
-                if (!name || artists.size >= 8) continue;
-                const key = `${track.source}:${person.id || person.browseId || name.toLowerCase()}`;
-                if (!artists.has(key)) artists.set(key,{name,track});
-            }
-        }
-        if (artists.size) {
-            const shelf = document.createElement('section');
-            shelf.className = 'search-artists-shelf';
-            shelf.innerHTML = '<h2>Исполнители</h2><div class="search-artists-cards"></div>';
-            for (const {name,track} of artists.values()) {
-                const button = document.createElement('button');
-                button.className = 'search-artist-card';
-                button.innerHTML = `${artistAvatarHtml(name)}<strong>${escapeHtml(name)}</strong>`;
-                button.addEventListener('click',()=>searchArtistProfile(name,{source:track.source,source_id:track.source_id}));
-                shelf.lastElementChild.appendChild(button);
-            }
-            container.appendChild(shelf);
-        }
-    }
+
 }
 
 function renderAlbumGrid(albums, container) {
@@ -534,7 +598,7 @@ function renderAlbumGrid(albums, container) {
 
         const card = document.createElement('div');
         card.className = 'feed-card album-card';
-        card.style.cssText = 'padding: 14px; border-radius: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative;';
+        card.style.cssText = 'padding: 14px; border-radius: 16px; background: var(--search-card,rgba(255,255,255,0.05)); border: 1px solid var(--search-card-edge,rgba(255,255,255,0.1)); display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative;';
 
         card.innerHTML = `
             <div class="feed-card-cover album-cover-wrap fallback-gradient" style="width: 100%; aspect-ratio: 1/1; border-radius: 12px; overflow: hidden; background: ${grad}; display: flex; align-items: center; justify-content: center; position: relative; box-shadow: 0 8px 20px rgba(0,0,0,0.35);">
@@ -547,8 +611,8 @@ function renderAlbumGrid(albums, container) {
                 </div>
             </div>
             <div style="display:flex; flex-direction:column; gap:3px; overflow:hidden;">
-                <div style="font-weight: 700; font-size: 14px; color: #ffffff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
-                <div style="font-size: 12px; color: var(--text-sec); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(artist)}</div>
+                <div style="font-weight: 700; font-size: 14px; color: var(--search-card-text,#fff); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+                <div style="font-size: 12px; color: var(--search-card-muted,var(--text-sec)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(artist)}</div>
                 <div style="font-size: 11px; color: var(--primary); font-weight:600; margin-top:2px;">${escapeHtml(metaStr)}</div>
             </div>
         `;
@@ -571,13 +635,13 @@ function renderAlbumGrid(albums, container) {
         // Hover effects
         card.addEventListener('mouseenter', () => {
             card.style.transform = 'translateY(-4px)';
-            card.style.background = 'rgba(255,255,255,0.08)';
+            card.style.background = 'var(--search-card-hover,rgba(255,255,255,0.08))';
             const overlay = card.querySelector('.album-play-overlay');
             if (overlay) overlay.style.opacity = '1';
         });
         card.addEventListener('mouseleave', () => {
             card.style.transform = 'translateY(0)';
-            card.style.background = 'rgba(255,255,255,0.05)';
+            card.style.background = 'var(--search-card,rgba(255,255,255,0.05))';
             const overlay = card.querySelector('.album-play-overlay');
             if (overlay) overlay.style.opacity = '0';
         });
@@ -757,7 +821,7 @@ export function renderPlaylistGrid(playlists, container) {
 
     playlists.forEach((pl, idx) => {
         const title = pl.title || pl.name || 'Плейлист';
-        const author = pl.author || pl.artist || 'NeDotify';
+        const author = pl.author || pl.artist || 'Soneth';
         const cover = pl.cover_url || pl.cover_path || pl.cover || '';
         const trackCount = pl.track_count || 10;
         const trackCountStr = typeof trackCount === 'number' ? `${trackCount} треков` : 'Плейлист';
@@ -770,7 +834,7 @@ export function renderPlaylistGrid(playlists, container) {
         card.dataset.id = pl.id || '';
         card.dataset.sourceId = pl.source_id || pl.id || '';
         card.dataset.source = pl.source || 'youtube';
-        card.style.cssText = 'padding: 14px; border-radius: 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative;';
+        card.style.cssText = 'padding: 14px; border-radius: 16px; background: var(--search-card,rgba(255,255,255,0.05)); border: 1px solid var(--search-card-edge,rgba(255,255,255,0.1)); display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: transform 0.2s, background 0.2s, box-shadow 0.2s; position: relative;';
 
         card.innerHTML = `
             <div class="feed-card-cover playlist-cover-wrap fallback-gradient" style="width: 100%; aspect-ratio: 1/1; border-radius: 12px; overflow: hidden; background: ${grad}; display: flex; align-items: center; justify-content: center; position: relative; box-shadow: 0 8px 20px rgba(0,0,0,0.35);">
@@ -783,8 +847,8 @@ export function renderPlaylistGrid(playlists, container) {
                 </div>
             </div>
             <div style="display:flex; flex-direction:column; gap:3px; overflow:hidden;">
-                <div style="font-weight: 700; font-size: 14px; color: #ffffff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
-                <div style="font-size: 12px; color: var(--text-sec); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(author)}</div>
+                <div style="font-weight: 700; font-size: 14px; color: var(--search-card-text,#fff); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+                <div style="font-size: 12px; color: var(--search-card-muted,var(--text-sec)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(author)}</div>
                 <div style="font-size: 11px; color: var(--primary); font-weight:600; margin-top:2px;">${escapeHtml(trackCountStr)}</div>
             </div>
         `;
@@ -807,13 +871,13 @@ export function renderPlaylistGrid(playlists, container) {
         // Hover effects
         card.addEventListener('mouseenter', () => {
             card.style.transform = 'translateY(-4px)';
-            card.style.background = 'rgba(255,255,255,0.08)';
+            card.style.background = 'var(--search-card-hover,rgba(255,255,255,0.08))';
             const overlay = card.querySelector('.playlist-play-overlay');
             if (overlay) overlay.style.opacity = '1';
         });
         card.addEventListener('mouseleave', () => {
             card.style.transform = 'translateY(0)';
-            card.style.background = 'rgba(255,255,255,0.05)';
+            card.style.background = 'var(--search-card,rgba(255,255,255,0.05))';
             const overlay = card.querySelector('.playlist-play-overlay');
             if (overlay) overlay.style.opacity = '0';
         });
@@ -888,7 +952,7 @@ export async function openPlaylistModal(playlist) {
                 <img src="${escapeHtml(playlist.cover_url || playlist.cover || playlist.cover_path || '')}" alt="" loading="lazy" decoding="async" data-hide-on-error="1" style="width:110px; height:110px; border-radius:12px; object-fit:cover; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
                 <div style="display:flex; flex-direction:column; gap:6px; flex:1; overflow:hidden;">
                     <div style="font-size:20px; font-weight:800; color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(playlist.title || playlist.name || 'Плейлист')}</div>
-                    <div style="font-size:14px; color:var(--text-sec);">${escapeHtml(playlist.author || playlist.artist || 'NeDotify')}</div>
+                    <div style="font-size:14px; color:var(--text-sec);">${escapeHtml(playlist.author || playlist.artist || 'Soneth')}</div>
                     <div style="font-size:12px; color:var(--text-sec); opacity:0.8;">${playlist.track_count ? escapeHtml(String(playlist.track_count)) + ' треков' : 'Плейлист'}</div>
                     <div style="margin-top:8px; display:flex; gap:10px;">
                         <button id="btn-play-full-playlist" style="padding:8px 18px; border-radius:24px; border:none; background:var(--primary); color:#fff; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;">
@@ -1097,7 +1161,7 @@ function runSearchQuery(query, keepCorrection = false) {
     visibleSearchCount = 12;
     searchPending = true;
     const requestId = activeSearchRequestId = `search-${++searchRequestGeneration}`;
-    Promise.resolve().then(()=>api('search',query,'all',type==='all'?null:type,requestId)).catch(()=>{
+    Promise.resolve().then(()=>api('search',query,'all',type==='all'?null:type,requestId,type==='all')).catch(()=>{
         if(requestId!==activeSearchRequestId || query!==currentSearchQuery || type!==currentType) return;
         searchPending = false;
         const container=document.getElementById('search-results');

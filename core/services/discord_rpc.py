@@ -215,18 +215,18 @@ class DiscordRPCService:
 
     def _payload(self, snapshot, *, fallback=False):
         if not snapshot or not snapshot['track'] or snapshot['state'] not in ('playing','paused'):
-            return None if self._option('discord_clear_on_stop') else dict(details='NeDotify', state='Воспроизведение остановлено')
+            return None if self._option('discord_clear_on_stop') else dict(details='Soneth', state='Воспроизведение остановлено')
         track = snapshot['track']
         def text(value, default):
             cleaned = str(value or '').strip()
             return (default if cleaned.lower() in ('','null','undefined','none') else cleaned)[:128].ljust(2)
-        payload = dict(large_image=self.FALLBACK_ASSET, large_text='NeDotify Player')
+        payload = dict(large_image=self.FALLBACK_ASSET, large_text='Soneth Player')
         try:
             from pypresence.types import ActivityType
             payload['activity_type'] = ActivityType.LISTENING
         except ImportError:
             pass  # Older optional clients can still publish compatible metadata.
-        payload['details'] = text(track.get('title'), 'Неизвестный трек') if self._option('discord_show_title') else 'NeDotify'
+        payload['details'] = text(track.get('title'), 'Неизвестный трек') if self._option('discord_show_title') else 'Soneth'
         if self._option('discord_show_artist'):
             artist = text(track.get('artist'), 'Неизвестный исполнитель')
             payload['state'] = (artist + (' · На паузе' if snapshot['state']=='paused' else ''))[:128]

@@ -1,3 +1,4 @@
+import { importPlaylist } from './playlist-import-progress.js';
 import { initLibraryView, loadLibraryOverview, updateLibraryPlaylists, updateLibraryFavoriteCount, updateLibraryHero, decorateLibraryRow, renderLibraryEmpty, renderLibraryFailure, openPlaylistActions } from './library-view.js';
 import { createLibraryVirtualList } from './library-virtual-list.js';
 import { initPlaylistRecommendations, showPlaylistRecommendations, hidePlaylistRecommendations } from './playlist-recommendations.js';
@@ -156,6 +157,12 @@ export function initLibrary() {
         });
     }
 
+    window.addEventListener('nedotify:playlist_availability_updated', ({detail}) => {
+        if (currentActiveSection === 'playlist' && String(currentSelectedPlaylistData?.id) === String(detail?.playlist_id)) {
+            refreshActiveLibraryView();
+        }
+    });
+
     const closeIP = () => {
         if (modalIP) modalIP.style.display = 'none';
         closeModalFocusTrap(modalIP);
@@ -187,11 +194,8 @@ export function initLibrary() {
 
         if (window.pywebview?.api?.import_external_playlist) {
             try {
-                const res = await window.pywebview.api.import_external_playlist(url, name);
+                const res = await importPlaylist(url, name);
                 if (res && res.success) {
-                    window.dispatchEvent(new CustomEvent('nedotify:toast', { 
-                        detail: { msg: `Импортирован плейлист "${res.playlist_name || res.name || 'Импортированный'}" (${res.imported_count || res.count || 0} треков)`, type: 'success' } 
-                    }));
                     closeIP();
                     if (urlInput) urlInput.value = '';
                     if (nameInput) nameInput.value = '';

@@ -1158,6 +1158,9 @@ class DatabaseManager:
 
             cursor.execute('ALTER TABLE playlists ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0')
 
+        if 'availability' not in {row['name'] for row in cursor.execute('PRAGMA table_info(playlist_tracks)')}:
+            cursor.execute('ALTER TABLE playlist_tracks ADD COLUMN availability TEXT')
+
         if 'category' not in {row['name'] for row in cursor.execute('PRAGMA table_info(settings)')}:
 
             cursor.execute("ALTER TABLE settings ADD COLUMN category TEXT DEFAULT 'general'")
@@ -5256,7 +5259,7 @@ class DatabaseManager:
 
             """
 
-            SELECT t.*, pt.position, pt.added_at as added_to_playlist_at
+            SELECT t.*, pt.position, pt.added_at as added_to_playlist_at, pt.availability
 
             FROM playlist_tracks pt
 
@@ -5275,6 +5278,13 @@ class DatabaseManager:
         return [dict(row) for row in cursor.fetchall()]
 
 
+
+    def set_playlist_track_availability(self, playlist_id, track_id, status):
+        with self._write_lock, self.conn:
+            self.conn.execute(
+                "UPDATE playlist_tracks SET availability=? WHERE playlist_id=? AND track_id=? AND availability='pending'",
+                (status, playlist_id, track_id),
+            )
 
     def rename_playlist(self, playlist_id: int, name: str) -> bool:
         """Rename only a user collection, preserving its identity and members."""
@@ -6329,7 +6339,7 @@ class DatabaseManager:
 
 
 
-    def import_playlist_atomic(self, name, description, tracks):
+    def import_playlist_atomic(self, name, description, tracks, *, verify=False):
 
         """Create/reuse a playlist and import every row in one transaction."""
 
@@ -6407,7 +6417,7 @@ class DatabaseManager:
                     if row is None and file_path:
                         row=cursor.execute('SELECT id FROM tracks WHERE file_path=? LIMIT 1',(file_path,)).fetchone()
 
-                    if row is None and name_is_meaningful(title, artist):
+                    if row is None and not verify and name_is_meaningful(title, artist):
 
                         row = cursor.execute('SELECT id FROM tracks WHERE '+TRACK_IDENTITY_SQL+' LIMIT 1', (title,artist)).fetchone()
 
@@ -6433,9 +6443,14 @@ class DatabaseManager:
 
                         position += 1
 
-                        cursor.execute('INSERT INTO playlist_tracks(playlist_id,track_id,position) VALUES (?,?,?)', (playlist_id,track_id,position))
+                        cursor.execute('INSERT INTO playlist_tracks(playlist_id,track_id,position,availability) VALUES (?,?,?,?)',
+                                       (playlist_id, track_id, position, 'pending' if verify else None))
 
                         imported += 1
+                    elif verify:
+                        cursor.execute("""UPDATE playlist_tracks SET availability='pending'
+                            WHERE playlist_id=? AND track_id=? AND (availability IS NULL OR availability='unknown')""",
+                                       (playlist_id, track_id))
 
                 cursor.execute('UPDATE playlists SET updated_at=CURRENT_TIMESTAMP WHERE id=?', (playlist_id,))
 

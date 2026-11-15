@@ -98,6 +98,7 @@ PUBLIC_METHODS = frozenset({
     'minimize_window',
     'next_track',
     'open_local_file',
+    'open_music_source',
     'open_release_page',
     'pause_download',
     'play_next',

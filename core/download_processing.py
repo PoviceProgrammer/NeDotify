@@ -1,6 +1,6 @@
 """Output policy, cancellable postprocessing and tags for the existing queue.
 
-Architectural reference: Riff v43.2.2 src/server/server.js handleDownload:
+Architectural reference: Riff src/server/server.js handleDownload:
 reuse verified audio, explicit output format, embed metadata, publish on success.
 Implementation is native Python; no Electron or second download manager.
 """
@@ -18,9 +18,31 @@ class ToolExecutionError(RuntimeError):
     def __init__(self, returncode, diagnostic):
         match = re.search(r'(?i)HTTP(?: Error)?\s+(\d{3})', diagnostic)
         self.code = int(match.group(1)) if match else None
+        detail = diagnostic.lower()
+        self.authentication_required = any(text in detail for text in (
+            'sign in to confirm', 'confirm you are not a bot', "confirm you're not a bot",
+            'needs to be reloaded', 'login required',
+        ))
+        self.format_unavailable = any(text in detail for text in (
+            'requested format is not available', 'no video formats found', 'only image formats are available',
+        ))
+        self.media_unavailable = self.code in (404, 410) or any(text in detail for text in (
+            'private video', 'video unavailable', 'has been removed', 'does not exist',
+        ))
+        self.drm_protected = 'drm protected' in detail
         self.retryable = self.code in (408, 429, 500, 502, 503, 504) or any(
-            text in diagnostic.lower() for text in ('timed out', 'connection reset', 'temporary failure'))
-        super().__init__(f'Источник вернул HTTP {self.code}' if self.code else f'Аудиокомпонент завершился с кодом {returncode}')
+            text in detail for text in ('timed out', 'connection reset', 'temporary failure', 'handshake'))
+        if self.drm_protected:
+            message = 'Трек защищён DRM'
+        elif self.media_unavailable:
+            message = 'Трек недоступен у источника'
+        elif self.format_unavailable:
+            message = 'Источник не предоставил подходящий аудиоформат'
+        elif self.code:
+            message = f'Источник вернул HTTP {self.code}'
+        else:
+            message = f'Аудиокомпонент завершился с кодом {returncode}'
+        super().__init__(message)
 
 
 @dataclass(frozen=True)

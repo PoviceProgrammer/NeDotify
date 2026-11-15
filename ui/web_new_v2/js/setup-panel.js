@@ -51,7 +51,7 @@ export async function openSetupPanel({firstRun=false}={}) {
     const panel=document.createElement('div');panel.id='setup-engine-panel';
     panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-labelledby','setup-title');
     panel.innerHTML=`<section class="setup-shell">
-      <header><div><span class="setup-eyebrow">NeDotify</span><h1 id="setup-title">${firstRun?'Подготовим музыку':'Компоненты и скачивание'}</h1></div><button type="button" id="setup-close" aria-label="Закрыть подготовку">×</button></header>
+      <header><div><span class="setup-eyebrow">Soneth</span><h1 id="setup-title">${firstRun?'Подготовим музыку':'Компоненты и скачивание'}</h1></div><button type="button" id="setup-close" aria-label="Закрыть подготовку">×</button></header>
       <p class="setup-lead">Проверим инструменты, выберем папку и качество. Библиотека и плейлисты сохранятся.</p>
       <nav aria-label="Этапы подготовки"><button type="button" data-setup-step="1">1 · Компоненты</button><button type="button" data-setup-step="2">2 · Скачивание</button><button type="button" data-setup-step="3">3 · Готовность</button></nav>
       <div class="setup-scroll">

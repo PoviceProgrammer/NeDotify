@@ -1400,7 +1400,7 @@ export function applyCustomBg(bgDataUrl, blurPx = 0, dimPct = 30) {
 
 
 const ICON_PACKS = [
-    { id: 'aura_neon', name: 'AURA Neon', icon: 'music', desc: 'Классическая нота NeDotify в неоновом розовoм свечении', color: '#ff2d55' },
+    { id: 'aura_neon', name: 'AURA Neon', icon: 'music', desc: 'Классическая нота Soneth в неоновом розовoм свечении', color: '#ff2d55' },
     { id: 'cyber_disc', name: 'Cyber Disc', icon: 'disc', desc: 'Киберпанк винил с фиолетовой неоновой подсветкой', color: '#a855f7' },
     { id: 'flame_beats', name: 'Flame Beats', icon: 'flame', desc: 'Огненный ритм для чартов и горячих хит-парадов', color: '#f97316' },
     { id: 'cosmic_star', name: 'Cosmic Sound', icon: 'sparkles', desc: 'Космический саундскейп и звездный блеск', color: '#38bdf8' },
@@ -1592,7 +1592,7 @@ export function applyIconPack(packId) {
 
     // Logo. Write into the .sidebar-logo-icon slot only: the rail title is the
     // collapse/expand toggle and owns two .sidebar-logo-text variants
-    // ("NeDotify" / the collapsed "N"). Replacing logoEl.innerHTML wholesale
+    // ("Soneth" / the collapsed "N"). Replacing logoEl.innerHTML wholesale
     // used to leave a bare text node here, which silently destroyed that
     // structure the first time a user switched icon packs.
     const logoEl = document.querySelector('.sidebar-logo');

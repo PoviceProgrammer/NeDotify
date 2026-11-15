@@ -131,6 +131,9 @@ class AppCore:
         self.youtube = YouTubeService(self.settings)
         self.vk = VKService(self.settings)
         self.spotify = SpotifyService(self.settings)
+        from services.web_music_service import WebMusicService
+        self.hitmos = WebMusicService("hitmos")
+        self.lmusic = WebMusicService("lmusic")
         self.deezer = DeezerService(self.settings, providers=lambda source: getattr(self, source))
         self.lyrics = LyricsService(self.settings, cache_path=os.path.join(
             os.path.dirname(os.path.abspath(self.db.db_path)), 'lyrics_cache.db'), db=self.db)
@@ -477,6 +480,14 @@ class AppCore:
             elif source == "yandex":
                 url = f"https://music.yandex.ru/track/{source_id}"
                 service = self.yandex
+            elif source in ('hitmos', 'lmusic'):
+                stream = getattr(self, source).resolve_audio(source_id)
+                if stream:
+                    self.resolver.refresh(source, source_id, stream)
+                    callback(stream, {})
+                else:
+                    on_error('На сайте нет доступного аудиопотока')
+                return
             elif source == 'deezer':
                 url = str(source_id)
                 service = self.deezer

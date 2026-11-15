@@ -40,23 +40,13 @@ def test_is_storyboards_only():
 
 
 def test_download_maps_gated_extraction_error(tmp_path, monkeypatch):
-    import services.youtube_service as ys
+    from core.download_processing import ToolExecutionError
+    from core.download_transfer import DownloadContext
 
-    class ExplodingYDL:
-        def __init__(self, opts):
-            pass
+    def transfer(*args, **kwargs):
+        raise ToolExecutionError(1, 'Requested format is not available')
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def extract_info(self, url, download=True):
-            raise Exception("Requested format is not available")
-
-    monkeypatch.setattr(ys, "yt_dlp",
-                        type("M", (), {"YoutubeDL": ExplodingYDL}))
+    monkeypatch.setattr(DownloadContext, 'download_executable', transfer)
     svc = YouTubeService()
-    with pytest.raises(Exception, match="SoundCloud"):
-        svc.download_audio_sync("vid1", str(tmp_path))
+    with pytest.raises(RuntimeError, match='SoundCloud'):
+        svc.download_audio_sync('jNQXAC9IVRw', str(tmp_path))

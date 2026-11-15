@@ -8,17 +8,17 @@
 #endif
 [Setup]
 AppId={{8F56F2A1-90E1-4A0A-AB89-24A326E6D371}
-AppName=NeDotify
-AppVersion=2.5.8
-VersionInfoVersion=2.5.8
-VersionInfoProductVersion=2.5.8
+AppName=Soneth
+AppVersion=2.6.1
+VersionInfoVersion=2.6.1
+VersionInfoProductVersion=2.6.1
 AppPublisher=The pAura Team
 AppCopyright=Copyright (C) 2024 The pAura Team
 DefaultDirName={localappdata}\Programs\NeDotify
-DefaultGroupName=NeDotify
+DefaultGroupName=Soneth
 AllowNoIcons=yes
 OutputDir=dist
-OutputBaseFilename=NeDotify_Setup
+OutputBaseFilename=Soneth_Setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 PrivilegesRequired=lowest
@@ -30,7 +30,7 @@ WizardStyle=modern
 WizardSizePercent=120
 DisableWelcomePage=no
 DisableReadyPage=no
-UninstallDisplayName=NeDotify 2.5.8
+UninstallDisplayName=Soneth 2.6.1
 #ifdef NEDOTIFY_BETA_NOTICE
 InfoBeforeFile={#NEDOTIFY_BETA_NOTICE}
 #endif
@@ -93,10 +93,10 @@ Source: "dist\zapret\*"; DestDir: "{app}\zapret"; Flags: ignoreversion recursesu
 #endif
 
 [Icons]
-Name: "{group}\NeDotify"; Filename: "{app}\NeDotify.exe"; Comment: "NeDotify — Музыкальный плеер"
-Name: "{group}\Удалить NeDotify"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\NeDotify"; Filename: "{app}\NeDotify.exe"; Comment: "NeDotify — Музыкальный плеер"; Tasks: desktopicon
-Name: "{userstartmenu}\NeDotify"; Filename: "{app}\NeDotify.exe"; Comment: "NeDotify — Музыкальный плеер"; Tasks: startmenuicon
+Name: "{group}\Soneth"; Filename: "{app}\NeDotify.exe"; Comment: "Soneth — Музыкальный плеер"
+Name: "{group}\Удалить Soneth"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\Soneth"; Filename: "{app}\NeDotify.exe"; Comment: "Soneth — Музыкальный плеер"; Tasks: desktopicon
+Name: "{userstartmenu}\Soneth"; Filename: "{app}\NeDotify.exe"; Comment: "Soneth — Музыкальный плеер"; Tasks: startmenuicon
 
 [Registry]
 ; Autostart value name: "NeDotify" is the single source of truth
@@ -108,17 +108,17 @@ Name: "{userstartmenu}\NeDotify"; Filename: "{app}\NeDotify.exe"; Comment: "NeDo
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "NeDotify"; ValueData: """{app}\NeDotify.exe"""; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{app}\NeDotify.exe"; Description: "{cm:LaunchProgram,NeDotify}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\NeDotify.exe"; Description: "{cm:LaunchProgram,Soneth}"; Flags: nowait postinstall skipifsilent
 
 [CustomMessages]
 russian.StartMenuIconTask=Добавить ярлык в меню «Пуск»
 english.StartMenuIconTask=Add a Start Menu shortcut
-russian.AutostartTask=Запускать NeDotify при запуске Windows
-english.AutostartTask=Start NeDotify when Windows starts
+russian.AutostartTask=Запускать Soneth при запуске Windows
+english.AutostartTask=Start Soneth when Windows starts
 russian.AutostartGroup=Автозапуск:
 english.AutostartGroup=Startup:
-russian.WelcomeBody=Добро пожаловать в установщик NeDotify 2.5.7.%n%nNeDotify — современный музыкальный плеер с поддержкой онлайн-сервисов, тем и горячих клавиш.%n%nНажмите «Далее», чтобы продолжить, или «Отмена», чтобы выйти.
-english.WelcomeBody=Welcome to the NeDotify 2.5.7 setup.%n%nNeDotify is a modern music player with online services, themes, and keyboard shortcuts.%n%nClick Next to continue, or Cancel to exit.
+russian.WelcomeBody=Добро пожаловать в установщик Soneth 2.6.1.%n%nSoneth — современный музыкальный плеер с поддержкой онлайн-сервисов, тем и горячих клавиш.%n%nНажмите «Далее», чтобы продолжить, или «Отмена», чтобы выйти.
+english.WelcomeBody=Welcome to the Soneth 2.6.1 setup.%n%nSoneth is a modern music player with online services, themes, and keyboard shortcuts.%n%nClick Next to continue, or Cancel to exit.
 
 [Code]
 const
@@ -200,9 +200,9 @@ begin
     begin
       Log('WebView2 runtime installation could not be completed.');
       if ActiveLanguage = 'russian' then
-        Result := 'Не удалось установить WebView2. Проверьте подключение к интернету и повторите установку NeDotify.'
+        Result := 'Не удалось установить WebView2. Проверьте подключение к интернету и повторите установку Soneth.'
       else
-        Result := 'WebView2 installation failed. Check your internet connection and retry NeDotify setup.';
+        Result := 'WebView2 installation failed. Check your internet connection and retry Soneth setup.';
     end;
   end;
 end;

@@ -15,6 +15,11 @@ import threading
 if sys.platform == "win32":
     multiprocessing.freeze_support()
 
+if __name__ == '__main__' and sys.argv[1:2] == ['--yt-dlp-download-worker']:
+    from core.download_transfer import run_bundled_ytdlp
+
+    raise SystemExit(run_bundled_ytdlp(sys.argv[2:]))
+
 import webview
 
 # Pin WebView2 runtime to a known-good version: Evergreen 151.0.4129.93 hangs
@@ -166,7 +171,7 @@ def _patch_pywebview_winforms_move():
 
 def main():
     """Application entry point."""
-    logging.info("Starting NeDotify...")
+    logging.info("Starting Soneth...")
     import time as _time
     _t0 = _time.monotonic()
     logging.info("[startup] process started")
@@ -325,7 +330,7 @@ def main():
         ui_root = os.path.join(base_dir, 'ui', 'web_new_v2')
         html_path = os.path.join(ui_root, 'index.html')
         window = webview.create_window(
-            'NeDotify', url=html_path, js_api=BridgeApi(api),
+            'Soneth', url=html_path, js_api=BridgeApi(api),
             width=1100, height=800, min_size=(600, 640), frameless=True,
             resizable=True, fullscreen=False,
             # Color-keyed WinForms transparency makes WebView2's GPU surface

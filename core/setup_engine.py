@@ -149,8 +149,9 @@ class SetupEngine:
         if managed:
             return managed, "managed"
         filename = ("yt-dlp" if name == "yt_dlp" else name) + ".exe"
-        locations = [Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1])),
-                     Path(sys.executable).parent]
+        locations = [Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))]
+        if name != "yt_dlp" or getattr(sys, "frozen", False):
+            locations.append(Path(sys.executable).parent)
         for directory in locations:
             path = directory / filename
             if path.is_file():
@@ -270,7 +271,7 @@ class SetupEngine:
         for name, available in components.items():
             if not available:
                 issues.append({"code": "missing_python_component", "component": name,
-                               "message": f"Отсутствует компонент приложения {name}. Восстановите установку NeDotify.", "recoverable": False})
+                               "message": f"Отсутствует компонент приложения {name}. Восстановите установку Soneth.", "recoverable": False})
         if not directory["available"]:
             issues.append({"code": "download_directory", "message": directory["error"], "recoverable": True})
         with self._lock:
@@ -296,16 +297,17 @@ class SetupEngine:
             if require_ffmpeg and not ffmpeg["available"]:
                 raise SetupDependencyError("missing_ffmpeg", "Для выбранного формата нужен FFmpeg. Восстановите компоненты в настройках.")
             self._leases += 1
-            managed_record = self._manifest.get("tools", {}).get("yt_dlp", {})
-            module_version = self._module_version("yt_dlp")
-            managed_version = managed_record.get("version", "")
-            module_numbers = tuple(int(n) for n in re.findall(r"\d+", module_version or ""))
-            managed_numbers = tuple(int(n) for n in re.findall(r"\d+", managed_version))
-            prefer_executable = ytdlp["source"] == "managed" and ytdlp["available"] and (
-                not module_numbers or managed_numbers > module_numbers or managed_record.get("prefer_executable") is True)
-            tools = {"yt_dlp_path": ytdlp["path"] if ytdlp["available"] else None,
-                     "yt_dlp_module": ytdlp["module_available"],
-                     "prefer_executable": prefer_executable,
+            yt_dlp_path = ytdlp["path"] if ytdlp["available"] else None
+            if ytdlp["source"] == "system" and ytdlp["module_available"]:
+                # Prefer the packaged official CLI over an arbitrary PATH wrapper.
+                yt_dlp_path = None
+            if yt_dlp_path and ytdlp["source"] == "managed":
+                bundled = self._module_version("yt_dlp") or ""
+                installed_version = tuple(int(n) for n in re.findall(r"\d+", ytdlp["version"]))
+                bundled_version = tuple(int(n) for n in re.findall(r"\d+", bundled))
+                if installed_version and bundled_version > installed_version:
+                    yt_dlp_path = None
+            tools = {"yt_dlp_path": yt_dlp_path,
                      "ffmpeg_path": ffmpeg["path"] if ffmpeg["available"] else None,
                      "ffprobe_path": probe["path"] if probe["available"] else None}
         try:
@@ -590,7 +592,6 @@ class SetupEngine:
             installed = {name: destination / path.name for name, path in paths.items()}
             record = {"version": release["tag_name"], "release_id": release.get("id"),
                       "asset": asset["name"], "asset_sha256": digest, "installed_at": time.time(),
-                      "prefer_executable": bool(tool == "yt_dlp" and self._operation.get("update")),
                       "source_url": f"https://github.com/{_REPOS[tool]}",
                       "paths": {name: str(path.relative_to(self.tools_dir)) for name, path in installed.items()},
                       "hashes": {name: self._sha256(path) for name, path in installed.items()},

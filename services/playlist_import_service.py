@@ -55,7 +55,7 @@ class PlaylistImportService:
         except ImportError:
             raise PlaylistImportError("Модуль yt-dlp недоступен для загрузки плейлистов")
 
-    def resolve(self, url_or_path: str) -> Dict[str, Any]:
+    def resolve(self, url_or_path: str, on_progress=None) -> Dict[str, Any]:
         """Resolve a playlist URL or file path into a standardized dict."""
         target = (url_or_path or "").strip()
         if not target:
@@ -71,14 +71,14 @@ class PlaylistImportService:
                     content = response.read(self.MAX_BYTES + 1)
                 if len(content) > self.MAX_BYTES:
                     raise PlaylistImportError('Плейлист слишком большой')
-                return self._parse_content(content.decode('utf-8-sig'), os.path.basename(parsed.path), target)
+                return self._parse_content(content.decode('utf-8-sig'), os.path.basename(parsed.path), target, on_progress)
         # 1. Local file or M3U/JSON text content
         if os.path.exists(target) or target.endswith((".m3u", ".m3u8", ".json", ".txt")):
-            return self._resolve_local_file(target)
+            return self._resolve_local_file(target, on_progress)
 
         # 2. YouTube URL
         if parsed.hostname in ('youtube.com', 'www.youtube.com', 'music.youtube.com', 'm.youtube.com', 'youtu.be'):
-            return self._resolve_youtube(target)
+            return self._resolve_youtube(target, on_progress)
 
         # 3. SoundCloud URL
         if parsed.hostname in ('soundcloud.com', 'www.soundcloud.com', 'on.soundcloud.com'):
@@ -87,7 +87,7 @@ class PlaylistImportService:
                 target = resolve_playlist_share_url(target)
             except ValueError as exc:
                 raise UnsupportedPlaylistService(str(exc)) from exc
-            return self._resolve_soundcloud(target)
+            return self._resolve_soundcloud(target, on_progress) if on_progress else self._resolve_soundcloud(target)
 
         if parsed.scheme == 'https' and parsed.hostname in ('deezer.com', 'www.deezer.com', 'link.deezer.com'):
             if parsed.hostname == 'link.deezer.com':
@@ -98,14 +98,15 @@ class PlaylistImportService:
             if parsed.hostname not in ('deezer.com', 'www.deezer.com') or not match:
                 raise PlaylistImportError('Укажите ссылку на публичный плейлист Deezer')
             from services.deezer_service import DeezerService
-            return DeezerService(self.settings).collection('playlist', match.group(1), self.MAX_TRACKS, require_complete=True)
+            return DeezerService(self.settings).collection('playlist', match.group(1), self.MAX_TRACKS, require_complete=True, on_progress=on_progress)
 
         # Unsupported service
         raise UnsupportedPlaylistService("Поддерживается импорт YouTube, SoundCloud, Deezer, M3U/M3U8, JSON и текстовых списков")
 
-    def _resolve_youtube(self, url: str) -> Dict[str, Any]:
+    def _resolve_youtube(self, url: str, on_progress=None) -> Dict[str, Any]:
         opts = {
             "extract_flat": "in_playlist",
+            "lazy_playlist": True,
             "skip_download": True,
             "quiet": True,
             "no_warnings": True,
@@ -115,56 +116,58 @@ class PlaylistImportService:
         try:
             with self._get_ydl(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
+                if not info:
+                    raise PlaylistImportError("В плейлисте не найдено доступных треков")
+
+                name = info.get("title") or info.get("playlist_title") or "YouTube Playlist"
+                entries = info.get("entries") or []
+
+                tracks = []
+                for entry in itertools.islice(entries, self.MAX_TRACKS + 1):
+                    if not isinstance(entry, dict):
+                        continue
+                    source_id = entry.get("id")
+                    if not source_id:
+                        continue
+                    title = entry.get("title") or "Unknown Title"
+                    artist = entry.get("uploader") or entry.get("artist") or "Unknown Artist"
+                    if artist.endswith(" - Topic"):
+                        artist = artist[:-8]
+
+                    duration = 0.0
+                    dur_val = entry.get("duration")
+                    if dur_val is not None:
+                        try:
+                            duration = float(dur_val)
+                        except (ValueError, TypeError):
+                            duration = 0.0
+
+                    cover_url = ""
+                    thumbnails = entry.get("thumbnails")
+                    if thumbnails and isinstance(thumbnails, list) and len(thumbnails) > 0:
+                        cover_url = thumbnails[-1].get("url", "")
+                    elif entry.get("thumbnail"):
+                        cover_url = entry["thumbnail"]
+                    if not cover_url:
+                        cover_url = f"https://img.youtube.com/vi/{source_id}/hqdefault.jpg"
+
+                    source_url = entry.get("webpage_url") or f"https://www.youtube.com/watch?v={source_id}"
+
+                    self._append_track(tracks, on_progress, {
+                        "title": title,
+                        "artist": artist,
+                        "album": "Unknown Album",
+                        "duration": duration,
+                        "source": "youtube",
+                        "source_id": str(source_id),
+                        "source_url": source_url,
+                        "cover_url": cover_url,
+                    })
+
+        except PlaylistImportError:
+            raise
         except Exception as e:
             raise PlaylistImportError(f"Ошибка при считывании YouTube плейлиста: {e}")
-
-        if not info:
-            raise PlaylistImportError("В плейлисте не найдено доступных треков")
-
-        name = info.get("title") or info.get("playlist_title") or "YouTube Playlist"
-        entries = info.get("entries") or []
-
-        tracks = []
-        for entry in itertools.islice(entries, self.MAX_TRACKS + 1):
-            if not isinstance(entry, dict):
-                continue
-            source_id = entry.get("id")
-            if not source_id:
-                continue
-            title = entry.get("title") or "Unknown Title"
-            artist = entry.get("uploader") or entry.get("artist") or "Unknown Artist"
-            if artist.endswith(" - Topic"):
-                artist = artist[:-8]
-
-            duration = 0.0
-            dur_val = entry.get("duration")
-            if dur_val is not None:
-                try:
-                    duration = float(dur_val)
-                except (ValueError, TypeError):
-                    duration = 0.0
-
-            cover_url = ""
-            thumbnails = entry.get("thumbnails")
-            if thumbnails and isinstance(thumbnails, list) and len(thumbnails) > 0:
-                cover_url = thumbnails[-1].get("url", "")
-            elif entry.get("thumbnail"):
-                cover_url = entry["thumbnail"]
-            if not cover_url:
-                cover_url = f"https://img.youtube.com/vi/{source_id}/hqdefault.jpg"
-
-            source_url = entry.get("webpage_url") or f"https://www.youtube.com/watch?v={source_id}"
-
-            tracks.append({
-                "title": title,
-                "artist": artist,
-                "album": "Unknown Album",
-                "duration": duration,
-                "source": "youtube",
-                "source_id": str(source_id),
-                "source_url": source_url,
-                "cover_url": cover_url,
-            })
 
         if len(tracks) > self.MAX_TRACKS or int(info.get('playlist_count') or 0) > self.MAX_TRACKS:
             raise PlaylistImportError(f'Плейлист превышает лимит {self.MAX_TRACKS} треков')
@@ -173,9 +176,10 @@ class PlaylistImportService:
 
         return {"name": name, "source": "youtube", "tracks": tracks}
 
-    def _resolve_soundcloud(self, url: str) -> Dict[str, Any]:
+    def _resolve_soundcloud(self, url: str, on_progress=None) -> Dict[str, Any]:
         opts = {
             "extract_flat": "in_playlist",
+            "lazy_playlist": True,
             "skip_download": True,
             "quiet": True,
             "socket_timeout": 6,
@@ -184,38 +188,40 @@ class PlaylistImportService:
         try:
             with self._get_ydl(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
+                if not info:
+                    raise PlaylistImportError("В плейлисте не найдено доступных треков")
+
+                name = info.get("title") or "SoundCloud Playlist"
+                entries = info.get("entries") or []
+
+                tracks = []
+                for entry in itertools.islice(entries, self.MAX_TRACKS + 1):
+                    if not isinstance(entry, dict) or not entry.get("id"):
+                        continue
+                    source_id = str(entry["id"])
+                    title = entry.get("title") or "Unknown Title"
+                    artist = entry.get("uploader") or entry.get("user", {}).get("username") or "Unknown Artist"
+                    dur_val = entry.get("duration", 0)
+                    try:
+                        duration = float(dur_val)
+                    except (ValueError, TypeError):
+                        duration = 0.0
+
+                    self._append_track(tracks, on_progress, {
+                        "title": title,
+                        "artist": artist,
+                        "album": "Unknown Album",
+                        "duration": duration,
+                        "source": "soundcloud",
+                        "source_id": source_id,
+                        "source_url": entry.get("url") or f"https://soundcloud.com/{source_id}",
+                        "cover_url": entry.get("thumbnail") or "",
+                    })
+
+        except PlaylistImportError:
+            raise
         except Exception as e:
             raise PlaylistImportError(f"Ошибка при считывании SoundCloud плейлиста: {e}")
-
-        if not info:
-            raise PlaylistImportError("В плейлисте не найдено доступных треков")
-
-        name = info.get("title") or "SoundCloud Playlist"
-        entries = info.get("entries") or []
-
-        tracks = []
-        for entry in itertools.islice(entries, self.MAX_TRACKS + 1):
-            if not isinstance(entry, dict) or not entry.get("id"):
-                continue
-            source_id = str(entry["id"])
-            title = entry.get("title") or "Unknown Title"
-            artist = entry.get("uploader") or entry.get("user", {}).get("username") or "Unknown Artist"
-            dur_val = entry.get("duration", 0)
-            try:
-                duration = float(dur_val)
-            except (ValueError, TypeError):
-                duration = 0.0
-
-            tracks.append({
-                "title": title,
-                "artist": artist,
-                "album": "Unknown Album",
-                "duration": duration,
-                "source": "soundcloud",
-                "source_id": source_id,
-                "source_url": entry.get("url") or f"https://soundcloud.com/{source_id}",
-                "cover_url": entry.get("thumbnail") or "",
-            })
 
         if len(tracks) > self.MAX_TRACKS or int(info.get('playlist_count') or 0) > self.MAX_TRACKS:
             raise PlaylistImportError(f'Плейлист превышает лимит {self.MAX_TRACKS} треков')
@@ -270,7 +276,7 @@ class PlaylistImportService:
                 if not track.get("source_url") and meta.get("source_url"):
                     track["source_url"] = meta["source_url"]
 
-    def _resolve_local_file(self, target: str) -> Dict[str, Any]:
+    def _resolve_local_file(self, target: str, on_progress=None) -> Dict[str, Any]:
         """Parse M3U, JSON, or text playlist files."""
         if not os.path.exists(target):
             raise PlaylistImportError(f"Файл плейлиста не найден: {target}")
@@ -284,9 +290,9 @@ class PlaylistImportService:
             raise PlaylistImportError(f"Не удалось прочитать файл: {e}")
         if len(content.encode('utf-8')) > self.MAX_BYTES:
             raise PlaylistImportError('Плейлист слишком большой')
-        return self._parse_content(content, file_name, target)
+        return self._parse_content(content, file_name, target, on_progress)
 
-    def _parse_content(self, content, file_name, target):
+    def _parse_content(self, content, file_name, target, on_progress=None):
 
         # JSON Format
         if target.endswith(".json") or content.strip().startswith("{") or content.strip().startswith("["):
@@ -324,7 +330,7 @@ class PlaylistImportService:
                                     if not title:continue
                                     sid='ytsearch1:'+(' - '.join(value for value in (artist,title) if value))
                             elif not sid and source=='soundcloud':sid=source_url
-                            tracks.append({
+                            self._append_track(tracks, on_progress, {
                                 "title": item.get("title", "Unknown Title"),
                                 "artist": item.get("artist", "Unknown Artist"),
                                 "album": item.get("album", "Unknown Album"),
@@ -378,7 +384,7 @@ class PlaylistImportService:
                         path_or_url = relative
                 if not remote_playlist and os.path.isfile(path_or_url):
                     title = current_title if current_title != "Unknown Title" else os.path.splitext(os.path.basename(path_or_url))[0]
-                    tracks.append({
+                    self._append_track(tracks, on_progress, {
                         "title": title,
                         "artist": current_artist,
                         "album": "Unknown Album",
@@ -387,16 +393,20 @@ class PlaylistImportService:
                         "file_path": path_or_url,
                     })
                 elif path_or_url.startswith("http"):
+                    from services.web_music_service import identify_track_page
+                    site = identify_track_page(path_or_url)
                     host = urllib.parse.urlsplit(path_or_url).hostname
                     source = ('youtube' if host in ('youtube.com', 'www.youtube.com', 'music.youtube.com', 'm.youtube.com', 'youtu.be')
                               else 'soundcloud' if host in ('soundcloud.com', 'www.soundcloud.com')
                               else 'deezer' if host in ('deezer.com', 'www.deezer.com') else 'local')
                     source_id = None
+                    if site:
+                        source, source_id = site
                     if source == 'deezer':
                         match = re.fullmatch(r'/(?:[a-z]{2}/)?track/(\d+)/?', urllib.parse.urlsplit(path_or_url).path)
                         if match:
                             from services.deezer_service import DeezerService
-                            tracks.append(DeezerService(self.settings).get_track(match.group(1)))
+                            self._append_track(tracks, on_progress, DeezerService(self.settings).get_track(match.group(1)))
                             current_title, current_artist, current_dur = 'Unknown Title', 'Unknown Artist', 0.0
                             continue
                         raise PlaylistImportError('Некорректная ссылка трека Deezer')
@@ -414,7 +424,7 @@ class PlaylistImportService:
                     if not source_id:
                         source_id = f"{current_artist} {current_title}".strip() if current_title != "Unknown Title" else path_or_url.strip()
 
-                    tracks.append({
+                    self._append_track(tracks, on_progress, {
                         "title": current_title,
                         "artist": current_artist,
                         "album": "Unknown Album",
@@ -425,7 +435,7 @@ class PlaylistImportService:
                     })
                 elif " - " in path_or_url:
                     parts = path_or_url.split(" - ", 1)
-                    tracks.append({
+                    self._append_track(tracks, on_progress, {
                         "artist": parts[0].strip(),
                         "title": parts[1].strip(),
                         "album": "Unknown Album",
@@ -434,7 +444,7 @@ class PlaylistImportService:
                         "source_id": 'ytsearch1:' + path_or_url.strip(),
                     })
                 elif len(path_or_url) > 2:
-                    tracks.append({
+                    self._append_track(tracks, on_progress, {
                         "artist": "Unknown Artist",
                         "title": path_or_url.strip(),
                         "album": "Unknown Album",
@@ -450,5 +460,11 @@ class PlaylistImportService:
             return {"name": file_name, "tracks": tracks}
 
         raise PlaylistImportError("Не удалось извлечь треки из файла плейлиста")
+    @staticmethod
+    def _append_track(tracks, on_progress, track):
+        tracks.append(track)
+        if on_progress:
+            on_progress(len(tracks))
+
     MAX_TRACKS = 2000
     MAX_BYTES = 4 * 1024 * 1024

@@ -118,9 +118,9 @@ function renderPlaylists(current) {
 }
 function refreshIdentity() {
     const settings=window.settings?.personalization || {};
-    text('profile-display-name',settings.nickname || 'Пользователь NeDotify');
+    text('profile-display-name',settings.nickname || 'Пользователь Soneth');
     const input=document.getElementById('profile-name-input');if(!document.getElementById('profile-edit-dialog').open)input.value=settings.nickname || '';
-    text('profile-date-joined',settings.registration_date?`В NeDotify с ${settings.registration_date}`:'Ваш музыкальный профиль');
+    text('profile-date-joined',settings.registration_date?`В Soneth с ${settings.registration_date}`:'Ваш музыкальный профиль');
     const image=document.getElementById('profile-avatar-img'),icon=document.getElementById('profile-avatar-icon');
     const path=settings.avatar_path || window.settings?.app?.avatar_path;
     if(!path){image.style.display='none';icon.style.display='grid';return;}

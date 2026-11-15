@@ -4,7 +4,7 @@
  * and display a Riff-style connected top notification banner.
  */
 
-let currentAppVersion = '2.5.8';
+let currentAppVersion = '2.6.1';
 let latestUpdateInfo = null;
 let isCheckingUpdates = false;
 
@@ -134,7 +134,7 @@ export async function checkForUpdates(manual = false) {
         } else {
             // Direct renderer fallback if bridge unavailable
             const res = await fetch('https://api.github.com/repos/PoviceProgrammer/NeDotify/releases/latest', {
-                headers: { 'User-Agent': 'NeDotify-Desktop (Windows)' }
+                headers: { 'User-Agent': 'Soneth-Desktop (Windows)' }
             });
             if (res.ok) {
                 const data = await res.json();
@@ -185,7 +185,7 @@ export async function checkForUpdates(manual = false) {
                 statusText.style.color = '';
             }
             if (manual && window.NeDotifyToast?.show) {
-                window.NeDotifyToast.show('У вас установлена последняя версия NeDotify!', 'success');
+                window.NeDotifyToast.show('У вас установлена последняя версия Soneth!', 'success');
             }
         } else {
             const err = result?.error || 'Не удалось связаться с сервером обновлений';

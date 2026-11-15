@@ -26,21 +26,22 @@ def test_calibration_also_requires_a_real_audio_transfer(monkeypatch, media_reac
 
 def test_probe_uses_no_user_credentials_and_cleans_its_download(monkeypatch):
     from pathlib import Path
-    import services.youtube_service as youtube
     directories = []
-    class Provider:
-        def __init__(self, settings):
-            assert settings is None
-        def download_audio_sync(self, source_id, directory, download_context):
-            directories.append(Path(directory))
-            options = download_context.ydl_options(directory)
-            assert options['proxy'] == ''
-            assert options['retries'] == 0
-            assert options['socket_timeout'] == 4
-            assert 'cookiefile' not in options
-            download_context.checkpoint()
-            (Path(directory) / 'validated-audio.webm').write_bytes(b'provider-validated')
-    monkeypatch.setattr(youtube, 'YouTubeService', Provider)
+
+    def run(args, checkpoint, timeout, on_line):
+        assert args[args.index('--proxy') + 1] == ''
+        assert args[args.index('--retries') + 1] == '0'
+        assert args[args.index('--socket-timeout') + 1] == '4'
+        assert '--no-cache-dir' in args
+        assert '--cookies' not in args and '--cookies-from-browser' not in args
+        checkpoint()
+        template = args[args.index('-o') + 1]
+        output = Path(template.replace('%(id)s', 'dQw4w9WgXcQ').replace('%(ext)s', 'm4a'))
+        directories.append(output.parent)
+        output.write_bytes(b'audio' * 1024)
+        on_line('nd-file:' + str(output))
+
+    monkeypatch.setattr('core.download_processing.run_tool', run)
     assert probe.probe_youtube_audio(lambda: False)
     assert directories and not directories[0].exists()
 

@@ -782,6 +782,13 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
     ];
     const grad = gradientColors[Math.abs(hash) % gradientColors.length];
 
+    const providerLabel = ({youtube: 'YouTube', soundcloud: 'SoundCloud', spotify: track.catalog_source === 'spotify' ? 'Spotify' : 'iTunes',
+        lmusic: 'LMusic', hitmos: 'Hitmos', deezer: 'Deezer', local: 'На компьютере'})[track.source] || '';
+    const availabilityLabel = ({pending: 'Проверяется', available: 'Доступен', unavailable: 'Недоступен',
+        unknown: 'Не удалось проверить'})[track.availability];
+    const webOnly = track.external_only || (track.source === 'hitmos' && track.availability !== 'available');
+    const searchMeta = track.duration ? [formatTime(track.duration), providerLabel] : [providerLabel];
+
     item.innerHTML = `
         <span class="track-number">${index + 1}</span>
         <div class="track-cover-wrap fallback-gradient" style="background: ${grad}">
@@ -790,11 +797,14 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
             <div class="track-cover-overlay">
                 <i data-lucide="play" style="width:16px;height:16px;color:white"></i>
             </div>
-            ${track.source && !isHiddenSource(track.source) ? `<div class="source-badge source-${escapeHtml(track.source)}" title="${escapeHtml(track.source === 'spotify' ? 'Apple Music / iTunes — аудио из YouTube' : track.source)}">${getSourceIcon(track.source)}</div>` : ''}
+            ${track.source && !isHiddenSource(track.source) ? `<div class="source-badge source-${escapeHtml(track.source)}" title="${escapeHtml(providerLabel)}">${getSourceIcon(track.source)}</div>` : ''}
         </div>
         <div class="track-info">
             <div class="track-title">${escapeHtml(track.title || 'Unknown')}</div>
-            <div class="track-artist">${formatArtistNames(track.artist || 'Unknown')}</div>
+            <div class="track-artist">${formatArtistNames(track.artist || 'Unknown')}${availabilityLabel
+                ? ` <span class="playlist-track-status" data-availability="${escapeHtml(track.availability)}">· ${availabilityLabel}</span>`
+                : ''}</div>
+            <span class="search-hit-meta">${escapeHtml(searchMeta.filter(Boolean).join(' · '))}</span>
             ${track.recommendation_reason ? `<span class="recommendation-reason" title="${escapeHtml(track.recommendation_reason)}">${escapeHtml(track.recommendation_reason)}</span>` : ''}
         </div>
         <div class="track-actions">
@@ -825,14 +835,29 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
         if (e.target.closest('.like-btn') || e.target.closest('.add-btn') || e.target.closest('.download-btn') || e.target.closest('.track-more-btn') || e.target.closest('.clickable-artist')) {
             return;
         }
-        if (window.pywebview && window.pywebview.api) {
-            window.pywebview.api.play_track(track, tracksArray, index);
+        if (webOnly && track.source_url) {
+            window.pywebview?.api?.open_music_source?.(track.source_url);
+            return;
+        }
+        if (window.pywebview?.api?.play_track) {
+            const queue = tracksArray.some(candidate => candidate.external_only || candidate.source === 'hitmos')
+                ? tracksArray.filter(candidate => !candidate.external_only && candidate.source !== 'hitmos')
+                : tracksArray;
+            const position = queue.indexOf(track);
+            window.pywebview.api.play_track(track, position >= 0 ? queue : [track], Math.max(0, position));
         }
     });
 
     // Download handler: show spinning animation, trigger download, update state on completion
     const downloadBtn = item.querySelector('.download-btn');
-    if (downloadBtn) {
+    if (downloadBtn && webOnly) {
+        downloadBtn.title = 'Открыть на сайте';
+        downloadBtn.innerHTML = '<i data-lucide="external-link"></i>';
+        downloadBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            if (track.source_url) window.pywebview?.api?.open_music_source?.(track.source_url);
+        });
+    } else if (downloadBtn) {
         const pending = pendingTrackDownloads.get(downloadKey(track));
         if (pending) {
             pending.add(track);

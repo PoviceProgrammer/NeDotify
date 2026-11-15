@@ -21,7 +21,7 @@ const SIDEBAR_COLLAPSED_KEY = 'nedotify_sidebar_collapsed';
 /**
  * Collapse the nav rail to icons only, or expand it back.
  *
- * The title in the rail head is the toggle: clicking "NeDotify" collapses to
+ * The title in the rail head is the toggle: clicking "Soneth" collapses to
  * icons, and in the collapsed state the title is the initial "N", so clicking
  * that expands again. The nav items are untouched throughout - they stay
  * clickable while collapsed, which is the whole point of the rail.
@@ -213,7 +213,7 @@ function activatePage(pageId) {
 
     // Update title bar
     const titleEl = document.getElementById('title-text');
-    if (titleEl) titleEl.textContent = pageTitles[pageId] || 'NeDotify';
+    if (titleEl) titleEl.textContent = pageTitles[pageId] || 'Soneth';
 
     // Back button wiring ensure
     const btnBackArtist = document.getElementById('btn-back-artist');
@@ -258,7 +258,7 @@ export function closeSettings() {
     });
 
     const titleEl = document.getElementById('title-text');
-    if (titleEl) titleEl.textContent = pageTitles[currentBasePage] || 'NeDotify';
+    if (titleEl) titleEl.textContent = pageTitles[currentBasePage] || 'Soneth';
 }
 
 // Global accessors

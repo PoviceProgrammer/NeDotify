@@ -138,10 +138,10 @@ export function initEvents() {
                 }
                 break;
                 
-            // BUG-U3-007: мёртвый case 'yt_playlist_ready' удалён — событие не
-            // эмитится бэкендом. Импорт плейлистов завершается emission
-            // 'playlists_updated' (core/api.py::import_external_playlist) и
-            // обрабатывается группой library_updated/playlists_updated ниже.
+            case 'playlist_import_progress':
+            case 'playlist_availability_updated':
+                window.dispatchEvent(new CustomEvent(`nedotify:${eventName}`, { detail: data }));
+                break;
 
             case 'authentic_home_error': {
                 const authContainer = document.getElementById('home-authentic-feed');

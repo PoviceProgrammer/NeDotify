@@ -193,6 +193,8 @@ class AppApi:
     def __init__(self, core):
         self._core = core
         self._core.api = self
+        from core.playlist_availability import PlaylistAvailability
+        self._playlist_availability = PlaylistAvailability(core, lambda *args: self._emit(*args))
         self._window = None
         self._main_window = None
         self._mini_window = None
@@ -328,6 +330,9 @@ class AppApi:
         if getattr(self, '_closed', False):
             return
         self._closed = True
+        availability = getattr(self, '_playlist_availability', None)
+        if availability:
+            availability.close()
         self._window = None
         self.shutdown()
         ready = getattr(self, '_ui_ready_event', None)
@@ -1181,6 +1186,11 @@ class AppApi:
         """Open external URL safely in default browser."""
         self.open_url(url)
 
+    def open_music_source(self, url: str):
+        from services.web_music_service import identify_track_page
+        if isinstance(url, str) and identify_track_page(url):
+            self.open_url(url)
+
     def emit_event(self, event_name: str, data: dict = None):
         if event_name == 'download_queue_updated' and (data or {}).get('status') in ('pending','paused'):
             with self._window_op_lock:
@@ -1991,7 +2001,7 @@ class AppApi:
             logger.error(f"get_next_track error: {type(e).__name__}")
         return None
 
-    def search(self, query: str, source: str = "all", result_type: str = None, request_id=None):
+    def search(self, query: str, source: str = "all", result_type: str = None, request_id=None, include_sections=False):
         """Search without blocking the UI bridge.
 
         Providers run in parallel, each bounded by PROVIDER_SEARCH_TIMEOUT seconds.
@@ -2017,7 +2027,7 @@ class AppApi:
             if result_type in ("artists", "artist"):
                 requested_providers = ["local", "youtube", "deezer"]
             else:
-                requested_providers = ["local", "youtube", "soundcloud", "spotify", "deezer"]
+                requested_providers = ["local", "youtube", "soundcloud", "spotify", "deezer", "hitmos", "lmusic"]
         elif source == "local":
             requested_providers = ["local"]
         elif source in DISABLED_UI_PROVIDERS:
@@ -2029,9 +2039,10 @@ class AppApi:
         if result_type in ('artists', 'artist'):
             requested_providers = [p for p in requested_providers if p in ('local', 'youtube', 'deezer')]
 
+        settings = getattr(self._core, "settings", None)
         requested_providers = [provider for provider in requested_providers
-            if provider not in ('youtube', 'soundcloud')
-            or self._core.settings.get('services', provider + '_enabled', True)]
+            if provider not in ('youtube', 'soundcloud', 'spotify', 'hitmos', 'lmusic')
+            or settings is None or settings.get('services', provider + '_enabled', True)]
 
         def emit_results(tracks, service_name):
             if not is_current():
@@ -2047,7 +2058,12 @@ class AppApi:
             })
 
         pending_lock = threading.Lock()
-        pending_providers = set(requested_providers)
+        remote_jobs = [(name, result_type, name) for name in requested_providers if name != 'local']
+        if include_sections and result_type is None and source == 'all':
+            remote_jobs += [(name, kind, f'{name}:{kind}')
+                            for name in ('youtube', 'soundcloud', 'deezer') if name in requested_providers
+                            for kind in ('albums', 'playlists')]
+        pending_providers = set(requested_providers) | {key for _, _, key in remote_jobs}
         completion_emitted = [False]
         observed_tracks = []
         lyrics_started = [False]
@@ -2184,6 +2200,8 @@ class AppApi:
                 url = self._core.engine.resolve_stream_url(probe, cancel_token=cancelled)
                 if url and not cancelled():
                     return remote
+                if remote['source'] in ('hitmos', 'lmusic') and not cancelled():
+                    return dict(remote, external_only=True)
                 return None
 
             def checked(future):
@@ -2224,6 +2242,10 @@ class AppApi:
                         local_results = self._core.db.search_artists(query) if hasattr(self._core.db, "search_artists") else []
                     else:
                         local_results = self._core.db.search_tracks(query)
+                        if include_sections and result_type is None:
+                            local_results = list(local_results or [])
+                            local_results.extend(self._core.db.search_albums(query) or [])
+                            local_results.extend(self._core.db.search_playlists(query) or [])
                     if not local_results:
                         from utils.search_query import convert_layout
                         alt_query = convert_layout(query)
@@ -2253,13 +2275,10 @@ class AppApi:
                 submit(_run_local)
 
         # Async Remote Provider Searches — hard timeout per provider
-        for service_name in requested_providers:
-            if service_name == "local":
-                continue
-
-            def _run_provider(name):
+        for service_name, provider_type, pending_key in remote_jobs:
+            def _run_provider(name, provider_type, pending_key):
                 if not is_current():
-                    mark_done(name)
+                    mark_done(pending_key)
                     return
                 is_done = [False]
                 retried_alt = [False]
@@ -2268,11 +2287,11 @@ class AppApi:
                 # synchronously, re-entering _finish on this same thread.
                 lock = threading.RLock()
 
-                def _finish(tracks):
+                def _finish(tracks, allow_retry=True):
                     with lock:
                         if is_done[0]:
                             return
-                        if not tracks and not retried_alt[0]:
+                        if not tracks and allow_retry and not retried_alt[0]:
                             from utils.search_query import convert_layout
                             alt_query = convert_layout(query)
                             if alt_query:
@@ -2294,10 +2313,13 @@ class AppApi:
                     except Exception:
                         logger.debug("search timer cancel failed", exc_info=True)
                     try:
-                        publish_results(tracks, name, name)
+                        if provider_type != result_type:
+                            tracks = [item for item in tracks or [] if isinstance(item, dict)
+                                      and item.get('type') == provider_type.rstrip('s')]
+                        publish_results(tracks, name, pending_key)
                     except Exception as exc:
                         logger.debug('%s search results could not be processed: %s', name, type(exc).__name__)
-                        mark_done(name)
+                        mark_done(pending_key)
 
                 def _on_success(tracks):
                     _finish(tracks)
@@ -2314,7 +2336,7 @@ class AppApi:
                         if is_done[0]:
                             return
                     logger.warning("%s search timed out after %.1fs", name, _timeout)
-                    _finish([])
+                    _finish([], allow_retry=False)
 
                 timer = threading.Timer(_timeout, _on_timeout)
                 timer.daemon = True
@@ -2334,8 +2356,8 @@ class AppApi:
                     options = {'callback': _on_success, 'error_callback': _on_error}
                     parameters = inspect.signature(srv.search).parameters
                     variadic = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in parameters.values())
-                    if result_type and ('result_type' in parameters or variadic):
-                        options['result_type'] = result_type
+                    if provider_type and ('result_type' in parameters or variadic):
+                        options['result_type'] = provider_type
                     if 'is_current' in parameters or variadic:
                         options['is_current'] = is_current
                     options_holder[0] = options
@@ -2344,7 +2366,7 @@ class AppApi:
                     logger.error("%s search could not start: %s", name, type(exc).__name__)
                     _finish([])
 
-            submit(_run_provider, service_name)
+            submit(_run_provider, service_name, provider_type, pending_key)
 
         return {"query": query, "tracks": []}
 
@@ -2464,7 +2486,7 @@ class AppApi:
         except Exception as exc:
             return fail(describe_error(exc, 'download')['message'], row.get('id') if row else None)
 
-    def import_external_playlist(self, url: str, name: str | None = None):
+    def import_external_playlist(self, url: str, name: str | None = None, job_id=None):
         url = _extract_first_url(url or '')
         local_path=os.path.abspath(os.path.expanduser(url.strip('"'))) if url else ''
         local_playlist=bool(local_path and os.path.splitext(local_path)[1].lower() in ('.m3u','.m3u8','.json','.txt') and os.path.isfile(local_path))
@@ -2475,12 +2497,25 @@ class AppApi:
             importer = getattr(self._core, 'playlist_importer', None)
             if importer is None:
                 return {'success': False, 'error': 'Сервис импорта недоступен'}
-            resolved = importer.resolve(url)
+            last_update = 0.0
+            def extracted(count):
+                nonlocal last_update
+                now = time.monotonic()
+                if now - last_update >= .15:
+                    last_update = now
+                    self._emit('playlist_import_progress', {'job_id': job_id, 'stage': 'extracting', 'extracted': count})
+
+            resolved = importer.resolve(url, on_progress=extracted) if job_id is not None else importer.resolve(url)
             tracks = resolved.get('tracks') if isinstance(resolved, dict) else None
             if not tracks:
                 return {'success': False, 'error': 'В плейлисте не найдено доступных треков'}
             playlist_name = str(name or resolved.get('name') or 'Импортированный плейлист').strip()[:200]
-            playlist_id, count = self._core.db.import_playlist_atomic(playlist_name, 'Imported playlist', tracks)
+            playlist_id, count = self._core.db.import_playlist_atomic(playlist_name, 'Imported playlist', tracks, verify=True)
+            saved = self._core.db.get_playlist_tracks(playlist_id)
+            if job_id is not None:
+                self._emit('playlist_import_progress', {'job_id': job_id, 'stage': 'saved', 'extracted': len(tracks),
+                                                        'playlist_id': playlist_id})
+            self._playlist_availability.start(playlist_id, saved, job_id)
             self._emit('playlists_updated', {'playlist_id': playlist_id})
             return {'success': True, 'playlist_id': playlist_id, 'playlist_name': playlist_name, 'imported_count': count}
         except Exception as exc:
@@ -2665,6 +2700,7 @@ class AppApi:
                         item["source_id"] = str(t.get("source_id") or t.get("id") or "")
                         self._enrich_track_lufs(item)
                         formatted.append(item)
+                self._playlist_availability.start(playlist_id, formatted)
                 return {"success": True, "tracks": formatted}
             except Exception as e:
                 logger.error(f"get_playlist_tracks local error: {type(e).__name__}")

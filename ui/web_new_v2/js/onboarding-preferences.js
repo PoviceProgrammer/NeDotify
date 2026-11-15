@@ -104,7 +104,7 @@ export function mountOnboardingPreferences(wizard, draft, {signal, onChange}) {
         $('#ob-download-format').value = draft.format;
         $('#ob-download-quality').value = draft.quality;
         $('#ob-download-quality').disabled = ['source','flac','wav'].includes(draft.format);
-        $('[data-ob-summary="style"]').textContent = draft.uiStyle === 'macos' ? 'macOS' : 'NeDotify';
+        $('[data-ob-summary="style"]').textContent = draft.uiStyle === 'macos' ? 'macOS' : 'Soneth';
         $('[data-ob-summary="sources"]').textContent = Object.keys(SOURCE_NAMES).filter(key => draft.sources[key]).map(key => SOURCE_NAMES[key]).join(', ') || 'Музыка с компьютера';
         $('[data-ob-summary="downloads"]').textContent = draft.format === 'source' ? 'Исходный файл' : `${draft.format.toUpperCase()} · ${draft.quality === 'best' ? 'лучшее доступное' : `${draft.quality} кбит/с`}`;
     };

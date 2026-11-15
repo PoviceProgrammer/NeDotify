@@ -110,7 +110,9 @@ class SpotifyService(BaseMusicService):
         return self.configure_session(session)
 
     def search(self, query: str, callback: Optional[Callable] = None, error_callback: Optional[Callable] = None, limit: int = 20, result_type: str = None, is_current=None):
-        key = f'spotify_search:{query}:{result_type}:{limit}'
+        access_token = self.settings.get('auth', 'spotify_token', '') if self.settings else ''
+        use_spotify = bool(access_token and result_type in (None, 'all', 'track', 'tracks'))
+        key = f'spotify_search:{use_spotify}:{query}:{result_type}:{limit}'
         cached = self.get_search_cache(key)
         if cached is not None:
             if callback:
@@ -125,6 +127,32 @@ class SpotifyService(BaseMusicService):
             try:
                 if is_current and not is_current():
                     raise RuntimeError('Запрос устарел')
+                if use_spotify:
+                    response = self._get_session().get(
+                        'https://api.spotify.com/v1/search',
+                        params={'q': query, 'type': 'track', 'limit': max(1, min(limit, 10))},
+                        headers={'Authorization': f'Bearer {access_token}'},
+                        timeout=5, allow_redirects=False,
+                    )
+                    response.raise_for_status()
+                    items = response.json().get('tracks', {}).get('items', [])
+                    tracks = []
+                    for item in items:
+                        if not item or not item.get('id') or item.get('is_playable') is False:
+                            continue
+                        album = item.get('album') or {}
+                        images = album.get('images') or []
+                        tracks.append({
+                            'source': 'spotify', 'catalog_source': 'spotify', 'source_id': 'spotify_' + item['id'],
+                            'source_url': 'https://open.spotify.com/track/' + item['id'],
+                            'title': item.get('name', ''), 'album': album.get('name', ''),
+                            'artist': ', '.join(artist['name'] for artist in item.get('artists', []) if artist.get('name')),
+                            'duration': (item.get('duration_ms') or 0) / 1000,
+                            'cover_url': images[0].get('url', '') if images else '',
+                        })
+                    if callback:
+                        callback(tracks)
+                    return tracks
                 if result_type in ("playlists", "playlist"):
                     if callback:
                         callback([])
@@ -165,6 +193,7 @@ class SpotifyService(BaseMusicService):
                             "source": item[6],
                             "source_id": item[7],
                             "source_url": item[8],
+                            "catalog_source": "itunes",
                             "is_favorite": False
                         })
                     if tracks:

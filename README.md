@@ -1,7 +1,7 @@
-<p align="center"><img src="screenshots/banner.png" width="100%" alt="NeDotify — Your music space"></p>
+<p align="center"><img src="screenshots/banner.png" width="100%" alt="Soneth — Your music space"></p>
 
-<h1 align="center">NeDotify</h1>
-<p align="center"><b>NeDotify 2.5.6 для Windows 10 / 11</b><br>Локальная библиотека, онлайн-источники, тексты песен и оформление под себя.</p>
+<h1 align="center">Soneth</h1>
+<p align="center"><b>Soneth 2.5.6 для Windows 10 / 11</b><br>Локальная библиотека, онлайн-источники, тексты песен и оформление под себя.</p>
 <p align="center">
   <a href="https://github.com/PoviceProgrammer/NeDotify/releases/latest"><img src="https://img.shields.io/badge/СКАЧАТЬ_ДЛЯ_WINDOWS-8b5cf6?style=for-the-badge&logo=windows&logoColor=white" alt="Скачать"></a>
   <a href="https://github.com/PoviceProgrammer/NeDotify/releases"><img src="https://img.shields.io/badge/ВСЕ_РЕЛИЗЫ-24292f?style=for-the-badge&logo=github" alt="Релизы"></a>
@@ -88,7 +88,7 @@
 1. Откройте [релиз v2.5.6](https://github.com/PoviceProgrammer/NeDotify/releases/tag/v2.5.6).
 2. В разделе **Assets** скачайте [NeDotify_Setup.exe](https://github.com/PoviceProgrammer/NeDotify/releases/download/v2.5.6/NeDotify_Setup.exe).
 3. Запустите установщик и пройдите шаги мастера. Он устанавливает приложение в профиль пользователя и создаёт выбранные ярлыки.
-4. Откройте NeDotify, завершите первоначальную настройку, выберите артистов и запустите трек через поиск или «Мою волну».
+4. Откройте Soneth, завершите первоначальную настройку, выберите артистов и запустите трек через поиск или «Мою волну».
 
 При отсутствии WebView2 установщик предложит установить его. Компоненты для обработки аудио подготавливаются приложением; Python и winget для установки не требуются. Архивы **Source code** содержат исходники.
 
@@ -102,7 +102,7 @@
 iscc installer.iss
 ```
 
-На выходе — `dist\NeDotify_Setup.exe`.
+На выходе — `dist\Soneth_Setup.exe`.
 
 ---
 
@@ -127,7 +127,7 @@ python -m venv .venv_win
 > Системный `python` не подойдёт — в нём нет `pywebview` и `yt-dlp`.
 > Нужен именно интерпретатор из `.venv_win`.
 
-Если приложение уже работает, но окно скрыто, откройте NeDotify через значок
+Если приложение уже работает, но окно скрыто, откройте Soneth через значок
 в трее. Крестик полностью закрывает приложение и очищает Discord-статус.
 Обычное сворачивание сохраняет воспроизведение музыки.
 
@@ -166,7 +166,7 @@ python -m venv .venv_win
 
 Если площадка недоступна в вашей сети, приложение может работать через системный
 VPN в TUN-режиме. В Happ выберите **TUN → Sing-box**, подключитесь к серверу,
-затем повторите поиск в NeDotify. Явный прокси задаётся в настройках приложения.
+затем повторите поиск в Soneth. Явный прокси задаётся в настройках приложения.
 
 Встроенный Zapret включается в **Настройки → Zapret (Обход DPI)**. Перед первым
 запуском идёт подбор стратегий; дождитесь результата или отмените его.
@@ -181,7 +181,7 @@ VPN в TUN-режиме. В Happ выберите **TUN → Sing-box**, подк
 
 [Открыть TequilaVPN в Telegram](https://t.me/TequilaVPNbot?start=refugkQUieF)
 
-Реферальная ссылка автора проекта. Сервис предоставляется отдельно от NeDotify.
+Реферальная ссылка автора проекта. Сервис предоставляется отдельно от Soneth.
 
 </td></tr>
 </table>

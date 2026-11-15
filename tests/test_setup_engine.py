@@ -148,7 +148,7 @@ def test_direct_http_download_does_not_require_unrelated_extractor(engine):
 def test_python_module_can_download_source_without_ffmpeg_and_releases_lease(engine, monkeypatch):
     monkeypatch.setattr(engine, "_module_version", lambda name: "2026.10.26")
     with engine.acquire_download_tools() as tools:
-        assert tools["yt_dlp_module"] is True
+        assert tools["yt_dlp_path"] is None
         assert tools["ffmpeg_path"] is None
         assert engine.start_repair()["code"] == "dependencies_busy"
     with pytest.raises(SetupDependencyError, match="FFmpeg"):
@@ -362,15 +362,34 @@ def test_stale_external_wrapper_does_not_disable_available_python_extractor(engi
     assert dependency['path'] is None
 
 
-def test_new_managed_extractor_takes_precedence_over_old_python_module(engine, monkeypatch):
-    repair(engine)
+def test_download_lease_prefers_the_newest_official_cli(engine, monkeypatch):
+    snapshot = repair(engine)
     monkeypatch.setattr(engine, '_module_version', lambda name: '2026.01.01')
     with engine.acquire_download_tools() as tools:
-        assert tools['yt_dlp_module'] is True
-        assert tools['prefer_executable'] is True
+        assert tools['yt_dlp_path'] == snapshot['paths']['yt_dlp_path']
+    monkeypatch.setattr(engine, '_module_version', lambda name: '2026.11.01')
+    with engine.acquire_download_tools() as tools:
+        assert tools['yt_dlp_path'] is None
+
+
+def test_bundled_cli_takes_precedence_over_unverified_path_wrapper(engine, monkeypatch, tmp_path):
+    wrapper = tmp_path / 'yt-dlp.exe'
+    monkeypatch.setattr(engine, '_resolve_tool',
+                        lambda name: (str(wrapper), 'system') if name == 'yt_dlp' else (None, None))
     monkeypatch.setattr(engine, '_module_version', lambda name: '2026.10.26')
     with engine.acquire_download_tools() as tools:
-        assert tools['prefer_executable'] is False
+        assert tools['yt_dlp_path'] is None
+
+
+def test_source_download_ignores_stale_venv_launcher(engine, monkeypatch, tmp_path):
+    import sys
+
+    (tmp_path / 'yt-dlp.exe').write_bytes(b'stale pip launcher')
+    monkeypatch.setattr(sys, 'executable', str(tmp_path / 'python.exe'))
+    monkeypatch.setattr('core.setup_engine.shutil.which', lambda name: None)
+    monkeypatch.setattr(engine, '_module_version', lambda name: '2026.10.26')
+    with engine.acquire_download_tools() as tools:
+        assert tools['yt_dlp_path'] is None
 
 
 def test_frozen_and_portable_tool_paths_are_discovered(tmp_path, monkeypatch):

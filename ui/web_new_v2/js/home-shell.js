@@ -63,7 +63,7 @@ function updateAvatar() {
     const avatar = document.getElementById('home-avatar-img');
     if (source?.src && source.style.display !== 'none') { avatar.src = source.src; avatar.hidden = false; }
     else avatar.hidden = true;
-    document.getElementById('home-profile')?.setAttribute('aria-label', `Профиль: ${window.settings?.personalization?.nickname || 'NeDotify'}`);
+    document.getElementById('home-profile')?.setAttribute('aria-label', `Профиль: ${window.settings?.personalization?.nickname || 'Soneth'}`);
 }
 
 export function initHomeShell() {
