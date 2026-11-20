@@ -1,0 +1,134 @@
+[
+  {
+    "query": "королевский XVII",
+    "searchResults": 3,
+    "exactMatches": 1,
+    "profileCompleted": true,
+    "errors": [],
+    "status": "found",
+    "resolvedName": "королевский XVII",
+    "source": "youtube",
+    "sourceId": "UCRJ1roMc0LwuSJVz7o2fqnw",
+    "bioCharacters": 0,
+    "tracks": 21,
+    "albums": 11,
+    "hasMore": true,
+    "avatarPresent": true,
+    "imageSize": [
+      1440,
+      600
+    ],
+    "nextPageTracks": 12,
+    "seconds": 8.49
+  },
+  {
+    "query": "madk1d",
+    "searchResults": 3,
+    "exactMatches": 1,
+    "profileCompleted": true,
+    "errors": [],
+    "status": "found",
+    "resolvedName": "madk1d",
+    "source": "youtube",
+    "sourceId": "UCvJLQlVdWiIU0qYmowdKh6g",
+    "bioCharacters": 37,
+    "tracks": 41,
+    "albums": 12,
+    "hasMore": true,
+    "avatarPresent": true,
+    "imageSize": [
+      797,
+      332
+    ],
+    "nextPageTracks": 18,
+    "seconds": 6.56
+  },
+  {
+    "query": "9mice",
+    "searchResults": 2,
+    "exactMatches": 1,
+    "profileCompleted": true,
+    "errors": [],
+    "status": "found",
+    "resolvedName": "9mice",
+    "source": "youtube",
+    "sourceId": "UCWsRik-nITb535GxGP9T_4Q",
+    "bioCharacters": 408,
+    "tracks": 88,
+    "albums": 15,
+    "hasMore": true,
+    "avatarPresent": true,
+    "imageSize": [
+      942,
+      392
+    ],
+    "nextPageTracks": 50,
+    "seconds": 3.54
+  },
+  {
+    "query": "LOVV66",
+    "searchResults": 3,
+    "exactMatches": 1,
+    "profileCompleted": true,
+    "errors": [],
+    "status": "found",
+    "resolvedName": "LOVV66",
+    "source": "youtube",
+    "sourceId": "UC9Wu7JyePcJNs1-UYOzZ6DQ",
+    "bioCharacters": 199,
+    "tracks": 148,
+    "albums": 18,
+    "hasMore": true,
+    "avatarPresent": true,
+    "imageSize": [
+      1806,
+      752
+    ],
+    "nextPageTracks": 29,
+    "seconds": 6.41
+  },
+  {
+    "query": "PHARAOH",
+    "searchResults": 20,
+    "exactMatches": 9,
+    "profileCompleted": true,
+    "errors": [],
+    "status": "found",
+    "resolvedName": "PHARAOH",
+    "source": "youtube",
+    "sourceId": "UCTLXD_eAdt1TUKpO_pyLXSw",
+    "bioCharacters": 311,
+    "tracks": 149,
+    "albums": 20,
+    "hasMore": true,
+    "avatarPresent": true,
+    "imageSize": [
+      2880,
+      1200
+    ],
+    "nextPageTracks": 44,
+    "seconds": 5.89
+  },
+  {
+    "query": "Radiohead",
+    "searchResults": 5,
+    "exactMatches": 1,
+    "profileCompleted": true,
+    "errors": [],
+    "status": "found",
+    "resolvedName": "Radiohead",
+    "source": "youtube",
+    "sourceId": "UCr_iyUANcn9OX_yy9piYoLw",
+    "bioCharacters": 1374,
+    "tracks": 150,
+    "albums": 20,
+    "hasMore": true,
+    "avatarPresent": true,
+    "imageSize": [
+      2880,
+      1200
+    ],
+    "nextPageTracks": 53,
+    "seconds": 4.69
+  }
+]

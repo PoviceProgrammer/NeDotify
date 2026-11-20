@@ -1,0 +1,50 @@
+{
+  "itunes_metadata": {
+    "search_completed": true,
+    "results": 3,
+    "search_seconds": 0.83,
+    "error_types": [],
+    "first": {
+      "title": "Resonance",
+      "artist": "Home",
+      "duration": 212,
+      "source": "spotify"
+    },
+    "audio_provider": "YouTube verified matching, not Spotify audio",
+    "verified_youtube_stream": false
+  },
+  "youtube": {
+    "search_completed": true,
+    "results": 11,
+    "search_seconds": 0.52,
+    "error_types": [],
+    "first": {
+      "title": "HOME  - Resonance [1 Hour]",
+      "artist": "TheMusicLooper",
+      "duration": 3690,
+      "source": "youtube"
+    },
+    "stream_completed": true,
+    "stream_resolved": true,
+    "media_http": 206,
+    "media_type": "audio/webm",
+    "media_bytes": 4096
+  },
+  "soundcloud": {
+    "search_completed": true,
+    "results": 3,
+    "search_seconds": 0.95,
+    "error_types": [],
+    "first": {
+      "title": "Resonance - Home Bladerunner ( Bladerunner 2049 )",
+      "artist": "Haunuva",
+      "duration": 261,
+      "source": "soundcloud"
+    },
+    "stream_completed": true,
+    "stream_resolved": true,
+    "media_http": 200,
+    "media_type": "application/vnd.apple.mpegurl",
+    "media_bytes": 4096
+  }
+}

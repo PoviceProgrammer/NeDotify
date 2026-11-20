@@ -1,9 +1,16 @@
 /* Settings use the same surfaces as Home and Library; the selected theme owns colours. */
 #view-settings.view-page.settings-overlay { padding: 0; border-radius: inherit; background: var(--bg-main); backdrop-filter: none; -webkit-backdrop-filter: none; align-items: stretch; justify-content: stretch; }
 #main-content:has(#view-settings.active) .view-page:not(#view-settings) { visibility: hidden; }
-#view-settings.view-page.settings-overlay.active .settings-modal-card { transform: none; opacity: 1; transition: none; }
-#view-settings.view-page.settings-overlay { transition: none; }
-#view-settings .settings-modal-card { width: 100%; height: 100%; max-width: none; max-height: none; padding: 0; border: 0; border-radius: inherit; background: var(--bg-main); box-shadow: none; backdrop-filter: none; transform: none; transition: opacity .15s; display: grid; grid-template-columns: 210px minmax(0,1fr); grid-template-rows: auto minmax(0,1fr); }
+/* Open/close timing is owned by ui-motion.css: that sheet is always loaded and
+   its `html body ...` selectors outrank anything here, so repeating the
+   transition in this deferred pack only duplicated the numbers. This block
+   sets the states that choreography interpolates. */
+#view-settings.view-page.active { animation: none !important; }
+#view-settings.view-page.settings-overlay.active .settings-modal-card { transform: none; opacity: 1; }
+#view-settings .settings-modal-card { width: 100%; height: 100%; max-width: none; max-height: none; padding: 0; border: 0; border-radius: inherit; background: var(--bg-main); box-shadow: none; backdrop-filter: none; transform: translateY(10px) scale(.992); opacity: 0; display: grid; grid-template-columns: 210px minmax(0,1fr); grid-template-rows: auto minmax(0,1fr); }
+/* Panel switching is a scoped View Transition from settings-panel.js; the old
+   slide keyframe would double the movement during the snapshot. */
+#view-settings .settings-panel.active { animation: none; }
 #view-settings .settings-header-bar { grid-column: 2; grid-row: 1; padding: 22px 22px 14px; gap: 16px; background: var(--bg-surface); border-bottom: 1px solid var(--home-edge); min-width: 0; }
 .settings-current-heading { min-width: 0; }
 .settings-current-heading h2 { font: 650 23px/1.2 var(--font-family); margin: 0 0 6px; letter-spacing: -.4px; }
@@ -159,7 +166,7 @@ html.no-backdrop #view-settings :is(.settings-nav,.settings-panels,.settings-hea
 #view-settings button:disabled { cursor: not-allowed; opacity: .5; }
 #view-settings .settings-block-heading { flex-wrap: wrap; }
 #view-settings #workshop-tags-container { min-width: 0; }
-#view-settings :is(#opt-active-resources,#opt-mp-pos,#mp-pos-btn-group) { flex-wrap: wrap; }
+#view-settings #opt-active-resources { flex-wrap: wrap; }
 #view-settings .workshop-card { min-width: 0; background: var(--bg-main); border-color: var(--home-edge); }
 #view-settings .workshop-card-title { color: var(--text-main); }
 #view-settings .workshop-card-author { color: var(--text-sec); }

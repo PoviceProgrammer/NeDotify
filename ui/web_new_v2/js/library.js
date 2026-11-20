@@ -57,7 +57,7 @@ export function initLibrary() {
                     if (res && res.success) {
                         if (res.count > 0 && batchProgressBox) {
                             batchProgressBox.style.display = 'inline-flex';
-                            if (batchProgressBar) batchProgressBar.style.width = '0%';
+                            if (batchProgressBar) batchProgressBar.style.transform = 'scaleX(0)';
                             if (batchProgressCount) batchProgressCount.textContent = `0 / ${res.count}`;
                         }
                         window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: res.message || 'Скачивание начато', type: 'success' } }));
@@ -88,21 +88,21 @@ export function initLibrary() {
     document.addEventListener('nedotify:batch_download_started', (e) => {
         const data = e.detail || {};
         if (batchProgressBox) batchProgressBox.style.display = 'inline-flex';
-        if (batchProgressBar) batchProgressBar.style.width = '0%';
+        if (batchProgressBar) batchProgressBar.style.transform = 'scaleX(0)';
         if (batchProgressCount) batchProgressCount.textContent = `0 / ${data.total || 0}`;
     });
 
     document.addEventListener('nedotify:batch_download_progress', (e) => {
         const data = e.detail || {};
         if (batchProgressBox) batchProgressBox.style.display = 'inline-flex';
-        if (batchProgressBar) batchProgressBar.style.width = `${data.percent || 0}%`;
+        if (batchProgressBar) batchProgressBar.style.transform = `scaleX(${Math.max(0, Math.min(100, data.percent || 0)) / 100})`;
         if (batchProgressCount) batchProgressCount.textContent = `${data.current || 0} / ${data.total || 0}`;
     });
 
     document.addEventListener('nedotify:batch_download_finished', (e) => {
         const data = e.detail || {};
         if (batchProgressCount) batchProgressCount.textContent = `${data.completed || 0} / ${data.total || 0}`;
-        if (batchProgressBar) batchProgressBar.style.width = '100%';
+        if (batchProgressBar) batchProgressBar.style.transform = 'scaleX(1)';
         setTimeout(() => {
             if (batchProgressBox) batchProgressBox.style.display = 'none';
             window.dispatchEvent(new CustomEvent('nedotify:toast', { detail: { msg: `✅ Загрузка завершена (${data.completed || 0} треков)`, type: 'success' } }));
@@ -414,6 +414,7 @@ window.refreshActiveLibraryView = refreshActiveLibraryView;
 let libraryScrollCleanup = null;
 
 function renderLibraryList(tracksContainer, tracks) {
+    window.NeDotifyMotion?.reveal(tracksContainer);
     if (libraryScrollCleanup) { libraryScrollCleanup(); libraryScrollCleanup = null; }
     const renderer = createLibraryVirtualList(tracksContainer, tracks, {
         createRow: (track, index, all) => decorateLibraryRow(createTrackElement(track, index, all, getCurrentTrack()), track, index),
@@ -494,7 +495,7 @@ export async function selectSection(type, data = null) {
         sub.textContent=type==='all' && allTotal!==null?`${allTotal} треков`:type==='all' && allHasMore?`${count} треков загружено`: `${count} треков`;
         updateLibraryHero(type,data,tracks);
         showPlaylistRecommendations(type,data,tracks);
-        if(!tracks.length){renderLibraryEmpty(container,type==='playlist'?'В этом плейлисте пока нет треков':type==='favorites'?'Добавьте любимые треки':type==='offline'?'Музыка для прослушивания без сети':'Начните свою коллекцию');return;}
+        if(!tracks.length){window.NeDotifyMotion?.reveal(container);renderLibraryEmpty(container,type==='playlist'?'В этом плейлисте пока нет треков':type==='favorites'?'Добавьте любимые треки':type==='offline'?'Музыка для прослушивания без сети':'Начните свою коллекцию');return;}
         const renderer=renderLibraryList(container,tracks);
         if(type==='all' && allHasMore) {
             let offset=raw.length;
@@ -815,10 +816,12 @@ function endDrag(item, list) {
             .map(el => el.getAttribute('data-pl-id'));
         savePlaylistOrder(ids);
 
-        // Flash item
-        item.style.transition = 'background 0.3s';
-        item.style.background = 'rgba(var(--primary-rgb, 59,130,246), 0.15)';
-        setTimeout(() => { item.style.background = ''; }, 400);
+        // Flash item through a class so hover and theme colours keep ownership
+        // of the inline style. Re-adding the class restarts the keyframe.
+        item.classList.remove('just-dropped');
+        void item.offsetWidth;
+        item.classList.add('just-dropped');
+        setTimeout(() => item.classList.remove('just-dropped'), 450);
     }, 200);
 }
 

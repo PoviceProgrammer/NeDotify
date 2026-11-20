@@ -1,0 +1,41 @@
+{
+  "seed": {
+    "source": "deezer",
+    "source_id": "3135556",
+    "title": "Harder, Better, Faster, Stronger",
+    "artist": "Daft Punk",
+    "duration": 226.0
+  },
+  "count": 30,
+  "ms": 1170,
+  "examples": [
+    {
+      "source": "deezer",
+      "source_id": "3155977",
+      "title": "Robot Rock",
+      "artist": "Daft Punk",
+      "recommendation_source": "deezer_radio"
+    },
+    {
+      "source": "deezer",
+      "source_id": "445797882",
+      "title": "Safe and Sound",
+      "artist": "Justice",
+      "recommendation_source": "deezer_radio"
+    },
+    {
+      "source": "deezer",
+      "source_id": "3155975",
+      "title": "Human After All",
+      "artist": "Daft Punk",
+      "recommendation_source": "deezer_radio"
+    },
+    {
+      "source": "deezer",
+      "source_id": "125543278",
+      "title": "Heal Tomorrow",
+      "artist": "Naïve New Beaters",
+      "recommendation_source": "deezer_radio"
+    }
+  ]
+}

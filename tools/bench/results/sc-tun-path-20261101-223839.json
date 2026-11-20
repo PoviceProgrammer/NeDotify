@@ -1,0 +1,11 @@
+{
+  "source": "soundcloud",
+  "source_id": "2393146779",
+  "anonymous": true,
+  "youtube_fallback_enabled": false,
+  "status": "failed",
+  "valid": false,
+  "phase": "resolve",
+  "resolve_ms": 29662,
+  "error_type": "provider_callback_failure"
+}

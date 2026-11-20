@@ -15,6 +15,31 @@
     cursor: pointer;
     font: 600 var(--font-size-md) var(--font-display);
     list-style: none;
+    transition: color .15s ease;
+}
+.download-manager summary:hover { color: var(--primary); }
+.download-manager summary::-webkit-details-marker { display: none; }
+
+/* `<details>` hides its content in one frame. Keeping the body in the box tree
+   at 0fr lets the height, opacity and visibility interpolate together; the
+   inner wrapper carries the overflow clip, so no descendant leaks out. */
+.download-manager details > .download-manager-body {
+    display: grid !important;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    visibility: hidden;
+    transition: grid-template-rows 260ms cubic-bezier(.2,.75,.2,1),
+                opacity 180ms ease,
+                visibility 260ms allow-discrete;
+}
+.download-manager details[open] > .download-manager-body {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    visibility: visible;
+}
+.download-manager-body-inner { min-height: 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) {
+    .download-manager details > .download-manager-body { transition: none; }
 }
 
 .download-manager-count,
@@ -71,7 +96,9 @@
     gap: var(--space-md);
     padding: 12px 0;
     border-top: 1px solid var(--color-border);
+    transition: background-color .15s ease;
 }
+.download-manager-row:hover { background: color-mix(in srgb, var(--color-surface-hover) 55%, transparent); }
 
 .download-manager-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); justify-content: flex-end; }
 

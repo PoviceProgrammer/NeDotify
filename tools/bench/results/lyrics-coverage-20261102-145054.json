@@ -1,0 +1,62 @@
+{
+  "actual_network": true,
+  "profile": "disposable",
+  "models": false,
+  "results": [
+    {
+      "status": "found",
+      "source": "lyrics.ovh",
+      "matched_title": "Never Gonna Give You Up",
+      "matched_artist": "Rick Astley",
+      "matched_duration": 0.0,
+      "match_type": "exact",
+      "found": true,
+      "characters": 1923,
+      "synced": false,
+      "case": "ovh",
+      "ms": 695,
+      "process_cpu_ms": 16
+    },
+    {
+      "found": false,
+      "characters": 0,
+      "synced": false,
+      "case": "better_qq",
+      "ms": 652,
+      "process_cpu_ms": 31
+    },
+    {
+      "status": "found",
+      "source": "Kugou",
+      "matched_title": "晴天",
+      "matched_artist": "周杰伦",
+      "matched_duration": 265.072,
+      "match_type": "exact",
+      "syncType": "line",
+      "found": true,
+      "characters": 593,
+      "synced": true,
+      "case": "kugou",
+      "ms": 2422,
+      "process_cpu_ms": 47
+    },
+    {
+      "status": "unavailable",
+      "found": false,
+      "characters": 0,
+      "synced": false,
+      "case": "upload-cold",
+      "ms": 4855,
+      "process_cpu_ms": 156
+    },
+    {
+      "status": "unavailable",
+      "found": false,
+      "characters": 0,
+      "synced": false,
+      "case": "upload-memory-cache",
+      "ms": 6588,
+      "process_cpu_ms": 156
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "vpnModified": false,
+  "profileIsolated": true,
+  "cookiesUsed": false,
+  "sourceId": "dQw4w9WgXcQ",
+  "path": "AppApi.download_track -> DownloadManager -> YouTubeService",
+  "frozenRuntime": false,
+  "apiModuleLoader": "SourceFileLoader",
+  "setupLeaseEnabled": true,
+  "accepted": true,
+  "terminalEventReceived": true,
+  "completeEvents": 1,
+  "failedEvents": 0,
+  "databaseDownloaded": true,
+  "fileBytes": 3434789,
+  "duration": 213.061,
+  "extension": ".webm",
+  "sha256": "37b3d79d90261c7a15317431c9539c23bff1adf90a4fbb725345cc9d94ab5bc6",
+  "queueStatus": "completed",
+  "ok": true,
+  "seconds": 4.41
+}

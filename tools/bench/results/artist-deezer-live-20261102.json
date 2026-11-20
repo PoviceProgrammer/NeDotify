@@ -1,0 +1,88 @@
+{
+  "previews": [
+    {
+      "source": "deezer",
+      "source_id": "50971482",
+      "name": "Pharaøh",
+      "preview_track": "Sweet Dreams · I Won't Let You Go · Hall Of Fame"
+    },
+    {
+      "source": "deezer",
+      "source_id": "379005",
+      "name": "Pharaoh",
+      "preview_track": "So Lately"
+    },
+    {
+      "source": "deezer",
+      "source_id": "10216612",
+      "name": "Pharaoh",
+      "preview_track": "Акид · Дико, например · 5 минут назад"
+    },
+    {
+      "source": "deezer",
+      "source_id": "14619927",
+      "name": "Pharaoh",
+      "preview_track": "PAST · Donald"
+    },
+    {
+      "source": "deezer",
+      "source_id": "66982102",
+      "name": "Pharaoh",
+      "preview_track": ""
+    },
+    {
+      "source": "deezer",
+      "source_id": "66981722",
+      "name": "Pharaoh",
+      "preview_track": ""
+    },
+    {
+      "source": "deezer",
+      "source_id": "129600152",
+      "name": "Pharaoh",
+      "preview_track": ""
+    },
+    {
+      "source": "deezer",
+      "source_id": "420588182",
+      "name": "Pharaoh",
+      "preview_track": ""
+    }
+  ],
+  "profile": {
+    "status": "found",
+    "name": "Pharaoh",
+    "source": "deezer",
+    "source_id": "10216612",
+    "tracks_has_more": true,
+    "catalog_partial": true,
+    "tracks": 34,
+    "sample_tracks": [
+      "Акид",
+      "Дико, например",
+      "5 минут назад",
+      "Фосфор",
+      "Выродок"
+    ]
+  },
+  "pages": [
+    {
+      "next_offset": 3,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 43,
+      "albums": 41
+    },
+    {
+      "next_offset": 6,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 43,
+      "albums": 41
+    }
+  ],
+  "unique_tracks_after_2_pages": 99,
+  "seconds": 3.408
+}

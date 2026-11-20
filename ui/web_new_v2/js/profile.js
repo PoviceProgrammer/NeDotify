@@ -34,6 +34,7 @@ export function relativeProfileTime(raw,now=Date.now()) {
     return 'Только что';
 }
 function state(container,message,retry) {
+    window.NeDotifyMotion?.reveal(container);
     container.replaceChildren();const box=document.createElement('div');box.className='profile-empty';
     const label=document.createElement('p');label.textContent=message;box.append(label);
     const button=document.createElement('button');button.className='home-pill';button.textContent=retry?'Повторить':'Найти музыку';button.onclick=retry || (()=>window.showPage('search'));box.append(button);container.append(box);
@@ -49,6 +50,7 @@ function decorateRow(track,index,list,metric) {
 }
 function renderTop(tracks) {
     const container=document.getElementById('profile-top-tracks');container.replaceChildren();
+    window.NeDotifyMotion?.reveal(container);
     if(!tracks.length){state(container,selectedPeriod==='all'?'Здесь появятся ваши любимые треки':'За этот период прослушиваний пока нет');return;}
     tracks.slice(0,5).forEach((track,index)=>{
         const count=track.plays ?? track.play_count;
@@ -75,7 +77,9 @@ function openHistory() {
 }
 function renderRecent() {
     const container=document.getElementById('profile-recent');container.replaceChildren();
+    window.NeDotifyMotion?.reveal(container);
     const activity=document.getElementById('profile-activity');activity.replaceChildren();
+    window.NeDotifyMotion?.reveal(activity);
     if(!recent.length){state(container,'Вы ещё ничего не слушали');state(activity,'Новые прослушивания появятся здесь');return;}
     recent.slice(0,5).forEach((track,index)=>{
         const card=document.createElement('article');card.className='profile-recent-card';
@@ -98,6 +102,7 @@ async function fillPlaylistCover(container,playlist,current) {
 function openCollection(type,playlist) {window.showPage('library');selectSection(type,playlist);}
 function renderPlaylists(current) {
     const container=document.getElementById('profile-playlists');container.replaceChildren();
+    window.NeDotifyMotion?.reveal(container);
     const items=[{name:'Любимые',kind:'favorites',track_count:profileData?.favorite_count ?? 0},...playlists.slice(0,3).map(item=>({...item,kind:'playlist'}))];
     items.forEach(playlist=>{
         const card=document.createElement('article');card.className='profile-playlist-card';
@@ -143,6 +148,7 @@ export async function loadProfile() {
     text('profile-stat-tracks',number.format(plays ?? profileData.total_tracks ?? 0));text('profile-stat-tracks-label',plays===null?'Треков в библиотеке':'Прослушиваний');
     text('profile-stat-time',formatListeningTimeShort(profileData.total_listening_time_ms || 0));text('profile-stat-favorites',number.format(profileData.favorite_count || 0));
     text('profile-stat-playlists',number.format(profileData.playlist_count || 0));
+    window.NeDotifyMotion?.reveal(document.querySelector('#view-profile .stats-grid'), 0);
     if(playlistResult.status==='fulfilled' && Array.isArray(playlistResult.value)){playlists=playlistResult.value;renderPlaylists(current);}
     else state(document.getElementById('profile-playlists'),'Не удалось загрузить плейлисты',loadProfile);
     renderRecent();loadTop();

@@ -1,0 +1,368 @@
+{
+  "scenario": "startup",
+  "mode": "three-provider-live",
+  "started_at": 1794303896.6159513,
+  "ok": true,
+  "error": null,
+  "data": {
+    "results": [
+      {
+        "first": {
+          "clockAdvancedMs": 1552,
+          "peak": 0.17965932190418243,
+          "positionMs": 2032
+        },
+        "firstPlaying": true,
+        "next": {
+          "clockAdvancedMs": 1571,
+          "peak": 0.20682454109191895,
+          "positionMs": 2029
+        },
+        "nextPlaying": true,
+        "pause": true,
+        "query": "Rick Astley",
+        "queueTracks": 2,
+        "resume": true,
+        "searchResults": 11,
+        "seek": true,
+        "source": "youtube",
+        "startAndMeasureMs": 4805,
+        "tracks": [
+          {
+            "artist": "Unknown Artist",
+            "source_id": "lYBUbBu4W08",
+            "title": "Never Gonna Give You Up"
+          },
+          {
+            "artist": "Unknown Artist",
+            "source_id": "t4KNl0pjxzI",
+            "title": "Cry for Help (Single Version)"
+          }
+        ],
+        "style": "current",
+        "resolutions": [
+          {
+            "source": "youtube",
+            "source_id": "lYBUbBu4W08",
+            "host": "rr1---sn-u15hn5-5h.googlevideo.com"
+          },
+          {
+            "source": "youtube",
+            "source_id": "t4KNl0pjxzI",
+            "host": "rr5---sn-25glenez.googlevideo.com"
+          }
+        ]
+      },
+      {
+        "first": {
+          "clockAdvancedMs": 1579,
+          "peak": 0.023453276604413986,
+          "positionMs": 2043
+        },
+        "firstPlaying": true,
+        "next": {
+          "clockAdvancedMs": 1551,
+          "peak": 0.11705886572599411,
+          "positionMs": 2002
+        },
+        "nextPlaying": true,
+        "pause": true,
+        "query": "v3lvet",
+        "queueTracks": 2,
+        "resume": true,
+        "searchResults": 20,
+        "seek": true,
+        "source": "soundcloud",
+        "startAndMeasureMs": 5277,
+        "tracks": [
+          {
+            "artist": "v3lvet",
+            "source_id": "2215597907",
+            "title": "пьяный дождь ( mylancore )"
+          },
+          {
+            "artist": "v3lvet",
+            "source_id": "2293084007",
+            "title": "Нуар ( 3bor remix )"
+          }
+        ],
+        "style": "current",
+        "resolutions": [
+          {
+            "source": "soundcloud",
+            "source_id": "2215597907",
+            "host": "playback.media-streaming.soundcloud.cloud"
+          },
+          {
+            "source": "soundcloud",
+            "source_id": "2293084007",
+            "host": "playback.media-streaming.soundcloud.cloud"
+          }
+        ]
+      },
+      {
+        "first": {
+          "clockAdvancedMs": 1531,
+          "peak": 0.038185808807611465,
+          "positionMs": 2021
+        },
+        "firstPlaying": true,
+        "next": {
+          "clockAdvancedMs": 1549,
+          "peak": 0.06841102242469788,
+          "positionMs": 2029
+        },
+        "nextPlaying": true,
+        "pause": true,
+        "query": "Radiohead Creep",
+        "queueTracks": 2,
+        "resume": true,
+        "searchResults": 20,
+        "seek": true,
+        "source": "spotify",
+        "startAndMeasureMs": 4779,
+        "tracks": [
+          {
+            "artist": "Radiohead",
+            "source_id": "ytsearch1: Radiohead - Creep (Acoustic)",
+            "title": "Creep (Acoustic)"
+          },
+          {
+            "artist": "Thom Yorke",
+            "source_id": "ytsearch1: Thom Yorke - Creep (feat. Radiohead) [Very 2021 Rmx]",
+            "title": "Creep (feat. Radiohead) [Very 2021 Rmx]"
+          }
+        ],
+        "style": "current",
+        "resolutions": [
+          {
+            "source": "spotify",
+            "source_id": "ytsearch1: Radiohead - Creep (Acoustic)",
+            "host": "rr2---sn-u15hn5-51.googlevideo.com"
+          },
+          {
+            "source": "spotify",
+            "source_id": "ytsearch1: Thom Yorke - Creep (feat. Radiohead) [Very 2021 Rmx]",
+            "host": "rr5---sn-u125g5-5q.googlevideo.com"
+          }
+        ]
+      },
+      {
+        "first": {
+          "clockAdvancedMs": 1550,
+          "peak": 0.12204436212778091,
+          "positionMs": 2019
+        },
+        "firstPlaying": true,
+        "next": {
+          "clockAdvancedMs": 1521,
+          "peak": 0.20682454109191895,
+          "positionMs": 2000
+        },
+        "nextPlaying": true,
+        "pause": true,
+        "query": "Rick Astley",
+        "queueTracks": 2,
+        "resume": true,
+        "searchResults": 11,
+        "seek": true,
+        "source": "youtube",
+        "startAndMeasureMs": 2661,
+        "tracks": [
+          {
+            "artist": "Unknown Artist",
+            "source_id": "lYBUbBu4W08",
+            "title": "Never Gonna Give You Up"
+          },
+          {
+            "artist": "Unknown Artist",
+            "source_id": "t4KNl0pjxzI",
+            "title": "Cry for Help (Single Version)"
+          }
+        ],
+        "style": "macos",
+        "resolutions": [
+          {
+            "source": "youtube",
+            "source_id": "lYBUbBu4W08",
+            "host": "rr1---sn-u15hn5-5h.googlevideo.com"
+          },
+          {
+            "source": "youtube",
+            "source_id": "t4KNl0pjxzI",
+            "host": "rr5---sn-25glenez.googlevideo.com"
+          },
+          {
+            "source": "youtube",
+            "source_id": "lYBUbBu4W08",
+            "host": "rr1---sn-u15hn5-5h.googlevideo.com"
+          },
+          {
+            "source": "youtube",
+            "source_id": "t4KNl0pjxzI",
+            "host": "rr5---sn-25glenez.googlevideo.com"
+          }
+        ]
+      },
+      {
+        "first": {
+          "clockAdvancedMs": 1540,
+          "peak": 0.016661139205098152,
+          "positionMs": 1973
+        },
+        "firstPlaying": true,
+        "next": {
+          "clockAdvancedMs": 1541,
+          "peak": 0.12221381813287735,
+          "positionMs": 1982
+        },
+        "nextPlaying": true,
+        "pause": true,
+        "query": "v3lvet",
+        "queueTracks": 2,
+        "resume": true,
+        "searchResults": 20,
+        "seek": true,
+        "source": "soundcloud",
+        "startAndMeasureMs": 3916,
+        "tracks": [
+          {
+            "artist": "v3lvet",
+            "source_id": "2215597907",
+            "title": "пьяный дождь ( mylancore )"
+          },
+          {
+            "artist": "v3lvet",
+            "source_id": "2293084007",
+            "title": "Нуар ( 3bor remix )"
+          }
+        ],
+        "style": "macos",
+        "resolutions": [
+          {
+            "source": "soundcloud",
+            "source_id": "2215597907",
+            "host": "playback.media-streaming.soundcloud.cloud"
+          },
+          {
+            "source": "soundcloud",
+            "source_id": "2293084007",
+            "host": "playback.media-streaming.soundcloud.cloud"
+          },
+          {
+            "source": "soundcloud",
+            "source_id": "2215597907",
+            "host": "playback.media-streaming.soundcloud.cloud"
+          },
+          {
+            "source": "soundcloud",
+            "source_id": "2293084007",
+            "host": "playback.media-streaming.soundcloud.cloud"
+          }
+        ]
+      },
+      {
+        "first": {
+          "clockAdvancedMs": 1541,
+          "peak": 0.035244353115558624,
+          "positionMs": 1971
+        },
+        "firstPlaying": true,
+        "next": {
+          "clockAdvancedMs": 1539,
+          "peak": 0.057268332690000534,
+          "positionMs": 1979
+        },
+        "nextPlaying": true,
+        "pause": true,
+        "query": "Radiohead Creep",
+        "queueTracks": 2,
+        "resume": true,
+        "searchResults": 20,
+        "seek": true,
+        "source": "spotify",
+        "startAndMeasureMs": 2405,
+        "tracks": [
+          {
+            "artist": "Radiohead",
+            "source_id": "ytsearch1: Radiohead - Creep (Acoustic)",
+            "title": "Creep (Acoustic)"
+          },
+          {
+            "artist": "Thom Yorke",
+            "source_id": "ytsearch1: Thom Yorke - Creep (feat. Radiohead) [Very 2021 Rmx]",
+            "title": "Creep (feat. Radiohead) [Very 2021 Rmx]"
+          }
+        ],
+        "style": "macos",
+        "resolutions": [
+          {
+            "source": "spotify",
+            "source_id": "ytsearch1: Radiohead - Creep (Acoustic)",
+            "host": "rr2---sn-u15hn5-51.googlevideo.com"
+          },
+          {
+            "source": "spotify",
+            "source_id": "ytsearch1: Thom Yorke - Creep (feat. Radiohead) [Very 2021 Rmx]",
+            "host": "rr5---sn-u125g5-5q.googlevideo.com"
+          },
+          {
+            "source": "spotify",
+            "source_id": "ytsearch1: Radiohead - Creep (Acoustic)",
+            "host": "rr2---sn-u15hn5-51.googlevideo.com"
+          },
+          {
+            "source": "spotify",
+            "source_id": "ytsearch1: Thom Yorke - Creep (feat. Radiohead) [Very 2021 Rmx]",
+            "host": "rr5---sn-u125g5-5q.googlevideo.com"
+          }
+        ]
+      }
+    ],
+    "realProviders": true,
+    "realBridge": true,
+    "audioFixtures": false,
+    "realSignalMeasured": true,
+    "speakerDestinationDisconnected": true,
+    "vpnModified": false
+  },
+  "perf": {
+    "Timestamp": 266733.896316,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 2173,
+    "LayoutObjects": 1918,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 18267,
+    "Resources": 126,
+    "ContextLifecycleStateObservers": 48,
+    "V8PerContextDatas": 1,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 13,
+    "LayoutCount": 738,
+    "RecalcStyleCount": 2235,
+    "LayoutDuration": 0.321716,
+    "RecalcStyleDuration": 1.241245,
+    "DevToolsCommandDuration": 0.208441,
+    "ScriptDuration": 0.393947,
+    "V8CompileDuration": 0.000159,
+    "TaskDuration": 7.208254,
+    "TaskOtherDuration": 5.042746,
+    "ThreadTime": 7.346536,
+    "ProcessTime": 14.238044,
+    "JSHeapUsedSize": 6614308,
+    "JSHeapTotalSize": 8126464,
+    "FirstMeaningfulPaint": 266657.822075,
+    "DomContentLoaded": 266657.871311,
+    "NavigationStart": 266657.716398
+  },
+  "finished_at": 1794303974.4045796
+}

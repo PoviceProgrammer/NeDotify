@@ -261,6 +261,7 @@ async function renderArtistStatus(name, data, container, generation) {
             <button class="btn btn-secondary" style="padding:8px 20px; border-radius:9999px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:#fff; cursor:pointer;">Повторить поиск</button>
         </div>
     `;
+    window.NeDotifyMotion?.reveal(container, 0);
     container.querySelector('button')?.addEventListener('click', () => loadArtistProfile(name, container));
     appendRealSearchResults(name, container, generation);
     if (window.pywebview?.api?.get_library) {
@@ -562,6 +563,7 @@ export async function loadArtistProfile(artistName, targetContainer = null, arti
         let catalogLimited = bridgeProfile.catalog_source_limited === true;
         function renderArtistTracks() {
             if (!tracksList) return;
+            window.NeDotifyMotion?.reveal(tracksList);
             if (tracksList.parentElement) {
                 let note = tracksList.parentElement.querySelector('.artist-catalog-status');
                 if (!note) {
@@ -682,6 +684,7 @@ export async function loadArtistProfile(artistName, targetContainer = null, arti
                     `;
                 }).join('');
 
+                window.NeDotifyMotion?.reveal(albumsGrid);
                 albumsGrid.querySelectorAll('.artist-album-card').forEach(card => {
                     const idx = Number(card.dataset.albumIndex);
                     const alb = albums[idx];
@@ -705,7 +708,7 @@ export async function loadArtistProfile(artistName, targetContainer = null, arti
         }
         }
         renderArtistAlbums();
-
+        window.NeDotifyMotion?.reveal(container, 0);
         renderIcons();
     } catch (e) {
         if (currentGen !== profileGenerationId) return;

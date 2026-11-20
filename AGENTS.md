@@ -38,6 +38,10 @@ and conclude.
 - `.claude/skills/nedotify-run` — launching the app, the WebView2 pin, logs, shutdown.
 - `.claude/skills/nedotify-build` — installer, `sys._MEIPASS`, `datas`, hidden imports.
 - `.claude/skills/nedotify-perf` — isolated benchmarks in `tools/bench/`.
+- [Soneth UI motion](docs/ui-motion.md) — read and research relevant music-app
+  references before adding or changing animation or interaction feedback.
+  Follow the linked reference and license guidance and document each effect's
+  source, implementation, and expected performance cost.
 - `STATUS.md` — what the code actually does. `docs/AUDIT.md` — what the
   2026-10-03 audit changed.
 

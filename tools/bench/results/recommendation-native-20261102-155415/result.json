@@ -1,0 +1,76 @@
+{
+  "scenario": "startup",
+  "mode": "recommendation-native",
+  "started_at": 1793624055.9194212,
+  "ok": true,
+  "error": null,
+  "data": {
+    "advancing": true,
+    "discovery_count": 12,
+    "examples": [
+      {
+        "artist": "Soys",
+        "source": "youtube",
+        "source_id": "TByoaC9dkko",
+        "title": "Pharaoh x Пошлая Молли - BLACK СТОП (Tik tok,Тик ток) mashup by.dmitrsolo / 2017 Aesthetic,тренды"
+      },
+      {
+        "artist": "QUEEN BELEMZY MINISTRIES - SCHOOL OF POWER",
+        "source": "soundcloud",
+        "source_id": "1582443743",
+        "title": "I AM GREAT, TO PEOPLE WHO LOVE GOD O."
+      },
+      {
+        "artist": "#голодный",
+        "source": "soundcloud",
+        "source_id": "2425486485",
+        "title": "blossom (speed up)"
+      }
+    ],
+    "mix_count": 6,
+    "passed": true,
+    "queue_count": 12,
+    "queue_exact": true,
+    "skin": "current",
+    "screenshot": "C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\tools\\bench\\results\\recommendation-native-20261102-155415\\recommendations-current.png"
+  },
+  "perf": {
+    "Timestamp": 25743.041773,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 1092,
+    "LayoutObjects": 1780,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 10640,
+    "Resources": 108,
+    "ContextLifecycleStateObservers": 47,
+    "V8PerContextDatas": 1,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 5,
+    "LayoutCount": 113,
+    "RecalcStyleCount": 255,
+    "LayoutDuration": 0.130692,
+    "RecalcStyleDuration": 0.761489,
+    "DevToolsCommandDuration": 0.042973,
+    "ScriptDuration": 0.057947,
+    "V8CompileDuration": 0.000158,
+    "TaskDuration": 1.556272,
+    "TaskOtherDuration": 0.563013,
+    "ThreadTime": 1.539743,
+    "ProcessTime": 2.562496,
+    "JSHeapUsedSize": 4925604,
+    "JSHeapTotalSize": 7864320,
+    "FirstMeaningfulPaint": 25736.614414,
+    "DomContentLoaded": 25736.591017,
+    "NavigationStart": 25736.391564
+  },
+  "finished_at": 1793624064.2000995
+}

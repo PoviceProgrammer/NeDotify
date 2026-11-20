@@ -1,0 +1,120 @@
+{
+  "seconds": 7.254,
+  "result": {
+    "status": "ambiguous",
+    "candidates": [
+      {
+        "name": "PHARAOH",
+        "source": "itunes",
+        "source_id": "1077538316",
+        "genres": "Hip-Hop/Rap",
+        "preview_track": "Дико, например · 5 минут назад · Дико, например",
+        "matching_track": "Дико, например"
+      },
+      {
+        "name": "Pharaoh",
+        "source": "itunes",
+        "source_id": "1373266440",
+        "genres": "Metal",
+        "preview_track": "Lost in the Waves · The Powers That Be · Freedom"
+      },
+      {
+        "name": "Pharaoh",
+        "source": "itunes",
+        "source_id": "1510767558",
+        "genres": "Hip-Hop/Rap",
+        "preview_track": "Perfect (feat. Nomad & Fiji)"
+      },
+      {
+        "name": "Pharaoh",
+        "source": "itunes",
+        "source_id": "1453051375",
+        "genres": "Hip-Hop/Rap",
+        "preview_track": "New Wave Alert"
+      },
+      {
+        "name": "PHARAOH",
+        "source": "itunes",
+        "source_id": "1446068838",
+        "genres": "Chinese Hip-Hop",
+        "preview_track": "如果死亡将要来临 · Lone Ranger · Respect"
+      },
+      {
+        "name": "Pharaoh",
+        "source": "itunes",
+        "source_id": "1539169408",
+        "genres": "Hip-Hop/Rap",
+        "preview_track": "Dna · We Gonna Make It · I Ball"
+      },
+      {
+        "name": "Pharaoh",
+        "type": "artist",
+        "source": "deezer",
+        "source_id": "379005",
+        "avatar_url": "https://cdn-images.dzcdn.net/images/artist/136d1c20214103a29e8725dcfb2d84b7/1000x1000-000000-80-0-0.jpg",
+        "preview_track": "So Lately"
+      },
+      {
+        "name": "Pharaoh",
+        "type": "artist",
+        "source": "deezer",
+        "source_id": "10216612",
+        "avatar_url": "https://cdn-images.dzcdn.net/images/artist/3212498cc7cd91f282d934043746a64d/1000x1000-000000-80-0-0.jpg",
+        "preview_track": "Акид · Дико, например · 5 минут назад",
+        "matching_track": "Дико, например"
+      },
+      {
+        "name": "Pharaoh",
+        "type": "artist",
+        "source": "deezer",
+        "source_id": "14619927",
+        "avatar_url": "https://cdn-images.dzcdn.net/images/artist/d41d8cd98f00b204e9800998ecf8427e/1000x1000-000000-80-0-0.jpg",
+        "preview_track": "PAST · Donald"
+      },
+      {
+        "name": "Pharaoh",
+        "type": "artist",
+        "source": "deezer",
+        "source_id": "66982102",
+        "avatar_url": "https://cdn-images.dzcdn.net/images/artist/11076bcc8d412eb85a0f7cb216f876fd/1000x1000-000000-80-0-0.jpg",
+        "preview_track": ""
+      },
+      {
+        "name": "Pharaoh",
+        "type": "artist",
+        "source": "deezer",
+        "source_id": "66981722",
+        "avatar_url": "https://cdn-images.dzcdn.net/images/artist/15e0f32ffab6a81e1c0e332a8fbba6d4/1000x1000-000000-80-0-0.jpg",
+        "preview_track": ""
+      },
+      {
+        "name": "Pharaoh",
+        "type": "artist",
+        "source": "deezer",
+        "source_id": "129600152",
+        "avatar_url": "https://cdn-images.dzcdn.net/images/artist/89b57657a42e5acac01adbcf12abc796/1000x1000-000000-80-0-0.jpg",
+        "preview_track": ""
+      },
+      {
+        "name": "Pharaoh",
+        "type": "artist",
+        "source": "deezer",
+        "source_id": "420588182",
+        "avatar_url": "https://cdn-images.dzcdn.net/images/artist/beaf0ed54d8f219b21d7df1a575f4ed2/1000x1000-000000-80-0-0.jpg",
+        "preview_track": ""
+      }
+    ]
+  },
+  "itunes_calls": [
+    {
+      "url": "https://itunes.apple.com/search?term=PHARAOH&entity=musicArtist&media=music&limit=8",
+      "results": 8,
+      "seconds": 0.47
+    },
+    {
+      "url": "https://itunes.apple.com/lookup?id=1077538316,1373266440,1446068838,1453051375,1510767558,1539169408&entity=song&limit=200",
+      "results": 426,
+      "seconds": 3.98
+    }
+  ]
+}

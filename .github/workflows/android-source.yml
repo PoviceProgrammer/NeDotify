@@ -1,0 +1,77 @@
+name: Android source checks
+on:
+  push:
+    paths: ['android/**', '.github/workflows/android-source.yml']
+  pull_request:
+    paths: ['android/**', '.github/workflows/android-source.yml']
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      # The platform package is named after the API level *and* its minor
+      # version: API 37.0 ships as "platforms;android-37.0" (there is no
+      # "platforms;android-37" in the repository). The build resolves
+      # platforms/android-37.0/android.jar as its boot classpath.
+      - name: Install the pinned SDK platform
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+      # TRIP-WIRE, ON PURPOSE.
+      # The snapshot pins the sources of android/ by hash, so this step fails
+      # on EVERY ordinary change until the manifest is regenerated:
+      #     powershell -File android/tools/update-review.ps1 -RefreshSnapshot
+      # The snapshot is what makes the check reproducible - a gate that
+      # accepts any tree is not a gate - so the step is not optional and the
+      # manifest is expected to change with the sources.
+      - name: Verify the source snapshot
+        shell: pwsh
+        run: ./android/review/VERIFY.ps1
+      # The catalog and the lock state must name the same versions: the lock
+      # state wins over the catalog, so a catalog that lies is a silent
+      # downgrade waiting to happen. The check is also part of
+      # android/verify.ps1.
+      - name: The version catalog and the lock state agree
+        shell: pwsh
+        run: ./android/tools/check-catalog-lock.ps1
+      # No APK: the APK tasks are forbidden by android/AGENTS.md.
+      - name: JVM, lint and instrumentation compilation (no APK)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --console=plain :app:testDebugUnitTest :app:lintDebug :app:compileDebugAndroidTestKotlin
+      # The dependency verification runs when an artifact is DOWNLOADED. An
+      # artifact that already sits in the local Gradle cache is NOT hashed
+      # again, so a warm cache hides an incomplete
+      # gradle/verification-metadata.xml. This step runs the resolution with
+      # an EMPTY Gradle home: it is the step that proves a fresh runner can
+      # resolve the build at all. (The metadata was incomplete once - the
+      # plugin classpath named guava-parent and junit-bom without their
+      # .module files - and the warm local cache hid it for a week.)
+      - name: Cold cache - the dependency verification really runs
+        shell: pwsh
+        working-directory: android
+        run: |
+          $env:GRADLE_USER_HOME = "${{ runner.temp }}/gradle-home-cold"
+          ./gradlew --console=plain :app:dependencies --configuration debugRuntimeClasspath
+      # Report only. The "a newer version is available" detectors are switched
+      # off in the lint gate, because their result is a function of the
+      # network; this task prints the same information and never fails the
+      # build.
+      - name: Newer dependency versions (report only)
+        shell: pwsh
+        working-directory: android
+        continue-on-error: true
+        run: ./gradlew --console=plain :reportNewerVersions
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-source-results
+          path: |
+            android/app/build/reports/
+            android/app/build/test-results/

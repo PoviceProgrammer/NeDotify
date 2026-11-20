@@ -12,7 +12,7 @@ import { applyBorderRadius } from './settings.js';
 import { enableBlurPerformance } from './settings.js';
 import { reopenOnboarding } from './onboarding.js';
 import { openSetupPanel } from './setup-panel.js';
-import { PRESET_THEMES, activateCustomPalette, applyAuraOrbs, applyCompactQueueBtn, applyCustomBg, applyFontSize, applyGlassBlur, applyIconPack, applyMpCoverShape, applyMpPos, applyMpProgress, applyMpShape, applyNextTrackPreview, applyPlayerStyle, applyProgressColor, applyProgressTransparency, applyQueuePosition, applyQueueViewMode, applyResourceToggle, applyShowQueue, applySliderType, applyThemeMode, applyTitleAlignment, applyTransparency, enableMacosGlass, getLocalSetting, getSavedCustomThemes, initKeybinds, normalizeProgressColor, normalizeProgressStyle, onStorageInfo, renderFontCards, renderSavedCustomThemes, renderThemeGrid, resetCustomPalette, restoreCustomPalette, saveSetting, savedSetting, setElText, setupEfficiencyPanel, setupOptimizationPanel, setupSlider, setupToggle, syncAuraOrbsState, syncPlayerSettingsUI, syncSwitch } from './settings.js';
+import { PRESET_THEMES, activateCustomPalette, applyAuraOrbs, applyCompactQueueBtn, applyCustomBg, applyFontSize, applyGlassBlur, applyIconPack, applyMpCoverShape, applyMpProgress, applyMpShape, applyNextTrackPreview, applyPlayerStyle, applyProgressColor, applyProgressTransparency, applyQueuePosition, applyQueueViewMode, applyResourceToggle, applyShowQueue, applySliderType, applyThemeMode, applyTitleAlignment, applyTransparency, enableMacosGlass, getLocalSetting, getSavedCustomThemes, initKeybinds, normalizeProgressColor, normalizeProgressStyle, onStorageInfo, renderFontCards, renderSavedCustomThemes, renderThemeGrid, resetCustomPalette, restoreCustomPalette, saveSetting, savedSetting, setElText, setupEfficiencyPanel, setupOptimizationPanel, setupSlider, setupToggle, syncAuraOrbsState, syncPlayerSettingsUI, syncSwitch } from './settings.js';
 
 export function initPrivacySettings() {
     for (const [key, values] of [['mode', ['auto', 'word', 'line']], ['animations', ['standard', 'reduced', 'off']]]) {
@@ -76,11 +76,19 @@ export function initSettings() {
             if (!target) return;
 
             document.querySelectorAll('.settings-nav-btn').forEach(b => b.classList.toggle('active', b === btn));
-            document.querySelectorAll('.settings-panel').forEach(p => {
-                p.classList.toggle('active', p === target);
-                p.style.display = p === target ? 'block' : 'none';
-            });
-            document.querySelector('#view-settings .settings-panels').scrollTop = 0;
+            const panelsRoot = document.querySelector('#view-settings .settings-panels');
+            const applyPanel = () => {
+                document.querySelectorAll('.settings-panel').forEach(p => {
+                    p.classList.toggle('active', p === target);
+                    p.style.display = p === target ? 'block' : 'none';
+                });
+                if (panelsRoot) panelsRoot.scrollTop = 0;
+            };
+            // Scoped View Transition: the outgoing panel fades up, the incoming
+            // one settles from below. `swap` cancels a stale transition when the
+            // user clicks another section quickly; without VT it applies at once.
+            if (panelsRoot && window.NeDotifyMotion) window.NeDotifyMotion.swap(panelsRoot, applyPanel);
+            else applyPanel();
 
             if (panelName === 'icons') setupIconsPanel();
             if (panelName === 'workshop') setupWorkshopPanel();
@@ -663,6 +671,7 @@ function setupZapretPanel() {
     const modeMenu = document.getElementById('zapret-mode-menu');
     function closeModeMenu() {
         if (!modeMenu || !modeTrigger) return;
+        modeMenu.inert = true;
         modeMenu.hidden = true;
         modeTrigger.setAttribute('aria-expanded', 'false');
     }
@@ -694,6 +703,7 @@ function setupZapretPanel() {
             if (modeTrigger.disabled) return;
             const opening = modeMenu.hidden;
             syncModePicker();
+            modeMenu.inert = !opening;
             modeMenu.hidden = !opening;
             modeTrigger.setAttribute('aria-expanded', String(opening));
             if (opening) modeMenu.querySelector('[aria-selected="true"]')?.focus();
@@ -1358,29 +1368,6 @@ function setupPlayerSettingsPanel() {
         if (output) output.value = `${value}%`;
     });
 
-    // Mini-player position buttons
-    const mpPosGroup = document.getElementById('mp-pos-btn-group') || document.getElementById('opt-mp-pos');
-    if (mpPosGroup) {
-        mpPosGroup.querySelectorAll('.opt-card-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                mpPosGroup.querySelectorAll('.opt-card-btn').forEach(b => {
-                    b.classList.remove('active');
-                    b.style.background = 'var(--bg-card)';
-                    b.style.color = '';
-                    b.style.borderColor = 'rgba(255,255,255,0.1)';
-                });
-                btn.classList.add('active');
-                btn.style.background = 'var(--primary)';
-                btn.style.color = '#fff';
-                btn.style.borderColor = 'var(--primary)';
-
-                const pos = btn.dataset.pos;
-                saveSetting('mp_pos', pos, 'player');
-                applyMpPos(pos);
-            });
-        });
-    }
-
     // Restore saved settings, backend first (see savedSetting) so a cleared
     // localStorage cannot reset the Player tab back to its defaults.
     const saved = {
@@ -1399,21 +1386,10 @@ function setupPlayerSettingsPanel() {
         mpProg: savedSetting('player', 'mp_progress', 'line'),
         mpCover: savedSetting('player', 'mp_cover_shape', 'default'),
         mpShape: savedSetting('player', 'mp_shape', 'default'),
-        mpPos: savedSetting('player', 'mp_pos', 'bottom-right'),
     };
 
     // Update active UI cards / toggle visuals from the saved state.
     syncPlayerSettingsUI();
-
-    if (mpPosGroup) {
-        mpPosGroup.querySelectorAll('.opt-card-btn').forEach(b => {
-            const isActive = b.dataset.pos === saved.mpPos;
-            b.classList.toggle('active', isActive);
-            b.style.background = isActive ? 'var(--primary)' : 'var(--bg-card)';
-            b.style.color = isActive ? '#fff' : '';
-            b.style.borderColor = isActive ? 'var(--primary)' : 'rgba(255,255,255,0.1)';
-        });
-    }
 
     applyTitleAlignment(saved.align);
     applyPlayerStyle(saved.style);
@@ -1430,7 +1406,6 @@ function setupPlayerSettingsPanel() {
     applyMpCoverShape(saved.mpCover);
     applyMpShape(saved.mpShape);
 
-    applyMpPos(saved.mpPos);
 }
 
 export const WORKSHOP_ITEMS = [
@@ -2080,6 +2055,8 @@ export function initSettingsSearchFilter() {
                 panel.style.display = active ? 'block' : 'none';
             }
         }
+        const visible = currentMatches || !query ? root.querySelector('.settings-panel.active') : empty;
+        globalThis.NeDotifyMotion?.reveal(visible, 0);
     };
     let timer;
     input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(apply, 120); });

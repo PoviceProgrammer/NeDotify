@@ -1,0 +1,16 @@
+[
+  {
+    "provider": "youtube",
+    "ok": true,
+    "bytes": 3433755,
+    "seconds": 4.13,
+    "error": ""
+  },
+  {
+    "provider": "soundcloud",
+    "ok": true,
+    "bytes": 1865436,
+    "seconds": 5.97,
+    "error": ""
+  }
+]

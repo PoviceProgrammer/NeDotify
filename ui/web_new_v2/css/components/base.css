@@ -1373,8 +1373,27 @@ input, textarea {
     z-index: 200;
     box-shadow: 0 8px 30px var(--shadow-color);
     display: none;
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+    transform-origin: top left;
+    pointer-events: none;
+    /* Discrete display keeps the painted pixels for the exit; input is released
+       immediately, so a closing menu can never swallow the next click. */
+    transition: opacity 150ms ease, transform 150ms cubic-bezier(0.2, 0.75, 0.2, 1),
+                display 150ms allow-discrete;
 }
-.context-menu.visible { display: block; }
+.context-menu.visible {
+    display: block;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+}
+@starting-style {
+    .context-menu.visible { opacity: 0; transform: translateY(-6px) scale(0.97); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .context-menu { transition: none; }
+}
 .context-menu-item {
     display: flex;
     align-items: center;
@@ -1567,7 +1586,10 @@ input, textarea {
     font-weight: 600;
     box-shadow: 0 8px 24px var(--shadow-color);
     border: 1px solid var(--border);
-    animation: toastIn 0.3s ease, toastOut 0.3s ease 3.7s forwards;
+    /* Dismissal is JS-owned (timer + hover pause in notifications.js). A CSS
+       `toastOut ... 3.7s forwards` here used to hide the toast while the JS
+       pause kept it interactive, so it vanished under the cursor. */
+    animation: toastIn 0.3s ease;
     pointer-events: auto;
     max-width: 100%;
     text-align: left;
@@ -1617,6 +1639,40 @@ input, textarea {
 .toast.success { border-color: var(--primary); }
 .toast.warning { border-color: #f59e0b; }
 .toast.info { border-color: var(--border); }
+
+/* ─── Shared hover tooltip (js/tooltip.js) ───
+   The node is created lazily on the first hover. Without position:fixed it
+   joined normal flow at the end of <body>, so every appearance reflowed the
+   document and `style.left/top` did nothing. Keep it out of flow and fade it
+   with opacity/translate only. */
+#app-tooltip {
+    position: fixed;
+    inset: auto;
+    z-index: var(--z-toast);
+    box-sizing: border-box;
+    max-width: min(300px, calc(100vw - 16px));
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-surface);
+    color: var(--text-main);
+    box-shadow: 0 8px 24px var(--shadow-color);
+    font: 500 12px/1.35 var(--font-family, 'DM Sans', sans-serif);
+    text-align: left;
+    overflow-wrap: anywhere;
+    pointer-events: none;
+    opacity: 0;
+    translate: 0 -2px;
+    transition: opacity 120ms ease, translate 140ms cubic-bezier(.2,.75,.25,1);
+}
+#app-tooltip.visible {
+    opacity: 1;
+    translate: 0 0;
+}
+@media (prefers-reduced-motion: reduce) {
+    #app-tooltip { transition: none; }
+}
+:root.battery-saver-active #app-tooltip { transition: none; }
 
 @keyframes toastIn {
     from { opacity: 0; transform: translateY(20px); }
@@ -2468,66 +2524,100 @@ dialog :is(button,input,select,a):focus-visible { outline: 2px solid var(--prima
     box-shadow: 0 0 25px rgba(255, 255, 255, 0.02);
 }
 
-/* Status-Bar Style #10. Native window and this panel are both 340 x 64. */
-html.mini-player-active, body.mini-player-active {
-    background: var(--mac-base, var(--bg-card, #18181c)) !important;
+/* Keep these dimensions in sync with the native mini-player window. */
+html:has(body.mini-player-active), body.mini-player-active {
+    background: #090909 !important;
     overflow: hidden !important;
 }
 #mini-player-overlay {
+    position: fixed;
+    inset: 0;
     display: none;
-    position: fixed !important;
-    inset: 0 !important;
-    width: 100% !important;
-    height: 64px !important;
-    min-width: 280px !important;
-    max-width: 350px !important;
-    margin: auto !important;
-    z-index: var(--z-mini-player) !important;
-    background: color-mix(in srgb, var(--mac-surface, var(--bg-card, #18181c)) 82%, transparent) !important;
-    color: var(--mac-text, var(--text-main, #fff)) !important;
-    padding: 8px 10px !important;
-    border-radius: 14px !important;
-    box-sizing: border-box !important;
-    align-items: center !important;
-    gap: 8px !important;
-    user-select: none;
+    width: min(340px, 100%);
+    height: min(64px, 100%);
+    margin: 0 auto;
+    z-index: var(--z-mini-player);
+    background: #090909;
+    color: #f5f5f5;
+    border-radius: 0 0 24px 24px;
     overflow: hidden;
-    border: 1px solid var(--mac-line, var(--border, #ffffff24)) !important;
-    box-shadow: inset 0 1px 0 #ffffff0b, 0 4px 16px #0003 !important;
-    backdrop-filter: blur(18px) saturate(1.15) !important;
-    -webkit-backdrop-filter: blur(18px) saturate(1.15) !important;
+    user-select: none;
+    transition: width 260ms cubic-bezier(.22,.75,.25,1), height 260ms cubic-bezier(.22,.75,.25,1);
 }
-body.mini-player-active #mini-player-overlay { display: flex !important; visibility: visible !important; opacity: 1 !important; }
-body.mini-player-active :is(#app-container,#title-bar,#sidebar,#main-content,#player-bar,#particles-bg,#custom-bg-layer,#custom-bg-dim-layer,#aura-orbs-container,#network-banner,.lyrics-overlay) {
+body.mini-player-active #mini-player-overlay { display: block; }
+#mini-player-overlay[data-expanded="true"] { width: min(460px, 100%); height: min(244px, 100%); }
+body.mini-player-active :is(#app-container,#title-bar,#sidebar,#main-content,#player-bar,#particles-bg,#custom-bg-layer,#custom-bg-dim-layer,#aura-orbs-container,#macos-backdrop,#network-banner,.lyrics-overlay) {
     display: none !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
 }
 body.mini-player-active #toast-container { bottom: 4px; max-width: 100%; }
-#mini-player-overlay .mp-compact-row { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; gap: 8px; height: 100%; cursor: grab; }
-#mini-player-overlay .mp-cover-wrap { position: relative; flex: 0 0 40px; width: 40px; height: 40px; border-radius: 8px; overflow: hidden; background: color-mix(in srgb,currentColor 7%,transparent); display: grid; place-items: center; }
+#mini-player-overlay .mp-compact-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 64px;
+    padding: 0 29px;
+    cursor: pointer;
+}
+#mini-player-overlay .mp-cover-wrap {
+    position: relative;
+    flex: 0 0 42px;
+    height: 42px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #ffffff12;
+    display: grid;
+    place-items: center;
+}
 #mini-player-overlay .mp-cover-wrap > :is(svg,i) { position: absolute; width: 20px; height: 20px; opacity: .45; }
 #mini-player-overlay .mp-cover-wrap img { position: relative; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
-#mini-player-overlay .mp-info { flex: 1 1 auto; min-width: 0; overflow: hidden; }
-#mini-player-overlay .mp-title { font: 600 12px/1.2 var(--font-family, sans-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#mini-player-overlay .mp-artist { font: 400 10px/1.25 var(--font-family, sans-serif); color: var(--mac-secondary,var(--text-sec,#ffffff99)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-#mini-player-overlay .mp-controls-row { display: grid; grid-template-columns: 24px 40px 24px; align-items: center; justify-items: center; gap: 2px; flex: 0 0 92px; }
-#mini-player-overlay .mp-ctrl-btn { display: grid; place-items: center; width: 24px; height: 28px; min-width: 0; padding: 0; border: 0; border-radius: 7px; color: inherit; background: transparent; cursor: pointer; -webkit-app-region: no-drag; }
-#mini-player-overlay .mp-ctrl-btn:hover { background: color-mix(in srgb,currentColor 9%,transparent); }
-#mini-player-overlay #mp-btn-play { width: 28px; height: 28px; border-radius: 50%; color: var(--mac-play-ink,var(--primary-fg,#fff)); background: var(--mac-play,var(--primary,#a855f7)); transition: width 220ms ease,border-radius 220ms ease !important; }
-#mini-player-overlay #mp-btn-play.is-playing { width: 40px; border-radius: 10px; }
-#mini-player-overlay #mp-btn-play svg { width: 15px; height: 15px; }
-#mini-player-overlay .mp-progress-row { height: 16px; margin-top: 0; display: flex; align-items: center; }
-#mini-player-overlay .mp-time { display: none; }
-#mini-player-overlay #mp-progress-track { flex: 1; height: 16px; min-width: 0; overflow: visible; background: transparent; touch-action: none; }
-#mini-player-overlay #mp-progress-track::before, #mini-player-overlay #mp-progress-fill { top: calc(50% - 1px); height: 2px; border-radius: 2px; }
-#mini-player-overlay #mp-progress-fill { width: 100%; transition: none !important; }
-#mini-player-overlay #mp-progress-fill::after { display: none; }
-#mini-player-overlay .seek-thumb { width: 6px; height: 6px; opacity: 0; }
-#mini-player-overlay #mp-progress-track:is(:hover,:focus-visible) .seek-thumb { opacity: 1; }
-#mini-player-overlay :is(button,[role="slider"]):focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+#mini-player-overlay .mp-info { min-width: 0; }
+#mini-player-overlay :is(.mp-title, .mp-artist) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#mini-player-overlay .mp-title { font-size: 14px; font-weight: 650; }
+#mini-player-overlay .mp-artist, #mini-player-overlay .mp-time { font-size: 12px; color: #aaa; }
+#mini-player-overlay .mp-details {
+    display: grid;
+    gap: 13px;
+    padding: 5px 34px 20px;
+    opacity: 0;
+    transform: translateY(-8px);
+    visibility: hidden;
+    transition: opacity 160ms ease, transform 200ms ease, visibility 200ms allow-discrete;
+}
+#mini-player-overlay[data-expanded="true"] .mp-details {
+    opacity: 1;
+    transform: none;
+    visibility: visible;
+}
+#mini-player-overlay .mp-progress-row { display: flex; align-items: center; gap: 10px; }
+#mini-player-overlay .mp-time { font-variant-numeric: tabular-nums; }
+#mini-player-overlay .mp-controls-row { display: flex; align-items: center; justify-content: center; gap: 16px; }
+#mini-player-overlay .mp-footer { display: flex; align-items: center; gap: 9px; }
+#mini-player-overlay .mp-ctrl-btn {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+    transition: background-color 150ms, color 150ms;
+}
+#mini-player-overlay .mp-ctrl-btn:hover { background: #ffffff16; }
+#mini-player-overlay .mp-ctrl-btn[aria-pressed="true"] { color: var(--primary); }
+#mini-player-overlay .mp-ctrl-btn svg { width: 18px; height: 18px; }
+#mini-player-overlay #mp-btn-play { width: 44px; height: 44px; border-radius: 50%; color: #090909; background: #f5f5f5; }
+#mini-player-overlay #mp-btn-play svg { width: 21px; height: 21px; }
+#mini-player-overlay #mp-btn-restore { margin-left: auto; }
+#mini-player-overlay #mp-volume-track { flex: 1 1 44%; max-width: 195px; }
+#mini-player-overlay #mp-volume-fill { background: #f5f5f5; }
+#mini-player-overlay #mp-progress-track { --primary: #f5f5f5; background: transparent; }
+#mini-player-overlay :is(button,[role="button"],[role="slider"]):focus-visible { outline: 2px solid #f5f5f5; outline-offset: -2px; }
 @media (prefers-reduced-motion: reduce) {
-    #mini-player-overlay #mp-btn-play { transition: none !important; }
+    #mini-player-overlay, #mini-player-overlay .mp-details, #mini-player-overlay .mp-ctrl-btn { transition: none; }
     #mini-player-overlay .animate-marquee { animation: none !important; }
 }
 
@@ -2807,7 +2897,10 @@ body.mini-player-active #toast-container { bottom: 4px; max-width: 100%; }
     opacity: 0;
     pointer-events: none;
     visibility: hidden;
-    transition: none;
+    /* The transition lives in settings-refresh.css, which is the pack that is
+       loaded together with the settings view. Declaring `none` here forced a
+       snap for every consumer and created an unconditional conflict with the
+       deferred pack. */
     border-radius: inherit;
 }
 
@@ -3439,7 +3532,14 @@ body {
 /* 2. MICRO-ANIMATIONS */
 
 button, .icon-btn, .play-btn {
-    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s, background 0.2s !important;
+    /* One universal press/colour transition. `!important` is deliberate: this
+       rule is the baseline for every button, including ones whose own rule only
+       lists a subset of properties. It must include the properties components
+       actually animate, otherwise a later `transition` shorthand silently
+       replaces the list (the sidebar rail and the play/pause morph both used to
+       lose their colour/width motion this way). */
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s,
+                background-color 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s !important;
 }
 
 button:active, .icon-btn:active, .play-btn:active {
@@ -4687,15 +4787,15 @@ html[data-ui-style="macos"] .btn-back-artist {
 
 @media (min-width:901px) {
 #sidebar, html.has-custom-bg #sidebar { transition: width .26s cubic-bezier(.2,.8,.2,1), min-width .26s cubic-bezier(.2,.8,.2,1), padding .26s; }
-#sidebar .nav-item { overflow: hidden; transition: padding .26s, gap .26s, width .26s; }
+#sidebar .nav-item { overflow: hidden; transition: padding .26s, gap .26s, width .26s, background-color .22s ease, color .22s ease, border-color .22s ease, box-shadow .22s ease, transform .2s cubic-bezier(.2,.8,.2,1) !important; }
 #sidebar.is-collapsed .nav-label { display: block; opacity: 0; max-width: 0; }
 #sidebar .nav-label { transition: opacity .15s, max-width .26s; }
 }
-body.mini-player-active #mini-player-overlay { animation: miniPlayerEnter .22s ease-out; }
+body.mini-player-active:not(.mini-player-native) #mini-player-overlay { animation: miniPlayerEnter .22s ease-out; }
 body:not(.mini-player-active) #app-container { animation: mainPlayerEnter .22s ease-out; }
 @keyframes miniPlayerEnter { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes mainPlayerEnter { from { opacity: .6; } to { opacity: 1; } }
-@media(prefers-reduced-motion:reduce) { #sidebar, #sidebar .nav-item, #sidebar .nav-label { transition: none !important; } body.mini-player-active #mini-player-overlay, body:not(.mini-player-active) #app-container { animation: none; } }
+@media(prefers-reduced-motion:reduce) { #sidebar, #sidebar .nav-item, #sidebar .nav-label { transition: none !important; } body.mini-player-active:not(.mini-player-native) #mini-player-overlay, body:not(.mini-player-active) #app-container { animation: none; } }
 
 :root.resource-bg-disabled :is(#custom-bg-layer, #custom-bg-dim-layer, #macos-backdrop) { display: none !important; }
 
@@ -4708,3 +4808,13 @@ body:not(.mini-player-active) #app-container { animation: mainPlayerEnter .22s e
 .personal-wave-tracks { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr)); gap:4px 18px; max-height:440px; overflow-y:auto; overscroll-behavior:contain; }
 .personal-wave-status { color:var(--text-sec); font-size:12px; margin:0 0 16px; }
 .personal-wave .track-item { min-width:0; }
+
+/* WinForms animates the bounds and clips the native window. Fill each viewport
+   size immediately so the compositor never exposes a second moving edge. */
+body.mini-player-native #mini-player-overlay {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    transition: none;
+}

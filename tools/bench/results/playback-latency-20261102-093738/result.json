@@ -1,0 +1,136 @@
+{
+  "scenario": "startup",
+  "mode": "playback-latency",
+  "started_at": 1793601458.880436,
+  "ok": true,
+  "error": null,
+  "data": {
+    "actual_bridge": true,
+    "api_stubs": false,
+    "results": [
+      {
+        "bridge_ms": 9,
+        "playing": true,
+        "source": "spotify",
+        "source_id": "ytsearch1: Rick Astley - Never Gonna Give You Up",
+        "time_to_audio_ms": 4495,
+        "within_3s": false,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 3140.3020539,
+            "host": "www.youtube.com",
+            "path": "/watch",
+            "ms": 455.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 3141.3275777,
+            "host": "www.youtube.com",
+            "path": "/youtubei/v1/player",
+            "ms": 133.0,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 3141.4838886,
+            "host": "manifest.googlevideo.com",
+            "path": "<redacted>",
+            "ms": 729.7,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 3142.2280789,
+            "host": "www.youtube.com",
+            "path": "<redacted>",
+            "ms": 74.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "extract_info",
+            "thread": "YouTubePlayback_0",
+            "started": 3140.2653734,
+            "ms": 2945.5,
+            "thread_cpu_ms": 296.9
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-238 (process_request_thread)",
+            "started": 3143.2463262,
+            "ms": 367.7,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      },
+      {
+        "bridge_ms": 27,
+        "playing": true,
+        "source": "spotify",
+        "source_id": "ytsearch1: Rick Astley - Never Gonna Give You Up",
+        "time_to_audio_ms": 212,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "connect",
+            "thread": "Thread-255 (process_request_thread)",
+            "started": 3144.4762468,
+            "ms": 395.0,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      }
+    ],
+    "all_within_5s": true,
+    "note": "First advancing decoded media clock, physical speaker output not assessed"
+  },
+  "perf": {
+    "Timestamp": 3144.937553,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 3669,
+    "LayoutObjects": 4086,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 15361,
+    "Resources": 70,
+    "ContextLifecycleStateObservers": 47,
+    "V8PerContextDatas": 1,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 2,
+    "LayoutCount": 90,
+    "RecalcStyleCount": 269,
+    "LayoutDuration": 0.157498,
+    "RecalcStyleDuration": 0.472055,
+    "DevToolsCommandDuration": 0.035241,
+    "ScriptDuration": 0.089588,
+    "V8CompileDuration": 0.000145,
+    "TaskDuration": 1.165173,
+    "TaskOtherDuration": 0.410646,
+    "ThreadTime": 1.127975,
+    "ProcessTime": 1.971943,
+    "JSHeapUsedSize": 4141116,
+    "JSHeapTotalSize": 7864320,
+    "FirstMeaningfulPaint": 3139.119637,
+    "DomContentLoaded": 3139.107271,
+    "NavigationStart": 3138.967901
+  },
+  "finished_at": 1793601466.0946949,
+  "seeded_user_cache_rows": 0
+}

@@ -1,4 +1,4 @@
-import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml, updatePlayingTrackInDOM, sizeCanvasForDpr, registerCanvasDprListener } from './utils.js';
+import { formatTime, renderIcons, showToast, getCoverUrl, extractDominantColor, escapeHtml, updatePlayingTrackInDOM, sizeCanvasForDpr, registerCanvasDprListener, submitRecommendationFeedback } from './utils.js';
 import { fetchRealPeaks } from './waveform-peaks.js';
 
 let isDraggingProgress = false;
@@ -1166,6 +1166,107 @@ export function togglePlayPause() {
     }
 }
 
+async function syncMiniDislike() {
+    if (document.getElementById('mini-player-overlay')?.dataset?.expanded !== 'true') return;
+    const button = document.getElementById('mp-btn-dislike');
+    const track = playbackState.track;
+    button.setAttribute('aria-pressed', 'false');
+    if (!track) return;
+    const feedback = await api('get_recommendation_feedback', track);
+    if (track === playbackState.track) button.setAttribute('aria-pressed', String(!!feedback?.track));
+}
+
+function setupMiniPlayerExpansion(restoreMainWindow) {
+    const card = document.getElementById('mini-player-overlay');
+    if (!card) return;
+    const compact = card.querySelector('.mp-compact-row');
+    const details = document.getElementById('mp-details');
+    const dislike = document.getElementById('mp-btn-dislike');
+    let hovered = false;
+    let pinned = false;
+    let collapseTimer;
+    let resizeRequest = Promise.resolve();
+
+    function setExpanded(expanded) {
+        if (expanded === (card.dataset.expanded === 'true')) return;
+        card.dataset.expanded = String(expanded);
+        compact.setAttribute('aria-expanded', String(expanded));
+        details.inert = !expanded;
+        if (expanded) {
+            paintPlaybackProgress();
+            syncMiniDislike();
+        }
+        resizeRequest = resizeRequest.then(() => {
+            if (!document.body.classList.contains('mini-player-active') ||
+                expanded !== (card.dataset.expanded === 'true')) return;
+            return api('set_mini_player_expanded', expanded, !matchMedia('(prefers-reduced-motion: reduce)').matches);
+        });
+    }
+
+    function collapse() {
+        clearTimeout(collapseTimer);
+        collapseTimer = setTimeout(() => {
+            if (!hovered && !pinned && !isDraggingProgress && !isDraggingVolume) setExpanded(false);
+        }, 90);
+    }
+
+    card.addEventListener('pointerenter', event => {
+        if (event.pointerType === 'touch') return;
+        hovered = true;
+        clearTimeout(collapseTimer);
+        setExpanded(true);
+    });
+    card.addEventListener('pointerleave', () => {
+        hovered = false;
+        collapse();
+    });
+    document.addEventListener('pointerup', () => {
+        if (card.dataset.expanded === 'true' && !hovered) collapse();
+    });
+    document.addEventListener('pointercancel', () => {
+        if (card.dataset.expanded === 'true' && !hovered) collapse();
+    });
+    compact.addEventListener('click', event => {
+        if (event.pointerType !== 'touch' && event.detail !== 0) return;
+        pinned = !pinned;
+        setExpanded(hovered || pinned);
+    });
+    compact.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        compact.click();
+    });
+    card.addEventListener('focusout', event => {
+        if (card.contains(event.relatedTarget)) return;
+        pinned = false;
+        collapse();
+    });
+    compact.addEventListener('dblclick', restoreMainWindow);
+    document.getElementById('mp-btn-restore').addEventListener('click', restoreMainWindow);
+    document.getElementById('mp-btn-close').addEventListener('click', () => {
+        hovered = pinned = false;
+        setExpanded(false);
+        api('minimize_window');
+    });
+    window.addEventListener('nedotify:mini_player_toggled', () => {
+        // The main layout is applied by a separate listener for the same event.
+        queueMicrotask(() => {
+            if (document.body.classList.contains('mini-player-active')) {
+                if (card.matches(':hover')) setExpanded(hovered = true);
+            } else {
+                hovered = pinned = false;
+                clearTimeout(collapseTimer);
+                setExpanded(false);
+            }
+        });
+    });
+
+    dislike.addEventListener('click', async () => {
+        if (playbackState.track) await submitRecommendationFeedback(playbackState.track);
+    });
+    window.addEventListener('nedotify:recommendation_feedback_changed', syncMiniDislike);
+}
+
 export function initPlayer() {
     bindTrackMomentPins();
     // Reserve the largest morph width so transport neighbours never move.
@@ -1184,7 +1285,6 @@ export function initPlayer() {
     const btnPrev = document.getElementById('pb-btn-prev');
     const btnShuffle = document.getElementById('pb-btn-shuffle');
     const btnRepeat = document.getElementById('pb-btn-repeat');
-    const btnLike = document.getElementById('pb-btn-like');
 
     /* keydown moved to hotkeys.js */
 
@@ -1208,14 +1308,17 @@ export function initPlayer() {
         if (ppRepeat) updateRepeatIcon(ppRepeat, mode);
     });
 
-    if (btnLike) btnLike.addEventListener('click', async () => {
-        if (!playbackState.track) return;
-        const res = await api('toggle_favorite', playbackState.track);
-        if (res && res.success) {
-            playbackState.track.is_favorite = res.is_favorite;
-            updateLikeButtons();
-        }
-    });
+    for (const id of ['pb-btn-like', 'pp-btn-like', 'mp-btn-like']) {
+        document.getElementById(id)?.addEventListener('click', async () => {
+            const track = playbackState.track;
+            if (!track) return;
+            const res = await api('toggle_favorite', track);
+            if (res?.success && track === playbackState.track) {
+                track.is_favorite = res.is_favorite;
+                updateLikeButtons();
+            }
+        });
+    }
 
     // Player page controls
     const ppPlay = document.getElementById('pp-btn-play');
@@ -1223,7 +1326,6 @@ export function initPlayer() {
     const ppPrev = document.getElementById('pp-btn-prev');
     const ppShuffle = document.getElementById('pp-btn-shuffle');
     const ppRepeat = document.getElementById('pp-btn-repeat');
-    const ppLike = document.getElementById('pp-btn-like');
 
     if (ppPlay) ppPlay.addEventListener('click', togglePlayPause);
     if (ppNext) ppNext.addEventListener('click', () => api('next_track', true));
@@ -1243,14 +1345,6 @@ export function initPlayer() {
         if (btnRepeat) updateRepeatIcon(btnRepeat, mode);
     });
 
-    if (ppLike) ppLike.addEventListener('click', async () => {
-        if (!playbackState.track) return;
-        const res = await api('toggle_favorite', playbackState.track);
-        if (res && res.success) {
-            playbackState.track.is_favorite = res.is_favorite;
-            updateLikeButtons();
-        }
-    });
 
     document.getElementById('pp-btn-more')?.addEventListener('click', event => {
         if (playbackState.track) window.NeDotify?.showTrackContextMenu?.(playbackState.track, event);
@@ -1333,15 +1427,7 @@ export function initPlayer() {
             restoreMainWindow();
         }
     });
-    const mpCard = document.getElementById('mini-player-overlay');
-    mpCard?.addEventListener('mousedown', event => {
-        if (event.button !== 0 || event.target.closest('button, a, input, [role="slider"]')) return;
-        event.preventDefault();
-        api('begin_window_drag');
-    });
-    mpCard?.addEventListener('dblclick', event => {
-        if (!event.target.closest('button, [role="slider"]')) restoreMainWindow();
-    });
+    setupMiniPlayerExpansion(restoreMainWindow);
 
     setupDragBar('mp-progress-track', progressDragHandlers());
     setupDragBar('pb-progress-track', progressDragHandlers(), {
@@ -1947,6 +2033,16 @@ export function onTrackChanged(track) {
     setElSrc('mp-cover', coverUrl);
 
     updateLikeButtons();
+    syncMiniDislike();
+    if (!sameTrack && window.NeDotifyMotion) {
+        for (const selector of ['#pb-title', '#pb-artist', '#pp-title', '#pp-artist', '#mini-player-overlay .mp-info']) {
+            window.NeDotifyMotion.reveal(document.querySelector(selector), 0);
+        }
+        // New artwork fades/scales in; hidden copies are skipped by play().
+        for (const id of ['pp-cover', 'pb-cover', 'mp-cover']) {
+            window.NeDotifyMotion.cover(document.getElementById(id));
+        }
+    }
     renderIcons();
 }
 
@@ -2056,6 +2152,7 @@ function stopMiniEqLoop() {
 }
 
 export function onStateChanged(state) {
+    const stateChanged = playbackState.status !== state;
     playbackState.status = state;
     notifyLyricsClock();
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = (playbackState.status === 'playing') ? 'playing' : state === 'paused' ? 'paused' : 'none';
@@ -2142,6 +2239,11 @@ export function onStateChanged(state) {
         setElHtml('pp-btn-play', ppPlaySvg);
         setElHtml('mp-btn-play', mpPlaySvg);
         renderIcons();
+        if (stateChanged && window.NeDotifyMotion) {
+            for (const id of ['pb-btn-play', 'pp-btn-play', 'mp-btn-play']) {
+                window.NeDotifyMotion.reveal(document.getElementById(id)?.querySelector('svg'), 0);
+            }
+        }
     }
 }
 
@@ -2195,13 +2297,22 @@ export function applySettings(settings) {
 // --- Helpers ---
 
 export function updateLikeButtons() {
-    const isFav = playbackState.track?.is_favorite;
-    ['pb-btn-like', 'pp-btn-like'].forEach(id => {
+    const isFav = !!playbackState.track?.is_favorite;
+    ['pb-btn-like', 'pp-btn-like', 'mp-btn-like'].forEach(id => {
         const btn = document.getElementById(id);
         if (!btn) return;
-        btn.classList.toggle('active', !!isFav);
-        const size = id.startsWith('pp') ? '20px' : '14px';
-        btn.innerHTML = `<i data-lucide="heart" style="width:${size};height:${size};${isFav ? 'fill:currentColor' : ''}"></i>`;
+        const wasActive = btn.classList.contains('active');
+        btn.classList.toggle('active', isFav);
+        if (id === 'mp-btn-like') btn.setAttribute('aria-pressed', String(isFav));
+        // Rebuilding the icon restarts heartPulse. Track changes call this
+        // function too, so only touch the DOM when the state really changed
+        // (or the icon is missing); otherwise a liked track pulses again on
+        // every navigation.
+        const icon = btn.querySelector('i[data-lucide="heart"], svg');
+        if (!icon || wasActive !== isFav) {
+            const size = id === 'pb-btn-like' ? '14px' : '20px';
+            btn.innerHTML = `<i data-lucide="heart" style="width:${size};height:${size};${isFav ? 'fill:currentColor' : ''}"></i>`;
+        }
     });
 
     renderIcons();
@@ -2297,11 +2408,14 @@ function paintPlaybackProgress(position = playbackState.positionMs) {
     const fraction = duration ? Math.max(0, Math.min(1, position / duration)) : 0;
     const current = formatTime((duration ? fraction * duration : Math.max(0, position || 0)) / 1000);
     const total = formatTime(duration / 1000);
+    // The big player counts down on the right (−2:58), every other surface shows the total.
+    const remaining = duration ? `-${formatTime(Math.max(0, duration - position) / 1000)}` : total;
     for (const prefix of ['pb', 'pp', 'mp']) {
         const fill = document.getElementById(`${prefix}-progress-fill`);
         if (fill) fill.style.transform = `scaleX(${fraction})`;
         const track = document.getElementById(`${prefix}-progress-track`);
         if (track) {
+            paintProgressWave(track, fraction, position);
             track.style.setProperty('--seek-progress', `${fraction * 100}%`);
             for (const [name, value] of [['aria-valuenow', (fraction * 100).toFixed(1)],
                 ['aria-valuetext', `${current} / ${total}`], ['aria-disabled', String(!duration)]]) {
@@ -2309,21 +2423,22 @@ function paintPlaybackProgress(position = playbackState.positionMs) {
             }
         }
         setElText(`${prefix}-time-current`, current);
-        setElText(`${prefix}-time-total`, total);
+        setElText(`${prefix}-time-total`, prefix === 'pp' ? remaining : total);
     }
+    const mini = document.getElementById('mini-player-overlay');
+    if (mini) mini.style.setProperty('--mp-progress', `${fraction * 100}%`);
     const panel = document.getElementById('pb-panel-fill');
     if (panel) panel.style.clipPath = `inset(0 ${100 - fraction * 100}% 0 0)`;
-    paintProgressWave(fraction, position);
     renderWaveforms(fraction);
 }
 
 // Adapted from Riff v44 src/renderer/app.js scrubber (MIT, rootscripts 2026).
 // The decorative sine is a seek indicator, independent of decoded audio peaks.
 // Keep its 42px wavelength and rounded stroke without adding an animation clock.
-function paintProgressWave(fraction, position) {
+function paintProgressWave(track, fraction, position) {
     if (document.documentElement.dataset?.progressStyle !== 'solid') return;
-    const track = document.getElementById('pb-progress-track');
-    if (!track) return;
+    const width = track.clientWidth, height = 12;
+    if (!width) return;
     let canvas = track.querySelector('.progress-wave');
     if (!canvas) {
         canvas = document.createElement('canvas');
@@ -2331,8 +2446,6 @@ function paintProgressWave(fraction, position) {
         canvas.setAttribute('aria-hidden', 'true');
         track.append(canvas);
     }
-    const width = track.getBoundingClientRect().width, height = 12;
-    if (!width) return;
     const dpr = window.devicePixelRatio || 1;
     const pixelWidth = Math.round(width * dpr), pixelHeight = Math.round(height * dpr);
     if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
@@ -2341,9 +2454,7 @@ function paintProgressWave(fraction, position) {
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
-    const styles = getComputedStyle(document.documentElement);
-    ctx.strokeStyle = canvas.id === 'pp-waveform-canvas' ? '#eeeef2' :
-        styles.getPropertyValue('--player-progress-color').trim() || getWaveColor();
+    ctx.strokeStyle = getWaveColor();
     ctx.globalAlpha = getProgressOpacity();
     ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const end = Math.max(0, Math.min(width, width * fraction));
@@ -2352,10 +2463,10 @@ function paintProgressWave(fraction, position) {
     if (end > 0) {
         ctx.beginPath();
         for (let x = 0; x <= end; x += 2) {
-            const y = 6 + Math.sin(phase - (end - x) * 2 * Math.PI / 42) * 3;
+            const y = 6 + Math.sin(phase - (end - x) * 2 * Math.PI / 42) * 3 * Math.min(1, (end - x) / 14);
             if (!x) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
-        ctx.lineTo(end, 6 + Math.sin(phase) * 3);
+        ctx.lineTo(end, 6);
         ctx.stroke();
     }
     ctx.globalAlpha *= .24;
@@ -2609,6 +2720,7 @@ if (typeof MutationObserver !== 'undefined') {
 
 // Invalidate cached element sizes on window resize
 window.addEventListener('resize', () => {
+    if (document.documentElement.dataset.progressStyle === 'solid' && !isDraggingProgress) paintPlaybackProgress();
     document.querySelectorAll('.waveform-canvas').forEach(cv => {
         cv._wfW = undefined;
         cv._wfH = undefined;
@@ -2708,7 +2820,11 @@ export function renderWaveforms(progressPct = 0) {
 
 // Paused playback has no animation loop to repaint a newly shown canvas.
 function redrawVisibleWaveforms() {
-    renderWaveforms(playbackState.positionMs / (playbackState.durationMs || 1));
+    if (document.documentElement.dataset?.progressStyle === 'solid' && !isDraggingProgress) {
+        paintPlaybackProgress();
+    } else {
+        renderWaveforms(playbackState.positionMs / (playbackState.durationMs || 1));
+    }
 }
 window.addEventListener('nedotify:page_changed', redrawVisibleWaveforms);
 window.addEventListener('nedotify:mini_player_toggled', () => requestThrottledWaveformRender());
@@ -2890,6 +3006,11 @@ function drawWaveformToCanvas(canvas, peaks, progressPct) {
 
 document.addEventListener('nedotify:slider_type_changed', () => {
     paintPlaybackProgress();
+    if (window.NeDotifyMotion) {
+        for (const prefix of progressPrefixes) {
+            window.NeDotifyMotion.reveal(document.getElementById(`${prefix}-progress-track`), 0);
+        }
+    }
     fetchAndRenderWaveform(playbackState.track);
 });
 

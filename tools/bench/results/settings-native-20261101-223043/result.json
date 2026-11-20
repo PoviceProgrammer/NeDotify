@@ -1,0 +1,100 @@
+{
+  "scenario": "startup",
+  "mode": "settings-native",
+  "started_at": 1793561443.679894,
+  "ok": true,
+  "error": null,
+  "data": {
+    "actual_bridge": true,
+    "api_stubs": false,
+    "skins": [
+      {
+        "style": "current",
+        "sliders": 48,
+        "reloaded": true,
+        "mode6": {
+          "accepted": true,
+          "restored": {
+            "bands": [
+              -20,
+              -12,
+              -8,
+              -2,
+              0,
+              0.5,
+              2,
+              8,
+              12,
+              20
+            ],
+            "mode": "6",
+            "preamp": 2.5
+          }
+        }
+      },
+      {
+        "style": "macos",
+        "sliders": 48,
+        "reloaded": true,
+        "mode6": {
+          "accepted": true,
+          "restored": {
+            "bands": [
+              -20,
+              -12,
+              -8,
+              -2,
+              0,
+              0.5,
+              2,
+              8,
+              12,
+              20
+            ],
+            "mode": "6",
+            "preamp": 2.5
+          }
+        }
+      }
+    ]
+  },
+  "perf": {
+    "Timestamp": 18028.564797,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 1058,
+    "LayoutObjects": 2127,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 9856,
+    "Resources": 70,
+    "ContextLifecycleStateObservers": 47,
+    "V8PerContextDatas": 1,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 2,
+    "LayoutCount": 179,
+    "RecalcStyleCount": 679,
+    "LayoutDuration": 0.326276,
+    "RecalcStyleDuration": 0.771877,
+    "DevToolsCommandDuration": 0.133963,
+    "ScriptDuration": 0.195403,
+    "V8CompileDuration": 0.000416,
+    "TaskDuration": 2.448881,
+    "TaskOtherDuration": 1.020946,
+    "ThreadTime": 2.410613,
+    "ProcessTime": 3.899716,
+    "JSHeapUsedSize": 5829620,
+    "JSHeapTotalSize": 10485760,
+    "FirstMeaningfulPaint": 18026.561897,
+    "DomContentLoaded": 18026.309483,
+    "NavigationStart": 18026.167661
+  },
+  "finished_at": 1793561463.7187512
+}

@@ -8,6 +8,7 @@ let favoriteCount = 0;
 let overviewGeneration = 0;
 let coverTarget = null;
 let collectionFilter = '';
+let collectionFilterTimer = null;
 const collageRequests = new Map();
 const COVER_KEY = 'nedotify_v2_playlist_covers';
 
@@ -72,9 +73,15 @@ function collectionCard(playlist, kind = 'playlist') {
 function renderCollectionGrids() {
     for(const id of ['lib-overview-collections','lib-active-collections']) {
         const grid=document.getElementById(id);if(!grid)continue;
+        const matching=playlists.filter(playlist=>String(playlist.name || '').toLocaleLowerCase('ru').includes(collectionFilter));
+        // Typing in the filter fires per character. Rebuilding both grids (and
+        // replaying their reveal) on each one made the library strobe.
+        const signature=collectionFilter+'|'+matching.map(playlist=>`${playlist.id}:${playlist.name}:${playlist.track_count}`).join('|');
+        if(grid.dataset.collectionSignature===signature)continue;
+        grid.dataset.collectionSignature=signature;
         grid.replaceChildren();
-        playlists.filter(playlist=>String(playlist.name || '').toLocaleLowerCase('ru').includes(collectionFilter))
-            .forEach(playlist=>grid.appendChild(collectionCard(playlist)));
+        window.NeDotifyMotion?.reveal(grid);
+        matching.forEach(playlist=>grid.appendChild(collectionCard(playlist)));
         const create=document.createElement('button');create.className='lib-collection-create';create.innerHTML='<span><i data-lucide="plus"></i></span><strong>Создать плейлист</strong><small>Соберите свою музыку</small>';create.onclick=()=>commands.create();grid.appendChild(create);
         renderIcons(grid);
     }
@@ -153,6 +160,7 @@ export function renderLibraryEmpty(container, message) {
     container.querySelector('button').onclick=()=>window.showPage?.('search');renderIcons(container);
 }
 export function renderLibraryFailure(container,retry) {
+    window.NeDotifyMotion?.reveal(container);
     container.innerHTML='<div class="lib-collection-empty"><i data-lucide="alert-circle"></i><h3>Не удалось загрузить коллекцию</h3><p>Повторите запрос. Ваши сохранённые треки остаются в библиотеке.</p><button class="home-pill">Повторить</button></div>';
     container.querySelector('button').onclick=retry;renderIcons(container);
 }
@@ -236,7 +244,9 @@ export function initLibraryView(callbacks) {
         document.getElementById('lib-collection-filter')?.focus();
     });
     document.getElementById('lib-collection-filter')?.addEventListener('input', event => {
-        collectionFilter = event.target.value.trim().toLocaleLowerCase('ru'); renderCollectionGrids();
+        const value = event.target.value.trim().toLocaleLowerCase('ru');
+        clearTimeout(collectionFilterTimer);
+        collectionFilterTimer = setTimeout(() => { collectionFilter = value; renderCollectionGrids(); }, 160);
     });
     document.querySelectorAll('[data-library-trigger]').forEach(button => button.onclick = () => {
         document.getElementById(button.dataset.libraryTrigger)?.click();

@@ -182,6 +182,7 @@ function ensureWaveStatus(drawer) {
 function renderWaveStatus(state = getTrackWaveState()) {
     const panel = document.getElementById('queue-wave-status');
     if (!panel) return;
+    panel.inert = !state.active;
     panel.hidden = !state.active;
     panel.dataset.status = state.status;
     const message = state.status === 'loading' ? 'Подбираем продолжение…' : state.status === 'waiting' ? 'Продолжение не загружено' : 'Продолжение добавится автоматически';
@@ -189,6 +190,213 @@ function renderWaveStatus(state = getTrackWaveState()) {
     label.textContent = message;
     label.title = state.title ? `Волна по треку «${state.title}»` : message;
     panel.querySelector('.queue-wave-retry').hidden = state.status !== 'waiting';
+}
+
+// One queue entry keeps the same `entry_id` for its whole life, so a re-render
+// can move the live node instead of recreating it.
+function queueRowKey(track, index) {
+    const id = track?.entry_id ?? track?.id ?? track?.source_id;
+    if (id !== undefined && id !== null && String(id) !== '') return String(id);
+    return `at-${index}-${track?.source || ''}-${track?.source_id ?? ''}-${track?.title || ''}`;
+}
+
+// Everything a row paints, *except* the playing marker: `_trackData` and the
+// marker are refreshed in place on a reused node, so a track change never
+// rebuilds a row.
+function queueRowShape(track, index, playing) {
+    return [queueTab, queueRowKey(track, index), track?.title || '',
+        track?.artist || '', track?.duration || 0, track?.recommendation_reason || '',
+        getCoverUrl(track) || ''].join('\u0001');
+}
+
+// `playing` is a state marker, not content. Apply it without touching the rest
+// of the row so the transport never has to re-create nodes.
+function applyQueueRowState(item, playing) {
+    item.classList.toggle('playing', playing);
+    const title = item.querySelector('.track-item-title');
+    if (!title) return;
+    if (title.style) title.style.color = playing ? 'var(--primary)' : '';
+}
+
+function buildQueueRow(track, index, position, playing, revision) {
+    const item = document.createElement('div');
+    item._trackData = track;
+    item.className = 'track-item' + (playing ? ' playing' : '');
+    item.classList.toggle('queue-history-row', queueTab === 'history');
+    item.draggable = false;
+    item.dataset.index = index;
+    item.dataset.rowKey = queueRowKey(track, index);
+    item.dataset.rowShape = queueRowShape(track, index, playing);
+    item.dataset.revision = revision == null ? '' : String(revision);
+    if (track.entry_id != null) item.dataset.motionKey = track.entry_id;
+    item.style.cursor = 'pointer';
+
+    // Handlers read the row's live dataset: a reused node keeps the listeners
+    // bound by the first render, so a captured `index` would go stale as soon
+    // as the queue is reordered.
+    const indexNow = () => Number(item.dataset.index);
+    const revisionNow = () => { const raw = item.dataset.revision; return raw === '' ? null : Number(raw); };
+
+    // We'll style it similarly to library tracks but with a drag handle
+    const coverUrl = getCoverUrl(track);
+    item.innerHTML = `
+        <span class="track-number">${position + 1}</span>
+        <div style="display:flex; align-items:center; color:var(--text-dim); cursor:grab; padding:0 6px; flex-shrink:0;" class="drag-handle" title="Зажмите чтобы перетащить">
+            <i data-lucide="grip-vertical" style="width:14px;height:14px"></i>
+        </div>
+        ${coverUrl ? `<img class="track-item-cover" src="${escapeHtml(coverUrl)}" alt="" width="42" height="42" style="width:42px;height:42px;min-width:42px;max-width:42px;border-radius:8px;object-fit:cover;flex-shrink:0;display:block;" loading="lazy" decoding="async" data-hide-on-error="1">` : `<div class="track-item-cover fallback-note-cover" style="width:42px;height:42px;min-width:42px;max-width:42px;display:flex;align-items:center;justify-content:center;background:#18181f;border-radius:8px;flex-shrink:0;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#555" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`}
+        <div class="track-item-info">
+            <div class="track-item-title" style="${playing ? 'color:var(--primary)' : ''}">${escapeHtml(track.title || 'Unknown')}</div>
+            <div class="track-item-artist">${escapeHtml(track.artist || 'Unknown Artist')}</div>
+            ${track.recommendation_reason ? `<div class="recommendation-reason" title="${escapeHtml(track.recommendation_reason)}">${escapeHtml(track.recommendation_reason)}</div>` : ''}
+        </div>
+        <div class="track-item-duration">${formatTime(track.duration || 0)}</div>
+        <button class="icon-btn queue-remove-btn" title="Удалить из очереди" style="flex-shrink:0;width:26px;height:26px;opacity:0.55;">
+            <i data-lucide="x" style="width:14px;height:14px"></i>
+        </button>
+    `;
+
+    const handle = item.querySelector('.drag-handle');
+    if (handle) {
+        handle.addEventListener('mousedown', () => { item.draggable = true; });
+        handle.addEventListener('mouseup', () => { item.draggable = false; });
+        handle.addEventListener('mouseleave', () => { if (draggedItemIndex === null) item.draggable = false; });
+    }
+
+    // Click to play track instantly
+    item.addEventListener('click', async (e) => {
+        if (e.target.closest('.drag-handle')) return;
+        if (e.target.closest('.queue-remove-btn')) return;
+        e.stopPropagation();
+        const current = item._trackData;
+
+        if (window.pywebview?.api?.play_track) {
+            try {
+                // BUG-U3-001: мёртвая ветка play_queue_track удалена — такого метода
+                // нет ни в PUBLIC_METHODS моста, ни в AppApi; play_track(track)
+                // сам находит трек по entry_id в живой очереди.
+                const result = await window.pywebview.api.play_track(current);
+                if (result === false || result?.success === false) throw new Error('Play rejected');
+            } catch { showToast('Не удалось включить трек из очереди', 'error'); }
+        } else if (window.NeDotify?.playTrack) {
+            window.NeDotify.playTrack(current);
+        }
+    });
+
+    // Remove-track cross button → backend remove_from_queue
+    const removeBtn = item.querySelector('.queue-remove-btn');
+    if (removeBtn) {
+        removeBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const index = indexNow();
+            const revision = revisionNow();
+            if (index === lastSnapshot.currentIndex) {
+                showToast('Нельзя удалить текущий трек', 'warning');
+                return;
+            }
+            if (removeBtn.disabled) return;
+            removeBtn.disabled = true;
+            try {
+                if (window.pywebview?.api?.remove_from_queue) {
+                    try {
+                        const res = await window.pywebview.api.remove_from_queue(index, item._trackData?.entry_id ?? null, revision);
+                        if (res === false || res?.success === false) {
+                            showToast(res.error || 'Не удалось удалить трек', 'error');
+                            return;
+                        }
+                    } catch(err) {
+                        showToast('Ошибка удаления из очереди', 'error');
+                        return;
+                    }
+                } else {
+                    currentQueue.splice(index, 1);
+                    syncQueueToWindow();
+                }
+                await loadQueue();
+            } finally {
+                removeBtn.disabled = false;
+            }
+        });
+        removeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+    }
+
+    // Drag & Drop Events
+    item.addEventListener('dragstart', (e) => {
+        draggedItemIndex = indexNow();
+        item.style.opacity = '0.5';
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', item.dataset.index);
+    });
+
+    item.addEventListener('dragend', () => {
+        draggedItemIndex = null;
+        item.draggable = false;
+        item.style.opacity = '1';
+        document.querySelectorAll('.track-item').forEach(el => {
+            el.classList.remove('drag-over-top');
+            el.classList.remove('drag-over-bottom');
+        });
+    });
+
+    item.addEventListener('dragover', (e) => {
+        e.preventDefault(); // Necessary to allow dropping
+        const index = indexNow();
+        if (draggedItemIndex === null || draggedItemIndex === index) return;
+
+        const rect = item.getBoundingClientRect();
+        const relY = e.clientY - rect.top;
+
+        item.classList.remove('drag-over-top', 'drag-over-bottom');
+        if (relY < rect.height / 2) {
+            item.classList.add('drag-over-top');
+        } else {
+            item.classList.add('drag-over-bottom');
+        }
+    });
+
+    item.addEventListener('dragleave', () => {
+        item.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+
+    item.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        item.classList.remove('drag-over-top', 'drag-over-bottom');
+
+        const index = indexNow();
+        if (draggedItemIndex === null || draggedItemIndex === index) return;
+
+        const rect = item.getBoundingClientRect();
+        const relY = e.clientY - rect.top;
+        let insertIndex = index;
+
+        if (relY >= rect.height / 2) {
+            insertIndex++;
+        }
+
+        if (draggedItemIndex < insertIndex) {
+            insertIndex--;
+        }
+
+        if (draggedItemIndex !== insertIndex) {
+            const movedItem = currentQueue.splice(draggedItemIndex, 1)[0];
+            currentQueue.splice(insertIndex, 0, movedItem);
+
+            if (window.pywebview?.api?.reorder_queue) {
+                try {
+                    const result = await window.pywebview.api.reorder_queue(draggedItemIndex, insertIndex, movedItem?.entry_id ?? null, revisionNow());
+                    if (result === false || result?.success === false) throw new Error('Reorder rejected');
+                } catch(err) {
+                    console.error('reorder_queue failed:', err);
+                    showToast('Не удалось изменить порядок очереди', 'error');
+                } finally {
+                    await loadQueue();
+                }
+            }
+        }
+    });
+
+    return item;
 }
 
 function renderQueue(tracks, currentIndex, history = []) {
@@ -204,197 +412,72 @@ function renderQueue(tracks, currentIndex, history = []) {
         if (count) count.textContent = button.dataset.queueTab === 'history' ? history.length : Math.max(0, tracks.length - Math.max(0, currentIndex + 1));
     });
     const renderedRevision = queueRevision;
+    const motion = window.NeDotifyMotion;
+    const drawerOpen = motion && content.closest('#queue-drawer:is(.active,.open)');
+    const before = drawerOpen && motion.listPositions(content);
     if (!tracks.length || (queueTab === 'history' && !history.length)) {
         content.innerHTML = `<div class="empty-state">${queueTab === 'history' ? 'Здесь появятся прослушанные треки' : 'Добавьте треки в очередь'}</div>`;
+        window.NeDotifyMotion?.reveal(content);
         return;
     }
 
-    content.innerHTML = '';
+    // Reuse rows whose painted shape is unchanged. `entry_id` is stable for a
+    // queue entry, so a track change, a reorder or a likes update must move the
+    // live node rather than recreate it - a full rebuild restarted every
+    // entrance animation and could not be cross-faded by settleList.
+    const reusable = new Map();
+    for (const node of [...content.children]) {
+        if (node.classList.contains('track-item') && node.dataset.rowKey) reusable.set(node.dataset.rowKey, node);
+    }
 
-    // Build every row into a fragment and insert once (search.js pattern):
-    // N appendChild calls would invalidate layout N times. No layout read
-    // happens below, and the getBoundingClientRect() calls live in the
-    // dragover/drop handlers, which can only fire after this loop returns.
-    const fragment = document.createDocumentFragment();
-
+    const desired = [];
+    let createdRows = false;
     const rows = queueRows(tracks, currentIndex, history, queueTab);
     let previousSection = null;
-    rows.forEach(({track,index,section}, position) => {
+    rows.forEach(({track, index, section}, position) => {
         if (section !== previousSection) {
             const heading = document.createElement('h3');
             heading.className = 'queue-section-title';
             heading.textContent = section;
-            fragment.appendChild(heading);
+            desired.push(heading);
             previousSection = section;
         }
-        const item = document.createElement('div');
-        item._trackData = track;
-        item.className = 'track-item' + (queueTab !== 'history' && index === currentIndex ? ' playing' : '');
-        item.classList.toggle('queue-history-row', queueTab === 'history');
-        item.draggable = false;
-        item.dataset.index = index;
-        item.style.cursor = 'pointer';
-        
-        // We'll style it similarly to library tracks but with a drag handle
-        const coverUrl = getCoverUrl(track);
-        item.innerHTML = `
-            <span class="track-number">${position + 1}</span>
-            <div style="display:flex; align-items:center; color:var(--text-dim); cursor:grab; padding:0 6px; flex-shrink:0;" class="drag-handle" title="Зажмите чтобы перетащить">
-                <i data-lucide="grip-vertical" style="width:14px;height:14px"></i>
-            </div>
-            ${coverUrl ? `<img class="track-item-cover" src="${escapeHtml(coverUrl)}" alt="" width="42" height="42" style="width:42px;height:42px;min-width:42px;max-width:42px;border-radius:8px;object-fit:cover;flex-shrink:0;display:block;" loading="lazy" decoding="async" data-hide-on-error="1" loading="lazy">` : `<div class="track-item-cover fallback-note-cover" style="width:42px;height:42px;min-width:42px;max-width:42px;display:flex;align-items:center;justify-content:center;background:#18181f;border-radius:8px;flex-shrink:0;"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#555" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`}
-            <div class="track-item-info">
-                <div class="track-item-title" style="${queueTab !== 'history' && index === currentIndex ? 'color:var(--primary)' : ''}">${escapeHtml(track.title || 'Unknown')}</div>
-                <div class="track-item-artist">${escapeHtml(track.artist || 'Unknown Artist')}</div>
-                ${track.recommendation_reason ? `<div class="recommendation-reason" title="${escapeHtml(track.recommendation_reason)}">${escapeHtml(track.recommendation_reason)}</div>` : ''}
-            </div>
-            <div class="track-item-duration">${formatTime(track.duration || 0)}</div>
-            <button class="icon-btn queue-remove-btn" title="Удалить из очереди" style="flex-shrink:0;width:26px;height:26px;opacity:0.55;">
-                <i data-lucide="x" style="width:14px;height:14px"></i>
-            </button>
-        `;
-
-        const handle = item.querySelector('.drag-handle');
-        if (handle) {
-            handle.addEventListener('mousedown', () => { item.draggable = true; });
-            handle.addEventListener('mouseup', () => { item.draggable = false; });
-            handle.addEventListener('mouseleave', () => { if (draggedItemIndex === null) item.draggable = false; });
+        const playing = queueTab !== 'history' && index === currentIndex;
+        const key = queueRowKey(track, index);
+        let item = reusable.get(key);
+        if (item) reusable.delete(key);
+        if (item && item.dataset.rowShape === queueRowShape(track, index, playing)) {
+            // Same content: move/keep the node, refresh only derived state.
+            item._trackData = track;
+            item.dataset.index = index;
+            item.dataset.revision = renderedRevision == null ? '' : String(renderedRevision);
+            applyQueueRowState(item, playing);
+            const number = item.querySelector('.track-number');
+            if (number && number.textContent !== String(position + 1)) number.textContent = position + 1;
+        } else {
+            if (item) item.remove();
+            item = buildQueueRow(track, index, position, playing, renderedRevision);
+            createdRows = true;
         }
-
-        // Click to play track instantly
-        item.addEventListener('click', async (e) => {
-            if (e.target.closest('.drag-handle')) return;
-            if (e.target.closest('.queue-remove-btn')) return;
-            e.stopPropagation();
-
-            if (window.pywebview?.api?.play_track) {
-                try {
-                    // BUG-U3-001: мёртвая ветка play_queue_track удалена — такого метода
-                    // нет ни в PUBLIC_METHODS моста, ни в AppApi; play_track(track)
-                    // сам находит трек по entry_id в живой очереди.
-                    const result = await window.pywebview.api.play_track(track);
-                    if (result === false || result?.success === false) throw new Error('Play rejected');
-                } catch { showToast('Не удалось включить трек из очереди', 'error'); }
-            } else if (window.NeDotify?.playTrack) {
-                window.NeDotify.playTrack(track);
-            }
-        });
-
-        // Remove-track cross button → backend remove_from_queue
-        const removeBtn = item.querySelector('.queue-remove-btn');
-        if (removeBtn) {
-            removeBtn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                if (index === currentIndex) {
-                    showToast('Нельзя удалить текущий трек', 'warning');
-                    return;
-                }
-                if (removeBtn.disabled) return;
-                removeBtn.disabled = true;
-                try {
-                    if (window.pywebview?.api?.remove_from_queue) {
-                        try {
-                            const res = await window.pywebview.api.remove_from_queue(index, track.entry_id ?? null, renderedRevision);
-                            if (res === false || res?.success === false) {
-                                showToast(res.error || 'Не удалось удалить трек', 'error');
-                                return;
-                            }
-                        } catch(err) {
-                            showToast('Ошибка удаления из очереди', 'error');
-                            return;
-                        }
-                    } else {
-                        currentQueue.splice(index, 1);
-                        syncQueueToWindow();
-                    }
-                    await loadQueue();
-                } finally {
-                    removeBtn.disabled = false;
-                }
-            });
-            removeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
-        }
-
-        // Drag & Drop Events
-        item.addEventListener('dragstart', (e) => {
-            draggedItemIndex = index;
-            item.style.opacity = '0.5';
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', String(index));
-        });
-
-        item.addEventListener('dragend', () => {
-            draggedItemIndex = null;
-            item.draggable = false;
-            item.style.opacity = '1';
-            document.querySelectorAll('.track-item').forEach(el => {
-                el.classList.remove('drag-over-top');
-                el.classList.remove('drag-over-bottom');
-            });
-        });
-
-        item.addEventListener('dragover', (e) => {
-            e.preventDefault(); // Necessary to allow dropping
-            if (draggedItemIndex === null || draggedItemIndex === index) return;
-            
-            const rect = item.getBoundingClientRect();
-            const relY = e.clientY - rect.top;
-            
-            item.classList.remove('drag-over-top', 'drag-over-bottom');
-            if (relY < rect.height / 2) {
-                item.classList.add('drag-over-top');
-            } else {
-                item.classList.add('drag-over-bottom');
-            }
-        });
-
-        item.addEventListener('dragleave', () => {
-            item.classList.remove('drag-over-top', 'drag-over-bottom');
-        });
-
-        item.addEventListener('drop', async (e) => {
-            e.preventDefault();
-            item.classList.remove('drag-over-top', 'drag-over-bottom');
-            
-            if (draggedItemIndex === null || draggedItemIndex === index) return;
-            
-            const rect = item.getBoundingClientRect();
-            const relY = e.clientY - rect.top;
-            let insertIndex = index;
-            
-            if (relY >= rect.height / 2) {
-                insertIndex++;
-            }
-            
-            if (draggedItemIndex < insertIndex) {
-                insertIndex--;
-            }
-            
-            if (draggedItemIndex !== insertIndex) {
-                const movedItem = currentQueue.splice(draggedItemIndex, 1)[0];
-                currentQueue.splice(insertIndex, 0, movedItem);
-                
-                if (window.pywebview?.api?.reorder_queue) {
-                    try {
-                        const result = await window.pywebview.api.reorder_queue(draggedItemIndex, insertIndex, movedItem?.entry_id ?? null, renderedRevision);
-                        if (result === false || result?.success === false) throw new Error('Reorder rejected');
-                    } catch(err) {
-                        console.error('reorder_queue failed:', err);
-                        showToast('Не удалось изменить порядок очереди', 'error');
-                    } finally {
-                        await loadQueue();
-                    }
-                }
-            }
-        });
-
-        fragment.appendChild(item);
+        desired.push(item);
     });
 
-    renderIcons(fragment);
-    content.appendChild(fragment);
+    // Anything left over is no longer in the queue (or changed tab).
+    for (const stale of reusable.values()) stale.remove();
+
+    // Reconcile in place: only moved/new nodes touch the DOM, so an unchanged
+    // queue leaves its rows (and their hover/focus) exactly where they were.
+    let cursor = content.firstChild;
+    for (const node of desired) {
+        if (node === cursor) cursor = cursor.nextSibling;
+        else content.insertBefore(node, cursor);
+    }
+    while (cursor) {
+        const next = cursor.nextSibling;
+        cursor.remove();
+        cursor = next;
+    }
+    if (createdRows) renderIcons(content);
+
+    if (drawerOpen) motion.settleList(content, before);
 }
-
-
-

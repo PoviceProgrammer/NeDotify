@@ -223,9 +223,21 @@ assert.equal(count('createLinearGradient'), 1);
 playing = false;
 tick(1200);
 assert.equal(count('createLinearGradient'), 2, 'pause changes gradient opacity');
-assert.equal(frames.size, 0, 'a paused visualizer draws an ambient frame once and then stops');
-emit(window, 'resize'); tick(1250);
+// Pausing walks the bars down to the idle pose instead of freezing them
+// half-way through the playing shape. The walk is finite - after the pose
+// settles (or at the MAX_IDLE_STEPS bound) the loop parks for good, so a
+// paused visualizer still owns no rAF.
+let settleFrames = 1;
+while (frames.size && settleFrames < 120) { tick(1250 + settleFrames * 50); settleFrames++; }
+assert.ok(settleFrames > 1, 'paused bars must settle to the idle pose, not stop mid-shape');
+assert.ok(settleFrames <= 41, `the idle settle must be bounded, took ${settleFrames} frames`);
+assert.equal(frames.size, 0, 'a paused visualizer stops once the idle pose settles');
+const settledAt = 1250 + (settleFrames - 1) * 50;
+emit(window, 'resize');
+// The resize handler coalesces through one rAF before sizing and repainting.
+tick(settledAt + 50); tick(settledAt + 100);
 assert.equal(count('createLinearGradient'), 3, 'resize must invalidate gradients for the canvas transform');
+assert.equal(frames.size, 0, 'resize repaints the settled pose once and parks again');
 """)
 
 

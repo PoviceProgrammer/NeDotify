@@ -135,6 +135,10 @@ function sample() {
         return img.complete && img.naturalWidth && rect.width > 0 && rect.bottom > bounds.top && rect.top < bounds.bottom && rect.right > bounds.left && rect.left < bounds.right;
     });
     const unique = [...new Map(images.map(img => [img.currentSrc || img.src, img])).values()].slice(0, 3);
+    // A section re-render briefly empties the list of completed covers. Keep the
+    // previous palette instead of painting `transparent`/`none` (which cannot be
+    // transitioned and made the whole background blink).
+    if (!unique.length) return;
     [...layer.children].forEach((orb,index) => {
         const img = unique[index % unique.length];
         const src = img?.currentSrc || img?.src;

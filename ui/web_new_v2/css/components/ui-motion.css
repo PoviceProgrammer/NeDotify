@@ -40,3 +40,51 @@ html body :is(.search-suggestions-dropdown,.custom-glass-dropdown-menu).hidden {
     html body :is(.search-suggestions-dropdown,.custom-glass-dropdown-menu) { transition:none; }
     ::view-transition-group(panel-content),::view-transition-old(panel-content),::view-transition-new(panel-content) { animation:none; }
 }
+
+/* Discrete hiding leaves the painted pixels for the exit, with input disabled. */
+html body :is(#lyrics-display-settings-popover, #network-banner, #playlist-import-progress, #queue-wave-status, #zapret-mode-menu, #zapret-state-warning, #music-folder-import-progress),
+html body .download-manager :is(.download-meter, .download-manager-track small, .download-manager-actions button, .download-manager-message) {
+    opacity: 1;
+    translate: 0 0;
+    transition: opacity 150ms ease, translate 160ms cubic-bezier(.2,.75,.25,1), display 160ms allow-discrete;
+}
+html body #network-banner { animation: none; }
+html body :is(#lyrics-display-settings-popover, #network-banner, #playlist-import-progress, #queue-wave-status, #zapret-mode-menu, #zapret-state-warning, #music-folder-import-progress):is(.hidden,[hidden]),
+html body .download-manager :is(.download-meter, .download-manager-track small, .download-manager-actions button, .download-manager-message)[hidden] {
+    opacity: 0;
+    translate: 0 -4px;
+    pointer-events: none;
+}
+@starting-style {
+    html body :is(#lyrics-display-settings-popover, #network-banner, #playlist-import-progress, #queue-wave-status, #zapret-mode-menu, #zapret-state-warning, #music-folder-import-progress):not(.hidden,[hidden]),
+    html body .download-manager :is(.download-meter, .download-manager-track small, .download-manager-actions button, .download-manager-message):not([hidden]) {
+        opacity: 0;
+        translate: 0 -4px;
+    }
+}
+html body.mini-player-active #network-banner { transition: none; }
+
+.download-meter { position: relative; display: grid; }
+.download-meter[data-determinate="true"]::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 99px;
+    background: var(--color-primary, var(--primary));
+    pointer-events: none;
+    transform-origin: left;
+    transform: scaleX(var(--download-fraction, 0));
+    transition: transform 180ms ease-out;
+}
+.download-meter[data-determinate="true"] progress::-webkit-progress-value { background: transparent; }
+.download-manager .download-meter[hidden] { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+    html body :is(#lyrics-display-settings-popover, #network-banner, #playlist-import-progress, #queue-wave-status, #zapret-mode-menu, #zapret-state-warning, #music-folder-import-progress),
+    html body .download-manager :is(.download-meter, .download-manager-track small, .download-manager-actions button, .download-manager-message),
+    .download-meter[data-determinate="true"]::after { transition: none; }
+}
+:root.battery-saver-active body :is(#lyrics-display-settings-popover, #network-banner, #playlist-import-progress, #queue-wave-status, #zapret-mode-menu, #zapret-state-warning, #music-folder-import-progress),
+:root.battery-saver-active body .download-manager :is(.download-meter, .download-manager-track small, .download-manager-actions button, .download-manager-message),
+:root.battery-saver-active .download-meter[data-determinate="true"]::after,
+:root.battery-saver-active #audio-tools-dialog .audio-sleep-options button { transition: none; }

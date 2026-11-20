@@ -1,0 +1,9 @@
+{
+  "scenario": "startup",
+  "mode": "windows-live",
+  "started_at": 1794233502.0471182,
+  "ok": false,
+  "error": "Traceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\tools\\bench\\bench_child.py\", line 263, in driver\n    result[\"data\"] = scenarios.scenario_startup(ctx)\n                     ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\tools\\bench\\check_windows_live_native_20261109.py\", line 36, in scenario\n    result = ctx.js_async(r'''async()=>{\n        const api=window.pywebview.api;\n    ...<39 lines>...\n            audioMuted:true,fixtures:false};\n    }''', timeout=115)\n  File \"C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\tools\\bench\\bench_child.py\", line 75, in js_async\n    return self.sess.js(call, timeout=timeout, await_promise=True)\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\tools\\bench\\cdp.py\", line 312, in js\n    return self.ws.evaluate(expression, timeout=timeout, await_promise=await_promise)\n           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\tools\\bench\\cdp.py\", line 203, in evaluate\n    raise CDPError(f\"JS exception: {json.dumps(details)[:400]}\")\ntools.bench.cdp.CDPError: JS exception: {\"columnNumber\": 19, \"exception\": {\"className\": \"Error\", \"description\": \"Error: pause timed out: {\\\"positionMs\\\":21156.309,\\\"paused\\\":false,\\\"buffering\\\":false,\\\"seeking\\\":false,\\\"playbackRate\\\":1,\\\"trackKey\\\":\\\"[\\\\\\\"youtube\\\\\\\",\\\\\\\"yWeuUwpEQfs\\\\\\\",\\\\\\\"Don't Panic\\\\\\\",\\\\\\\"Coldplay\\\\\\\",\\\\\\\"Parachutes\\\\\\\",\\\\\\\"\\\\\\\"]\\\"}\\n    at wait (<anonymous>:8:19)\\n    at async <anonymous>:28:9\", \"objectId\": \"4507\n",
+  "data": {},
+  "finished_at": 1794233530.7095695
+}

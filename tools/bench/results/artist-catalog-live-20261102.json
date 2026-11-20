@@ -1,0 +1,8 @@
+{
+  "resolved": {
+    "status": "unavailable",
+    "error": "HTTPSConnectionPool(host='itunes.apple.com', port=443): Read timed out. (read timeout=0.14931840000281227)"
+  },
+  "resolve_seconds": 8.014,
+  "total_seconds": 8.014
+}

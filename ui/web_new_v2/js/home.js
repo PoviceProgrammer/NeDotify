@@ -132,6 +132,49 @@ window.addEventListener('nedotify:recommendation_collection_changed', () => {
     requestHomeSection('home-mixes', 'get_home_mixes', [6], true);
 });
 
+function homeTrackKey(track) {
+    const id = track?.source_id ?? track?.id ?? track?.track_id;
+    if (id !== undefined && id !== null && String(id) !== '') return `${track.source || ''}:${String(id)}`;
+    const name = track?.title || track?.name || track?.artist || '';
+    return `${name}|${track?.artist || track?.name || ''}`;
+}
+
+function feedSignature(tracks, extra = null) {
+    return JSON.stringify((tracks || []).map(track => [homeTrackKey(track), extra ? extra(track) : '']));
+}
+
+// Backfilled artwork changes only `img.src`. Re-rendering the section for that
+// replayed the whole row/grid entrance; patch the live cards instead.
+function patchFeedCovers(containerId, tracks) {
+    const container = document.getElementById(containerId);
+    if (!container) return false;
+    const byKey = new Map((tracks || []).map(track => [homeTrackKey(track), track]));
+    let touched = false;
+    container.querySelectorAll('.feed-card').forEach(card => {
+        const data = card._trackData;
+        if (!data) return;
+        const fresh = byKey.get(homeTrackKey(data));
+        if (!fresh) return;
+        card._trackData = fresh;
+        const src = getCoverUrl(fresh);
+        const cover = card.querySelector('.feed-card-cover');
+        if (!src || !cover) return;
+        const img = cover.querySelector('img');
+        if (img) {
+            if (img.getAttribute('src') !== src) { img.src = src; touched = true; }
+        } else {
+            const created = document.createElement('img');
+            created.src = src;
+            created.alt = '';
+            created.loading = 'lazy';
+            created.decoding = 'async';
+            cover.prepend(created);
+            touched = true;
+        }
+    });
+    return touched;
+}
+
 function backfillHomeCovers(currentGen) {
     // Artwork may involve dozens of network lookups. Keep it outside the feed
     // critical path and do not repeat a failed scan on every track change.
@@ -143,6 +186,10 @@ function backfillHomeCovers(currentGen) {
             if (!res?.updated || currentGen !== homeLoadGeneration) return;
             const fresh = await window.pywebview.api.get_home_data() || {};
             if (currentGen !== homeLoadGeneration) return;
+            // Covers only: patch the live nodes, then let the signature-guarded
+            // renderers see unchanged content and do nothing.
+            patchFeedCovers('home-history', fresh.history || []);
+            patchFeedCovers('home-top-tracks', fresh.analytics?.top_tracks || []);
             renderHistory(fresh.history || []);
             if (fresh.analytics) {
                 renderTopTracks(fresh.analytics.top_tracks || []);
@@ -167,8 +214,9 @@ export async function loadHome(isTrackChange = false) {
 
         document.getElementById('home-error')?.classList.add('hidden');
         updateHomeCollections(data);
-        // Four collections, backed by real local data.
-        renderQuickAccess(data, data.playlists || []);
+        // Four collections, backed by real local data. The grid renders once,
+        // after playlists and local tracks are known — three passes replayed
+        // the same entrance animation (and three replaceChildren calls).
 
         // History
         renderHistory(data.history || []);
@@ -193,7 +241,6 @@ export async function loadHome(isTrackChange = false) {
                 if (Array.isArray(playlists)) {
                     data.playlists = playlists;
                     renderHomePlaylists(playlists);
-                    renderQuickAccess(data, playlists);
                 }
             } catch (err) {
                 console.warn('Failed to load playlists on home:', err);
@@ -205,9 +252,9 @@ export async function loadHome(isTrackChange = false) {
                 const localTracks = await window.pywebview.api.get_downloaded_tracks();
                 if (currentGen !== homeLoadGeneration) return;
                 data.localTracks = Array.isArray(localTracks) ? localTracks : [];
-                renderQuickAccess(data, data.playlists || []);
             } catch (error) { console.warn('Home local collection unavailable:', error); }
         }
+        renderQuickAccess(data, data.playlists || []);
 
         if(!isTrackChange)requestHomeSection('home-mixes','get_home_mixes',[6]);
         refreshFavoritesCovers();
@@ -245,7 +292,21 @@ export function renderQuickAccess(data = {}, playlists = []) {
     const playlist = pl ? {id:`playlist-${pl.id}`,type:'playlist',playlist:pl,title:pl.name || 'Плейлист',subtitle:formatTracksCount(pl.track_count),icon:'list-music',open:()=>openHomeLibrary('playlist',pl),play:async()=>{try {const result=await window.pywebview.api.get_playlist_tracks(pl.id); const tracks=Array.isArray(result)?result:result?.tracks || []; if(tracks.length) await play(tracks); else openHomeLibrary('playlist',pl);}catch {openHomeLibrary('playlist',pl);}}} : {id:'create-playlist',type:'local',title:'Ваш первый плейлист',subtitle:'Соберите любимую музыку',icon:'plus',open:()=>window.NeDotify?.createPlaylist(),play:()=>window.NeDotify?.createPlaylist()};
     const track = data.history?.[0];
     const recent = track ? {id:'recent',type:'track',track,title:track.title,subtitle:track.artist || 'Недавно прослушано',open:()=>play(data.history),play:()=>play(data.history)} : {id:'library',type:'local',title:'Ваша библиотека',subtitle:'Выберите музыку',icon:'library',open:()=>openHomeLibrary('all'),play:()=>openHomeLibrary('all')};
+    const signature = JSON.stringify([
+        data.favorites_count || 0,
+        data.localTracks ? data.localTracks.length : null,
+        pl ? [pl.id, pl.name, pl.track_count] : null,
+        track ? [homeTrackKey(track), getCoverUrl(track)] : null,
+    ]);
+    if (container.dataset.qaSignature === signature) {
+        container.setAttribute('aria-busy','false');
+        refreshFavoritesCovers();
+        return;
+    }
+    container.dataset.qaSignature = signature;
+    const wasEmpty = !container.childElementCount;
     container.replaceChildren();
+    if (wasEmpty) window.NeDotifyMotion?.reveal(container);
     container.setAttribute('aria-busy','false');
     [favorites,local,playlist,recent].forEach(item => {
         const card=document.createElement('div'); card.className=`quick-access-card qa-${item.type}`; card.dataset.qaId=item.id;
@@ -265,7 +326,14 @@ function renderHistory(tracks) {
     updateHomeCoverCollage(tracks);
     const container = document.getElementById('home-history');
     if (!container) return;
+    // Content signature only: cover backfill patches `img.src` in place, so an
+    // unchanged track list must not wipe and re-reveal the whole feed.
+    const signature = feedSignature(tracks.slice(0, 10));
+    if (container.dataset.feedSignature === signature) return;
+    container.dataset.feedSignature = signature;
+    const wasEmpty = !container.childElementCount;
     container.innerHTML = '';
+    if (wasEmpty) window.NeDotifyMotion?.reveal(container);
     if (!tracks.length) { container.innerHTML = '<div class="home-empty"><i data-lucide="headphones"></i><h3>Слушайте то, что нравится</h3><p>Ваши недавние треки появятся здесь после первого прослушивания.</p></div>'; renderIcons(container); return; }
     const fragment = document.createDocumentFragment();
     tracks.slice(0, 10).forEach((track, idx) => {
@@ -303,6 +371,7 @@ export function renderAuthenticHome(sections) {
     if (!container) return;
     
     container.innerHTML = '';
+    window.NeDotifyMotion?.reveal(container);
     
     const sectionList = Array.isArray(sections) 
         ? sections 
@@ -496,6 +565,7 @@ export function renderHomePlaylists(playlists) {
     const container = document.getElementById('home-playlists');
     if (!container) return;
     container.innerHTML = '';
+    window.NeDotifyMotion?.reveal(container);
 
     // Fragment: all playlist cards land in one insertion (search.js pattern).
     // attachPlaylistCollage() can only resume in a microtask, i.e. after this
@@ -627,6 +697,7 @@ export function renderArtists(artists) {
         sec.style.display = '';
     }
     container.innerHTML = '';
+    window.NeDotifyMotion?.reveal(container);
 
     if (!artists || artists.length === 0) {
         container.innerHTML = '<div class="empty-state text-sm" style="padding:20px">Нет данных</div>';
@@ -661,6 +732,7 @@ function renderFeedSection(containerId, tracks) {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '';
+    window.NeDotifyMotion?.reveal(container);
 
     if (!tracks || tracks.length === 0) {
         const message = containerId === 'home-mixes'
@@ -714,6 +786,7 @@ function createFeedTile({title, subtitle = '', coverMarkup = '', coverUrl = '', 
 function createFeedCard(track, trackList = null, trackIndex = 0, options = {}) {
     let card = document.createElement('div');
     card.className = 'feed-card';
+    card._trackData = track;
 
     if (track.type === 'custom_playlist') {
         const covers=(track.tracks||[]).slice(0,4).map(t=>({src:getCoverUrl(t),coverUrl:t.cover_url,sourceId:t.source_id,source:t.source}));
@@ -723,8 +796,11 @@ function createFeedCard(track, trackList = null, trackIndex = 0, options = {}) {
             try { await window.pywebview.api.report_recommendation_impression(track.recommendation_impression_id); }
             catch { /* Playback still works if the local collector is unavailable. */ }
         };
-        const play=async()=>{
-            await reportShown();
+        // Telemetry must never gate the click: awaiting the impression report
+        // left the button dead for a round-trip and made playback order depend
+        // on an unrelated local RPC.
+        const play=()=>{
+            void reportShown();
             return window.pywebview.api.play_track(track.tracks[0],track.tracks,0);
         };
         card.querySelector('.feed-card-play').onclick=e=>{e.stopPropagation();play().catch(()=>showToast('Не удалось включить микс','error'));};
@@ -747,6 +823,7 @@ function createFeedCard(track, trackList = null, trackIndex = 0, options = {}) {
         artistName: artistLink ? track.artist : '',
         track: track,
     });
+    card._trackData = track;
     if (track.recommendation_reason) {
         const reason = document.createElement('span');
         reason.className = 'recommendation-reason';
@@ -786,7 +863,12 @@ window.addEventListener('app:refresh_home', () => {
 export function renderTopTracks(tracks) {
     const container = document.getElementById('home-top-tracks');
     if (!container) return;
+    const signature = feedSignature(tracks, track => `${track.play_count || track.plays || track.total_plays || 0}`);
+    if (container.dataset.feedSignature === signature) return;
+    container.dataset.feedSignature = signature;
+    const wasEmpty = !container.childElementCount;
     container.innerHTML = '';
+    if (wasEmpty) window.NeDotifyMotion?.reveal(container);
     
     if (!tracks || tracks.length === 0) {
         container.innerHTML = '<div class="empty-state text-sm" style="padding:18px 24px; color:rgba(255,255,255,0.85); font-weight:600; background:rgba(255,255,255,0.04); border-radius:12px; border:1px dashed rgba(255,255,255,0.15); width:100%;">🎵 Слушайте любимую музыку, чтобы сформировать личный Топ!</div>';
@@ -810,7 +892,12 @@ export function renderTopTracks(tracks) {
 export function renderTopArtists(artists) {
     const container = document.getElementById('home-top-artists');
     if (!container) return;
+    const signature = feedSignature(artists, artist => `${artist.total_plays || artist.play_count || artist.plays || 0}`);
+    if (container.dataset.feedSignature === signature) return;
+    container.dataset.feedSignature = signature;
+    const wasEmpty = !container.childElementCount;
     container.innerHTML = '';
+    if (wasEmpty) window.NeDotifyMotion?.reveal(container);
     
     if (!artists || artists.length === 0) {
         container.innerHTML = '<div class="empty-state text-sm" style="padding:16px;color:var(--text-sec)">Пока нет данных</div>';

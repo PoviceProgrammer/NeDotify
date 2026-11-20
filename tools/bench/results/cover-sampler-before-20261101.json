@@ -1,0 +1,19 @@
+{
+  "workload": "5000 samples of one decoded 100x100 cover; unchanged 50x50 sampler and pixel stepping",
+  "repetitions": 5,
+  "calls_per_repetition": 1000,
+  "canvas_contexts": 5000,
+  "samples_ms": [
+    55.100000001490116,
+    46.399999998509884,
+    44.69999999925494,
+    92.19999999925494,
+    42.900000002235174
+  ],
+  "median_ms": 46.399999998509884,
+  "color": {
+    "r": 120,
+    "g": 80,
+    "b": 40
+  }
+}

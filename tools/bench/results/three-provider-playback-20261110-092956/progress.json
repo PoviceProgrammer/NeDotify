@@ -1,0 +1,96 @@
+[
+  {
+    "first": {
+      "clockAdvancedMs": 1571,
+      "peak": 0.31796377897262573,
+      "positionMs": 2061
+    },
+    "firstPlaying": true,
+    "next": {
+      "clockAdvancedMs": 1552,
+      "peak": 0.1635175347328186,
+      "positionMs": 1971
+    },
+    "nextPlaying": true,
+    "pause": true,
+    "query": "Rick Astley",
+    "queueTracks": 2,
+    "resume": true,
+    "searchResults": 11,
+    "seek": true,
+    "source": "youtube",
+    "startAndMeasureMs": 6051,
+    "tracks": [
+      {
+        "artist": "Unknown Artist",
+        "source_id": "lYBUbBu4W08",
+        "title": "Never Gonna Give You Up"
+      },
+      {
+        "artist": "Unknown Artist",
+        "source_id": "t4KNl0pjxzI",
+        "title": "Cry for Help (Single Version)"
+      }
+    ],
+    "style": "current",
+    "resolutions": [
+      {
+        "source": "youtube",
+        "source_id": "lYBUbBu4W08",
+        "host": "rr4---sn-oj5hn5-5a.googlevideo.com"
+      },
+      {
+        "source": "youtube",
+        "source_id": "t4KNl0pjxzI",
+        "host": "rr1---sn-2o25g5-53.googlevideo.com"
+      }
+    ]
+  },
+  {
+    "first": {
+      "clockAdvancedMs": 1559,
+      "peak": 0.02193029597401619,
+      "positionMs": 2029
+    },
+    "firstPlaying": true,
+    "next": {
+      "clockAdvancedMs": 1579,
+      "peak": 0.11705886572599411,
+      "positionMs": 1991
+    },
+    "nextPlaying": true,
+    "pause": true,
+    "query": "v3lvet",
+    "queueTracks": 2,
+    "resume": true,
+    "searchResults": 20,
+    "seek": true,
+    "source": "soundcloud",
+    "startAndMeasureMs": 4936,
+    "tracks": [
+      {
+        "artist": "v3lvet",
+        "source_id": "2215597907",
+        "title": "пьяный дождь ( mylancore )"
+      },
+      {
+        "artist": "v3lvet",
+        "source_id": "2293084007",
+        "title": "Нуар ( 3bor remix )"
+      }
+    ],
+    "style": "current",
+    "resolutions": [
+      {
+        "source": "soundcloud",
+        "source_id": "2215597907",
+        "host": "playback.media-streaming.soundcloud.cloud"
+      },
+      {
+        "source": "soundcloud",
+        "source_id": "2293084007",
+        "host": "playback.media-streaming.soundcloud.cloud"
+      }
+    ]
+  }
+]

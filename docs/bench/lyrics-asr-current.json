@@ -1,0 +1,262 @@
+{
+  "generated_at": "2026-10-23T17:17:13",
+  "models": {
+    "large-v3": {
+      "status": "not_measured"
+    },
+    "large-v3-turbo": {
+      "status": "stopped_for_new_latency_requirement",
+      "ok": null,
+      "runs": [
+        {
+          "repetition": 1,
+          "model_load_ms": 1686,
+          "resources": {
+            "n_samples": 6327,
+            "window_sec": 1712.9,
+            "python_cpu_pct": {
+              "mean": 5.96,
+              "median": 5.85,
+              "p95": 11.67,
+              "max": 23.81
+            },
+            "webview_cpu_pct": {
+              "mean": 0.0,
+              "median": 0.0,
+              "p95": 0.0,
+              "max": 0.0
+            },
+            "tree_cpu_pct": {
+              "mean": 201.9,
+              "median": 203.4,
+              "p95": 214.47,
+              "max": 237.2
+            },
+            "python_rss_mb": {
+              "mean": 31.32,
+              "median": 31.35,
+              "p95": 32.72,
+              "max": 34.21
+            },
+            "webview_rss_mb": {
+              "mean": 0.0,
+              "median": 0.0,
+              "p95": 0.0,
+              "max": 0.0
+            },
+            "worker_cpu_pct": {
+              "mean": 195.94,
+              "median": 197.87,
+              "p95": 206.21,
+              "max": 231.55
+            },
+            "worker_rss_mb": {
+              "mean": 1815.75,
+              "median": 1815.71,
+              "p95": 1835.11,
+              "max": 1838.8
+            },
+            "tree_rss_mb": {
+              "mean": 1847.07,
+              "median": 1846.82,
+              "p95": 1867.46,
+              "max": 1870.73
+            },
+            "python_threads_max": 9,
+            "n_children_max": 2
+          },
+          "native_process_usage": null,
+          "error": null,
+          "memory_guard": null,
+          "not_run": null,
+          "files": [
+            {
+              "name": "english_full",
+              "duration_sec": 213.023125,
+              "ok": true,
+              "first_confirmed_text_sec": 79.023,
+              "elapsed_sec": 671.138
+            },
+            {
+              "name": "english_clip",
+              "duration_sec": 30.0,
+              "ok": true,
+              "first_confirmed_text_sec": 78.959,
+              "elapsed_sec": 78.959
+            },
+            {
+              "name": "distorted_clip",
+              "duration_sec": 30.0,
+              "ok": true,
+              "first_confirmed_text_sec": 79.285,
+              "elapsed_sec": 79.285
+            },
+            {
+              "name": "russian_full",
+              "duration_sec": 305.1250625,
+              "ok": true,
+              "first_confirmed_text_sec": 38.244,
+              "elapsed_sec": 675.513
+            },
+            {
+              "name": "russian_clip",
+              "duration_sec": 30.0,
+              "ok": true,
+              "first_confirmed_text_sec": 41.14,
+              "elapsed_sec": 41.14
+            },
+            {
+              "name": "rap_clip",
+              "duration_sec": 30.0,
+              "ok": true,
+              "first_confirmed_text_sec": 83.273,
+              "elapsed_sec": 83.273
+            },
+            {
+              "name": "instrumental_clip",
+              "duration_sec": 30.0,
+              "ok": true,
+              "first_confirmed_text_sec": 81.077,
+              "elapsed_sec": 81.077
+            },
+            {
+              "name": "silence",
+              "duration_sec": 15.0,
+              "ok": true,
+              "elapsed_sec": 0.007
+            }
+          ]
+        },
+        {
+          "repetition": 2,
+          "model_load_ms": 1688,
+          "resources": null,
+          "native_process_usage": null,
+          "error": null,
+          "memory_guard": null,
+          "not_run": null,
+          "files": [
+            {
+              "name": "english_full",
+              "duration_sec": 213.023125,
+              "ok": false,
+              "first_confirmed_text_sec": 78.442,
+              "elapsed_sec": 238.768
+            }
+          ]
+        }
+      ],
+      "engine": "v1.9.2",
+      "runtime_identity": null,
+      "threads": 2,
+      "cpu_job_percent": 20
+    }
+  },
+  "playback": {
+    "baseline": {
+      "status": "not_measured"
+    },
+    "large-v3": {
+      "status": "not_measured"
+    },
+    "large-v3-turbo": {
+      "status": "not_measured"
+    }
+  },
+  "release_ready": false,
+  "stage": "isolated_prototype",
+  "whole_song_budget_ms": 30000,
+  "model_replacement_authorized": true,
+  "limitations": [
+    "Published-lyrics accuracy has not been scored against human references.",
+    "HTML audio telemetry cannot prove absence of hardware audio underruns.",
+    "Prototype uses installed FFmpeg; a compact distributable decoder is still pending.",
+    "Initial Turbo run used pre-decoded PCM; separate playback probes include the decoder."
+  ],
+  "machine": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.14.7",
+    "logical_cpus": 12,
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13420H"
+  },
+  "corpus": {
+    "schema": 1,
+    "description": "Public music recordings; transformed excerpt is explicitly labeled.",
+    "files": [
+      {
+        "name": "english_full",
+        "path": "english_full.wav",
+        "duration_sec": 213.023125,
+        "sha256": "7b3ebab64bd884266b816f47ae713429bfda3ae435d5dbfcabaabb9171313532",
+        "offset_sec": 0,
+        "filters": null
+      },
+      {
+        "name": "english_clip",
+        "path": "english_clip.wav",
+        "duration_sec": 30.0,
+        "sha256": "4e9002c7c03c63214621f99bddf96e14580bb221e20b60d335a2bc0d39112151",
+        "offset_sec": 35,
+        "filters": null
+      },
+      {
+        "name": "distorted_clip",
+        "path": "distorted_clip.wav",
+        "duration_sec": 30.0,
+        "sha256": "f53625ffe6e01aa20484e859f3183135eec58c133d4689a808c2454ab721505e",
+        "offset_sec": 35,
+        "filters": "aecho=0.8:0.8:60:0.35,lowpass=f=2600,volume=1.8,alimiter=limit=0.65"
+      },
+      {
+        "name": "russian_full",
+        "path": "russian_full.wav",
+        "duration_sec": 305.1250625,
+        "sha256": "9ae085df72150dc7bfc110620532aac940cad6242ff47ef90f066301d0979d62",
+        "offset_sec": 0,
+        "filters": null
+      },
+      {
+        "name": "russian_clip",
+        "path": "russian_clip.wav",
+        "duration_sec": 30.0,
+        "sha256": "e0ecf57f78efc313a24c40368456df27f2d617cb079746e3d95dd3544886cbc1",
+        "offset_sec": 35,
+        "filters": null
+      },
+      {
+        "name": "rap_full",
+        "path": "rap_full.wav",
+        "duration_sec": 327.485875,
+        "sha256": "f399522161e99b6c2389277735bb63a05ead3ac7e9f0fa3eaf65f7af65fb611d",
+        "offset_sec": 0,
+        "filters": null
+      },
+      {
+        "name": "rap_clip",
+        "path": "rap_clip.wav",
+        "duration_sec": 30.0,
+        "sha256": "20a512d6ddbf38847cc3d6b598d982d026b20d70e95d64a184cfe8609b358d8c",
+        "offset_sec": 35,
+        "filters": null
+      },
+      {
+        "name": "instrumental_clip",
+        "path": "instrumental_clip.wav",
+        "duration_sec": 30.0,
+        "sha256": "0b9bb30b69ffcfc7630bb6b5fc8dd44d48f276c964710ad4a30d13bb4387d768",
+        "offset_sec": 0,
+        "filters": null
+      },
+      {
+        "name": "silence",
+        "path": "silence.wav",
+        "duration_sec": 15.0,
+        "sha256": "e4d57c332e4fe0688608f923a77d6b001e9fb3835c143617e01f0d65a7bcb0c0",
+        "offset_sec": 0,
+        "filters": null
+      }
+    ],
+    "instrumental_source": "https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400037"
+  },
+  "latency_candidates": {}
+}

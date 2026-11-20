@@ -1,0 +1,9 @@
+{
+  "source": "soundcloud",
+  "source_id": "2393146779",
+  "path": "SoundCloudService.download_audio_sync + DownloadContext",
+  "valid": false,
+  "error_type": "DownloadError",
+  "status": "failed",
+  "elapsed_ms": 34300
+}

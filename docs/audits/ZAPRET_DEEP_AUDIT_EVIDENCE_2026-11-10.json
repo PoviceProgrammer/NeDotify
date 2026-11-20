@@ -1,0 +1,108 @@
+{
+  "createdLocal": "2026-11-10T08:25:31",
+  "fullSuite": {
+    "passed": 2915,
+    "skipped": 9,
+    "deselected": 2,
+    "log": ".test_runs/zapret-deep-complete-gate-20261110.log"
+  },
+  "zapretContracts": {
+    "passed": 410,
+    "deselected": 1
+  },
+  "pinnedArchiveLive": true,
+  "frozenDownloads": [
+    {
+      "artifact": "tools/bench/results/youtube-download-audit-20261110-082339-01c6be.json",
+      "vpnModified": false,
+      "profileIsolated": true,
+      "cookiesUsed": false,
+      "sourceId": "dQw4w9WgXcQ",
+      "path": "AppApi.download_track -> DownloadManager -> YouTubeService",
+      "frozenRuntime": true,
+      "apiModuleLoader": "PyiFrozenLoader",
+      "setupLeaseEnabled": true,
+      "accepted": true,
+      "terminalEventReceived": true,
+      "completeEvents": 1,
+      "failedEvents": 0,
+      "databaseDownloaded": true,
+      "fileBytes": 3434789,
+      "duration": 213.061,
+      "extension": ".webm",
+      "sha256": "f13812f7c933d1e9747e2eef50414ac1e1d3096f23ad26de711a5c70f8da1a2d",
+      "queueStatus": "completed",
+      "ok": true,
+      "seconds": 4.55
+    },
+    {
+      "artifact": "tools/bench/results/youtube-download-audit-20261110-082347-316fd0.json",
+      "vpnModified": false,
+      "profileIsolated": true,
+      "cookiesUsed": false,
+      "sourceId": "ytsearch1:Rick Astley Never Gonna Give You Up",
+      "path": "AppApi.download_track -> DownloadManager -> YouTubeService",
+      "frozenRuntime": true,
+      "apiModuleLoader": "PyiFrozenLoader",
+      "setupLeaseEnabled": true,
+      "accepted": true,
+      "terminalEventReceived": true,
+      "completeEvents": 1,
+      "failedEvents": 0,
+      "databaseDownloaded": true,
+      "fileBytes": 3434824,
+      "duration": 213.061,
+      "extension": ".webm",
+      "sha256": "3aab4e33c57e90602c094ff2e29450ede4eb38cf10c51016adc9e77e7f297b3f",
+      "queueStatus": "completed",
+      "ok": true,
+      "seconds": 5.19
+    }
+  ],
+  "nativeJob": {
+    "assignedActualPopenHandle": true,
+    "terminatedOnJobClose": true
+  },
+  "regularExeStartup": {
+    "date": "2026-11-10",
+    "exe": "C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\dist\\NeDotify.exe",
+    "temporaryEmptyProfile": true,
+    "visibleNativeWindow": true,
+    "windowLoaded": true,
+    "bridgeReady": true,
+    "zapretAutostartSkipped": true,
+    "startupSeconds": 4.42,
+    "ok": true
+  },
+  "installer": {
+    "path": "dist/NeDotify_Setup.exe",
+    "bytes": 173462392,
+    "sha256": "5eb7d9694738d371f539f7c408e6ff4a8d5b7523fd936aa8b974abcaf177ccd4"
+  },
+  "sourceSHA256": {
+    "services/zapret_service.py": "fb1610381f80005d2219877063d21ac178a79152d5dbaaaa60c466ea76cc9a5f",
+    "services/zapret_probe.py": "39bea54fe00fedc8266943b441d959c4b55c6cb343a65d17d5204ad52290c7de",
+    "core/api.py": "2b925362754b198dd61edb043c701af66ebddb9c7510bc4f39e256de9b1b6d90",
+    "core/app.py": "d26de0286ce316b3f6fc168c2d6ea78ae321dd13d318b188a4dba4c15b71a557",
+    "core/ui_server.py": "23c5a9b5a48ac8aa005092ffa7902823a7a307a9513f4c451e04ef6a6d6e35e9",
+    "installer.iss": "d9c8c9ec81e76df49c33ec4975c1bc6dfec956fd8b206657a64f001316c5347a",
+    "setup_pyinstaller.spec": "c6b0bd245a603f4adee570b7831e7fc3d4acc60f4a66ef890d5a1fdfe5aad869",
+    "ui/web_new_v2/js/settings-panel.js": "47cd60795b326c1f20ef6e2c9d13d232eedb637793dc351a40d4e765a1991008",
+    "ui/web_new_v2/js/events.js": "7eba9d4c25c8816f8eda7f53d802bda19242204777f6d356d86025bff257e86e",
+    "ui/web_new_v2/js/main.js": "0cf2b97f5efa87decc52788bb5deec27f82f5e29a3ef10a56d1ee712507a0382",
+    "tests/test_zapret_binary_integrity.py": "34263b71474486f5a58645990090392ad02568a7d46d53cdf8d713ed0f96a56b",
+    "tests/test_zapret_deep_install_update.py": "4c7f576b8bca792fc78fef721b797aee667cc5cf6962897e709299fa39c48cb1",
+    "tests/test_zapret_deep_integration.py": "f9ceed443fa3144c74fe02219fade671a5596e95631618bdde108c1cd1f97843",
+    "tests/test_zapret_deep_lifecycle.py": "d82f1b670d3681c5a8cb8290728562ca24904848c984fd9da4a42ce10d961247",
+    "tests/test_zapret_deep_media_probe.py": "32fbfe34b34ab3d134f8a8b5e5a9ce5ee1d385d9218e5d25c8966a9bc972ffca",
+    "tests/test_zapret_deep_races.py": "ec35ebb90a1fb3710cb338ce866d1e14e3b49c80f22b8e8038f1115e2c49dd24",
+    "tests/test_zapret_first_install.py": "7ecad4e3395d9ed6072a7d423888d6f2fb806eac104b50ed2415ec2dcc4f34b2",
+    "tests/test_zapret_lifecycle_a1.py": "53ace939d5f5cfdd22072b112e2544b10698eaab99077b00eed1bfc275025964",
+    "tests/test_zapret_network_d2.py": "0d011bfd5e8120965c7a28af7adc88d9e559037ed93d142397fc39032ab6a7b5",
+    "tests/test_zapret_selection.py": "d2c2d49b66c8b179fde2c9c040201a944af7def362bcbe8f66ed1e3b6805ed33",
+    "tests/test_zapret_uac_window.py": "fad85c89c38d6cf7a946a0a6c1c463adadf07ce2e61dfedcff2298993d89dd3a",
+    "tests/test_zapret_ui_e1.py": "89b64cfd795c80c61b383a9483ad7fc3823a15e2f1469f2f3887ee5ca31dcb17",
+    "tests/test_zapret_update_c1.py": "92ba3e5eaaacb6fc36efed23e194609fc7932ace08d90c365b3c509c36c4ff81",
+    "tests/test_zapret_winapi_b1.py": "e2d9bb9b966142e4ce0b115be9248010ed27f03e16607a08b461f953955187a2"
+  }
+}

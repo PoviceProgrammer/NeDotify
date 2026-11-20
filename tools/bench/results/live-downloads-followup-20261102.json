@@ -1,0 +1,16 @@
+{
+  "method": "Actual service.download_audio_sync with DownloadContext, disposable profile, _downloaded_file_defect integrity check",
+  "network": "Windows route to public provider addresses selects happ-tun; no system/VPN settings modified",
+  "downloads": [
+    {"provider": "soundcloud", "target": "2393146779", "ok": true, "bytes": 1865436, "seconds": 5.66, "error": ""},
+    {"provider": "youtube", "target": "dQw4w9WgXcQ", "ok": true, "bytes": 3433755, "seconds": 4.38, "error": ""},
+    {"provider": "deezer", "target": "3135556", "ok": true, "bytes": 4039652, "seconds": 5.86, "error": ""},
+    {"provider": "spotify", "query": "Rick Astley Never Gonna Give You Up", "ok": true, "bytes": 3433755, "seconds": 6.13, "error": ""}
+  ],
+  "yandex": {"verified": false, "reason": "Configured value is not a valid-looking Yandex OAuth token; no credentials requested or changed"},
+  "limitations": [
+    "One successful download per source; these are observed timings, not before/after bandwidth comparisons",
+    "Earlier isolated attempts failed on network timeout, SoundCloud client ID extraction, and an unavailable YouTube test video; retained in other artifacts",
+    "Spotify and Deezer are catalogue rows resolved through the application's existing full-audio source matching"
+  ]
+}

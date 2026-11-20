@@ -5,7 +5,9 @@
     padding: 8px 14px; border: 1px solid var(--border);
     border-radius: 999px; background: var(--bg-card);
     color: var(--text-sec); font: inherit; font-size: 12px; cursor: pointer;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
+.recommendation-mode-group button:active { transform: scale(.97); }
 .recommendation-mode-group button[aria-pressed="true"] { color: var(--text-main); border-color: var(--primary); background: color-mix(in srgb, var(--primary) 18%, transparent); }
 .recommendation-mode-group button:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 .recommendation-mode-group button:disabled { opacity: .6; cursor: wait; }

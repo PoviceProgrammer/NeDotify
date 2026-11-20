@@ -1,0 +1,79 @@
+{
+  "scenario": "startup",
+  "mode": "soundcloud-native",
+  "started_at": 1793596905.1316679,
+  "ok": false,
+  "error": "data.skins[1]: Actual SoundCloud playback did not reach an advancing unbuffered clock",
+  "data": {
+    "actual_bridge": true,
+    "api_stubs": false,
+    "source": "soundcloud",
+    "source_id": "2393146779",
+    "skins": [
+      {
+        "clock_advanced": true,
+        "playing": true,
+        "position_ms": 2513.56,
+        "style": "current"
+      },
+      {
+        "clock": {
+          "buffering": false,
+          "paused": true,
+          "playbackRate": 1,
+          "positionMs": 2680.593,
+          "seeking": false,
+          "trackKey": "[\"soundcloud\",\"2393146779\",\"SoundCloud playback check\",\"\",\"\",\"\"]"
+        },
+        "console_errors": [],
+        "error": "Actual SoundCloud playback did not reach an advancing unbuffered clock",
+        "playing": false,
+        "stream": {
+          "host": "playback.media-streaming.soundcloud.cloud",
+          "manifest_path": false
+        },
+        "style": "macos"
+      }
+    ],
+    "note": "Decoded media clock verified; physical speaker output not assessed"
+  },
+  "perf": {
+    "Timestamp": 53541.137674,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 988,
+    "LayoutObjects": 1278,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 9657,
+    "Resources": 68,
+    "ContextLifecycleStateObservers": 47,
+    "V8PerContextDatas": 1,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 2,
+    "LayoutCount": 103,
+    "RecalcStyleCount": 366,
+    "LayoutDuration": 0.134814,
+    "RecalcStyleDuration": 0.619383,
+    "DevToolsCommandDuration": 0.034894,
+    "ScriptDuration": 0.084031,
+    "V8CompileDuration": 0.000109,
+    "TaskDuration": 1.527262,
+    "TaskOtherDuration": 0.654031,
+    "ThreadTime": 1.504808,
+    "ProcessTime": 5.509172,
+    "JSHeapUsedSize": 3197896,
+    "JSHeapTotalSize": 3670016,
+    "FirstMeaningfulPaint": 53471.484393,
+    "DomContentLoaded": 53471.464868,
+    "NavigationStart": 53471.320505
+  },
+  "finished_at": 1793596976.2916682
+}

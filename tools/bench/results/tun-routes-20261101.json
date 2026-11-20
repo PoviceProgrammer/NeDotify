@@ -1,0 +1,88 @@
+{
+  "captured_at": "2026-11-01T22:38:24.4821524+03:00",
+  "route_checks": [
+    {
+      "target": "www.youtube.com",
+      "family": "A",
+      "selected_interfaces": [
+        "happ-tun"
+      ]
+    },
+    {
+      "target": "www.youtube.com",
+      "family": "AAAA",
+      "selected_interfaces": [
+        "happ-tun"
+      ]
+    },
+    {
+      "target": "soundcloud.com",
+      "family": "A",
+      "selected_interfaces": [
+        "happ-tun"
+      ]
+    },
+    {
+      "target": "api-v2.soundcloud.com",
+      "family": "A",
+      "selected_interfaces": [
+        "happ-tun"
+      ]
+    }
+  ],
+  "default_routes": [
+    {
+      "InterfaceAlias": "Беспроводная сеть",
+      "DestinationPrefix": "0.0.0.0/0",
+      "RouteMetric": 0
+    },
+    {
+      "InterfaceAlias": "happ-tun",
+      "DestinationPrefix": "0.0.0.0/0",
+      "RouteMetric": 0
+    },
+    {
+      "InterfaceAlias": "happ-tun",
+      "DestinationPrefix": "::/0",
+      "RouteMetric": 0
+    }
+  ],
+  "interfaces": [
+    {
+      "InterfaceAlias": "Беспроводная сеть",
+      "AddressFamily": 23,
+      "InterfaceMetric": 50,
+      "NlMtu": 1500
+    },
+    {
+      "InterfaceAlias": "happ-tun",
+      "AddressFamily": 23,
+      "InterfaceMetric": null,
+      "NlMtu": 1500
+    },
+    {
+      "InterfaceAlias": "Loopback Pseudo-Interface 1",
+      "AddressFamily": 23,
+      "InterfaceMetric": 75,
+      "NlMtu": 4294967295
+    },
+    {
+      "InterfaceAlias": "Беспроводная сеть",
+      "AddressFamily": 2,
+      "InterfaceMetric": 50,
+      "NlMtu": 1500
+    },
+    {
+      "InterfaceAlias": "happ-tun",
+      "AddressFamily": 2,
+      "InterfaceMetric": null,
+      "NlMtu": 1500
+    },
+    {
+      "InterfaceAlias": "Loopback Pseudo-Interface 1",
+      "AddressFamily": 2,
+      "InterfaceMetric": 75,
+      "NlMtu": 4294967295
+    }
+  ]
+}

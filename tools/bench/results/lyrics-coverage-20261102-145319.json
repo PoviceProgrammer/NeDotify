@@ -1,0 +1,108 @@
+{
+  "actual_network": true,
+  "profile": "disposable",
+  "models": false,
+  "results": [
+    {
+      "found": false,
+      "error": "URLError",
+      "http_status": null,
+      "case": "ovh",
+      "ms": 6034,
+      "process_cpu_ms": 31
+    },
+    {
+      "status": "found",
+      "source": "Better Lyrics QQ",
+      "matched_title": "Never Gonna Give You Up",
+      "matched_artist": "Rick Astley",
+      "matched_duration": 0.0,
+      "match_type": "exact",
+      "found": true,
+      "characters": 2004,
+      "synced": false,
+      "case": "better_qq",
+      "ms": 657,
+      "process_cpu_ms": 31
+    },
+    {
+      "status": "found",
+      "source": "Kugou",
+      "matched_title": "晴天",
+      "matched_artist": "周杰伦",
+      "matched_duration": 265.072,
+      "match_type": "exact",
+      "syncType": "line",
+      "found": true,
+      "characters": 593,
+      "synced": true,
+      "case": "kugou",
+      "ms": 786,
+      "process_cpu_ms": 31
+    },
+    {
+      "status": "found",
+      "source": "Genius",
+      "matched_title": "Сукины дети (Sons of Bitches)",
+      "matched_artist": "1.Kla$",
+      "matched_duration": 0.0,
+      "match_type": "exact",
+      "syncType": "plain",
+      "identity_recovered": true,
+      "identity_evidence": [
+        {
+          "source": "Deezer",
+          "id": "3342957861",
+          "artist": "1.Kla$",
+          "title": "Сукины дети",
+          "duration": 220
+        },
+        {
+          "source": "Netease",
+          "id": "1359923532",
+          "artist": "1.Kla$",
+          "title": "Сукины дети",
+          "duration": 220.517
+        }
+      ],
+      "found": true,
+      "characters": 1475,
+      "synced": false,
+      "case": "upload-cold",
+      "ms": 5306,
+      "process_cpu_ms": 219
+    },
+    {
+      "status": "found",
+      "source": "Genius",
+      "matched_title": "Сукины дети (Sons of Bitches)",
+      "matched_artist": "1.Kla$",
+      "matched_duration": 0.0,
+      "match_type": "exact",
+      "syncType": "plain",
+      "identity_recovered": true,
+      "identity_evidence": [
+        {
+          "source": "Deezer",
+          "id": "3342957861",
+          "artist": "1.Kla$",
+          "title": "Сукины дети",
+          "duration": 220
+        },
+        {
+          "source": "Netease",
+          "id": "1359923532",
+          "artist": "1.Kla$",
+          "title": "Сукины дети",
+          "duration": 220.517
+        }
+      ],
+      "found": true,
+      "characters": 1475,
+      "synced": false,
+      "case": "upload-memory-cache",
+      "ms": 0,
+      "process_cpu_ms": 0
+    }
+  ]
+}

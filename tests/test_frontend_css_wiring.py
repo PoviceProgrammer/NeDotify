@@ -293,9 +293,24 @@ def test_css_dedup_preserves_effective_transitions_and_glow_defaults():
     )
     assert settings_rule
     assert "backdrop-filter: none" in settings_rule.group(1)
-    assert "transition: none" in settings_rule.group(1)
+    # Neither the base shell nor the deferred pack may own the timing: it lives
+    # once in ui-motion.css, which is always linked. A `transition: none` in
+    # base.css used to snap the overlay open and read as an unconditional
+    # conflict in the allowlist.
+    assert not re.search(r"(?m)^\s*transition\s*:", settings_rule.group(1))
     settings_refresh = read(os.path.join(CSS_DIR, "components", "settings-refresh.css"))
-    assert "#view-settings.view-page.settings-overlay { transition: none; }" in settings_refresh
+    motion_css = read(os.path.join(CSS_DIR, "components", "ui-motion.css"))
+    assert re.search(
+        r"html body #view-settings\.view-page\.settings-overlay\s*\{\s*"
+        r"transition:\s*opacity 200ms ease,\s*visibility 220ms allow-discrete;",
+        motion_css,
+    )
+    assert re.search(
+        r"html body #view-settings\.view-page\.settings-overlay \.settings-modal-card\s*\{\s*"
+        r"transition:\s*opacity 180ms ease,\s*transform 240ms cubic-bezier\(\.2,\.75,\.2,1\);",
+        motion_css,
+    )
+    assert "transition: opacity 180ms ease, visibility 200ms allow-discrete" not in settings_refresh
     assert "backdrop-filter: blur(var(--glass-blur))" in settings_refresh
     assert "--player-glow-opacity: 0.55" in token_css
 
@@ -350,8 +365,13 @@ def test_base_refresh_conflicts_match_the_reviewed_allowlist():
     # Native dialogs animate on open and disable that motion when requested.
     # Atmosphere owns reduced-motion lifecycle; the retired particle display
     # override no longer hides a still-running canvas through CSS.
-    assert len(current) == 220
-    assert sum(item["reason"] == "conditional-cascade-override" for item in current) == 219
+    # #app-tooltip gained its missing base rule (fixed overlay, opacity/translate
+    # fade) plus a reduced-motion `none` variant in the same selector.
+    # The context menu and search results now animate through @starting-style /
+    # discrete `display`, and the settings overlay transition moved out of
+    # base.css into the deferred settings pack.
+    assert len(current) == 225
+    assert sum(item["reason"] == "conditional-cascade-override" for item in current) == 224
     assert sum(item["reason"] == "state-selector-override" for item in current) == 1
     assert not any(item["reason"] == "unconditional-conflict" for item in current)
 
@@ -399,7 +419,8 @@ def test_dark_palette_has_one_owner():
 def test_player_bar_tokens_cover_the_home_refresh_responsive_range():
     refresh = read(os.path.join(CSS_DIR, "components", "home-refresh.css"))
     assert "@media (max-width: 900px) and (min-width: 761px)" in refresh
-    assert "--player-bar-height: 80px; --player-bar-offset: 16px;" in refresh
+    # Retuned together with the 96px base player bar (padding/gap refresh).
+    assert "--player-bar-height: 88px; --player-bar-offset: 16px;" in refresh
 
 
 def test_local_cyrillic_font_fallback_is_bundled_and_external_font_hosts_are_removed(index_html):

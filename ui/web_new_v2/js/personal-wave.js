@@ -1,7 +1,11 @@
 import { createTrackElement } from './utils.js';
 
 let mounted=false, request=null, snapshot=null, timer=null, refreshTimer=null, serial=0;
+// Signature of the list currently in the DOM. Kept in module state instead of
+// dataset so a re-ranked but identical list is a cheap string compare.
+let renderedSignature='';
 const identity=t=>`${String(t.artist||'').toLocaleLowerCase()}:${String(t.title||'').toLocaleLowerCase()}`;
+const rowKey=t=>`${t.source||''}:${t.source_id??t.id??''}|${identity(t)}`;
 export async function mountPersonalWave() {
     if(mounted)return;
     const anchor=document.getElementById('home-for-you-section');if(!anchor)return;
@@ -50,8 +54,15 @@ export async function mountPersonalWave() {
         }
         const token=pending.current?.current_track._personal_wave_session||`personal-wave-list-${Date.now()}`;
         const tracks=rows.map(t=>({...t,_personal_wave_session:token}));
-        list.replaceChildren();
-        tracks.forEach((track,index)=>list.append(createTrackElement(track,index,tracks,snapshot?.current_track)));
+        const signature=tracks.map(rowKey).join('|');
+        // Near the end of the queue this handler reruns on every track change.
+        // If the re-ranked list is identical, replacing 60 rows only made the
+        // section flicker; keep the live DOM and just refresh the caption.
+        if(renderedSignature!==signature) {
+            renderedSignature=signature;
+            list.replaceChildren();
+            tracks.forEach((track,index)=>list.append(createTrackElement(track,index,tracks,snapshot?.current_track)));
+        }
         status.textContent=`${tracks.length} треков · выберите любой, чтобы переключить очередь на волну`;
     });
     refresh.addEventListener('click',()=>load(!!active()));

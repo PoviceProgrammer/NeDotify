@@ -1,0 +1,139 @@
+{
+  "scenario": "startup",
+  "mode": "playback-latency",
+  "started_at": 1793601427.9291995,
+  "ok": false,
+  "error": "data.results[0]: No advancing decoded audio within 20 seconds",
+  "data": {
+    "actual_bridge": true,
+    "api_stubs": false,
+    "results": [
+      {
+        "bridge_ms": 10,
+        "clock": {
+          "buffering": true,
+          "paused": true,
+          "playbackRate": 1,
+          "positionMs": 0,
+          "seeking": false,
+          "trackKey": "[\"spotify\",\"ytsearch1: Rick Astley - Never Gonna Give You Up\",\"Never Gonna Give You Up\",\"Rick Astley\",\"\",\"\"]"
+        },
+        "console_errors": [
+          "Backend Error: Попробуйте ещё раз. Подробности сохранены в журнале приложения."
+        ],
+        "error": "No advancing decoded audio within 20 seconds",
+        "host": null,
+        "playing": false,
+        "source": "spotify",
+        "source_id": "ytsearch1: Rick Astley - Never Gonna Give You Up",
+        "within_5s": false,
+        "style": "macos",
+        "stages": []
+      },
+      {
+        "bridge_ms": 44,
+        "playing": true,
+        "source": "spotify",
+        "source_id": "ytsearch1: Rick Astley - Never Gonna Give You Up",
+        "time_to_audio_ms": 5021,
+        "within_3s": false,
+        "within_5s": false,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 3129.635561,
+            "host": "www.youtube.com",
+            "path": "/watch",
+            "ms": 853.5,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 3131.0838149,
+            "host": "www.youtube.com",
+            "path": "/youtubei/v1/player",
+            "ms": 128.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 3131.2300814,
+            "host": "manifest.googlevideo.com",
+            "path": "<redacted>",
+            "ms": 776.6,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 3132.0204443,
+            "host": "www.youtube.com",
+            "path": "<redacted>",
+            "ms": 71.7,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "extract_info",
+            "thread": "YouTubePlayback_0",
+            "started": 3129.5989657,
+            "ms": 3429.9,
+            "thread_cpu_ms": 250.0
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-253 (process_request_thread)",
+            "started": 3133.0669262,
+            "ms": 361.0,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      }
+    ],
+    "all_within_5s": false,
+    "note": "First advancing decoded media clock, physical speaker output not assessed"
+  },
+  "perf": {
+    "Timestamp": 3134.013177,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 2325,
+    "LayoutObjects": 2240,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 12399,
+    "Resources": 70,
+    "ContextLifecycleStateObservers": 47,
+    "V8PerContextDatas": 1,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 2,
+    "LayoutCount": 179,
+    "RecalcStyleCount": 327,
+    "LayoutDuration": 0.182567,
+    "RecalcStyleDuration": 1.486427,
+    "DevToolsCommandDuration": 0.055611,
+    "ScriptDuration": 0.080135,
+    "V8CompileDuration": 0.000191,
+    "TaskDuration": 2.556995,
+    "TaskOtherDuration": 0.752064,
+    "ThreadTime": 2.537253,
+    "ProcessTime": 3.932215,
+    "JSHeapUsedSize": 3675360,
+    "JSHeapTotalSize": 4980736,
+    "FirstMeaningfulPaint": 3108.203106,
+    "DomContentLoaded": 3108.187019,
+    "NavigationStart": 3108.042664
+  },
+  "finished_at": 1793601455.1713164,
+  "seeded_user_cache_rows": 0
+}

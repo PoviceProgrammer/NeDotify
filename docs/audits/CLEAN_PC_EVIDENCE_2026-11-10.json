@@ -1,0 +1,100 @@
+{
+  "createdLocal": "2026-11-10T08:51:37",
+  "fullSuite": {
+    "passed": 2915,
+    "skipped": 9,
+    "deselected": 2,
+    "log": ".test_runs/clean-pc-full-20261110.log"
+  },
+  "setupContracts": {
+    "passed": 116,
+    "skipped": 1
+  },
+  "newChecksPassed": 2,
+  "normalExeStartups": [
+    {
+      "artifact": "tools\\bench\\results\\windows-frozen-startup-20261110-084136.json",
+      "date": "2026-11-10",
+      "exe": "C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\dist\\NeDotify.exe",
+      "temporaryEmptyProfile": true,
+      "virginProfile": true,
+      "restrictedPath": true,
+      "externalWorkingDirectory": true,
+      "visibleNativeWindow": true,
+      "windowLoaded": true,
+      "bridgeReady": true,
+      "zapretAutostartSkipped": true,
+      "startupSeconds": 4.4,
+      "ok": true
+    },
+    {
+      "artifact": "tools\\bench\\results\\windows-frozen-startup-20261110-084950.json",
+      "date": "2026-11-10",
+      "exe": "C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\dist\\NeDotify.exe",
+      "temporaryEmptyProfile": true,
+      "virginProfile": true,
+      "restrictedPath": true,
+      "systemWebViewFallback": true,
+      "externalWorkingDirectory": true,
+      "visibleNativeWindow": true,
+      "windowLoaded": true,
+      "bridgeReady": true,
+      "zapretAutostartSkipped": true,
+      "startupSeconds": 4.15,
+      "systemWebViewUsed": true,
+      "ok": true
+    }
+  ],
+  "frozenDownload": {
+    "vpnModified": false,
+    "profileIsolated": true,
+    "cookiesUsed": false,
+    "sourceId": "dQw4w9WgXcQ",
+    "path": "AppApi.download_track -> DownloadManager -> YouTubeService",
+    "frozenRuntime": true,
+    "apiModuleLoader": "PyiFrozenLoader",
+    "setupLeaseEnabled": true,
+    "restrictedPath": true,
+    "preparation": {
+      "initialReady": false,
+      "ready": true,
+      "operation": "completed",
+      "dependencies": {
+        "yt_dlp": {
+          "available": true,
+          "source": "python"
+        },
+        "ffmpeg": {
+          "available": true,
+          "source": "managed"
+        },
+        "ffprobe": {
+          "available": true,
+          "source": "managed"
+        }
+      }
+    },
+    "accepted": true,
+    "terminalEventReceived": true,
+    "completeEvents": 1,
+    "failedEvents": 0,
+    "databaseDownloaded": true,
+    "fileBytes": 8533512,
+    "duration": 213.072,
+    "extension": ".mp3",
+    "sha256": "e6baeea522c3419b2847ec1851c39383fbf9295a7ecc497637f62e812c9fb4bb",
+    "queueStatus": "completed",
+    "nativeDecodeFrames": 10226069,
+    "nativeDecodeRate": 48000,
+    "ok": true,
+    "seconds": 5.68
+  },
+  "frozenDownloadArtifact": "tools\\bench\\results\\youtube-download-audit-20261110-084957-3b320a.json",
+  "installer": {
+    "bytes": 173462408,
+    "sha256": "0b07b55757b60ca71798c0f4451bd3a1c5b0e5227db47bd570b58542f2647268"
+  },
+  "freshWindowsVMTested": false,
+  "vpnModified": false,
+  "physicalSpeakerTested": false
+}

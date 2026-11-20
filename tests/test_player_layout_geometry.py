@@ -144,9 +144,10 @@ def _player_cascade(style, width):
       <div id="view-player"><div class="player-2col-layout">
        <div class="player-left-col player-glass-card"><div class="player-cover-section" /></div>
        <div class="player-right-col player-glass-card" />
-      </div></div><div id="player-bar"><div class="pb-progress pb-progress-surface">
-       <div id="pb-progress-track" class="progress-track" />
-      </div><div class="pb-controls"><div class="pb-buttons" /></div></div></body></html>''')
+      </div></div><div id="player-bar"><div id="pb-panel-fill" class="pb-panel-fill" />
+       <div class="pb-controls"><div class="pb-buttons" /><div class="pb-progress">
+        <div id="pb-progress-track" class="progress-track" />
+       </div></div></div></body></html>''')
     matcher = cssselect2.Matcher()
     files = ["ui/web_new_v2/css/components/base.css", "ui/web_new_v2/css/components/player-bar.css",
              "ui/web_new_v2/css/components/player-view.css", "ui/web_new_v2/css/components/home-refresh.css",
@@ -211,15 +212,35 @@ def test_macos_bottom_bar_uses_shared_responsive_geometry():
                 assert current[selector].get(prop) == macos[selector].get(prop), (width,selector,prop)
 
 
-def test_full_bar_seek_surface_is_not_reassigned_to_the_old_mobile_grid_row():
-    for style in ('current', 'macos'):
-        surface = _player_cascade(style, 600)['pb-progress pb-progress-surface']
-        assert surface['position'] == 'absolute'
-        assert surface.get('margin-right', '0') == '0'
-        assert surface.get('grid-row', 'auto') == 'auto'
-
-
-def test_mobile_transport_buttons_stay_above_the_seek_surface():
+def test_seek_row_is_inline_in_the_controls_layer_above_the_decorative_fill():
+    """The seek row used to be an absolute `.pb-progress-surface` stretched over
+    the whole bar, which made every pixel of the bar a seek target and forced
+    the transport buttons into a higher stacking layer. It now lives inside
+    `.pb-controls`, so the invariant is: it is in flow, it takes pointer input,
+    and its layer sits above the tinted panel fill behind the bar."""
     for style in ('current', 'macos'):
         rules = _player_cascade(style, 600)
-        assert int(rules['pb-buttons'].get('z-index', '0')) > int(rules['pb-progress pb-progress-surface']['z-index'])
+        progress = rules['pb-progress']
+        assert progress.get('position', 'static') == 'static', (
+            'the seek row must stay inline in .pb-controls; an absolute overlay '
+            'turns the whole player bar into one drag surface'
+        )
+        assert progress.get('pointer-events') == 'auto'
+        assert int(rules['pb-controls']['z-index']) > int(rules['pb-panel-fill']['z-index'])
+        assert rules['pb-panel-fill'].get('pointer-events') == 'none'
+
+
+def test_mobile_seek_row_is_its_own_grid_row_below_the_transport_buttons():
+    """At the narrow breakpoint `.pb-controls` becomes `display: contents`, so
+    the buttons and the seek row join the bar's own grid: buttons in row 1,
+    seek row pinned to row 2 across the full width. They are separate rows, so
+    the seek surface cannot cover a transport button it never overlaps."""
+    for style in ('current', 'macos'):
+        rules = _player_cascade(style, 600)
+        assert rules['pb-controls']['display'] == 'contents'
+        buttons, progress = rules['pb-buttons'], rules['pb-progress']
+        assert buttons['grid-row'] == '1'
+        assert progress['grid-row'] == '2'
+        assert progress['grid-column'] == '1/-1'
+        assert progress.get('position', 'static') == 'static'
+        assert int(buttons.get('z-index', '0')) > 0

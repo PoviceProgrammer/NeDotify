@@ -4,6 +4,11 @@ import { getCurrentTrack } from './player.js';
 
 let popoverInitialized = false;
 let saveDebounceTimer = null;
+// One kinetic re-measure per frame. Every slider `input` used to re-measure both
+// sheets synchronously (write padding, then read offsetHeight/offsetTop), so a
+// drag at input rate forced a layout flush per event on a sheet with hundreds of
+// lines. The sheet only has to be re-anchored once per painted frame.
+let layoutFrame = 0;
 
 const DEFAULT_SETTINGS = {
     font_size: 24,
@@ -12,7 +17,41 @@ const DEFAULT_SETTINGS = {
     text_align: 'center'
 };
 
+const STORAGE_KEY = 'nedotify_lyrics_display_settings';
+
 let currentSettings = { ...DEFAULT_SETTINGS };
+// Set as soon as the user moves a slider or picks an alignment. A backend
+// response that arrives afterwards must not overwrite what they just chose.
+let userTouched = false;
+
+/**
+ * The bridge and SQLite speak camelCase (`fontSize`, `textAlign`); the DOM side
+ * and the ranges speak snake_case. Accept either spelling and return only the
+ * keys that are actually present, so a partial backend response can be merged
+ * over the localStorage copy instead of resetting the missing fields.
+ * @param {*} source
+ * @returns {{font_size?:*,font_weight?:*,line_height?:*,text_align?:*}|null}
+ */
+function normalizeSettings(source) {
+    if (!source || typeof source !== 'object') return null;
+    const pick = (...names) => {
+        for (const name of names) {
+            const value = source[name];
+            if (value !== undefined && value !== null && value !== '') return value;
+        }
+        return undefined;
+    };
+    const size = pick('font_size', 'fontSize');
+    const weight = pick('font_weight', 'fontWeight');
+    const lineHeight = pick('line_height', 'lineHeight');
+    const align = pick('text_align', 'textAlign');
+    const normalized = {};
+    if (size !== undefined) normalized.font_size = size;
+    if (weight !== undefined) normalized.font_weight = weight;
+    if (lineHeight !== undefined) normalized.line_height = lineHeight;
+    if (align !== undefined) normalized.text_align = align;
+    return normalized;
+}
 
 /**
  * Apply display settings to DOM, CSS variables and viewport kinetic scrollers.
@@ -20,12 +59,18 @@ let currentSettings = { ...DEFAULT_SETTINGS };
  * @param {boolean} shouldPersist 
  */
 export function applyLyricsDisplaySettings(settings, shouldPersist = false) {
+    // The DOM side is snake_case; everything coming from the bridge, SQLite or
+    // localStorage may be camelCase or partially filled. Normalize once, here,
+    // so every caller shares the same tolerance. Missing fields fall back to
+    // the defaults; a caller that wants to keep current values merges first.
+    const incoming = { ...DEFAULT_SETTINGS, ...(normalizeSettings(settings) || {}) };
     currentSettings = {
-        font_size: Math.max(14, Math.min(36, parseInt(settings.font_size, 10) || 24)),
-        font_weight: Math.max(400, Math.min(800, parseInt(settings.font_weight, 10) || 700)),
-        line_height: Math.max(1.1, Math.min(2.2, parseFloat(settings.line_height) || 1.45)),
-        text_align: settings.text_align === 'left' ? 'left' : 'center'
+        font_size: Math.max(14, Math.min(36, parseInt(incoming.font_size, 10) || 24)),
+        font_weight: Math.max(400, Math.min(800, parseInt(incoming.font_weight, 10) || 700)),
+        line_height: Math.max(1.1, Math.min(2.2, parseFloat(incoming.line_height) || 1.45)),
+        text_align: incoming.text_align === 'left' ? 'left' : 'center'
     };
+    if (shouldPersist) userTouched = true;
 
     const fontSizePx = `${currentSettings.font_size}px`;
     const fontWeightStr = String(currentSettings.font_weight);
@@ -57,15 +102,14 @@ export function applyLyricsDisplaySettings(settings, shouldPersist = false) {
         vp.style.setProperty('--lyrics-text-align', currentSettings.text_align);
     });
 
-    // 3. Directly update existing rendered lines for immediate visual response
-    const lyricElements = document.querySelectorAll('.lyric-line, .lyric-orig-text, .lyric-word, .lyric-plain');
-    lyricElements.forEach(el => {
-        el.style.fontSize = fontSizePx;
-        el.style.fontWeight = fontWeightStr;
-        el.style.lineHeight = lineHeightStr;
-    });
+    // 3. Typography is carried entirely by the custom properties above: both
+    // lyric.css rules that matter (`font-size`, `font-weight`, `line-height`)
+    // already read `var(--lyrics-*)`, and `font-size` is `!important` there, so
+    // inline styles on the lines could never win anyway. The old loop wrote
+    // fontSize/fontWeight/lineHeight onto every rendered line on each `input`
+    // event — hundreds of no-op style writes per slider frame.
 
-    // 3. Update Popover UI Controls if present
+    // 4. Update Popover UI Controls if present
     const sliderSize = document.getElementById('slider-lyrics-font-size');
     const valSize = document.getElementById('val-lyrics-font-size');
     if (sliderSize) sliderSize.value = currentSettings.font_size;
@@ -86,31 +130,49 @@ export function applyLyricsDisplaySettings(settings, shouldPersist = false) {
     if (btnLeft) btnLeft.classList.toggle('active', currentSettings.text_align === 'left');
     if (btnCenter) btnCenter.classList.toggle('active', currentSettings.text_align === 'center');
 
-    // 4. Invalidate Kinetic Scroller layout so lines re-measure
-    if (window.NeDotify?.invalidateLyricsKineticLayout) {
-        window.NeDotify.invalidateLyricsKineticLayout();
+    // 5. Invalidate Kinetic Scroller layout so lines re-measure. Coalesced to
+    // one frame: `measureViewport` writes px padding and reads offsetHeight, so
+    // calling it per `input` event forced a layout flush at pointer rate.
+    if (window.NeDotify?.invalidateLyricsKineticLayout && !layoutFrame) {
+        const schedule = typeof requestAnimationFrame === 'function'
+            ? (fn) => requestAnimationFrame(fn)
+            : (fn) => setTimeout(fn, 16);
+        layoutFrame = schedule(() => {
+            layoutFrame = 0;
+            window.NeDotify.invalidateLyricsKineticLayout();
+        });
     }
 
-    // 5. Local Storage & Backend Persistence
+    // 6. Local Storage & Backend Persistence
     try {
-        localStorage.setItem('nedotify_lyrics_display_settings', JSON.stringify(currentSettings));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(currentSettings));
     } catch (e) {
         console.warn('Could not save lyrics display settings to localStorage:', e);
     }
 
     if (shouldPersist) {
         if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
-        saveDebounceTimer = setTimeout(() => {
-            if (window.pywebview?.api?.save_lyrics_display_settings) {
-                window.pywebview.api.save_lyrics_display_settings(
-                    currentSettings.font_size,
-                    currentSettings.font_weight,
-                    currentSettings.line_height,
-                    currentSettings.text_align
-                ).catch(err => console.warn('Failed to persist lyrics display settings to backend:', err));
-            }
-        }, 300);
+        saveDebounceTimer = setTimeout(persistToBackend, 300);
     }
+}
+
+/**
+ * Send the current settings to the Python side. The bridge forwards arguments
+ * as-is and the method takes a single `settings` dict; the old call passed four
+ * positional numbers, failed `isinstance(settings, dict)` and saved nothing.
+ */
+function persistToBackend() {
+    saveDebounceTimer = null;
+    const api = window.pywebview?.api;
+    if (!api?.save_lyrics_display_settings) return;
+    api.save_lyrics_display_settings({
+        fontSize: currentSettings.font_size,
+        fontWeight: currentSettings.font_weight,
+        lineHeight: currentSettings.line_height,
+        textAlign: currentSettings.text_align,
+    }).then(result => {
+        if (result === false) console.warn('Backend rejected lyrics display settings');
+    }).catch(err => console.warn('Failed to persist lyrics display settings to backend:', err));
 }
 
 /**
@@ -126,13 +188,16 @@ export function openLyricsSettingsPopover(triggerEl) {
         return;
     }
 
+    popover.inert = false;
     popover.classList.remove('hidden');
     renderIcons(popover);
 
     if (triggerEl) {
         const rect = triggerEl.getBoundingClientRect();
-        const popoverWidth = 320;
-        const popoverHeight = 360;
+        // Measure, do not guess: the popover is ~500px tall, and the old
+        // hard-coded 360 pointed the flip test at the wrong edge.
+        const popoverWidth = popover.offsetWidth || 320;
+        const popoverHeight = popover.offsetHeight || 360;
 
         // Position horizontally: align with right edge of trigger, or clamp within viewport
         let left = rect.right - popoverWidth;
@@ -153,8 +218,15 @@ export function openLyricsSettingsPopover(triggerEl) {
 }
 
 export function closeLyricsSettingsPopover() {
+    // A pending debounce would be lost if the app closes right after the user
+    // picks a value, so flush it when the popover is dismissed.
+    if (saveDebounceTimer) {
+        clearTimeout(saveDebounceTimer);
+        persistToBackend();
+    }
     const popover = document.getElementById('lyrics-display-settings-popover');
     if (popover) {
+        popover.inert = true;
         popover.classList.add('hidden');
     }
 }
@@ -169,26 +241,42 @@ export function initLyricsSettingsPopover() {
     const popover = document.getElementById('lyrics-display-settings-popover');
     if (!popover) return;
 
-    // Load initial settings: try localStorage first, then backend
+    // `#app-container` is a stacking context (position: relative; z-index: 10).
+    // The expanded player is moved to <body> with z-index: 80, so a fixed
+    // popover kept inside the container is painted *underneath* the expanded
+    // player — it opened correctly but every click looked dead. A global
+    // overlay belongs at the top level, outside every stacking context.
+    if (popover.parentElement !== document.body) document.body.appendChild(popover);
+
+    // Load initial settings: localStorage paints immediately, the backend is the
+    // source of truth and may correct it. Both are normalized because they use
+    // different key spellings (snake_case vs camelCase).
     try {
-        const stored = localStorage.getItem('nedotify_lyrics_display_settings');
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            applyLyricsDisplaySettings(parsed, false);
-        } else {
-            applyLyricsDisplaySettings(DEFAULT_SETTINGS, false);
-        }
+        const stored = localStorage.getItem(STORAGE_KEY);
+        applyLyricsDisplaySettings(stored ? JSON.parse(stored) : DEFAULT_SETTINGS, false);
     } catch (e) {
         applyLyricsDisplaySettings(DEFAULT_SETTINGS, false);
     }
 
     if (window.pywebview?.api?.get_lyrics_display_settings) {
         window.pywebview.api.get_lyrics_display_settings().then(res => {
-            if (res && res.success && res.settings) {
-                applyLyricsDisplaySettings(res.settings, false);
-            }
+            // Accept either the wrapped `{success, settings}` shape or a flat
+            // settings object, and merge over what localStorage already painted:
+            // the backend returns only stored keys, so a fresh database must not
+            // wipe a value the user chose before saves were fixed.
+            const incoming = normalizeSettings(res?.settings ?? res);
+            if (!incoming || userTouched || !Object.keys(incoming).length) return;
+            applyLyricsDisplaySettings({ ...currentSettings, ...incoming }, false);
         }).catch(err => console.warn('Could not fetch lyrics display settings from backend:', err));
     }
+
+    // Last-chance flush if the window closes inside the debounce window.
+    window.addEventListener('pagehide', () => {
+        if (saveDebounceTimer) {
+            clearTimeout(saveDebounceTimer);
+            persistToBackend();
+        }
+    });
 
     // Bind Trigger Buttons
     const triggerPage = document.getElementById('btn-lyrics-settings-page');

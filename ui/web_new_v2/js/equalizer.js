@@ -218,8 +218,15 @@ function renderBandSliders() {
     const container = document.getElementById('eq-bands-container');
     if (!container) return;
 
-    container.innerHTML = '';
     const config = BAND_CONFIGS[currentEqMode] || BAND_CONFIGS[3];
+    // Dragging a band fires an input event per pixel. Rebuilding the slider the
+    // user is holding detached it mid-gesture, which is what made the control
+    // feel sticky. Only a mode change (or first render) needs new nodes.
+    const modeKey = String(currentEqMode);
+    if (container.dataset.eqMode === modeKey && container.childElementCount === config.length) return;
+    container.dataset.eqMode = modeKey;
+
+    container.innerHTML = '';
 
     config.forEach((group, groupIdx) => {
         const col = document.createElement('div');
@@ -296,6 +303,8 @@ function updateEqUI() {
     sliders.forEach(s => {
         const groupIdx = parseInt(s.dataset.group);
         if (!isNaN(groupIdx) && config[groupIdx]) {
+            // Never rewrite the control the pointer is currently on.
+            if (s === document.activeElement) return;
             const group = config[groupIdx];
             let sum = 0;
             group.bands.forEach(idx => { sum += eqBands[idx]; });

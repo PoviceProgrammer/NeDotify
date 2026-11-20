@@ -669,19 +669,7 @@ html[data-ui-style="macos"] #view-player #player-lyrics-scroll .lyric-line:has(.
     gap: 14px;
     color: #ffffff;
     user-select: none;
-    animation: lspFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     box-sizing: border-box;
-}
-
-@keyframes lspFadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-8px) scale(0.97);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
 }
 
 .lsp-header {

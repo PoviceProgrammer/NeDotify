@@ -757,7 +757,6 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
     item.className = `track-item${isCurrentlyPlaying ? ' playing' : ''}`;
     if (track.recommendation_reason) item.classList.add('has-recommendation-reason');
     if (selectedTracksMap.has(String(track.source_id || track.id || `track_${index}`))) item.classList.add('selected');
-    item.style.animationDelay = `${Math.min(index * 0.03, 0.5)}s`;
     item.dataset.trackSourceId = String(track.source_id || track.id || '');
 
     const coverSrc = getCoverUrl(track);

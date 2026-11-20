@@ -18,8 +18,8 @@
          default skin for macOS-style users. -->
     <script src="js/appearance-assets.js?v=20261021_webp" defer></script>
     <script src="js/notifications.js" defer></script>
-    <script src="js/ui-motion.js" defer></script>
-    <link rel="stylesheet" href="css/components/ui-motion.css">
+    <script src="js/ui-motion.js?v=20261120_motion" defer></script>
+    <link rel="stylesheet" href="css/components/ui-motion.css?v=20261120_motion">
     <script src="js/ui-style.js?v=20261017_appearance"></script>
     <!-- Fonts: Sora (Headings) + DM Sans (Body). Self-hosted WOFF2 cuts live in
          assets/fonts/ and are declared by css/fonts.css, so no font CDN is
@@ -33,9 +33,9 @@
     <script src="js/lucide.min.js" defer></script>
     <link rel="icon" type="image/png" href="logo.png">
     <link rel="stylesheet" href="css/tokens.css?v=20260827_blur">
-    <link rel="stylesheet" href="css/components/base.css?v=20261023_toasts_tips">
-    <link rel="stylesheet" href="css/components/player-bar.css?v=20261028_seek">
-    <link rel="stylesheet" href="css/components/player-view.css?v=20261026_player_layout">
+    <link rel="stylesheet" href="css/components/base.css?v=20261120_motion">
+    <link rel="stylesheet" href="css/components/player-bar.css?v=20261117_slider_bg">
+    <link rel="stylesheet" href="css/components/player-view.css?v=20261120_motion">
     <link rel="stylesheet" href="css/components/lyrics.css?v=20260827_blur">
     <link rel="stylesheet" href="css/components/home-view.css?v=20260827_blur">
     <link rel="stylesheet" href="css/components/track-table.css?v=20260827_blur">
@@ -43,7 +43,7 @@
     <!-- The shared shell overrides follow themes.css. View packs below remain
          at their cascade positions as href-less slots and load on first use;
          css/styles.css is a tooling inventory, not an app entrypoint. -->
-    <link rel="stylesheet" href="css/components/home-refresh.css?v=20261014_home">
+    <link rel="stylesheet" href="css/components/home-refresh.css?v=20261120_motion">
     <link rel="stylesheet" data-nedotify-deferred-style="search">
     <link rel="stylesheet" data-nedotify-deferred-style="library">
     <link rel="stylesheet" data-nedotify-deferred-style="downloads">
@@ -53,18 +53,18 @@
     <link rel="stylesheet" href="css/components/setup-engine.css?v=20261029_setup">
     <link rel="stylesheet" data-nedotify-deferred-style="profile">
     <link rel="stylesheet" href="css/components/window-resize.css?v=20261015_resize">
-    <link rel="stylesheet" href="css/components/visual-polish.css?v=20261006_polish">
+    <link rel="stylesheet" href="css/components/visual-polish.css?v=20261120_motion">
     <link rel="stylesheet" data-nedotify-deferred-style="stylePicker">
     <link rel="stylesheet" data-nedotify-deferred-style="macosTokens">
     <link rel="stylesheet" data-nedotify-deferred-style="macosInterface">
     <link rel="stylesheet" data-nedotify-deferred-style="macosSettings">
     <link rel="stylesheet" data-nedotify-deferred-style="macosLibrary">
-    <script src="js/style-loader.js?v=20261022_view_css"></script>
+    <script src="js/style-loader.js?v=20261120_motion"></script>
     <link rel="stylesheet" href="css/components/atmosphere-settings.css?v=20261030_atmosphere">
     <link rel="stylesheet" href="css/components/audio-tools.css">
 <link rel="stylesheet" href="css/components/notifications.css">
 <link rel="stylesheet" href="css/components/navigation-motion.css">
-<link rel="stylesheet" href="css/components/recommendation-controls.css">
+<link rel="stylesheet" href="css/components/recommendation-controls.css?v=20261120_motion">
 <link rel="stylesheet" href="css/components/playlist-recommendations.css">
 <link rel="stylesheet" href="css/components/track-wave.css">
 </head>
@@ -137,9 +137,9 @@
 <div id="playlist-import-progress" role="status" aria-live="polite" hidden></div>
 </div>
 
-<!-- Status-bar mini player: one shared playback state, three transport controls. -->
-<div id="mini-player-overlay" class="mini-player-card" aria-label="Мини-плеер. Двойной щелчок по обложке или Escape — полный плеер">
-    <div class="mp-compact-row" title="Двойной щелчок — полный плеер">
+<div id="mini-player-overlay" class="mini-player-card" aria-label="Мини-плеер">
+    <div class="mp-compact-row" role="button" tabindex="0" aria-label="Развернуть управление мини-плеером"
+         aria-expanded="false" aria-controls="mp-details" title="Двойной щелчок — полный плеер">
         <div class="mp-cover-wrap">
             <i data-lucide="music-2" aria-hidden="true"></i>
             <img id="mp-cover" alt="Обложка" style="display:none" data-show-on-load="1">
@@ -147,28 +147,34 @@
         <div class="mp-info">
             <div id="mp-title" class="mp-title">Трек не выбран</div>
             <div id="mp-artist" class="mp-artist">Выберите трек</div>
-            <div class="mp-progress-row">
-                <span id="mp-time-current" class="mp-time">0:00</span>
-                <div class="progress-track" id="mp-progress-track" role="slider" aria-label="Позиция воспроизведения" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-                    <canvas id="mp-waveform-canvas" class="waveform-canvas hidden"></canvas>
-                    <div class="progress-fill" id="mp-progress-fill" style="transform:scaleX(0)"></div>
-                    <span class="seek-thumb" aria-hidden="true"></span>
-                    <span class="track-moment-pin" id="mp-moment-pin" aria-hidden="true" hidden></span>
-                </div>
-                <span id="mp-time-total" class="mp-time">0:00</span>
-            </div>
         </div>
     </div>
-    <div class="mp-controls-row">
-<button id="mp-btn-prev" class="mp-ctrl-btn" title="Предыдущий" aria-label="Предыдущий">
-            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
-        </button>
-<button id="mp-btn-play" class="mp-ctrl-btn mp-play-btn" title="Воспроизведение / Пауза" aria-label="Воспроизведение / Пауза">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-        </button>
-<button id="mp-btn-next" class="mp-ctrl-btn" title="Следующий" aria-label="Следующий">
-            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
-        </button>
+    <div class="mp-details" id="mp-details" inert>
+        <div class="mp-progress-row">
+            <span id="mp-time-current" class="mp-time">0:00</span>
+            <div class="progress-track" id="mp-progress-track" role="slider" aria-label="Позиция воспроизведения" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+                <canvas id="mp-waveform-canvas" class="waveform-canvas hidden"></canvas>
+                <div class="progress-fill" id="mp-progress-fill" style="transform:scaleX(0)"></div>
+                <span class="seek-thumb" aria-hidden="true"></span>
+                <span class="track-moment-pin" id="mp-moment-pin" aria-hidden="true" hidden></span>
+            </div>
+            <span id="mp-time-total" class="mp-time">0:00</span>
+        </div>
+        <div class="mp-controls-row">
+            <button type="button" id="mp-btn-like" class="mp-ctrl-btn" title="Избранное" aria-label="Избранное" aria-pressed="false"><i data-lucide="heart"></i></button>
+            <button type="button" id="mp-btn-prev" class="mp-ctrl-btn" title="Предыдущий" aria-label="Предыдущий"><i data-lucide="skip-back"></i></button>
+            <button type="button" id="mp-btn-play" class="mp-ctrl-btn mp-play-btn" title="Воспроизведение / Пауза" aria-label="Воспроизведение / Пауза"><i data-lucide="play"></i></button>
+            <button type="button" id="mp-btn-next" class="mp-ctrl-btn" title="Следующий" aria-label="Следующий"><i data-lucide="skip-forward"></i></button>
+            <button type="button" id="mp-btn-dislike" class="mp-ctrl-btn" title="Не рекомендовать трек" aria-label="Не рекомендовать трек" aria-pressed="false"><i data-lucide="thumbs-down"></i></button>
+        </div>
+        <div class="mp-footer">
+            <button type="button" id="mp-volume-btn" class="mp-ctrl-btn" aria-label="Отключить или включить звук"><i data-lucide="volume-2"></i></button>
+            <div class="volume-track" id="mp-volume-track" role="slider" aria-label="Громкость" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" tabindex="0">
+                <div class="volume-fill" id="mp-volume-fill" style="width:70%"></div>
+            </div>
+            <button type="button" id="mp-btn-restore" class="mp-ctrl-btn" title="Полный плеер" aria-label="Полный плеер"><i data-lucide="maximize-2"></i></button>
+            <button type="button" id="mp-btn-close" class="mp-ctrl-btn" title="Свернуть окно" aria-label="Свернуть окно"><i data-lucide="x"></i></button>
+        </div>
     </div>
 </div>
 
@@ -442,7 +448,7 @@
                                             <span id="lib-batch-progress-count">0 / 0</span>
                                         </div>
                                         <div style="width:100%; height:4px; border-radius:2px; background:rgba(255,255,255,0.15); overflow:hidden;">
-                                            <div id="lib-batch-progress-bar" style="width:0%; height:100%; background:var(--primary); transition:width 0.2s ease;"></div>
+                                            <div id="lib-batch-progress-bar" style="width:100%; height:100%; background:var(--primary); transform-origin:left; transform:scaleX(0); transition:transform 0.2s ease;"></div>
                                         </div>
                                     </div>
                                     <button id="lib-btn-batch-cancel" title="Отменить загрузку" aria-label="Отменить загрузку" class="icon-btn" style="width:24px;height:24px;color:#ef4444;background:transparent;border:none;cursor:pointer;"><i data-lucide="x" style="width:14px;height:14px"></i></button>
@@ -470,16 +476,21 @@
                 <!-- Ambient Background Glow -->
                 <div class="player-bg-glow" id="player-bg-glow"></div>
 
-                <!-- Left Column: Cover & Controls Glass Panel -->
+                <!-- Left Column: big cover on top, track info below it, then
+                     progress and a minimal transport row (reference layout:
+                     cover left / lyrics right). -->
                 <div class="player-glass-card player-left-col">
-                    <div class="player-header-title" id="pp-header-title"><span id="pp-title">Трек не выбран</span> — <span id="pp-artist">Выберите трек</span></div>
-                    
                     <div class="player-cover-section">
                         <div class="player-cover-wrapper">
                             <img id="pp-cover" class="player-cover-img" src="" alt="Cover">
                             <canvas id="visualizer-canvas"></canvas>
                         </div>
                     </div>
+
+                    <!-- Track info sits under the artwork. The literal " — " text
+                         node between the spans is hidden by the parent's
+                         font-size:0; each span renders as its own block line. -->
+                    <div class="player-header-title" id="pp-header-title"><span id="pp-title">Трек не выбран</span> — <span id="pp-artist">Выберите трек</span></div>
 
                     <!-- Progress Slider -->
                     <div class="pb-progress player-card-progress">
@@ -492,9 +503,10 @@
                         <span class="pb-time" id="pp-time-total">0:00</span>
                     </div>
 
-                    <!-- Mini Controls: two deliberate rows. Nine controls cannot fit the card's
-                     content width (~282px) on one line, so the old flat row
-                     silently wrapped its last button onto a second line. -->
+                    <!-- Transport row: prev / play / next centred, queue pinned to
+                     the right edge. like/more stay in the DOM because the macOS
+                     skin surfaces them; the current skin shows only the queue
+                     button, and everything else lives on the bottom bar. -->
                     <div class="player-full-controls player-card-controls">
                         <div class="pcc-row pcc-row-secondary">
                             <button class="btn-ctrl" id="pp-btn-like" title="Лайк" aria-label="Лайк">
@@ -502,18 +514,6 @@
                             </button>
                             <button class="btn-ctrl player-macos-action" id="pp-btn-more" title="Действия с треком" aria-label="Действия с треком">
                                 <i data-lucide="more-horizontal"></i>
-                            </button>
-                            <button class="btn-ctrl" id="pp-btn-shuffle" title="Перемешать" aria-label="Перемешать">
-                                <i data-lucide="shuffle" style="width:20px;height:20px"></i>
-                            </button>
-                            <button class="btn-ctrl" id="pp-btn-repeat" title="Повтор" aria-label="Повтор">
-                                <i data-lucide="repeat" style="width:20px;height:20px"></i>
-                            </button>
-                            <button class="btn-ctrl" id="pp-btn-lyrics" title="Текст песни" aria-label="Текст песни">
-                                <i data-lucide="mic" style="width:20px;height:20px"></i>
-                            </button>
-                            <button class="btn-ctrl" id="pp-btn-queue" title="Очередь" aria-label="Очередь">
-                                <i data-lucide="list-music" style="width:20px;height:20px"></i>
                             </button>
                         </div>
                         <div class="pcc-row pcc-row-transport">
@@ -525,6 +525,9 @@
                             </button>
                             <button class="btn-ctrl" id="pp-btn-next" title="Следующий" aria-label="Следующий">
                                 <i data-lucide="skip-forward" style="width:20px;height:20px"></i>
+                            </button>
+                            <button class="btn-ctrl" id="pp-btn-queue" title="Очередь" aria-label="Очередь">
+                                <i data-lucide="list-music" style="width:20px;height:20px"></i>
                             </button>
                         </div>
                     </div>
@@ -909,19 +912,25 @@
                                     </div>
                             </div>
 
-                            <!-- 3. Тип слайдера -->
-                            <div class="setting-card-group" id="opt-slider-type" style="margin-top: 20px;">
-                                <div class="setting-label">Форма прогресса</div>
-                                <div class="setting-sublabel">Полупрозрачное заполнение нижней панели или плавная волна</div>
-                                <div class="select-grid" style="grid-template-columns: repeat(2, 1fr); margin-top: 10px;">
-                                    <div class="opt-card active" data-val="panel" style="padding:14px 10px;">
-                                        <i data-lucide="square" style="width:18px;height:18px"></i>
-                                        <span>Сплошной</span>
-                                    </div>
-                                    <div class="opt-card" data-val="solid" style="padding:14px 10px;">
-                                        <i data-lucide="waves" style="width:18px;height:18px"></i>
-                                        <span>Волна</span>
-                                    </div>
+                            <div class="setting-card-group" id="opt-slider-type">
+                                <div class="setting-label" id="slider-type-label">Тип ползунка</div>
+                                <div class="setting-sublabel">Выберите стиль ползунка прогресса</div>
+                                <div class="progress-style-options" role="group" aria-labelledby="slider-type-label">
+                                    <button type="button" class="opt-card" data-val="line" aria-pressed="false">
+                                        <span>Обычный</span><span class="progress-style-preview" aria-hidden="true"></span>
+                                    </button>
+                                    <button type="button" class="opt-card" data-val="thin-line" aria-pressed="false">
+                                        <span>Тонкий</span><span class="progress-style-preview" aria-hidden="true"></span>
+                                    </button>
+                                    <button type="button" class="opt-card" data-val="smooth" aria-pressed="false">
+                                        <span>Плавный</span><span class="progress-style-preview" aria-hidden="true"></span>
+                                    </button>
+                                    <button type="button" class="opt-card" data-val="solid" aria-pressed="false">
+                                        <span>Волнистый</span><span class="progress-style-preview" aria-hidden="true"></span>
+                                    </button>
+                                    <button type="button" class="opt-card active" data-val="panel" aria-pressed="true">
+                                        <span>Заливка панели</span><span class="progress-style-preview" aria-hidden="true"></span>
+                                    </button>
                                 </div>
                             </div>
 
@@ -939,7 +948,7 @@
                             <div class="setting-row player-progress-color-row">
                                 <div>
                                     <div class="setting-label">Цвет прогресса</div>
-                                    <div class="setting-sublabel">Применяется к заливке, полоскам и волне</div>
+                                    <div class="setting-sublabel">Применяется к индикатору прогресса</div>
                                 </div>
                                 <label class="player-progress-color-control" aria-label="Выбрать цвет прогресса">
                                     <input id="player-progress-color" type="color" value="#10d6a3" aria-label="Цвет прогресса">
@@ -1072,38 +1081,6 @@
                                         <i data-lucide="circle"></i>
                                         <span>Капсула</span>
                                     </div>
-                                </div>
-                            </div>
-
-                            <!-- 12. Позиция мини-плеера -->
-                            <div class="setting-card-group" id="opt-mp-pos" style="margin-top: 20px;">
-                                <div class="setting-label">Позиция мини-плеера</div>
-                                <div class="setting-sublabel" style="margin-bottom:12px;">Выберите, в какой части экрана будет располагаться мини-плеер</div>
-                                <div style="display:flex; flex-wrap:wrap; gap:10px; width:100%;" id="mp-pos-btn-group">
-                                    <button class="opt-card-btn" data-pos="top-left" title="Вверху слева" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                        <i data-lucide="arrow-up-left" style="width:18px;height:18px"></i>
-                                        <span style="font-size:12px; font-weight:500;">Вверху слева</span>
-                                    </button>
-                                    <button class="opt-card-btn" data-pos="top-center" title="Вверху по центру" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                        <i data-lucide="arrow-up" style="width:18px;height:18px"></i>
-                                        <span style="font-size:12px; font-weight:500;">Вверху по центру</span>
-                                    </button>
-                                    <button class="opt-card-btn" data-pos="top-right" title="Вверху справа" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                        <i data-lucide="arrow-up-right" style="width:18px;height:18px"></i>
-                                        <span style="font-size:12px; font-weight:500;">Вверху справа</span>
-                                    </button>
-                                    <button class="opt-card-btn" data-pos="bottom-left" title="Внизу слева" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                        <i data-lucide="arrow-down-left" style="width:18px;height:18px"></i>
-                                        <span style="font-size:12px; font-weight:500;">Внизу слева</span>
-                                    </button>
-                                    <button class="opt-card-btn active" data-pos="bottom-right" title="Внизу справа" style="padding:10px 14px; border-radius:12px; border:1px solid var(--primary); background:var(--primary); color:#fff; display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                        <i data-lucide="arrow-down-right" style="width:18px;height:18px"></i>
-                                        <span style="font-size:12px; font-weight:500;">Внизу справа</span>
-                                    </button>
-                                    <button class="opt-card-btn" data-pos="center" title="По центру" style="padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,0.1); background:var(--bg-card); display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                        <i data-lucide="maximize-2" style="width:18px;height:18px"></i>
-                                        <span style="font-size:12px; font-weight:500;">По центру</span>
-                                    </button>
                                 </div>
                             </div>
 
@@ -1851,7 +1828,7 @@
                                 <div>
                                     <div class="setting-label">Включить службы Zapret</div>
                                     <div class="setting-sublabel">Маскировать трафик YouTube и сторонних музыкальных сервисов в текущей сессии</div>
-                                    <div class="setting-sublabel" id="zapret-state-warning" role="status" style="display:none; color:#e6a23c; font-weight:600;"></div>
+                                    <div class="setting-sublabel" id="zapret-state-warning" role="status" hidden style="color:#e6a23c; font-weight:600;"></div>
                                 </div>
                                 <button class="toggle-switch" id="toggle-zapret-enabled" role="switch" aria-checked="false" aria-label="Включить службы Zapret"><div class="toggle-dot"></div></button>
                             </div>
@@ -1870,7 +1847,7 @@
                                 </div>
                                 <div class="zapret-mode-picker">
                                 <button type="button" id="zapret-mode-trigger" aria-haspopup="listbox" aria-expanded="false" aria-controls="zapret-mode-menu">Режим обхода</button>
-                                <div id="zapret-mode-menu" role="listbox" aria-label="Режим обхода" hidden></div>
+                                <div id="zapret-mode-menu" role="listbox" aria-label="Режим обхода" hidden inert></div>
                                 <select class="settings-select" id="select-zapret-mode" aria-label="Режим обхода Zapret" hidden>
                                     <option value="youtube_discord">YouTube и музыкальные сервисы (рекомендуется)</option>
                                     <option value="standard">Стандартный (fake,split2)</option>
@@ -1912,15 +1889,6 @@
 <!-- Player Bar (Bottom) -->
 <div id="player-bar">
     <div id="pb-panel-fill" aria-hidden="true" style="clip-path: inset(0 100% 0 0)"></div>
-    <div class="pb-progress pb-progress-surface" aria-label="Прогресс воспроизведения">
-        <span class="pb-time" id="pb-time-current">0:00</span>
-        <div class="progress-track" id="pb-progress-track" role="slider" aria-label="Позиция воспроизведения" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-            <canvas id="pb-waveform-canvas" class="waveform-canvas hidden"></canvas>
-            <div class="progress-fill" id="pb-progress-fill" style="transform: scaleX(0)"></div><span class="seek-thumb" aria-hidden="true"></span>
-            <span class="track-moment-pin" id="pb-moment-pin" aria-hidden="true" hidden></span>
-        </div>
-        <span class="pb-time" id="pb-time-total">0:00</span>
-    </div>
     <!-- Track Info (wider left) -->
     <div class="pb-track">
         <img id="pb-cover" class="pb-cover" src="assets/default_cover.png" alt="">
@@ -1938,7 +1906,7 @@
         </button>
     </div>
 
-    <!-- Center Transport Controls -->
+    <!-- Center: transport row on top, progress row right below it -->
     <div class="pb-controls">
         <div class="pb-buttons">
             <button class="btn-ctrl" id="pb-btn-shuffle" title="Перемешать" aria-label="Перемешать">
@@ -1956,12 +1924,22 @@
             <button class="btn-ctrl" id="pb-btn-repeat" title="Повтор" aria-label="Повтор">
                 <i data-lucide="repeat" style="width:14px;height:14px"></i>
             </button>
+            <button class="btn-ctrl" id="pb-btn-device" aria-label="Настройки звука" title="Настройки звука"><i data-lucide="radio"></i></button>
+        </div>
+        <div class="pb-progress" aria-label="Прогресс воспроизведения">
+            <span class="pb-time" id="pb-time-current">0:00</span>
+            <div class="progress-track" id="pb-progress-track" role="slider" aria-label="Позиция воспроизведения" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+                <canvas id="pb-waveform-canvas" class="waveform-canvas hidden"></canvas>
+                <div class="progress-fill" id="pb-progress-fill" style="transform: scaleX(0)"></div><span class="seek-thumb" aria-hidden="true"></span>
+                <span class="track-moment-pin" id="pb-moment-pin" aria-hidden="true" hidden></span>
+            </div>
+            <span class="pb-time" id="pb-time-total">0:00</span>
         </div>
     </div>
 
     <!-- Right: Queue + Volume (compact) -->
     <div class="pb-right">
-        <button class="btn-ctrl" id="pb-btn-device" aria-label="Настройки звука" title="Настройки звука"><i data-lucide="monitor-speaker"></i></button>
+        <button class="btn-ctrl" id="pb-btn-expand-view" aria-label="Открыть полный плеер" title="Открыть полный плеер"><i data-lucide="maximize-2"></i></button>
         <button class="btn-ctrl" id="pb-btn-queue" title="Очередь воспроизведения" aria-label="Очередь воспроизведения" aria-controls="queue-drawer" aria-expanded="false">
             <i data-lucide="list-music" style="width:16px;height:16px"></i>
         </button>
@@ -1973,8 +1951,7 @@
                 <div class="volume-fill" id="pb-volume-fill" style="width:70%"></div>
             </div>
         </div>
-        <button class="btn-ctrl" id="pb-btn-expand-view" aria-label="Открыть полный плеер" title="Открыть полный плеер"><i data-lucide="maximize-2"></i></button>
-</div>
+    </div>
 </div>
 
 <input id="lib-cover-file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
@@ -2289,9 +2266,9 @@
 
 <script src="js/tooltip.js?v=20261023_tips"></script>
 <script src="js/boot.js?v=20261005_rail"></script>
-<script type="module" src="js/main.js?v=20261012_catalog_lyrics"></script>
+<script type="module" src="js/main.js?v=20261120_motion"></script>
     <!-- ─── LYRICS DISPLAY SETTINGS POPOVER (Screenshot #1) ─── -->
-    <div id="lyrics-display-settings-popover" class="lyrics-settings-popover hidden" role="region" aria-label="Настройки отображения текста">
+    <div id="lyrics-display-settings-popover" class="lyrics-settings-popover hidden" role="region" aria-label="Настройки отображения текста" inert>
         <div class="lsp-header">
             <span class="lsp-title"><i data-lucide="type" style="width:15px;height:15px;"></i> Оформление текста</span>
             <button id="btn-close-lsp" class="icon-btn lsp-close-btn" aria-label="Закрыть"><i data-lucide="x" style="width:14px;height:14px;"></i></button>

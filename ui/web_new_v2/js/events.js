@@ -140,6 +140,7 @@ export function initEvents() {
                 
             case 'playlist_import_progress':
             case 'playlist_availability_updated':
+            case 'album_availability_updated':
                 window.dispatchEvent(new CustomEvent(`nedotify:${eventName}`, { detail: data }));
                 break;
 
@@ -465,7 +466,7 @@ function syncRepeatIcon(btn, mode) {
     } else {
         btn.innerHTML = '<i data-lucide="repeat" style="width:16px;height:16px"></i>';
     }
-    renderIcons();
+    renderIcons(btn);
 }
 
 

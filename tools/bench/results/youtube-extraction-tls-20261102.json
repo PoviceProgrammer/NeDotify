@@ -1,0 +1,97 @@
+[
+  {
+    "mode": "tls",
+    "ok": true,
+    "ms": 4403,
+    "audio": {
+      "format_id": "251",
+      "ext": "webm",
+      "abr": 128.93,
+      "acodec": "opus",
+      "duration": 213
+    },
+    "requests": [
+      {
+        "host": "www.youtube.com",
+        "path": "/watch",
+        "ms": 845
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "/youtubei/v1/player",
+        "ms": 466
+      },
+      {
+        "host": "manifest.googlevideo.com",
+        "path": "<redacted>",
+        "ms": 562
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "<redacted>",
+        "ms": 695
+      }
+    ],
+    "video_id": "dQw4w9WgXcQ"
+  },
+  {
+    "mode": "tls",
+    "ok": true,
+    "ms": 2643,
+    "audio": {
+      "format_id": "251",
+      "ext": "webm",
+      "abr": 127.5,
+      "acodec": "opus",
+      "duration": 367
+    },
+    "requests": [
+      {
+        "host": "www.youtube.com",
+        "path": "/watch",
+        "ms": 463
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "/youtubei/v1/player",
+        "ms": 404
+      },
+      {
+        "host": "manifest.googlevideo.com",
+        "path": "<redacted>",
+        "ms": 432
+      }
+    ],
+    "video_id": "YQHsXMglC9A"
+  },
+  {
+    "mode": "tls",
+    "ok": true,
+    "ms": 2231,
+    "audio": {
+      "format_id": "251",
+      "ext": "webm",
+      "abr": 130.862,
+      "acodec": "opus",
+      "duration": 282
+    },
+    "requests": [
+      {
+        "host": "www.youtube.com",
+        "path": "/watch",
+        "ms": 440
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "/youtubei/v1/player",
+        "ms": 442
+      },
+      {
+        "host": "manifest.googlevideo.com",
+        "path": "<redacted>",
+        "ms": 444
+      }
+    ],
+    "video_id": "kJQP7kiw5Fk"
+  }
+]

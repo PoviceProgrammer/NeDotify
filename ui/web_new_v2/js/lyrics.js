@@ -31,6 +31,9 @@ let lyricsInitialized = false;
 let wordPainter = null;
 let wordRows = [];
 let wordFrameId = null;
+let offsetToastTimer = null;
+let offsetToastAt = 0;
+let paintedVisibilityKey = '';
 function lyricsPreferences() {
     const settings = window.settings?.lyrics || {};
     return {mode: ['auto', 'word', 'line'].includes(settings.mode) ? settings.mode : 'auto',
@@ -42,16 +45,44 @@ function clearWordLyrics() {
     wordFrameId = null;
     wordPainter = null;
     wordRows = [];
+    paintedVisibilityKey = '';
+}
+
+function containerIsVisible(container) {
+    if (!container?.getClientRects().length) return false;
+    const overlay = container.closest?.('#lyrics-overlay, .lyrics-overlay');
+    // The overlay is hidden with opacity:0, so it still has client rects and a
+    // layout box. Ask its state class instead of trusting geometry.
+    if (overlay) return overlay.classList.contains('active') || overlay.classList.contains('visible');
+    return true;
 }
 
 function lyricsAreVisible() {
     if (document.hidden) return false;
-    return getContainers().some(container => container.getClientRects().length > 0);
+    return getContainers().some(containerIsVisible);
 }
 
 function paintWordLyrics(positionMs, force = false) {
     if (!wordPainter) return;
-    wordPainter.paint(wordRows, positionMs + currentOffsetMs, lyricsPreferences().animations, force);
+    // Two sheets are rendered (panel + overlay). Painting the hidden one used to
+    // repaint gradient text for both on every animation frame.
+    const rows = [];
+    const visibleIds = [];
+    for (const row of wordRows) {
+        const first = row.find(line => line?.length)?.[0];
+        if (!first) continue;
+        const container = first.closest?.('#lyrics-content, #overlay-lyrics-content');
+        if (container && !containerIsVisible(container)) continue;
+        rows.push(row);
+        visibleIds.push(container?.id || '');
+    }
+    if (!rows.length) return;
+    // A sheet that was hidden while the other painted missed its active-row
+    // updates. The first frame after it becomes visible repaints it in full.
+    const visibilityKey = visibleIds.join('|');
+    const repaintAll = force || visibilityKey !== paintedVisibilityKey;
+    paintedVisibilityKey = visibilityKey;
+    wordPainter.paint(rows, positionMs + currentOffsetMs, lyricsPreferences().animations, repaintAll);
 }
 
 function syncWordLyrics() {
@@ -280,12 +311,21 @@ export function setOffsetControlsEnabled(enabled) {
 export function adjustLyricsOffset(deltaMs) {
     currentOffsetMs += deltaMs;
     updateOffsetBadges();
-    window.dispatchEvent(new CustomEvent('nedotify:toast', {
-        detail: {
-            msg: `Смещение текста: ${currentOffsetMs > 0 ? '+' : ''}${(currentOffsetMs / 1000).toFixed(1)}s`,
-            type: 'info'
-        }
-    }));
+    // Hold-to-repeat ticks every 90 ms. One toast per tick filled the queue and
+    // kept notifications playing back for ~35 s after the button was released.
+    const notify = () => {
+        offsetToastAt = performance.now();
+        window.dispatchEvent(new CustomEvent('nedotify:toast', {
+            detail: {
+                msg: `Смещение текста: ${currentOffsetMs > 0 ? '+' : ''}${(currentOffsetMs / 1000).toFixed(1)}s`,
+                type: 'info'
+            }
+        }));
+    };
+    clearTimeout(offsetToastTimer);
+    const wait = 700 - (performance.now() - offsetToastAt);
+    if (wait <= 0) notify();
+    else offsetToastTimer = setTimeout(notify, wait);
     const track = getCurrentTrack();
     if (track) {
         const trackKey = String(track.source_id || track.id || track.title || '');
@@ -379,6 +419,7 @@ export function initLyrics() {
                     isOverlayVisible = true;
                     overlay.classList.add('active');
                     loadCurrentTrackLyrics();
+                    syncWordLyrics();
                 }
             }
         });
@@ -1136,6 +1177,9 @@ export function renderLyrics(data, force = false) {
     lastLyricsData = normalizedData;
     rememberLyrics(normalizedData);
     if (unchanged && !force) return;
+    if (previousPlain !== nextPlain && typeof lyricsPreferences === 'function' && lyricsPreferences().animations !== 'off') {
+        containers.forEach(container => window.NeDotifyMotion?.reveal(container, 0));
+    }
     if (typeof clearWordLyrics === 'function') clearWordLyrics();
     resetLyricsScroll();
     updateOffsetBadges();

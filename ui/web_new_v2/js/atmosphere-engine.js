@@ -271,8 +271,14 @@ export class AtmosphereEngine {
             this.listen(this.document, 'nedotify:window_visibility_changed', this.sync);
             this.listen(this.window, 'nedotify:mini_player_toggled', this.sync);
             this.listen(this.window, 'resize', () => {
-                this.rebuild();
-                this.sync();
+                // Window resizes fire dozens of times per drag; each rebuild
+                // resets the canvas backing store. Coalesce to one per frame.
+                if (this.resizeFrame) return;
+                this.resizeFrame = this.raf(() => {
+                    this.resizeFrame = 0;
+                    this.rebuild();
+                    this.sync();
+                });
             });
             this.listen(this.window, 'nedotify:background_decoration_changed', this.sync);
             this.listen(this.window, 'nedotify:appearance_changed', () => {
@@ -512,6 +518,8 @@ export class AtmosphereEngine {
     release() {
         if (this.frameId !== null) this.caf(this.frameId);
         this.frameId = null;
+        if (this.resizeFrame) this.caf(this.resizeFrame);
+        this.resizeFrame = 0;
         this.lastTime = 0;
         this.simulationTime = 0;
         for (const dispose of this.listeners) dispose();

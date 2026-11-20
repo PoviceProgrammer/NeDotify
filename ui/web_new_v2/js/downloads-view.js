@@ -26,9 +26,10 @@ function createDownloadRow(item) {
     const row = document.createElement('li');
     row.className = 'download-manager-row';
     row.innerHTML = '<div class="download-manager-track"><strong></strong><span></span><small></small></div>' +
-        '<div class="download-manager-state"><span></span><progress max="100"></progress></div>' +
+        '<div class="download-manager-state"><span></span><div class="download-meter" hidden><progress max="100"></progress></div></div>' +
         '<div class="download-manager-actions"><button type="button" class="download-manager-action"></button><button type="button" data-action="cancel">Отменить</button></div>';
     row.dataset.trackId = String(item.track_id);
+    row.dataset.motionKey = row.dataset.trackId;
     downloadRows.set(String(item.track_id), row);
     return row;
 }
@@ -43,9 +44,16 @@ function updateDownloadRow(row, item) {
     error.hidden = !error.textContent;
     const progress = row.querySelector('progress');
     progress.setAttribute('aria-label', `Загрузка: ${title}`);
-    if (Number.isFinite(item.percent)) progress.value = item.percent;
-    else progress.removeAttribute('value');
-    progress.hidden = !['downloading', 'paused', 'pending'].includes(item.status);
+    const meter = progress.parentElement;
+    const determinate = Number.isFinite(item.percent);
+    if (determinate) {
+        progress.value = item.percent;
+        meter.style.setProperty('--download-fraction', progress.position);
+    } else {
+        progress.removeAttribute('value');
+    }
+    meter.dataset.determinate = String(determinate);
+    meter.hidden = !['downloading', 'paused', 'pending'].includes(item.status);
     const bytes = item.downloaded_bytes > 0 ? ` · ${formatBytes(item.downloaded_bytes)}` : '';
     const total = item.total_bytes > 0 ? ` / ${formatBytes(item.total_bytes)}` : '';
     const speed = item.bytes_per_second > 0 ? ` · ${formatBytes(item.bytes_per_second)}/с` : '';
@@ -68,6 +76,9 @@ function renderDownloads() {
     const list = downloadHost.querySelector('.download-manager-list');
     const visible = downloadItems.slice(0, visibleLimit);
     const retained = new Set(visible.map(item => String(item.track_id)));
+    const motion = window.NeDotifyMotion;
+    const removing = motion && [...downloadRows.keys()].some(id => !retained.has(id));
+    const before = removing && motion.listPositions(list, downloadHost);
     for (const [trackId, row] of downloadRows) {
         if (!retained.has(trackId)) {
             row.remove();
@@ -75,14 +86,22 @@ function renderDownloads() {
         }
     }
     visible.forEach((item, index) => {
-        const row = downloadRows.get(String(item.track_id)) || createDownloadRow(item);
+        const existing = downloadRows.get(String(item.track_id));
+        const row = existing || createDownloadRow(item);
         updateDownloadRow(row, item);
         if (list.children[index] !== row) list.insertBefore(row, list.children[index] || null);
+        if (!existing && !before?.size && index < 8) motion?.reveal(row);
     });
+    if (before?.size) motion.settleList(list, before, downloadHost);
     const active = downloadItems.filter(item => ['pending', 'downloading'].includes(item.status)).length;
     const paused = downloadItems.filter(item => item.status === 'paused').length;
     const failed = downloadItems.filter(item => item.status === 'failed').length;
-    downloadHost.querySelector('.download-manager-count').textContent = active ? `${active} в очереди` : paused ? `${paused} на паузе` : failed ? `${failed} с ошибкой` : '';
+    const count = downloadHost.querySelector('.download-manager-count');
+    const nextCount = active ? `${active} в очереди` : paused ? `${paused} на паузе` : failed ? `${failed} с ошибкой` : '';
+    if (count.textContent !== nextCount) {
+        count.textContent = nextCount;
+        if (nextCount) motion?.reveal(count, 2);
+    }
     downloadHost.querySelector('[data-action="pause-all"]').disabled = !active;
     downloadHost.querySelector('[data-action="resume-all"]').disabled = !paused;
     downloadHost.querySelector('[data-action="retry-failed"]').disabled = !failed;
@@ -176,6 +195,7 @@ export function initDownloadManagerView(host) {
     downloadRows = new Map();
     host.classList.add('download-manager');
     host.innerHTML = '<details><summary><span>Загрузки</span><span class="download-manager-count"></span></summary>' +
+        '<div class="download-manager-body"><div class="download-manager-body-inner">' +
         '<div class="download-manager-toolbar"><button type="button" data-action="pause-all">Пауза всех</button>' +
         '<button type="button" data-action="resume-all">Продолжить все</button>' +
         '<button type="button" data-action="retry-failed">Повторить ошибки</button>' +
@@ -183,7 +203,8 @@ export function initDownloadManagerView(host) {
         '<button type="button" data-action="refresh">Обновить</button></div>' +
         '<p class="download-manager-message" role="status">Загрузка очереди…</p>' +
         '<ul class="download-manager-list" aria-label="Очередь загрузок"></ul>' +
-        '<button type="button" data-action="more" hidden></button></details>';
+        '<button type="button" data-action="more" hidden></button>' +
+        '</div></div></details>';
     host.addEventListener('click', runDownloadAction);
     scheduleRefresh();
 }

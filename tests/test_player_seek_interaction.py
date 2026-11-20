@@ -124,7 +124,7 @@ for (const prefix of ['pb','pp','mp']) {
 """)
 
 
-def test_progress_style_offers_panel_and_line_and_migrates_old_preferences():
+def test_progress_styles_preserve_current_and_legacy_preferences():
     run_node(r"""
 import assert from 'node:assert/strict';import vm from 'node:vm';
 const code=SOURCE;
@@ -132,5 +132,5 @@ const context=vm.createContext({});
 vm.runInContext(code.slice(code.indexOf('function normalizeProgressStyle('),code.indexOf('function normalizeProgressColor(')),context);
 for (const old of ['bars','wave','hidden','default',undefined]) assert.equal(context.normalizeProgressStyle(old),'panel');
 for (const old of ['solid','thin','ios']) assert.equal(context.normalizeProgressStyle(old),'solid');
-assert.equal(context.normalizeProgressStyle('panel'),'panel');
+for (const style of ['panel','line','thin-line','smooth','solid']) assert.equal(context.normalizeProgressStyle(style),style);
 """.replace('SOURCE',source('settings.js')))

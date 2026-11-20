@@ -1,0 +1,22 @@
+{
+  "vpnModified": false,
+  "profileIsolated": true,
+  "cookiesUsed": false,
+  "sourceId": "dQw4w9WgXcQ",
+  "path": "AppApi.download_track -> DownloadManager -> YouTubeService",
+  "frozenRuntime": false,
+  "apiModuleLoader": "SourceFileLoader",
+  "setupLeaseEnabled": true,
+  "accepted": true,
+  "terminalEventReceived": true,
+  "completeEvents": 1,
+  "failedEvents": 0,
+  "databaseDownloaded": true,
+  "fileBytes": 3454092,
+  "duration": 213.09,
+  "extension": ".m4a",
+  "sha256": "cbbb3e771b5cc39fe7c8c68192dac4a103b3289e2d52f0400aeefc58244774c8",
+  "queueStatus": "completed",
+  "ok": true,
+  "seconds": 3.75
+}

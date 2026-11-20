@@ -1,0 +1,97 @@
+{
+  "scenario": "startup",
+  "mode": "playback-latency",
+  "started_at": 1793600618.3660743,
+  "ok": true,
+  "error": null,
+  "data": {
+    "actual_bridge": true,
+    "api_stubs": false,
+    "results": [
+      {
+        "bridge_ms": 19,
+        "playing": true,
+        "source": "spotify",
+        "source_id": "ytsearch1: Rick Astley - Never Gonna Give You Up",
+        "time_to_audio_ms": 8840,
+        "within_3s": false,
+        "within_5s": false,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "extract_info",
+            "thread": "YouTubePlayback_0",
+            "started": 2300.5667305,
+            "ms": 6438.6
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-243 (process_request_thread)",
+            "started": 2307.0462308,
+            "ms": 453.3
+          }
+        ]
+      },
+      {
+        "bridge_ms": 18,
+        "playing": true,
+        "source": "spotify",
+        "source_id": "ytsearch1: Rick Astley - Never Gonna Give You Up",
+        "time_to_audio_ms": 152,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "connect",
+            "thread": "Thread-255 (process_request_thread)",
+            "started": 2308.4944886,
+            "ms": 411.8
+          }
+        ]
+      }
+    ],
+    "all_within_5s": false,
+    "note": "First advancing decoded media clock, physical speaker output not assessed"
+  },
+  "perf": {
+    "Timestamp": 2308.956662,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 3637,
+    "LayoutObjects": 4427,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 15869,
+    "Resources": 73,
+    "ContextLifecycleStateObservers": 47,
+    "V8PerContextDatas": 1,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 2,
+    "LayoutCount": 143,
+    "RecalcStyleCount": 296,
+    "LayoutDuration": 0.177882,
+    "RecalcStyleDuration": 1.005535,
+    "DevToolsCommandDuration": 0.035329,
+    "ScriptDuration": 0.076527,
+    "V8CompileDuration": 0.000205,
+    "TaskDuration": 1.829374,
+    "TaskOtherDuration": 0.533896,
+    "ThreadTime": 1.786679,
+    "ProcessTime": 2.845987,
+    "JSHeapUsedSize": 4741352,
+    "JSHeapTotalSize": 7077888,
+    "FirstMeaningfulPaint": 2298.756878,
+    "DomContentLoaded": 2298.76252,
+    "NavigationStart": 2298.613493
+  },
+  "finished_at": 1793600630.1153216,
+  "seeded_user_cache_rows": 0
+}

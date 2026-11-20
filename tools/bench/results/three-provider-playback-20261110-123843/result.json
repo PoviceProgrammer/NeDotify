@@ -1,0 +1,103 @@
+{
+  "scenario": "startup",
+  "mode": "three-provider-live",
+  "started_at": 1794303523.84968,
+  "ok": true,
+  "error": null,
+  "data": {
+    "results": [
+      {
+        "first": {
+          "clockAdvancedMs": 1549,
+          "peak": 0.037313200533390045,
+          "positionMs": 2048
+        },
+        "firstPlaying": true,
+        "next": {
+          "clockAdvancedMs": 1561,
+          "peak": 0.046797558665275574,
+          "positionMs": 2051
+        },
+        "nextPlaying": true,
+        "pause": true,
+        "query": "Radiohead Creep",
+        "queueTracks": 2,
+        "resume": true,
+        "searchResults": 20,
+        "seek": true,
+        "source": "spotify",
+        "startAndMeasureMs": 5386,
+        "tracks": [
+          {
+            "artist": "Radiohead",
+            "source_id": "ytsearch1: Radiohead - Creep (Acoustic)",
+            "title": "Creep (Acoustic)"
+          },
+          {
+            "artist": "Thom Yorke",
+            "source_id": "ytsearch1: Thom Yorke - Creep (feat. Radiohead) [Very 2021 Rmx]",
+            "title": "Creep (feat. Radiohead) [Very 2021 Rmx]"
+          }
+        ],
+        "style": "current",
+        "resolutions": [
+          {
+            "source": "spotify",
+            "source_id": "ytsearch1: Radiohead - Creep (Acoustic)",
+            "host": "rr3---sn-oj5hn5-55.googlevideo.com"
+          },
+          {
+            "source": "spotify",
+            "source_id": "ytsearch1: Thom Yorke - Creep (feat. Radiohead) [Very 2021 Rmx]",
+            "host": "rr5---sn-u125g5-5q.googlevideo.com"
+          }
+        ]
+      }
+    ],
+    "realProviders": true,
+    "realBridge": true,
+    "audioFixtures": false,
+    "realSignalMeasured": true,
+    "speakerDestinationDisconnected": true,
+    "vpnModified": false
+  },
+  "perf": {
+    "Timestamp": 266297.315501,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 2169,
+    "LayoutObjects": 1921,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 18224,
+    "Resources": 124,
+    "ContextLifecycleStateObservers": 48,
+    "V8PerContextDatas": 1,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 5,
+    "LayoutCount": 173,
+    "RecalcStyleCount": 626,
+    "LayoutDuration": 0.110942,
+    "RecalcStyleDuration": 0.283323,
+    "DevToolsCommandDuration": 0.071694,
+    "ScriptDuration": 0.112287,
+    "V8CompileDuration": 0.000182,
+    "TaskDuration": 1.84245,
+    "TaskOtherDuration": 1.264022,
+    "ThreadTime": 1.828176,
+    "ProcessTime": 3.516971,
+    "JSHeapUsedSize": 4089532,
+    "JSHeapTotalSize": 5505024,
+    "FirstMeaningfulPaint": 266284.940178,
+    "DomContentLoaded": 266284.982666,
+    "NavigationStart": 266284.819652
+  },
+  "finished_at": 1794303537.8236082
+}

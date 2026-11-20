@@ -8,6 +8,7 @@ function showImportProgress(update) {
     if (!job || !importProgress || !(update.stage in stageOrder)) return;
     const order = stageOrder[update.stage];
     if (order < job.order || (order === job.order && (update.checked ?? update.extracted ?? 0) < job.count)) return;
+    const newStage = order !== job.order;
     job.order = order;
     job.count = update.checked ?? update.extracted ?? 0;
     if (update.extracted != null) job.extracted = update.extracted;
@@ -20,6 +21,7 @@ function showImportProgress(update) {
             : update.total
                 ? `Импорт завершён · доступно ${update.available} · недоступно ${update.unavailable} · без подтверждения ${update.unknown}`
                 : `Импорт завершён · извлечено ${job.extracted}`;
+    if (newStage) window.NeDotifyMotion?.reveal(importProgress, 0);
     if (update.stage === 'done') {
         imports.delete(update.job_id);
         hideImportProgress = setTimeout(() => { importProgress.hidden = true; }, 6000);

@@ -1,0 +1,48 @@
+{
+  "itunes_metadata": {
+    "search_completed": true,
+    "results": 3,
+    "search_seconds": 0.53,
+    "error_types": [],
+    "first": {
+      "title": "Never Gonna Give You Up",
+      "artist": "Rick Astley",
+      "duration": 213,
+      "source": "spotify"
+    },
+    "audio_provider": "YouTube verified matching, not Spotify audio"
+  },
+  "youtube": {
+    "search_completed": true,
+    "results": 12,
+    "search_seconds": 1.49,
+    "error_types": [],
+    "first": {
+      "title": "Never Gonna Give You Up",
+      "artist": "Rick Astley",
+      "duration": 214,
+      "source": "youtube"
+    },
+    "stream_completed": true,
+    "stream_resolved": true,
+    "media_http": 206,
+    "media_type": "audio/webm",
+    "media_bytes": 4096
+  },
+  "soundcloud": {
+    "search_completed": true,
+    "results": 3,
+    "search_seconds": 1.02,
+    "error_types": [
+      "str"
+    ],
+    "first": {
+      "title": "Never Gonna Give You Up",
+      "artist": "Rick Astley",
+      "duration": 30,
+      "source": "soundcloud"
+    },
+    "stream_completed": true,
+    "stream_resolved": false
+  }
+}

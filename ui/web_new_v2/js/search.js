@@ -101,8 +101,10 @@ export function initSearch() {
             if (query.length > 0) {
                 const sugg = document.getElementById('search-suggestions-dropdown');
                 if (sugg) sugg.classList.add('hidden');
-                showLoading();
+                // Do not blank the current results on every keystroke: the
+                // spinner belongs to the request, not to the input event.
                 searchDebounce = setTimeout(() => {
+                    showLoading();
                     allResults = [];
                     currentSearchQuery = query;
                     runSearchQuery(query);
@@ -280,6 +282,10 @@ export function onSearchResults(data) {
             renderCorrectionContext(container);
             renderOfflineSearchNote(container);
         }
+        // Rank once, when the stream is over. Ranking on every chunk reordered
+        // a previously appended prefix, which defeated the append path and
+        // rebuilt (and re-animated) the whole list.
+        if (rankSearchResults()) renderResults(allResults);
         if (allResults.length === 0 && !isViewingArtistProfile) offerSearchCorrections();
         return;
     }
@@ -308,28 +314,38 @@ export function onSearchResults(data) {
                     allResults.push(t);
                 }
             }
-            // Rank exact matches ahead of title and artist matches.
-            if (currentSearchQuery) {
-                const fold = (s) => String(s || '').toLowerCase().replace(/ё/g, 'е');
-                const query = fold(currentSearchQuery);
-                const rank = (t) => {
-                    const title = fold(t.title), artist = fold(t.artist);
-                    if (!query) return 3;
-                    if (title === query || (artist + ' - ' + title) === query) return 0;
-                    if (title.startsWith(query) || title.includes(query)) return 1;
-                    if (artist.includes(query)) return 2;
-                    return 3;
-                };
-                allResults = allResults
-                    .map((t, i) => [t, i])
-                    .sort((a, b) => (rank(a[0]) - rank(b[0])) || (Number(Boolean(a[0].external_only)) - Number(Boolean(b[0].external_only))) || (a[1] - b[1]))
-                    .map(([t]) => t);
-            }
             renderResults(allResults);
             return;
         }
     }
     // Empty chunk: keep spinner until completion sentinel arrives
+}
+
+// Rank exact matches ahead of title and artist matches. Kept out of the
+// per-chunk path: arrivals are already appended in provider order, and a stable
+// prefix is what lets renderSearchResultsBatch append instead of rebuild.
+function rankSearchResults() {
+    if (!currentSearchQuery || allResults.length < 2) return false;
+    const fold = (s) => String(s || '').toLowerCase().replace(/ё/g, 'е');
+    const query = fold(currentSearchQuery);
+    const rank = (t) => {
+        const title = fold(t.title), artist = fold(t.artist);
+        if (!query) return 3;
+        if (title === query || (artist + ' - ' + title) === query) return 0;
+        if (title.startsWith(query) || title.includes(query)) return 1;
+        if (artist.includes(query)) return 2;
+        return 3;
+    };
+    const sorted = allResults
+        .map((t, i) => [t, i])
+        .sort((a, b) => (rank(a[0]) - rank(b[0])) || (Number(Boolean(a[0].external_only)) - Number(Boolean(b[0].external_only))) || (a[1] - b[1]))
+        .map(([t]) => t);
+    let changed = false;
+    for (let i = 0; i < sorted.length; i++) {
+        if (sorted[i] !== allResults[i]) { changed = true; break; }
+    }
+    if (changed) allResults = sorted;
+    return changed;
 }
 
 function renderResults(tracks) {
@@ -341,6 +357,9 @@ function renderResults(tracks) {
     const container = document.getElementById('search-results');
     if (!container) return;
 
+    // Overview/grid switch reveals once (inside their own renderers). Track
+    // lists reveal only the rows that are actually new.
+    if (currentType !== 'tracks' && currentType !== 'all' && tracks?.length) window.NeDotifyMotion?.reveal(container);
     if (!tracks || tracks.length === 0) {
         container.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
         return;
@@ -447,6 +466,15 @@ function searchSection(container, title, category) {
 }
 
 function renderSearchOverview(container, results) {
+    const context = `${lastResultKey}|${currentType}`;
+    // Streaming chunks arrive several times per query. Rebuilding an unchanged
+    // overview is pure churn; re-revealing it made the whole panel pulse while
+    // results were still arriving.
+    const signature = `${context}|${visibleSearchCount}|${results.map(trackDedupKey).join('|')}`;
+    if (container._overviewSignature === signature) return;
+    const animate = container._overviewContext !== context;
+    container._overviewContext = context;
+    container._overviewSignature = signature;
     container.innerHTML = '';
     renderCorrectionContext(container);
     renderOfflineSearchNote(container);
@@ -520,6 +548,7 @@ function renderSearchOverview(container, results) {
             section.appendChild(button);
         }
     }
+    if (animate) window.NeDotifyMotion?.reveal(container);
     renderIcons(container);
 }
 
@@ -537,23 +566,34 @@ function renderSearchResultsBatch(container, displayTracks, replace = false) {
         list.className = 'track-list';
         container.appendChild(list);
     }
-    if (replace) {
-        list.innerHTML = '';
-    }
-
-
+    const previousCount = replace ? 0 : list.children.length;
+    if (replace) list.replaceChildren();
 
     container.querySelector('.search-more-results')?.remove();
     container.querySelector('.search-artists-shelf')?.remove();
-    list.replaceChildren();
-    const fragment = document.createDocumentFragment();
+
     const end = Math.min(displayTracks.length, visibleSearchCount);
-    for (let index = 0; index < end; index++) {
-        const row = createTrackElement(displayTracks[index], index, displayTracks, getCurrentTrack());
-        row.classList.add('search-hit-row');
-        fragment.appendChild(row);
+    // Streaming results only ever append (renderResults verifies the prefix),
+    // so rebuild nothing and animate nothing that already exists.
+    const start = Math.max(0, Math.min(previousCount, end));
+    if (start < end) {
+        const fragment = document.createDocumentFragment();
+        for (let index = start; index < end; index++) {
+            const row = createTrackElement(displayTracks[index], index, displayTracks, getCurrentTrack());
+            row.classList.add('search-hit-row');
+            fragment.appendChild(row);
+        }
+        list.appendChild(fragment);
     }
-    list.appendChild(fragment);
+    // Shrinking (a completed re-rank, or a smaller page) is rare; drop the tail.
+    while (list.children.length > end) list.lastElementChild.remove();
+
+    if (replace || previousCount === 0) window.NeDotifyMotion?.reveal(list);
+    else if (end > previousCount) {
+        for (let index = previousCount; index < Math.min(end, previousCount + 4); index++) {
+            window.NeDotifyMotion?.reveal(list.children[index]);
+        }
+    }
     renderIcons(list);
     if (end < displayTracks.length) {
         const more = document.createElement('button');
@@ -713,7 +753,7 @@ export async function playAlbum(album, cardElement = null) {
 function hideDetailModal(modal) {
     if (!modal) return;
     modal.style.display = 'none';
-    if (modal.id === 'album-detail-modal') { albumModalGeneration++; albumFetchCleanup?.(); }
+    if (modal.id === 'album-detail-modal') { albumModalGeneration++; albumFetchCleanup?.(); modal._availabilityCleanup?.(); modal._availabilityCleanup = null; }
     closeModalFocusTrap(modal);
 }
 
@@ -797,11 +837,36 @@ export async function openAlbumModal(album) {
         return;
     }
     if (playAll) playAll.disabled = false;
-    tracksContainer.innerHTML = result.verified ? '' : '<div class="lyric-notice">Из библиотеки — данные из тегов файла</div>';
-    albumTracks.forEach((t, idx) => {
-        tracksContainer.appendChild(createTrackElement(t, idx, albumTracks, getCurrentTrack()));
-    });
-    renderIcons();
+    const notice = result.verified ? '' : '<div class="lyric-notice">Из библиотеки — данные из тегов файла</div>';
+    const renderAlbumTracks = list => {
+        tracksContainer.innerHTML = notice;
+        list.forEach((t, idx) => tracksContainer.appendChild(createTrackElement(t, idx, list, getCurrentTrack())));
+        renderIcons();
+    };
+    renderAlbumTracks(albumTracks);
+
+    // Availability badges arrive after the initial render: the backend probes
+    // every album track exactly like a playlist import and republishes the
+    // annotated tracklist through album_availability_updated. The cleanup is
+    // stored on the modal node so the listener cannot outlive the overlay.
+    modal._availabilityCleanup?.();
+    modal._availabilityCleanup = null;
+    if (result.request_id) {
+        const onAvailability = event => {
+            const detail = event.detail || {};
+            if (detail.request_id !== result.request_id) return;
+            if (generation !== albumModalGeneration || modal.style.display === 'none') {
+                modal._availabilityCleanup?.();
+                modal._availabilityCleanup = null;
+                return;
+            }
+            if (!Array.isArray(detail.tracks) || !detail.tracks.length) return;
+            albumTracks.splice(0, albumTracks.length, ...detail.tracks);
+            renderAlbumTracks(albumTracks);
+        };
+        document.addEventListener('nedotify:album_availability_updated', onAvailability);
+        modal._availabilityCleanup = () => document.removeEventListener('nedotify:album_availability_updated', onAvailability);
+    }
 
     document.getElementById('btn-play-full-album')?.addEventListener('click', () => {
         if (albumTracks.length > 0 && window.pywebview?.api?.play_track) {

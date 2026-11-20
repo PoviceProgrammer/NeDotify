@@ -1,0 +1,22 @@
+{
+  "vpnModified": false,
+  "profileIsolated": true,
+  "cookiesUsed": false,
+  "sourceId": "ytsearch1:Rick Astley Never Gonna Give You Up",
+  "path": "AppApi.download_track -> DownloadManager -> YouTubeService",
+  "frozenRuntime": true,
+  "apiModuleLoader": "PyiFrozenLoader",
+  "setupLeaseEnabled": true,
+  "accepted": true,
+  "terminalEventReceived": true,
+  "completeEvents": 1,
+  "failedEvents": 0,
+  "databaseDownloaded": true,
+  "fileBytes": 3434824,
+  "duration": 213.061,
+  "extension": ".webm",
+  "sha256": "3aab4e33c57e90602c094ff2e29450ede4eb38cf10c51016adc9e77e7f297b3f",
+  "queueStatus": "completed",
+  "ok": true,
+  "seconds": 5.19
+}

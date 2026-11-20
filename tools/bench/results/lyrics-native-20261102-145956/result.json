@@ -1,0 +1,78 @@
+{
+  "scenario": "startup",
+  "mode": "lyrics-native",
+  "started_at": 1793620796.8675323,
+  "ok": true,
+  "error": null,
+  "data": {
+    "results": [
+      {
+        "advancing": true,
+        "bridge_success": true,
+        "characters": 1434,
+        "events": [
+          {
+            "characters": 1475,
+            "identity_recovered": true,
+            "matched_artist": "1.Kla$",
+            "phase": "partial",
+            "source": "Genius",
+            "status": "found"
+          },
+          {
+            "characters": 1475,
+            "identity_recovered": true,
+            "matched_artist": "1.Kla$",
+            "phase": "final",
+            "source": "Genius",
+            "status": "found"
+          }
+        ],
+        "passed": true,
+        "playback_mode": "actual_audio",
+        "skin": "current",
+        "visible_lines": 45
+      }
+    ],
+    "all_passed": true
+  },
+  "perf": {
+    "Timestamp": 22483.568536,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 6,
+    "Frames": 2,
+    "JSEventListeners": 1909,
+    "LayoutObjects": 4859,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 21569,
+    "Resources": 222,
+    "ContextLifecycleStateObservers": 83,
+    "V8PerContextDatas": 3,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 6,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 2,
+    "ArrayBufferContents": 4,
+    "LayoutCount": 55,
+    "RecalcStyleCount": 129,
+    "LayoutDuration": 0.065949,
+    "RecalcStyleDuration": 0.07891,
+    "DevToolsCommandDuration": 0.027048,
+    "ScriptDuration": 0.040412,
+    "V8CompileDuration": 0.000152,
+    "TaskDuration": 0.443458,
+    "TaskOtherDuration": 0.230987,
+    "ThreadTime": 0.432261,
+    "ProcessTime": 1.299974,
+    "JSHeapUsedSize": 4766972,
+    "JSHeapTotalSize": 7077888,
+    "FirstMeaningfulPaint": 22477.42956,
+    "DomContentLoaded": 22477.483676,
+    "NavigationStart": 22477.359878
+  },
+  "finished_at": 1793620804.7300851
+}

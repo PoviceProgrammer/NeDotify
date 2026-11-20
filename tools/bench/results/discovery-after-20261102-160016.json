@@ -1,0 +1,496 @@
+{
+  "known_fingerprint": "d94f81921ea02c89065e9fa23c591fb1890859faa45933de91c190b214be7995",
+  "signals": {
+    "known": 66,
+    "artists": 20
+  },
+  "seeds": [
+    {
+      "source": "youtube",
+      "source_id": "MsH08whXHls",
+      "artist": "BG Muz",
+      "title": "PHARAON - BLACK SIEMENS (remix by NID)"
+    },
+    {
+      "source": "soundcloud",
+      "source_id": "2426517300",
+      "artist": "Cube Rubik",
+      "title": "Я навайбкодил ВПН"
+    },
+    {
+      "source": "soundcloud",
+      "source_id": "2393146779",
+      "artist": "@svrreal",
+      "title": "ЗАНЫ ПРЕПАРАТЫ / ZANY (HARDTEKK)"
+    },
+    {
+      "source": "soundcloud",
+      "source_id": "2331544133",
+      "artist": "HELLBLADE",
+      "title": "ZELENUYU (ultra slowed)"
+    },
+    {
+      "source": "soundcloud",
+      "source_id": "715124080",
+      "artist": "The Weeknd",
+      "title": "Blinding Lights"
+    }
+  ],
+  "artists": [
+    "BG Muz",
+    "PHARAOH",
+    "The Weeknd"
+  ],
+  "providers": [
+    {
+      "name": "soundcloud_related",
+      "ms": 286,
+      "count": 20,
+      "new": 20,
+      "examples": [
+        {
+          "source": "soundcloud",
+          "source_id": "2427171108",
+          "artist": "BLAZER 993",
+          "title": "боллим"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2425486485",
+          "artist": "#голодный",
+          "title": "blossom (speed up)"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2426957139",
+          "artist": "crocodiller",
+          "title": "crocodiller (feat. crocodiller)"
+        }
+      ]
+    },
+    {
+      "name": "youtube_radio",
+      "ms": 770,
+      "count": 20,
+      "new": 20,
+      "examples": [
+        {
+          "source": "youtube",
+          "source_id": "TByoaC9dkko",
+          "artist": "Soys",
+          "title": "Pharaoh x Пошлая Молли - BLACK СТОП (Tik tok,Тик ток) mashup by.dmitrsolo / 2017 Aesthetic,тренды"
+        },
+        {
+          "source": "youtube",
+          "source_id": "BkIyHX2h7MY",
+          "artist": "V I L L I A N",
+          "title": "Garou -『Amv』$UICIDEBOY$//LTE"
+        },
+        {
+          "source": "youtube",
+          "source_id": "mghF9mOddTc",
+          "artist": "Falxce",
+          "title": "Chill Phonk (Slowed + Reverb)"
+        }
+      ]
+    },
+    {
+      "name": "deezer_radio:BG Muz",
+      "ms": 379,
+      "count": 30,
+      "new": 30,
+      "examples": [
+        {
+          "source": "deezer",
+          "source_id": "1677832857",
+          "artist": "Big Kuza",
+          "title": "Hear This Shit"
+        },
+        {
+          "source": "deezer",
+          "source_id": "1042576522",
+          "artist": "Yung Bleu",
+          "title": "Level 3"
+        },
+        {
+          "source": "deezer",
+          "source_id": "1833579827",
+          "artist": "Big Kuza",
+          "title": "Different With You"
+        }
+      ]
+    },
+    {
+      "name": "deezer_related_artists",
+      "artist": "BG Muz",
+      "count": 6,
+      "ms": 1026
+    },
+    {
+      "name": "deezer_radio:PHARAOH",
+      "ms": 315,
+      "count": 30,
+      "new": 30,
+      "examples": [
+        {
+          "source": "deezer",
+          "source_id": "1988992507",
+          "artist": "Pharaøh",
+          "title": "House of Memories"
+        },
+        {
+          "source": "deezer",
+          "source_id": "2876327672",
+          "artist": "Nito-Onna",
+          "title": "Car Keys"
+        },
+        {
+          "source": "deezer",
+          "source_id": "3996354961",
+          "artist": "Pharaøh",
+          "title": "I Won't Let You Go"
+        }
+      ]
+    },
+    {
+      "name": "deezer_related_artists",
+      "artist": "PHARAOH",
+      "count": 6,
+      "ms": 669
+    },
+    {
+      "name": "verified_deezer_discovery",
+      "ms": 2216,
+      "count": 30,
+      "new": 29,
+      "examples": [
+        {
+          "source": "deezer",
+          "source_id": "1278960402",
+          "artist": "The Weeknd",
+          "title": "House Of Balloons / Glass Table Girls"
+        },
+        {
+          "source": "deezer",
+          "source_id": "2047662477",
+          "artist": "Metro Boomin",
+          "title": "Creepin'"
+        },
+        {
+          "source": "deezer",
+          "source_id": "136889400",
+          "artist": "The Weeknd",
+          "title": "Starboy"
+        }
+      ]
+    },
+    {
+      "name": "verified_deezer_public_positive_control",
+      "ms": 1468,
+      "count": 30,
+      "new": 30,
+      "examples": [
+        {
+          "source": "deezer",
+          "source_id": "3135562",
+          "artist": "Daft Punk",
+          "title": "Voyager"
+        },
+        {
+          "source": "deezer",
+          "source_id": "1359861952",
+          "artist": "Polo & Pan",
+          "title": "Ani Kuni"
+        },
+        {
+          "source": "deezer",
+          "source_id": "3167851",
+          "artist": "Daft Punk - Stardust",
+          "title": "Human After All / Together / One More Time / Music Sounds Better with You"
+        }
+      ]
+    }
+  ],
+  "mixes_completed": true,
+  "mix_wall_ms": 4281,
+  "mix_cpu_ms": 484,
+  "mixes": [
+    {
+      "title": "Любимые и знакомые",
+      "count": 12,
+      "unique": 12,
+      "new": 0,
+      "sources": {
+        "soundcloud": 9,
+        "youtube": 2,
+        "spotify": 1
+      },
+      "evidence": {
+        "": 12
+      },
+      "new_examples": []
+    },
+    {
+      "title": "Открытия для вас",
+      "count": 12,
+      "unique": 12,
+      "new": 12,
+      "sources": {
+        "youtube": 5,
+        "soundcloud": 4,
+        "deezer": 3
+      },
+      "evidence": {
+        "youtube_radio": 3,
+        "soundcloud_related": 4,
+        "deezer_radio": 3,
+        "artist_search": 2
+      },
+      "new_examples": [
+        {
+          "source": "youtube",
+          "source_id": "TByoaC9dkko",
+          "title": "Pharaoh x Пошлая Молли - BLACK СТОП (Tik tok,Тик ток) mashup by.dmitrsolo / 2017 Aesthetic,тренды",
+          "artist": "Soys"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "1582443743",
+          "title": "I AM GREAT, TO PEOPLE WHO LOVE GOD O.",
+          "artist": "QUEEN BELEMZY MINISTRIES - SCHOOL OF POWER"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2427171108",
+          "title": "боллим",
+          "artist": "BLAZER 993"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2392118142",
+          "title": "Zany Preparaty Hardtekk - WiNDeiL",
+          "artist": "SOWL"
+        }
+      ]
+    },
+    {
+      "title": "Ежедневный микс 1",
+      "count": 9,
+      "unique": 9,
+      "new": 7,
+      "sources": {
+        "youtube": 5,
+        "soundcloud": 4
+      },
+      "evidence": {
+        "youtube_radio": 4,
+        "soundcloud_related": 3,
+        "": 2
+      },
+      "new_examples": [
+        {
+          "source": "youtube",
+          "source_id": "TByoaC9dkko",
+          "title": "Pharaoh x Пошлая Молли - BLACK СТОП (Tik tok,Тик ток) mashup by.dmitrsolo / 2017 Aesthetic,тренды",
+          "artist": "Soys"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2392118142",
+          "title": "Zany Preparaty Hardtekk - WiNDeiL",
+          "artist": "SOWL"
+        },
+        {
+          "source": "youtube",
+          "source_id": "BhVOl7JSWrQ",
+          "title": "WRXXTCH - Complicated For Me",
+          "artist": "BG Muz"
+        },
+        {
+          "source": "youtube",
+          "source_id": "CffowlcXdlU",
+          "title": "Взглянем В Глаза Правде",
+          "artist": "PHARAOH"
+        }
+      ]
+    },
+    {
+      "title": "Ежедневный микс 2",
+      "count": 8,
+      "unique": 8,
+      "new": 3,
+      "sources": {
+        "soundcloud": 7,
+        "youtube": 1
+      },
+      "evidence": {
+        "soundcloud_related": 3,
+        "": 5
+      },
+      "new_examples": [
+        {
+          "source": "soundcloud",
+          "source_id": "2392675350",
+          "title": "ZANY_HARDTEKK",
+          "artist": "WiNDeiL"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2430542523",
+          "title": "O grande silencio  [Part. Peixe Fantasma]",
+          "artist": "Grupo Porco"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2342157779",
+          "title": "ACIDTEKK (super slowed)",
+          "artist": "HELLBLADE"
+        }
+      ]
+    },
+    {
+      "title": "Ежедневный микс 3",
+      "count": 5,
+      "unique": 5,
+      "new": 2,
+      "sources": {
+        "soundcloud": 5
+      },
+      "evidence": {
+        "soundcloud_related": 2,
+        "": 3
+      },
+      "new_examples": [
+        {
+          "source": "soundcloud",
+          "source_id": "2427171108",
+          "title": "боллим",
+          "artist": "BLAZER 993"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2425486485",
+          "title": "blossom (speed up)",
+          "artist": "#голодный"
+        }
+      ]
+    },
+    {
+      "title": "Ежедневный микс 4",
+      "count": 12,
+      "unique": 12,
+      "new": 12,
+      "sources": {
+        "soundcloud": 2,
+        "deezer": 10
+      },
+      "evidence": {
+        "soundcloud_related": 2,
+        "deezer_radio": 10
+      },
+      "new_examples": [
+        {
+          "source": "soundcloud",
+          "source_id": "1582443743",
+          "title": "I AM GREAT, TO PEOPLE WHO LOVE GOD O.",
+          "artist": "QUEEN BELEMZY MINISTRIES - SCHOOL OF POWER"
+        },
+        {
+          "source": "deezer",
+          "source_id": "137727241",
+          "title": "Often (Kygo Remix)",
+          "artist": "The Weeknd"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "1621759326",
+          "title": "Remix- I Am Great To People Who Love God",
+          "artist": "QUEEN BELEMZY MINISTRIES - SCHOOL OF POWER"
+        },
+        {
+          "source": "deezer",
+          "source_id": "908859842",
+          "title": "Faith",
+          "artist": "The Weeknd"
+        }
+      ]
+    }
+  ],
+  "shared_overlap": [
+    {
+      "a": 0,
+      "b": 1,
+      "shared": 0
+    },
+    {
+      "a": 0,
+      "b": 2,
+      "shared": 2
+    },
+    {
+      "a": 0,
+      "b": 3,
+      "shared": 4
+    },
+    {
+      "a": 0,
+      "b": 4,
+      "shared": 1
+    },
+    {
+      "a": 0,
+      "b": 5,
+      "shared": 0
+    },
+    {
+      "a": 1,
+      "b": 2,
+      "shared": 4
+    },
+    {
+      "a": 1,
+      "b": 3,
+      "shared": 1
+    },
+    {
+      "a": 1,
+      "b": 4,
+      "shared": 1
+    },
+    {
+      "a": 1,
+      "b": 5,
+      "shared": 4
+    },
+    {
+      "a": 2,
+      "b": 3,
+      "shared": 1
+    },
+    {
+      "a": 2,
+      "b": 4,
+      "shared": 0
+    },
+    {
+      "a": 2,
+      "b": 5,
+      "shared": 0
+    },
+    {
+      "a": 3,
+      "b": 4,
+      "shared": 0
+    },
+    {
+      "a": 3,
+      "b": 5,
+      "shared": 0
+    },
+    {
+      "a": 4,
+      "b": 5,
+      "shared": 0
+    }
+  ]
+}

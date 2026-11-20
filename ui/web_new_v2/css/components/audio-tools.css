@@ -29,7 +29,7 @@
 #audio-tools-dialog select { box-sizing: border-box; width: 100%; margin-top: 8px; border: 1px solid var(--border); border-radius: 12px; padding: 7px; color: inherit; background: var(--bg-card); font: inherit; }
 #audio-tools-dialog .audio-hq-controls { display: flex; flex-direction: column; gap: 3px; }
 #audio-tools-dialog .audio-sleep-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; margin-top: 14px; }
-#audio-tools-dialog .audio-sleep-options button { justify-content: center; padding: 8px 5px; font-size: 11px; transition: none !important; }
+#audio-tools-dialog .audio-sleep-options button { justify-content: center; padding: 8px 5px; font-size: 11px; transition: background-color 150ms, color 150ms; }
 #audio-tools-dialog .audio-sleep-options button[aria-pressed="true"] { background: var(--text-main); color: var(--bg-card); }
 #audio-tools-dialog p { font-size: 11px; color: var(--text-sec); line-height: 1.5; }
 #audio-tools-dialog footer { flex: 0 0 auto; display: flex; justify-content: flex-end; margin: 0; padding: 0; }

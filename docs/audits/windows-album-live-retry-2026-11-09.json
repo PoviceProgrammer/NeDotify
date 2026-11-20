@@ -1,0 +1,58 @@
+{
+  "date": "2026-11-09",
+  "query": "Coldplay Parachutes",
+  "profile": "temporary, no credentials",
+  "sources": [
+    {
+      "source": "youtube",
+      "completed": true,
+      "search_ms": 1530,
+      "search_count": 20,
+      "album": {
+        "source_id": "MPREb_oBucXyijinj",
+        "title": "Parachutes",
+        "artist": "Coldplay",
+        "year": "2000",
+        "cover_url": "https://yt3.googleusercontent.com/7RK5kFu8RjjulsxsPCJ55wmJLchKaaIRAYih0ldj--RGbnOOdA0U2vmLWyVfjPW82nR-Dwm2r8PhEi61=w544-h544-l90-rj"
+      },
+      "status": "found",
+      "track_count": 10,
+      "details_error": null,
+      "durations_known": 10
+    },
+    {
+      "source": "itunes_legacy_spotify",
+      "completed": true,
+      "search_ms": 741,
+      "search_count": 2,
+      "album": {
+        "source_id": "1122782080",
+        "title": "Parachutes",
+        "artist": "Coldplay",
+        "year": "2000",
+        "cover_url": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/f5/93/8c/f5938c49-964c-31d1-4b33-78b634f71fb7/190295978075.jpg/600x600bb.jpg"
+      },
+      "status": "found",
+      "track_count": 10,
+      "details_error": null,
+      "durations_known": 10
+    },
+    {
+      "source": "deezer",
+      "completed": true,
+      "search_ms": 499,
+      "search_count": 3,
+      "album": {
+        "source_id": "301663",
+        "title": "Parachutes",
+        "artist": "Coldplay",
+        "year": null,
+        "cover_url": "https://cdn-images.dzcdn.net/images/cover/970dce98eeea6729244c0ae71707a83d/500x500-000000-80-0-0.jpg"
+      },
+      "status": "found",
+      "track_count": 10,
+      "details_error": null,
+      "durations_known": 10
+    }
+  ]
+}

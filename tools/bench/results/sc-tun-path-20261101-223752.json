@@ -1,0 +1,7 @@
+{
+  "source": "soundcloud",
+  "source_id": "2393146779",
+  "status": "failed",
+  "valid": false,
+  "error_type": "ValueError"
+}

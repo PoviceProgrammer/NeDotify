@@ -1,0 +1,479 @@
+{
+  "scenario": "startup",
+  "mode": "playback-latency",
+  "started_at": 1793602803.5178018,
+  "ok": true,
+  "error": null,
+  "data": {
+    "actual_bridge": true,
+    "api_stubs": false,
+    "results": [
+      {
+        "bridge_ms": 22,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2215597907",
+        "time_to_audio_ms": 3788,
+        "within_3s": false,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "_get_client_id",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4484.4191313,
+            "ms": 0.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_api_get",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4484.4191701,
+            "status": 200,
+            "ms": 666.7,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "connect",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4485.0992672,
+            "ms": 376.6,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "_public_json",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4485.0860224,
+            "ms": 571.6,
+            "thread_cpu_ms": 31.2
+          },
+          {
+            "stage": "connect",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4485.6588253,
+            "ms": 387.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_media_url_is_servable",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4485.6576244,
+            "result": true,
+            "ms": 652.1,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-239 (process_request_thread)",
+            "started": 4487.3300537,
+            "ms": 385.4,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      },
+      {
+        "bridge_ms": 13,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2104544877",
+        "time_to_audio_ms": 2009,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "_get_client_id",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4488.512325,
+            "ms": 0.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_api_get",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4488.5123605,
+            "status": 200,
+            "ms": 190.3,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "_public_json",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4488.7028008,
+            "ms": 174.6,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "_media_url_is_servable",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4488.8774551,
+            "result": true,
+            "ms": 293.6,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      },
+      {
+        "bridge_ms": 8,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2331544133",
+        "time_to_audio_ms": 1838,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "_get_client_id",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4490.8359329,
+            "ms": 0.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_api_get",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4490.8359596,
+            "status": 200,
+            "ms": 196.2,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_public_json",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4491.0321876,
+            "ms": 173.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_media_url_is_servable",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4491.2051863,
+            "result": true,
+            "ms": 251.7,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      },
+      {
+        "bridge_ms": 11,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2289890927",
+        "time_to_audio_ms": 2024,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "_get_client_id",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4492.9797112,
+            "ms": 0.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_api_get",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4492.979746,
+            "status": 200,
+            "ms": 172.8,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_public_json",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4493.1526061,
+            "ms": 167.9,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_media_url_is_servable",
+            "thread": "SoundCloudPlayback_0",
+            "started": 4493.320499,
+            "result": true,
+            "ms": 257.5,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      },
+      {
+        "bridge_ms": 8,
+        "playing": true,
+        "source": "youtube",
+        "source_id": "dQw4w9WgXcQ",
+        "time_to_audio_ms": 4042,
+        "within_3s": false,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 4495.4690737,
+            "host": "www.youtube.com",
+            "path": "/watch",
+            "ms": 571.8,
+            "thread_cpu_ms": 31.2
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 4496.8103482,
+            "host": "www.youtube.com",
+            "path": "/youtubei/v1/player",
+            "ms": 144.2,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 4496.9844484,
+            "host": "manifest.googlevideo.com",
+            "path": "<redacted>",
+            "ms": 423.1,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 4497.4255684,
+            "host": "www.youtube.com",
+            "path": "<redacted>",
+            "ms": 69.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "extract_info",
+            "thread": "YouTubePlayback_0",
+            "started": 4495.4018343,
+            "ms": 3188.3,
+            "thread_cpu_ms": 484.4
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-300 (process_request_thread)",
+            "started": 4498.6986384,
+            "ms": 351.1,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      },
+      {
+        "bridge_ms": 6,
+        "playing": true,
+        "source": "spotify",
+        "source_id": "ytsearch1: Rick Astley - Never Gonna Give You Up",
+        "time_to_audio_ms": 1200,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "connect",
+            "thread": "Thread-312 (process_request_thread)",
+            "started": 4500.1939086,
+            "ms": 361.6,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      },
+      {
+        "bridge_ms": 6,
+        "playing": true,
+        "source": "deezer",
+        "source_id": "3135556",
+        "time_to_audio_ms": 3866,
+        "within_3s": false,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 4502.3982655,
+            "host": "www.youtube.com",
+            "path": "/watch",
+            "ms": 465.7,
+            "thread_cpu_ms": 31.2
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 4503.5503012,
+            "host": "www.youtube.com",
+            "path": "/youtubei/v1/player",
+            "ms": 124.5,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 4503.7035338,
+            "host": "manifest.googlevideo.com",
+            "path": "<redacted>",
+            "ms": 414.8,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "extract_info",
+            "thread": "YouTubePlayback_0",
+            "started": 4502.3965072,
+            "ms": 1940.3,
+            "thread_cpu_ms": 328.1
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-326 (process_request_thread)",
+            "started": 4504.3742074,
+            "ms": 358.1,
+            "thread_cpu_ms": 15.6
+          }
+        ]
+      },
+      {
+        "bridge_ms": 8,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2215597907",
+        "time_to_audio_ms": 1246,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": []
+      },
+      {
+        "bridge_ms": 9,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2104544877",
+        "time_to_audio_ms": 1274,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": []
+      },
+      {
+        "bridge_ms": 20,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2331544133",
+        "time_to_audio_ms": 1226,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": []
+      },
+      {
+        "bridge_ms": 18,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2289890927",
+        "time_to_audio_ms": 1245,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": []
+      },
+      {
+        "bridge_ms": 7,
+        "playing": true,
+        "source": "youtube",
+        "source_id": "dQw4w9WgXcQ",
+        "time_to_audio_ms": 760,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "connect",
+            "thread": "Thread-393 (process_request_thread)",
+            "started": 4511.7838595,
+            "ms": 341.9,
+            "thread_cpu_ms": 15.6
+          }
+        ]
+      },
+      {
+        "bridge_ms": 7,
+        "playing": true,
+        "source": "spotify",
+        "source_id": "ytsearch1: Rick Astley - Never Gonna Give You Up",
+        "time_to_audio_ms": 722,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "connect",
+            "thread": "Thread-403 (process_request_thread)",
+            "started": 4512.7868643,
+            "ms": 388.7,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      },
+      {
+        "bridge_ms": 10,
+        "playing": true,
+        "source": "deezer",
+        "source_id": "3135556",
+        "time_to_audio_ms": 631,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "connect",
+            "thread": "Thread-412 (process_request_thread)",
+            "started": 4513.8372135,
+            "ms": 324.0,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      }
+    ],
+    "all_within_5s": true,
+    "note": "First advancing decoded media clock, physical speaker output not assessed"
+  },
+  "perf": {
+    "Timestamp": 4514.727463,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 1240,
+    "LayoutObjects": 1912,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 10908,
+    "Resources": 74,
+    "ContextLifecycleStateObservers": 47,
+    "V8PerContextDatas": 1,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 2,
+    "LayoutCount": 552,
+    "RecalcStyleCount": 849,
+    "LayoutDuration": 0.30025,
+    "RecalcStyleDuration": 1.755112,
+    "DevToolsCommandDuration": 0.136292,
+    "ScriptDuration": 0.17639,
+    "V8CompileDuration": 0.000207,
+    "TaskDuration": 3.923724,
+    "TaskOtherDuration": 1.555473,
+    "ThreadTime": 3.906868,
+    "ProcessTime": 6.771873,
+    "JSHeapUsedSize": 4873656,
+    "JSHeapTotalSize": 6815744,
+    "FirstMeaningfulPaint": 4483.930026,
+    "DomContentLoaded": 4483.949488,
+    "NavigationStart": 4483.786873
+  },
+  "finished_at": 1793602835.8858662,
+  "seeded_user_cache_rows": 3
+}

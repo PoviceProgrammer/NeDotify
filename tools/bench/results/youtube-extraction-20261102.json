@@ -1,0 +1,193 @@
+[
+  {
+    "mode": "default",
+    "ok": true,
+    "ms": 2994,
+    "audio": {
+      "format_id": "251",
+      "ext": "webm",
+      "abr": 128.93,
+      "acodec": "opus",
+      "duration": 213
+    },
+    "requests": [
+      {
+        "host": "www.youtube.com",
+        "path": "/watch",
+        "ms": 451
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "/youtubei/v1/player",
+        "ms": 115
+      },
+      {
+        "host": "manifest.googlevideo.com",
+        "path": "<redacted>",
+        "ms": 482
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "<redacted>",
+        "ms": 64
+      }
+    ],
+    "video_id": "dQw4w9WgXcQ"
+  },
+  {
+    "mode": "audio",
+    "ok": true,
+    "ms": 2460,
+    "audio": {
+      "format_id": "251",
+      "ext": "webm",
+      "abr": 128.93,
+      "acodec": "opus",
+      "duration": 213
+    },
+    "requests": [
+      {
+        "host": "www.youtube.com",
+        "path": "/youtubei/v1/player",
+        "ms": 406
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "/iframe_api",
+        "ms": 93
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "<redacted>",
+        "ms": 68
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "/youtubei/v1/player",
+        "ms": 165
+      },
+      {
+        "host": "manifest.googlevideo.com",
+        "path": "<redacted>",
+        "ms": 468
+      }
+    ],
+    "video_id": "dQw4w9WgXcQ"
+  },
+  {
+    "mode": "default",
+    "ok": true,
+    "ms": 1977,
+    "audio": {
+      "format_id": "251",
+      "ext": "webm",
+      "abr": 127.5,
+      "acodec": "opus",
+      "duration": 367
+    },
+    "requests": [
+      {
+        "host": "www.youtube.com",
+        "path": "/watch",
+        "ms": 449
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "/youtubei/v1/player",
+        "ms": 128
+      },
+      {
+        "host": "manifest.googlevideo.com",
+        "path": "<redacted>",
+        "ms": 389
+      }
+    ],
+    "video_id": "YQHsXMglC9A"
+  },
+  {
+    "mode": "audio",
+    "ok": false,
+    "error": "DownloadError",
+    "requests": [
+      {
+        "host": "www.youtube.com",
+        "path": "/youtubei/v1/player",
+        "ms": 441
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "/iframe_api",
+        "ms": 99
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "<redacted>",
+        "ms": 84
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "/youtubei/v1/player",
+        "ms": 137
+      }
+    ],
+    "video_id": "YQHsXMglC9A"
+  },
+  {
+    "mode": "default",
+    "ok": true,
+    "ms": 2048,
+    "audio": {
+      "format_id": "251",
+      "ext": "webm",
+      "abr": 130.862,
+      "acodec": "opus",
+      "duration": 282
+    },
+    "requests": [
+      {
+        "host": "www.youtube.com",
+        "path": "/watch",
+        "ms": 504
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "/youtubei/v1/player",
+        "ms": 174
+      },
+      {
+        "host": "manifest.googlevideo.com",
+        "path": "<redacted>",
+        "ms": 551
+      }
+    ],
+    "video_id": "kJQP7kiw5Fk"
+  },
+  {
+    "mode": "audio",
+    "ok": false,
+    "error": "DownloadError",
+    "requests": [
+      {
+        "host": "www.youtube.com",
+        "path": "/youtubei/v1/player",
+        "ms": 491
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "/iframe_api",
+        "ms": 117
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "<redacted>",
+        "ms": 93
+      },
+      {
+        "host": "www.youtube.com",
+        "path": "/youtubei/v1/player",
+        "ms": 120
+      }
+    ],
+    "video_id": "kJQP7kiw5Fk"
+  }
+]

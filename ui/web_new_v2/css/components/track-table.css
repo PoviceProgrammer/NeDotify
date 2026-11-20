@@ -27,6 +27,11 @@
 }
 
 /* ─── 2. Unified Track Item ─── */
+/* Rows deliberately have no entrance animation. `animation: fadeIn` used to
+   live here and every list rebuild — streaming search chunks, queue_updated,
+   personal-wave tail refreshes — replayed it for all rows at once, which is the
+   flash those flows were blamed for. New rows are revealed by
+   NeDotifyMotion.reveal/settleList (opacity+translate, cancellable, guarded). */
 .track-item {
     display: flex;
     align-items: center;
@@ -36,7 +41,10 @@
     border: 1px solid transparent;
     background: transparent;
     cursor: pointer;
-    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.2s ease;
+    /* padding-left is part of this list because `.track-item.playing` widens it
+       by 4px: without a transition the text of the newly selected row snapped
+       sideways. Only the playing row changes it, so this stays a one-box cost. */
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.2s ease, padding-left 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
     user-select: none;
     position: relative;
     /* Off-screen rows of a long list skip layout/paint/style work. The
@@ -60,7 +68,11 @@
        the two agree and the scrollbar never moves. */
     content-visibility: auto;
     contain-intrinsic-size: auto 66px;
-    animation: fadeIn 0.3s ease forwards;
+}
+
+/* A recommendation caption adds a third text line (13px) to the 66px row. */
+.track-item.has-recommendation-reason {
+    contain-intrinsic-size: auto 73px;
 }
 
 .track-item:hover {
@@ -73,6 +85,13 @@
     background: var(--color-surface-active, rgba(244, 63, 94, 0.14));
     border-color: var(--color-border-glow, rgba(244, 63, 94, 0.45));
 }
+
+/* The playing row's extra 4px inset is a state marker, not motion. */
+@media (prefers-reduced-motion: reduce) {
+    .track-item { transition: none; }
+}
+:root.perf-low .track-item,
+:root.battery-saver-active .track-item { transition: none; }
 
 .track-item.selected {
     background: var(--color-surface-active, rgba(244, 63, 94, 0.14));
@@ -132,17 +151,20 @@
 
 .track-equalizer-bars .eq-bar {
     width: 3px;
+    height: 100%;
     background: var(--color-primary, var(--primary, #f43f5e));
     border-radius: 1px;
+    transform-origin: bottom;
     animation: eqPulse 1s ease-in-out infinite alternate;
 }
 
 .track-equalizer-bars .eq-bar:nth-child(2) { animation-delay: 0.2s; }
 .track-equalizer-bars .eq-bar:nth-child(3) { animation-delay: 0.4s; }
 
+/* Animate the compositor-friendly axis: the bars keep their 14px layout box. */
 @keyframes eqPulse {
-    0% { height: 3px; }
-    100% { height: 14px; }
+    0% { transform: scaleY(0.2); }
+    100% { transform: scaleY(1); }
 }
 
 /* ─── 4. Source Provider Badges ─── */

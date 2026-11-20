@@ -11,9 +11,9 @@
    so all of them silently resolved the 84px fallback — even though the bar's
    height is not constant:
 
-       default          84px
-       <= 900px         80px   (bottom: 16px)
-       <= 600px         68px   (bottom: 72px  ->  top edge at 140px)
+       default          96px   (home-refresh.css publishes the same value)
+       <= 900px         88px
+       <= 760px        108px   (stacked two-row layout, home-refresh.css)
 
    With a hardcoded 84px the reserved space was 116px while the bar reached
    140px, so at 600px wide the bar covered the last 24px of content. The
@@ -31,10 +31,9 @@
    descendants — it would not reach #main-content or #sidebar, which are the
    elements actually reserving the space. */
 :root {
-    --player-bar-height: 84px;
+    --player-bar-height: 96px;
     --player-bar-offset: 20px;
     --player-progress-opacity: .82;
-    --player-bar-inline-inset: 16px;
 }
 
 #macos-cover-fallback { display: none; }
@@ -45,7 +44,7 @@
     bottom: 20px;
     left: 24px;
     right: 24px;
-    height: 84px;
+    height: 96px;
     border-radius: 20px;
     background: color-mix(in srgb, var(--color-surface, rgba(255, 255, 255, 0.035)) calc(var(--app-bg-opacity, 1) * 88%), rgba(14, 7, 17, 0.75));
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -53,7 +52,7 @@
     display: grid;
     grid-template-columns: minmax(240px, 1.2fr) 2fr minmax(160px, 0.8fr);
     align-items: center;
-    padding: 0 var(--space-lg, 24px) 0 var(--space-md, 16px);
+    padding: 0 var(--space-lg, 24px) 6px var(--space-md, 16px);
     z-index: 50;
     -webkit-app-region: no-drag;
     gap: var(--space-md, 16px);
@@ -234,12 +233,6 @@
     box-shadow: 0 6px 22px rgba(var(--color-primary-rgb, 244, 63, 94), 0.65);
 }
 
-.btn-play-main.is-playing {
-    width: 64px;
-    border-radius: 21px;
-    transform: scale(1);
-}
-
 /* Shared seek geometry. The hit areas are fixed; only painted lines grow. */
 .pb-progress { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 600px; min-width: 0; }
 .pb-time { font-family: var(--font-mono, monospace); font-size: 11px; color: var(--text-sec); min-width: 36px; flex-shrink: 0; text-align: center; user-select: none; }
@@ -270,8 +263,6 @@
     transform: rotate(45deg);
 }
 .track-moment-pin:hover::before { background: #ffe5a7; }
-#pb-moment-pin { top: auto; bottom: -5px; transform: translateX(-50%); }
-:root[data-progress-style="panel"] #pb-moment-pin { bottom: 0; }
 #track-options-moment-items svg { width: 14px; height: 14px; flex: none; }
 .progress-track[aria-disabled="true"] { cursor: default; }
 .progress-track[aria-disabled="true"] .seek-thumb { opacity: 0; }
@@ -279,46 +270,127 @@
 /* Preview stays within the slider at both endpoints, including narrow windows. */
 .progress-track[data-seek-preview]::after { content: attr(data-seek-preview); position: absolute; left: clamp(28px, var(--seek-pointer, 50%), calc(100% - 28px)); bottom: calc(100% + 5px); transform: translateX(-50%); padding: 4px 7px; border-radius: 6px; color: var(--text-main, #fff); background: var(--bg-card, #202328); border: 1px solid var(--border, #ffffff30); font: 11px/1.3 var(--font-mono, monospace); white-space: nowrap; pointer-events: none; z-index: 5; box-shadow: 0 2px 8px #0003; }
 .progress-track:focus-visible { outline: 2px solid var(--player-progress-color, var(--primary)); outline-offset: 2px; }
-/* This overlay never participates in the transport grid or covers controls. */
-#player-bar > .pb-progress-surface { position: absolute; inset: 0; z-index: 1; display: block; width: auto; max-width: none; margin: 0; overflow: visible; pointer-events: none; }
+/* The progress row lives inside .pb-controls, right under the transport
+   buttons (reference layout: circular accent button, slider row beneath it).
+   It inherits the z-index-2 stacking of .pb-controls, so it stays above the
+   panel-fill tint. */
 #player-bar > .pb-track, #player-bar > .pb-controls, #player-bar > .pb-right { position: relative; z-index: 2; pointer-events: none; }
 #player-bar > .pb-track > *, #player-bar > .pb-controls .pb-buttons, #player-bar > .pb-right > * { pointer-events: auto; }
-#player-bar > .pb-progress-surface .pb-time { position: absolute; bottom: 4px; font-size: 10px; line-height: 1; pointer-events: none; }
-#player-bar > .pb-progress-surface #pb-time-current { left: 88px; text-align: left; }
-#player-bar > .pb-progress-surface #pb-time-total { right: 10px; text-align: right; }
-/* Expand by the actual symmetric panel margins, including its borders. This
-   also stays edge-to-edge under CSS zoom, where 100vw would be scaled twice. */
-#player-bar > .pb-progress-surface #pb-progress-track { position: absolute; inset: auto auto -1px 50%; width: calc(100% + 2 * var(--player-bar-inline-inset) + 2px); height: 12px; transform: translateX(-50%); border-radius: 0; background: transparent; pointer-events: auto; }
-#player-bar #pb-progress-track::before, #player-bar #pb-progress-fill { top: auto; bottom: 0; height: 3px; border-radius: 0; transition: height .15s ease; }
-#player-bar #pb-progress-track:is(:hover, :focus-visible, [data-seeking])::before, #player-bar #pb-progress-track:is(:hover, :focus-visible, [data-seeking]) #pb-progress-fill { height: 6px; }
-#player-bar #pb-progress-track .seek-thumb { top: auto; bottom: -2px; transform: translateX(-50%); opacity: 0; transition: opacity .15s; }
-#player-bar #pb-progress-track:is(:hover, :focus-visible, [data-seeking]) .seek-thumb { opacity: 1; }
-#player-bar #pb-progress-track[aria-disabled="true"] .seek-thumb { opacity: 0; }
+#player-bar > .pb-controls .pb-progress { pointer-events: auto; }
 #player-bar #pb-waveform-canvas { display: none; }
-.progress-wave { display: none; position: absolute; inset: auto 0 0; width: 100%; height: 12px; pointer-events: none; }
-:root[data-progress-style="solid"] #player-bar .progress-wave { display: block; }
-/* Paint the wave in the lower window inset, below the elapsed/duration row. */
-:root[data-progress-style="solid"] #player-bar > .pb-progress-surface #pb-progress-track { bottom: -10px; }
-:root[data-progress-style="solid"] #player-bar #pb-progress-track::before,
-:root[data-progress-style="solid"] #player-bar #pb-progress-fill { visibility: hidden; }
-#player-bar #pb-progress-track[data-seek-preview]::after { bottom: calc(var(--player-bar-height) + 5px); }
+.progress-wave { display: none; position: absolute; inset: calc(50% - 6px) 0 auto; width: 100%; height: 12px; pointer-events: none; }
+:root[data-progress-style="solid"] .progress-wave { display: block; }
 /* Panel mode seeks by dragging the whole tinted surface. Keep its keyboard
-   slider and shared ARIA feedback, without painting an additional thin line. */
+   slider and shared ARIA feedback, without painting an additional thin line.
+   The centered row stays visible for the time labels only, and keeps a
+   pointer-free gap so the whole-bar drag surface is not interrupted. */
 #player-bar > #pb-panel-fill { position: absolute; inset: 0; border-radius: inherit; background: var(--player-progress-color, var(--primary)); opacity: calc(var(--player-progress-opacity, .82) * .14); transform-origin: left; pointer-events: none; z-index: 0; }
-:root[data-progress-style="solid"] #player-bar > #pb-panel-fill { visibility: hidden; }
+:root:not([data-progress-style="panel"]) #player-bar > #pb-panel-fill { visibility: hidden; }
 :root[data-progress-style="panel"] #player-bar { touch-action: none; cursor: ew-resize; }
-:root[data-progress-style="panel"] #player-bar > .pb-progress-surface { margin: 0; }
-:root[data-progress-style="panel"] #player-bar > .pb-progress-surface #pb-progress-track { inset: 0; width: auto; height: auto; transform: none; pointer-events: none; }
+:root[data-progress-style="panel"] #player-bar .pb-progress { pointer-events: none; }
 :root[data-progress-style="panel"] #player-bar #pb-progress-track::before,
 :root[data-progress-style="panel"] #player-bar #pb-progress-fill,
 :root[data-progress-style="panel"] #player-bar #pb-progress-track .seek-thumb { display: none; }
 /* Old waveform preferences are still safe to render during settings migration. */
 :root:is([data-progress-style="bars"], [data-progress-style="wave"]) #pp-progress-fill { display: block; }
-:root:is([data-progress-style="panel"], [data-progress-style="solid"]) .waveform-canvas { display: none; }
+:root:is([data-progress-style="panel"], [data-progress-style="solid"], [data-progress-style="line"], [data-progress-style="thin-line"], [data-progress-style="smooth"]) .waveform-canvas { display: none; }
+/* Use the same visual geometry for the previews and the seek surfaces. */
+:is([data-val="line"] .progress-style-preview, :root[data-progress-style="line"] .progress-track) { --seek-line-height: 5px; }
+:is([data-val="thin-line"] .progress-style-preview, :root[data-progress-style="thin-line"] .progress-track) {
+    --seek-line-height: 2px;
+    --seek-thumb-width: 14px;
+    --seek-thumb-height: 14px;
+}
+:is([data-val="smooth"] .progress-style-preview, :root[data-progress-style="smooth"] .progress-track) {
+    --seek-line-height: 4px;
+    --seek-thumb-width: 4px;
+    --seek-thumb-height: 18px;
+    --seek-gap: 5px;
+}
+.progress-track { --seek-progress: 0%; }
+.progress-track, .progress-style-preview {
+    --seek-ink: var(--player-progress-color, var(--primary));
+    --seek-edge: clamp(calc(var(--seek-thumb-width, 0px) / 2), var(--seek-progress, 0%), calc(100% - var(--seek-thumb-width, 0px) / 2));
+}
+html[data-progress-style]:is([data-progress-style="line"], [data-progress-style="thin-line"], [data-progress-style="smooth"], [data-progress-style="solid"], [data-progress-style="panel"]) body .progress-track {
+    background: transparent;
+}
+html[data-progress-style]:is([data-progress-style="line"], [data-progress-style="thin-line"], [data-progress-style="smooth"]) body .progress-track::before,
+.progress-style-preview::before {
+    top: calc(50% - var(--seek-line-height, 4px) / 2);
+    bottom: auto;
+    height: var(--seek-line-height, 4px);
+    border-radius: 6px;
+    background: linear-gradient(to right,
+        var(--seek-ink) 0 var(--seek-played-end, var(--seek-progress)),
+        transparent var(--seek-played-end, var(--seek-progress)) var(--seek-rest-start, var(--seek-progress)),
+        color-mix(in srgb, var(--seek-ink) 24%, transparent) var(--seek-rest-start, var(--seek-progress)) 100%);
+    opacity: var(--player-progress-opacity, .82);
+}
+:is([data-val="smooth"] .progress-style-preview, :root[data-progress-style="smooth"] .progress-track) {
+    --seek-played-end: min(var(--seek-progress), max(0px, var(--seek-edge) - var(--seek-gap)));
+    --seek-rest-start: min(100%, var(--seek-edge) + var(--seek-gap));
+}
+html[data-progress-style]:is([data-progress-style="line"], [data-progress-style="thin-line"], [data-progress-style="smooth"], [data-progress-style="solid"]) body .progress-fill,
+html[data-progress-style]:is([data-progress-style="line"], [data-progress-style="solid"]) body .seek-thumb,
+html[data-progress-style="solid"] body .progress-track::before { display: none; }
+html:is([data-progress-style="thin-line"], [data-progress-style="smooth"]) body .progress-track[aria-disabled="false"] .seek-thumb,
+.progress-style-preview::after {
+    top: 50%;
+    bottom: auto;
+    left: var(--seek-edge);
+    width: var(--seek-thumb-width, 0px);
+    height: var(--seek-thumb-height, 0px);
+    border-radius: 999px;
+    background: var(--seek-ink);
+    opacity: var(--player-progress-opacity, .82);
+    transform: translate(-50%, -50%);
+}
+html:is([data-progress-style="thin-line"], [data-progress-style="smooth"]) body .progress-track[aria-disabled="true"] .seek-thumb { display: none; }
+#opt-slider-type { margin-top: 20px; }
+.progress-style-options { display: grid; gap: 4px; margin-top: 10px; }
+#opt-slider-type .opt-card {
+    display: grid;
+    grid-template-columns: minmax(105px, 27%) minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    min-height: 42px;
+    padding: 6px 12px;
+    border: 0;
+    border-radius: 12px;
+    text-align: left;
+    color: var(--text-sec);
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+    transition: background-color 160ms ease, color 160ms ease;
+}
+#opt-slider-type .opt-card:hover, #opt-slider-type .opt-card.active {
+    background: color-mix(in srgb, var(--text-main) 9%, transparent);
+    color: var(--text-main);
+}
+#opt-slider-type .opt-card:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.progress-style-preview { --seek-progress: 55%; --seek-ink: currentColor; position: relative; height: 26px; }
+.progress-style-preview::before, .progress-style-preview::after { content: ''; position: absolute; }
+.progress-style-preview::before { inset-inline: 0; }
+[data-val="panel"] .progress-style-preview { --seek-line-height: 20px; }
+[data-val="solid"] .progress-style-preview::before {
+    background: color-mix(in srgb, currentColor 24%, transparent);
+    left: var(--seek-progress);
+}
+[data-val="solid"] .progress-style-preview::after {
+    inset: calc(50% - 6px) auto auto 0;
+    width: var(--seek-progress);
+    height: 12px;
+    transform: none;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='12'%3E%3Cpath d='M0 6Q10.5 14 21 6T42 6' fill='none' stroke='black' stroke-width='3'/%3E%3C/svg%3E") repeat-x;
+}
+#mini-player-overlay .mp-compact-row {
+    background: linear-gradient(to right, #fff1 var(--mp-progress, 0%), transparent var(--mp-progress, 0%));
+}
 #mini-player-overlay #mp-progress-fill { transition: none !important; }
 #mini-player-overlay #mp-progress-fill::after { display: none; }
-@media (max-width: 600px) { :root { --player-bar-inline-inset: 10px; } }
-@media (prefers-reduced-motion: reduce) { #player-bar #pb-progress-fill, #player-bar #pb-progress-track::before { transition: none; } }
+@media (prefers-reduced-motion: reduce) { #player-bar #pb-progress-fill, #player-bar #pb-progress-track::before, #opt-slider-type .opt-card { transition: none; } }
 
 /* ─── 5. Right: Volume & Queue Triggers ─── */
 .pb-right {
@@ -492,6 +564,13 @@
     contain-intrinsic-size: auto 56px;
 }
 
+/* Queue rows with a recommendation caption are ~13px taller than the 56px
+   base drawer row; keep the placeholder honest so the drawer scrollbar stays
+   still. */
+#queue-drawer-content .track-item.has-recommendation-reason {
+    contain-intrinsic-size: auto 69px;
+}
+
 #queue-drawer-content .track-item * {
     pointer-events: none;
 }
@@ -638,16 +717,19 @@
 
 
 /* ─── 9. Responsive Breakpoints ─── */
+/* NOTE: home-refresh.css loads after this file and publishes the effective
+   geometry for the current skin (`--player-bar-height` and the 3-column
+   grid). The values below are kept in sync so both sources agree. */
 @media (max-width: 900px) {
-    :root { --player-bar-height: 80px; --player-bar-offset: 16px; }
+    :root { --player-bar-height: 88px; --player-bar-offset: 16px; }
     #player-bar {
         bottom: 16px;
         left: 16px;
         right: 16px;
-        height: 80px;
+        height: 88px;
         border-radius: 16px;
         grid-template-columns: 1fr 2fr 0.5fr;
-        padding: 0 var(--space-md, 16px);
+        padding: 0 var(--space-md, 16px) 6px;
     }
 
     .player-page-container {
@@ -657,19 +739,15 @@
 }
 
 @media (max-width: 600px) {
-    :root { --player-bar-height: 68px; --player-bar-offset: 72px; }
+    :root { --player-bar-height: 108px; --player-bar-offset: 70px; }
     #player-bar {
-        bottom: 72px;
+        bottom: 16px;
         left: 12px;
         right: 12px;
-        height: 68px;
+        height: 108px;
         border-radius: 14px;
-        grid-template-columns: 1fr 1fr;
-        padding: 0 var(--space-sm, 8px);
-    }
-
-    .pb-right {
-        display: none;
+        grid-template-columns: minmax(0, 1fr) 215px;
+        padding: 12px 14px;
     }
 
     #main-content {
@@ -677,15 +755,15 @@
     }
 }
 
-/* The morph animates inside a fixed slot, never the transport row. */
+/* Transport slot keeps a fixed footprint so neighbours never move; the
+   button itself stays a round circle in both play states (reference layout).
+   JS still toggles the `is-playing` class and swaps the play/pause glyph. */
 .player-play-slot { display: inline-grid; place-items: center; flex-shrink: 0; vertical-align: middle; }
-.pb-play-slot { width: 64px; height: 48px; }
-#player-bar #pb-btn-play { width: 48px !important; min-width: 0 !important; height: 48px; border-radius: 50%; transition: width 220ms ease, border-radius 220ms ease, background-color 220ms ease !important; }
-#player-bar #pb-btn-play.is-playing { width: 64px !important; border-radius: 18px; }
+.pb-play-slot { width: 48px; height: 48px; }
+#player-bar #pb-btn-play { width: 48px !important; min-width: 0 !important; height: 48px; border-radius: 50%; transition: background-color 220ms ease, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1) !important; }
 @media (max-width: 760px) {
-    .pb-play-slot { width: 56px; height: 40px; }
+    .pb-play-slot { width: 40px; height: 40px; }
     #player-bar #pb-btn-play { width: 40px !important; height: 40px; }
-    #player-bar #pb-btn-play.is-playing { width: 56px !important; border-radius: 15px; }
 }
 @media (prefers-reduced-motion: reduce) {
     #player-bar #pb-btn-play { transition: none !important; }

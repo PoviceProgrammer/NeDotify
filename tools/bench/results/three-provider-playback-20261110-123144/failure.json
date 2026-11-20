@@ -1,0 +1,39 @@
+{
+  "clock": {
+    "buffering": true,
+    "paused": true,
+    "playbackRate": 1,
+    "positionMs": 0,
+    "seeking": false,
+    "trackKey": "[\"spotify\",\"ytsearch1: Radiohead - Creep (Acoustic)\",\"Creep (Acoustic)\",\"Radiohead\",\"Creep - EP\",\"\"]"
+  },
+  "current": {
+    "firstPlaying": false,
+    "nextPlaying": false,
+    "pause": false,
+    "query": "Radiohead Creep",
+    "resume": false,
+    "searchResults": 20,
+    "seek": false,
+    "source": "spotify",
+    "tracks": [
+      {
+        "artist": "Radiohead",
+        "source_id": "ytsearch1: Radiohead - Creep (Acoustic)",
+        "title": "Creep (Acoustic)"
+      },
+      {
+        "artist": "Thom Yorke",
+        "source_id": "ytsearch1: Thom Yorke - Creep (feat. Radiohead) [Very 2021 Rmx]",
+        "title": "Creep (feat. Radiohead) [Very 2021 Rmx]"
+      }
+    ]
+  },
+  "resolutions": [
+    {
+      "source": "spotify",
+      "source_id": "ytsearch1: Radiohead - Creep (Acoustic)",
+      "host": null
+    }
+  ]
+}

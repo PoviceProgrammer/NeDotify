@@ -4,7 +4,7 @@
     const root = document.documentElement;
     const loaded = new Map();
     const nodes = new Map();
-    const versions = '20261024_macos_player';
+    const versions = '20261120_motion';
     // The placeholders in index.html preserve the authored cascade order. They
     // have no href and issue no request until a page needs that pack.
     const deferred = {

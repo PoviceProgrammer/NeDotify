@@ -126,7 +126,7 @@ PUBLIC_METHODS = frozenset({
     'set_artist_alias',
     'set_cache_quota',
     'set_equalizer',
-    'set_mini_player_position',
+    'set_mini_player_expanded',
     'set_recommendation_feedback',
     'set_recommendation_collection',
     'set_snap_button_rect',

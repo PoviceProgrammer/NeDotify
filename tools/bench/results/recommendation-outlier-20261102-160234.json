@@ -1,0 +1,45 @@
+{
+  "metadata": [
+    {
+      "source_id": "1582443743",
+      "status": 200,
+      "title": "I AM GREAT, TO PEOPLE WHO LOVE GOD O.",
+      "genre": "Soundtrack",
+      "tag_list": "",
+      "duration": 179885,
+      "artist": "QUEEN BELEMZY MINISTRIES - SCHOOL OF POWER"
+    },
+    {
+      "source_id": "715124080",
+      "status": 200,
+      "title": "FELLOWSHIP WITH THE HOLY SPIRIT/POWERFUL TESTIMONY",
+      "genre": "Religion & Spirituality",
+      "tag_list": "",
+      "duration": 6896118,
+      "artist": "QUEEN BELEMZY MINISTRIES - SCHOOL OF POWER"
+    }
+  ],
+  "provenance": [
+    {
+      "seed_id": "2426517300",
+      "count": 30,
+      "outlier_present": false
+    },
+    {
+      "seed_id": "2393146779",
+      "count": 30,
+      "outlier_present": false
+    },
+    {
+      "seed_id": "2331544133",
+      "count": 30,
+      "outlier_present": false
+    },
+    {
+      "seed_id": "715124080",
+      "count": 29,
+      "outlier_present": true
+    }
+  ],
+  "wall_ms": 1028
+}

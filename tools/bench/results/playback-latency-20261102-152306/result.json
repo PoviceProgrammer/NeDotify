@@ -1,0 +1,1834 @@
+{
+  "scenario": "startup",
+  "mode": "playback-latency",
+  "started_at": 1793622186.8187556,
+  "ok": true,
+  "error": null,
+  "data": {
+    "actual_bridge": true,
+    "api_stubs": false,
+    "results": [
+      {
+        "bridge_ms": 25,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2215597907",
+        "time_to_audio_ms": 4022,
+        "within_3s": false,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "_get_client_id",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23868.0606686,
+            "ms": 210.3,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_api_get",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23868.270978,
+            "status": 200,
+            "ms": 678.5,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23868.9565641,
+            "ms": 385.6,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api-v2.soundcloud.com",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23868.9564983,
+            "ms": 588.4
+          },
+          {
+            "stage": "_public_json",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23868.9495905,
+            "ms": 595.4,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "connect",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23869.6157123,
+            "ms": 384.7,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23869.6156286,
+            "ms": 651.7
+          },
+          {
+            "stage": "_media_url_is_servable",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23869.5450348,
+            "result": true,
+            "ms": 731.6,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-243 (process_request_thread)",
+            "started": 23870.3257231,
+            "ms": 288.4
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-244 (process_request_thread)",
+            "started": 23870.6611232,
+            "ms": 280.8
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-245 (process_request_thread)",
+            "started": 23871.016581,
+            "ms": 148.0
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-246 (process_request_thread)",
+            "started": 23871.0168579,
+            "ms": 467.6,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-246 (process_request_thread)",
+            "started": 23871.0167979,
+            "ms": 634.1
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_1",
+            "started": 23872.04543,
+            "ms": 304.1,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      },
+      {
+        "bridge_ms": 6,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2104544877",
+        "time_to_audio_ms": 1718,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "_get_client_id",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23872.3971468,
+            "ms": 0.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_api_get",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23872.3971928,
+            "status": 200,
+            "ms": 187.5,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_7",
+            "started": 23872.4500822,
+            "ms": 293.6,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api-v2.soundcloud.com",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23872.5848165,
+            "ms": 177.7
+          },
+          {
+            "stage": "_public_json",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23872.584742,
+            "ms": 177.9,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_7",
+            "started": 23872.4500047,
+            "ms": 370.9
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23872.7627039,
+            "ms": 272.7
+          },
+          {
+            "stage": "_media_url_is_servable",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23872.7626127,
+            "result": true,
+            "ms": 272.9,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_6",
+            "started": 23872.8217589,
+            "ms": 289.9,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "genius.com",
+            "thread": "LyricsPool_3",
+            "started": 23872.7038072,
+            "ms": 519.4
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_7",
+            "started": 23872.9070519,
+            "ms": 319.1,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_2",
+            "started": 23872.55303,
+            "ms": 765.2,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-258 (process_request_thread)",
+            "started": 23873.0830008,
+            "ms": 263.5
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.deezer.com",
+            "thread": "LyricsPool_7",
+            "started": 23872.9069858,
+            "ms": 473.2
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-259 (process_request_thread)",
+            "started": 23873.3871002,
+            "ms": 274.2
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_5",
+            "started": 23873.1061355,
+            "ms": 616.6,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_6",
+            "started": 23872.8217005,
+            "ms": 935.3
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "megalobiz.com",
+            "thread": "LyricsPool_5",
+            "started": 23873.106078,
+            "ms": 765.9
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-260 (process_request_thread)",
+            "started": 23873.7362249,
+            "ms": 147.7
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-261 (process_request_thread)",
+            "started": 23873.7358562,
+            "ms": 163.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "music.163.com",
+            "thread": "LyricsPool_2",
+            "started": 23872.552952,
+            "ms": 1443.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "www.megalobiz.com",
+            "thread": "LyricsPool_1",
+            "started": 23873.9793089,
+            "ms": 159.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "genius.com",
+            "thread": "LyricsPool_5",
+            "started": 23873.9791593,
+            "ms": 229.4
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_0",
+            "started": 23873.9759883,
+            "ms": 279.6,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_3",
+            "started": 23873.9788977,
+            "ms": 334.7,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      },
+      {
+        "bridge_ms": 7,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2331544133",
+        "time_to_audio_ms": 1882,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "_get_client_id",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23874.4298842,
+            "ms": 0.1,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_5",
+            "started": 23874.4456715,
+            "ms": 81.7
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_5",
+            "started": 23874.5276332,
+            "ms": 73.2
+          },
+          {
+            "stage": "_api_get",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23874.4299724,
+            "status": 200,
+            "ms": 185.4,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_3",
+            "started": 23874.448188,
+            "ms": 298.9,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api-v2.soundcloud.com",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23874.6155194,
+            "ms": 175.7
+          },
+          {
+            "stage": "_public_json",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23874.6154304,
+            "ms": 175.9,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_0",
+            "started": 23874.5141353,
+            "ms": 304.2,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_3",
+            "started": 23874.4481436,
+            "ms": 401.2
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.deezer.com",
+            "thread": "LyricsPool_2",
+            "started": 23874.602061,
+            "ms": 270.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_5",
+            "started": 23874.6012882,
+            "ms": 382.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_3",
+            "started": 23874.849562,
+            "ms": 146.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "www.megalobiz.com",
+            "thread": "LyricsPool_1",
+            "started": 23874.8980971,
+            "ms": 145.6
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23874.7914395,
+            "ms": 319.1
+          },
+          {
+            "stage": "_media_url_is_servable",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23874.7913225,
+            "result": true,
+            "ms": 319.3,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "unison.boidu.dev",
+            "thread": "LyricsPool_0",
+            "started": 23874.5140475,
+            "ms": 647.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-270 (process_request_thread)",
+            "started": 23875.1556199,
+            "ms": 268.5
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_5",
+            "started": 23874.6012073,
+            "ms": 908.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "music.163.com",
+            "thread": "LyricsPool_6",
+            "started": 23875.2222586,
+            "ms": 339.8
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_1",
+            "started": 23875.0439212,
+            "ms": 637.5,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-272 (process_request_thread)",
+            "started": 23875.4651142,
+            "ms": 272.9
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_3",
+            "started": 23875.1679112,
+            "ms": 604.3
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_5",
+            "started": 23875.5096141,
+            "ms": 322.9,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "megalobiz.com",
+            "thread": "LyricsPool_1",
+            "started": 23875.0438623,
+            "ms": 789.6
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_5",
+            "started": 23875.5095637,
+            "ms": 414.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-274 (process_request_thread)",
+            "started": 23875.8173319,
+            "ms": 150.5
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-273 (process_request_thread)",
+            "started": 23875.8094313,
+            "ms": 160.1
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_3",
+            "started": 23875.7724082,
+            "ms": 305.5,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_3",
+            "started": 23875.7723584,
+            "ms": 416.2
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "music.163.com",
+            "thread": "LyricsPool_6",
+            "started": 23875.5624164,
+            "ms": 700.7
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_2",
+            "started": 23876.1704467,
+            "ms": 279.3,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_5",
+            "started": 23876.1706271,
+            "ms": 301.7,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "www.megalobiz.com",
+            "thread": "LyricsPool_6",
+            "started": 23876.3692635,
+            "ms": 143.4
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "genius.com",
+            "thread": "LyricsPool_1",
+            "started": 23876.1702611,
+            "ms": 375.3
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_5",
+            "started": 23876.1705952,
+            "ms": 431.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "music.163.com",
+            "thread": "LyricsPool_0",
+            "started": 23876.170118,
+            "ms": 443.9
+          }
+        ]
+      },
+      {
+        "bridge_ms": 6,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2289890927",
+        "time_to_audio_ms": 1645,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "_get_client_id",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23876.6343003,
+            "ms": 0.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_api_get",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23876.6343285,
+            "status": 200,
+            "ms": 190.7,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api-v2.soundcloud.com",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23876.8252738,
+            "ms": 174.1
+          },
+          {
+            "stage": "_public_json",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23876.8251626,
+            "ms": 174.3,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_2",
+            "started": 23876.7175978,
+            "ms": 308.2,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_1",
+            "started": 23876.9857033,
+            "ms": 76.5
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_1",
+            "started": 23877.0623392,
+            "ms": 71.8
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_4",
+            "started": 23876.8519509,
+            "ms": 285.1,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_5",
+            "started": 23877.0617057,
+            "ms": 104.7
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23876.9995742,
+            "ms": 263.4
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.betterlyrics.org",
+            "thread": "LyricsPool_4",
+            "started": 23876.8518855,
+            "ms": 411.3
+          },
+          {
+            "stage": "_media_url_is_servable",
+            "thread": "SoundCloudPlayback_0",
+            "started": 23876.9994881,
+            "result": true,
+            "ms": 264.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_5",
+            "started": 23877.1709491,
+            "ms": 130.3
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "unison.boidu.dev",
+            "thread": "LyricsPool_2",
+            "started": 23876.7175083,
+            "ms": 583.9
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.deezer.com",
+            "thread": "LyricsPool_4",
+            "started": 23877.2633769,
+            "ms": 153.7
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_1",
+            "started": 23877.1343952,
+            "ms": 284.5,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "music.163.com",
+            "thread": "LyricsPool_0",
+            "started": 23877.1312608,
+            "ms": 324.7
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "www.megalobiz.com",
+            "thread": "LyricsPool_6",
+            "started": 23877.393386,
+            "ms": 145.5
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-284 (process_request_thread)",
+            "started": 23877.3086653,
+            "ms": 261.6
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-285 (process_request_thread)",
+            "started": 23877.6134045,
+            "ms": 265.7
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-286 (process_request_thread)",
+            "started": 23877.9549983,
+            "ms": 149.2
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-287 (process_request_thread)",
+            "started": 23877.955288,
+            "ms": 153.7
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_6",
+            "started": 23877.5392971,
+            "ms": 583.7,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_1",
+            "started": 23877.1343533,
+            "ms": 1071.2
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "megalobiz.com",
+            "thread": "LyricsPool_6",
+            "started": 23877.5391549,
+            "ms": 727.6
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_1",
+            "started": 23878.2061621,
+            "ms": 285.4,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_0",
+            "started": 23878.3976588,
+            "ms": 107.8
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "www.megalobiz.com",
+            "thread": "LyricsPool_4",
+            "started": 23878.3985042,
+            "ms": 144.5
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_1",
+            "started": 23878.2060513,
+            "ms": 358.7
+          }
+        ]
+      },
+      {
+        "bridge_ms": 7,
+        "playing": true,
+        "source": "youtube",
+        "source_id": "dQw4w9WgXcQ",
+        "time_to_audio_ms": 4090,
+        "within_3s": false,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_0",
+            "started": 23878.9116139,
+            "ms": 110.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_0",
+            "started": 23879.0217773,
+            "ms": 114.3
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_1",
+            "started": 23879.0804115,
+            "ms": 81.4
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "genius.com",
+            "thread": "LyricsPool_6",
+            "started": 23878.794275,
+            "ms": 371.4
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 23878.6687683,
+            "host": "www.youtube.com",
+            "path": "/watch",
+            "ms": 523.8,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_1",
+            "started": 23879.1620527,
+            "ms": 67.5
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "music.163.com",
+            "thread": "LyricsPool_7",
+            "started": 23878.8365768,
+            "ms": 424.1
+          },
+          {
+            "stage": "_get",
+            "thread": "Catalogue_0",
+            "started": 23878.7280895,
+            "ms": 615.8,
+            "thread_cpu_ms": 46.9
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_2",
+            "started": 23879.081263,
+            "ms": 318.1,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "www.megalobiz.com",
+            "thread": "LyricsPool_4",
+            "started": 23879.2879334,
+            "ms": 144.8
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_0",
+            "started": 23879.1364681,
+            "ms": 319.8,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_6",
+            "started": 23879.1663554,
+            "ms": 330.8,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_6",
+            "started": 23879.1663105,
+            "ms": 407.3
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.deezer.com",
+            "thread": "LyricsPool_1",
+            "started": 23879.2298559,
+            "ms": 364.2
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "unison.boidu.dev",
+            "thread": "LyricsPool_2",
+            "started": 23879.0812195,
+            "ms": 574.7
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_6",
+            "started": 23879.5740991,
+            "ms": 291.6,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_4",
+            "started": 23879.4329315,
+            "ms": 588.9,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_0",
+            "started": 23879.1363985,
+            "ms": 945.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "megalobiz.com",
+            "thread": "LyricsPool_4",
+            "started": 23879.4328665,
+            "ms": 730.1
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 23880.0608475,
+            "host": "www.youtube.com",
+            "path": "/youtubei/v1/player",
+            "ms": 131.7,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_6",
+            "started": 23879.5740193,
+            "ms": 727.9
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_5",
+            "started": 23879.4084002,
+            "ms": 947.4,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_get",
+            "thread": "Catalogue_1",
+            "started": 23880.2996223,
+            "ms": 435.1,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 23880.2167971,
+            "host": "manifest.googlevideo.com",
+            "path": "<redacted>",
+            "ms": 562.1,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 23880.7936703,
+            "host": "www.youtube.com",
+            "path": "<redacted>",
+            "ms": 69.1,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "extract_info",
+            "thread": "YouTubePlayback_0",
+            "started": 23878.6348326,
+            "ms": 3246.4,
+            "thread_cpu_ms": 265.6
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-304 (process_request_thread)",
+            "started": 23882.0026126,
+            "ms": 377.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "rr1---sn-gxuo03g-vqnl.googlevideo.com",
+            "thread": "Thread-304 (process_request_thread)",
+            "started": 23882.0025366,
+            "ms": 486.3
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "www.megalobiz.com",
+            "thread": "LyricsPool_1",
+            "started": 23882.8215258,
+            "ms": 145.5
+          }
+        ]
+      },
+      {
+        "bridge_ms": 6,
+        "playing": true,
+        "source": "spotify",
+        "source_id": "ytsearch1: Rick Astley - Never Gonna Give You Up",
+        "time_to_audio_ms": 1277,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_5",
+            "started": 23883.0177023,
+            "ms": 324.8,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.betterlyrics.org",
+            "thread": "LyricsPool_5",
+            "started": 23883.0176499,
+            "ms": 437.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "genius.com",
+            "thread": "LyricsPool_3",
+            "started": 23883.1074744,
+            "ms": 436.4
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_2",
+            "started": 23883.3077218,
+            "ms": 341.2,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_0",
+            "started": 23883.2488178,
+            "ms": 439.9
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.deezer.com",
+            "thread": "LyricsPool_5",
+            "started": 23883.4725169,
+            "ms": 217.3
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_2",
+            "started": 23883.3076756,
+            "ms": 425.8
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "music.163.com",
+            "thread": "LyricsPool_4",
+            "started": 23883.4353181,
+            "ms": 347.7
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-315 (process_request_thread)",
+            "started": 23883.5893981,
+            "ms": 358.9,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "rr1---sn-gxuo03g-vqnl.googlevideo.com",
+            "thread": "Thread-315 (process_request_thread)",
+            "started": 23883.5893338,
+            "ms": 474.4
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "genius.com",
+            "thread": "LyricsPool_2",
+            "started": 23884.1281743,
+            "ms": 114.5
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_4",
+            "started": 23884.1283961,
+            "ms": 128.4
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_7",
+            "started": 23883.7021115,
+            "ms": 614.1,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "genius.com",
+            "thread": "LyricsPool_2",
+            "started": 23884.2442858,
+            "ms": 126.7
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "www.megalobiz.com",
+            "thread": "LyricsPool_4",
+            "started": 23884.2626182,
+            "ms": 157.8
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_5",
+            "started": 23883.7366597,
+            "ms": 750.9,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.betterlyrics.org",
+            "thread": "LyricsPool_2",
+            "started": 23884.4698707,
+            "ms": 87.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "rr1---sn-gxuo03g-vqnl.googlevideo.com",
+            "thread": "Thread-320 (process_request_thread)",
+            "started": 23884.4659023,
+            "ms": 104.5
+          }
+        ]
+      },
+      {
+        "bridge_ms": 7,
+        "playing": true,
+        "source": "deezer",
+        "source_id": "3135556",
+        "time_to_audio_ms": 3748,
+        "within_3s": false,
+        "within_5s": true,
+        "style": "macos",
+        "stages": [
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_7",
+            "started": 23884.6699076,
+            "ms": 102.4
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "music.163.com",
+            "thread": "LyricsPool_3",
+            "started": 23884.7633988,
+            "ms": 351.3
+          },
+          {
+            "stage": "_get",
+            "thread": "ProviderPlayback_0",
+            "started": 23884.5860625,
+            "ms": 538.2,
+            "thread_cpu_ms": 31.2
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_1",
+            "started": 23885.1402073,
+            "ms": 932.1,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 23885.7512524,
+            "host": "www.youtube.com",
+            "path": "/watch",
+            "ms": 463.2,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "_get",
+            "thread": "aura-shared_0",
+            "started": 23886.5373606,
+            "ms": 415.9,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 23886.925767,
+            "host": "www.youtube.com",
+            "path": "/youtubei/v1/player",
+            "ms": 140.7,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "_get",
+            "thread": "Catalogue_1",
+            "started": 23887.3363554,
+            "ms": 156.8,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "urlopen",
+            "thread": "YouTubePlayback_0",
+            "started": 23887.0785354,
+            "host": "manifest.googlevideo.com",
+            "path": "<redacted>",
+            "ms": 437.2,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "extract_info",
+            "thread": "YouTubePlayback_0",
+            "started": 23885.7501657,
+            "ms": 1868.1,
+            "thread_cpu_ms": 203.1
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-330 (process_request_thread)",
+            "started": 23887.6342392,
+            "ms": 371.3,
+            "thread_cpu_ms": 15.6
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "rr1---sn-gxuo03g-vqnl.googlevideo.com",
+            "thread": "Thread-330 (process_request_thread)",
+            "started": 23887.6341604,
+            "ms": 513.8
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.betterlyrics.org",
+            "thread": "LyricsPool_0",
+            "started": 23888.2148684,
+            "ms": 131.8
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_3",
+            "started": 23888.2147722,
+            "ms": 137.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "www.megalobiz.com",
+            "thread": "LyricsPool_7",
+            "started": 23888.214631,
+            "ms": 147.9
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_0",
+            "started": 23888.3618714,
+            "ms": 68.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_3",
+            "started": 23888.3677011,
+            "ms": 79.8
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "genius.com",
+            "thread": "LyricsPool_5",
+            "started": 23888.2155045,
+            "ms": 377.7
+          }
+        ]
+      },
+      {
+        "bridge_ms": 29,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2215597907",
+        "time_to_audio_ms": 1144,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-343 (process_request_thread)",
+            "started": 23888.761527,
+            "ms": 276.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "music.163.com",
+            "thread": "LyricsPool_4",
+            "started": 23888.8080193,
+            "ms": 348.2
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-344 (process_request_thread)",
+            "started": 23889.0866691,
+            "ms": 304.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-345 (process_request_thread)",
+            "started": 23889.4817516,
+            "ms": 145.7
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-346 (process_request_thread)",
+            "started": 23889.4815181,
+            "ms": 165.3
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_5",
+            "started": 23889.6105172,
+            "ms": 369.0,
+            "thread_cpu_ms": 0.0
+          }
+        ]
+      },
+      {
+        "bridge_ms": 7,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2104544877",
+        "time_to_audio_ms": 1034,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-355 (process_request_thread)",
+            "started": 23890.1934658,
+            "ms": 285.7
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-356 (process_request_thread)",
+            "started": 23890.5217441,
+            "ms": 278.4
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-358 (process_request_thread)",
+            "started": 23890.8776754,
+            "ms": 152.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-357 (process_request_thread)",
+            "started": 23890.8773015,
+            "ms": 167.9
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_2",
+            "started": 23891.0877593,
+            "ms": 124.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "www.megalobiz.com",
+            "thread": "LyricsPool_1",
+            "started": 23891.0876486,
+            "ms": 143.9
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_4",
+            "started": 23891.0884407,
+            "ms": 392.9,
+            "thread_cpu_ms": 46.9
+          }
+        ]
+      },
+      {
+        "bridge_ms": 7,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2331544133",
+        "time_to_audio_ms": 1103,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "pooled_response_headers",
+            "host": "genius.com",
+            "thread": "LyricsPool_4",
+            "started": 23891.6020023,
+            "ms": 115.2
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.betterlyrics.org",
+            "thread": "LyricsPool_5",
+            "started": 23891.6442009,
+            "ms": 151.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_2",
+            "started": 23891.6223788,
+            "ms": 179.9
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-368 (process_request_thread)",
+            "started": 23891.542212,
+            "ms": 273.9
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_4",
+            "started": 23891.7714058,
+            "ms": 77.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "music.163.com",
+            "thread": "LyricsPool_7",
+            "started": 23891.4972832,
+            "ms": 412.8
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_4",
+            "started": 23891.8486558,
+            "ms": 67.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "www.megalobiz.com",
+            "thread": "LyricsPool_1",
+            "started": 23891.940581,
+            "ms": 144.3
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.deezer.com",
+            "thread": "LyricsPool_4",
+            "started": 23891.9160149,
+            "ms": 213.6
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-369 (process_request_thread)",
+            "started": 23891.8555077,
+            "ms": 304.4
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_5",
+            "started": 23891.7955007,
+            "ms": 437.3
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-370 (process_request_thread)",
+            "started": 23892.2321123,
+            "ms": 147.6
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-371 (process_request_thread)",
+            "started": 23892.2539797,
+            "ms": 162.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "music.163.com",
+            "thread": "LyricsPool_7",
+            "started": 23891.9104072,
+            "ms": 587.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_0",
+            "started": 23892.2325444,
+            "ms": 282.8,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_5",
+            "started": 23892.2330722,
+            "ms": 296.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_5",
+            "started": 23892.2330374,
+            "ms": 370.8
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_2",
+            "started": 23891.9879697,
+            "ms": 641.8
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_1",
+            "started": 23892.0851069,
+            "ms": 607.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "unison.boidu.dev",
+            "thread": "LyricsPool_0",
+            "started": 23892.2325,
+            "ms": 548.3
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "megalobiz.com",
+            "thread": "LyricsPool_1",
+            "started": 23892.0850514,
+            "ms": 756.1
+          }
+        ]
+      },
+      {
+        "bridge_ms": 10,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2289890927",
+        "time_to_audio_ms": 1007,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-379 (process_request_thread)",
+            "started": 23892.9555205,
+            "ms": 263.6
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-380 (process_request_thread)",
+            "started": 23893.2631296,
+            "ms": 274.2
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-382 (process_request_thread)",
+            "started": 23893.6136007,
+            "ms": 147.7
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "playback.media-streaming.soundcloud.cloud",
+            "thread": "Thread-381 (process_request_thread)",
+            "started": 23893.6131676,
+            "ms": 163.5
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "genius.com",
+            "thread": "LyricsPool_2",
+            "started": 23894.0808065,
+            "ms": 94.3
+          }
+        ]
+      },
+      {
+        "bridge_ms": 7,
+        "playing": true,
+        "source": "youtube",
+        "source_id": "dQw4w9WgXcQ",
+        "time_to_audio_ms": 788,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_2",
+            "started": 23894.2904362,
+            "ms": 70.8
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lyrics.kugou.com",
+            "thread": "LyricsPool_2",
+            "started": 23894.3615054,
+            "ms": 77.4
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.deezer.com",
+            "thread": "LyricsPool_5",
+            "started": 23894.5115365,
+            "ms": 145.2
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-390 (process_request_thread)",
+            "started": 23894.2778104,
+            "ms": 389.1,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_2",
+            "started": 23894.4391763,
+            "ms": 302.9,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "rr1---sn-gxuo03g-vqnl.googlevideo.com",
+            "thread": "Thread-390 (process_request_thread)",
+            "started": 23894.2777296,
+            "ms": 506.4
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_0",
+            "started": 23894.4988677,
+            "ms": 285.5,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_7",
+            "started": 23894.2264709,
+            "ms": 582.2,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "lrclib.net",
+            "thread": "LyricsPool_0",
+            "started": 23894.4988122,
+            "ms": 411.1
+          },
+          {
+            "stage": "connect",
+            "thread": "LyricsPool_4",
+            "started": 23894.6298288,
+            "ms": 283.9,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "music.163.com",
+            "thread": "LyricsPool_1",
+            "started": 23894.5019427,
+            "ms": 423.1
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "megalobiz.com",
+            "thread": "LyricsPool_7",
+            "started": 23894.2264086,
+            "ms": 727.9
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "api.lyrics.ovh",
+            "thread": "LyricsPool_2",
+            "started": 23894.439126,
+            "ms": 741.5
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "unison.boidu.dev",
+            "thread": "LyricsPool_4",
+            "started": 23894.6296338,
+            "ms": 610.6
+          }
+        ]
+      },
+      {
+        "bridge_ms": 7,
+        "playing": true,
+        "source": "spotify",
+        "source_id": "ytsearch1: Rick Astley - Never Gonna Give You Up",
+        "time_to_audio_ms": 325,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "pooled_response_headers",
+            "host": "rr1---sn-gxuo03g-vqnl.googlevideo.com",
+            "thread": "Thread-401 (process_request_thread)",
+            "started": 23895.3695264,
+            "ms": 112.5
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "rr1---sn-gxuo03g-vqnl.googlevideo.com",
+            "thread": "Thread-405 (process_request_thread)",
+            "started": 23895.6672069,
+            "ms": 122.9
+          }
+        ]
+      },
+      {
+        "bridge_ms": 10,
+        "playing": true,
+        "source": "deezer",
+        "source_id": "3135556",
+        "time_to_audio_ms": 747,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "connect",
+            "thread": "Thread-411 (process_request_thread)",
+            "started": 23895.9780366,
+            "ms": 400.0,
+            "thread_cpu_ms": 0.0
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "rr1---sn-gxuo03g-vqnl.googlevideo.com",
+            "thread": "Thread-411 (process_request_thread)",
+            "started": 23895.977944,
+            "ms": 520.6
+          },
+          {
+            "stage": "pooled_response_headers",
+            "host": "rr1---sn-gxuo03g-vqnl.googlevideo.com",
+            "thread": "Thread-415 (process_request_thread)",
+            "started": 23896.9012103,
+            "ms": 101.8
+          }
+        ]
+      }
+    ],
+    "all_within_5s": true,
+    "note": "First advancing decoded media clock, physical speaker output not assessed"
+  },
+  "perf": {
+    "Timestamp": 23897.011479,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 1836,
+    "LayoutObjects": 2130,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 11371,
+    "Resources": 70,
+    "ContextLifecycleStateObservers": 47,
+    "V8PerContextDatas": 1,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 2,
+    "LayoutCount": 557,
+    "RecalcStyleCount": 797,
+    "LayoutDuration": 0.249931,
+    "RecalcStyleDuration": 1.377824,
+    "DevToolsCommandDuration": 0.114296,
+    "ScriptDuration": 0.151784,
+    "V8CompileDuration": 0.000143,
+    "TaskDuration": 3.551921,
+    "TaskOtherDuration": 1.657943,
+    "ThreadTime": 3.136404,
+    "ProcessTime": 5.638149,
+    "JSHeapUsedSize": 5295880,
+    "JSHeapTotalSize": 9175040,
+    "FirstMeaningfulPaint": 23867.189828,
+    "DomContentLoaded": 23867.234675,
+    "NavigationStart": 23867.082365
+  },
+  "finished_at": 1793622218.16977,
+  "seeded_user_cache_rows": 3
+}

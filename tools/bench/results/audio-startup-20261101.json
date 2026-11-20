@@ -1,0 +1,118 @@
+{
+  "workload": "64 KiB HTTP body; first 1 KiB immediate, remainder after 150 ms",
+  "repetitions_per_provider": 3,
+  "results": {
+    "legacy": {
+      "youtube": {
+        "first_packet_median_ms": 186.078,
+        "total_median_ms": 186.398,
+        "first_packet_samples_ms": [
+          204.52269999987038,
+          186.07750000001033,
+          153.12200000016674
+        ]
+      },
+      "soundcloud": {
+        "first_packet_median_ms": 173.854,
+        "total_median_ms": 174.096,
+        "first_packet_samples_ms": [
+          189.39269999987118,
+          173.8535999998021,
+          170.06480000009105
+        ]
+      },
+      "spotify": {
+        "first_packet_median_ms": 168.952,
+        "total_median_ms": 169.066,
+        "first_packet_samples_ms": [
+          152.3778000000675,
+          175.46730000003663,
+          168.95199999999022
+        ]
+      },
+      "yandex": {
+        "first_packet_median_ms": 171.049,
+        "total_median_ms": 171.307,
+        "first_packet_samples_ms": [
+          171.91759999991518,
+          171.04889999995976,
+          169.42249999988235
+        ]
+      },
+      "deezer": {
+        "first_packet_median_ms": 171.908,
+        "total_median_ms": 172.145,
+        "first_packet_samples_ms": [
+          171.9084000001203,
+          185.03559999999197,
+          171.84969999993882
+        ]
+      },
+      "vk": {
+        "first_packet_median_ms": 172.285,
+        "total_median_ms": 172.724,
+        "first_packet_samples_ms": [
+          152.66540000015993,
+          189.91430000005494,
+          172.28499999987434
+        ]
+      }
+    },
+    "streaming": {
+      "youtube": {
+        "first_packet_median_ms": 23.585,
+        "total_median_ms": 174.655,
+        "first_packet_samples_ms": [
+          22.301299999980984,
+          35.43139999987943,
+          23.58500000013919
+        ]
+      },
+      "soundcloud": {
+        "first_packet_median_ms": 22.524,
+        "total_median_ms": 173.742,
+        "first_packet_samples_ms": [
+          20.06759999994756,
+          22.524299999986397,
+          33.9165000000321
+        ]
+      },
+      "spotify": {
+        "first_packet_median_ms": 2.037,
+        "total_median_ms": 152.804,
+        "first_packet_samples_ms": [
+          2.0207999998547166,
+          41.104899999936606,
+          2.0372999999835884
+        ]
+      },
+      "yandex": {
+        "first_packet_median_ms": 2.475,
+        "total_median_ms": 153.496,
+        "first_packet_samples_ms": [
+          24.38150000011774,
+          2.1499000001767854,
+          2.4752000001626584
+        ]
+      },
+      "deezer": {
+        "first_packet_median_ms": 12.805,
+        "total_median_ms": 163.376,
+        "first_packet_samples_ms": [
+          2.556400000003123,
+          12.804800000139949,
+          21.70780000005834
+        ]
+      },
+      "vk": {
+        "first_packet_median_ms": 20.699,
+        "total_median_ms": 171.676,
+        "first_packet_samples_ms": [
+          20.69870000013907,
+          34.94630000000143,
+          19.612199999983204
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "itunes_metadata": {
+    "search_completed": true,
+    "results": 3,
+    "search_seconds": 0.52,
+    "error_types": [],
+    "first": {
+      "title": "Resonance",
+      "artist": "Home",
+      "duration": 212,
+      "source": "spotify"
+    },
+    "audio_provider": "YouTube verified matching, not Spotify audio",
+    "verified_youtube_stream": true,
+    "mapped_media_http": 206,
+    "mapped_media_type": "audio/webm",
+    "mapped_media_bytes": 4096
+  },
+  "youtube": {
+    "search_completed": true,
+    "results": 12,
+    "search_seconds": 0.61,
+    "error_types": [],
+    "first": {
+      "title": "Resonance",
+      "artist": "Home",
+      "duration": 213,
+      "source": "youtube"
+    },
+    "stream_completed": true,
+    "stream_resolved": true,
+    "media_http": 206,
+    "media_type": "audio/webm",
+    "media_bytes": 4096
+  },
+  "soundcloud": {
+    "search_completed": true,
+    "results": 3,
+    "search_seconds": 0.75,
+    "error_types": [],
+    "first": {
+      "title": "Resonance - Home Bladerunner ( Bladerunner 2049 )",
+      "artist": "Haunuva",
+      "duration": 261,
+      "source": "soundcloud"
+    },
+    "stream_completed": true,
+    "stream_resolved": true,
+    "media_http": 200,
+    "media_type": "application/vnd.apple.mpegurl",
+    "media_bytes": 4096,
+    "segment_http": 206,
+    "segment_type": "audio/mp4",
+    "segment_bytes": 4096
+  }
+}

@@ -9,20 +9,43 @@
   ],
   "entries": [
     {
+      "selector": "#app-tooltip",
+      "property": "transition",
+      "reason": "conditional-cascade-override",
+      "variants": [
+        {
+          "file": "ui/web_new_v2/css/components/base.css",
+          "line": 1666,
+          "value": "opacity 120ms ease, translate 140ms cubic-bezier(.2,.75,.25,1)",
+          "at_rules": [],
+          "important": false
+        },
+        {
+          "file": "ui/web_new_v2/css/components/base.css",
+          "line": 1673,
+          "value": "none",
+          "at_rules": [
+            "@media (prefers-reduced-motion: reduce)"
+          ],
+          "important": false
+        }
+      ]
+    },
+    {
       "selector": "#home-color-atmosphere span",
       "property": "animation",
       "reason": "conditional-cascade-override",
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 4677,
+          "line": 4777,
           "value": "homeColorDrift 24s ease-in-out infinite alternate",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 4684,
+          "line": 4784,
           "value": "none",
           "at_rules": [
             "@media (prefers-reduced-motion: reduce)"
@@ -38,14 +61,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 4677,
+          "line": 4777,
           "value": "background-color 2s ease",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 4684,
+          "line": 4784,
           "value": "none",
           "at_rules": [
             "@media (prefers-reduced-motion: reduce)"
@@ -68,7 +91,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 235,
+          "line": 236,
           "value": "26px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -91,7 +114,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 235,
+          "line": 236,
           "value": "-.6px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -114,7 +137,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 267,
+          "line": 268,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -137,7 +160,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 217,
+          "line": 218,
           "value": "86px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -160,7 +183,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 217,
+          "line": 218,
           "value": "repeat(2,minmax(0,1fr))",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -183,7 +206,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 219,
+          "line": 220,
           "value": "74px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -192,7 +215,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 268,
+          "line": 269,
           "value": "68px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -215,7 +238,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 219,
+          "line": 220,
           "value": "74px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -224,7 +247,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 268,
+          "line": 269,
           "value": "54px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -247,7 +270,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 269,
+          "line": 270,
           "value": "9px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -270,7 +293,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 272,
+          "line": 273,
           "value": "28px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -293,7 +316,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 272,
+          "line": 273,
           "value": "3px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -316,7 +339,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 272,
+          "line": 273,
           "value": "28px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -339,7 +362,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 271,
+          "line": 272,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -362,7 +385,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 270,
+          "line": 271,
           "value": "11px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -385,7 +408,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 266,
+          "line": 267,
           "value": "11px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -401,14 +424,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 138,
+          "line": 144,
           "value": "none",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 181,
+          "line": 187,
           "value": "block",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -431,7 +454,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1905,
+          "line": 1961,
           "value": "12px 12px 160px 12px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -454,7 +477,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 208,
+          "line": 209,
           "value": "var(--home-content-glass)",
           "at_rules": [
             "@supports (backdrop-filter: blur(1px))"
@@ -477,7 +500,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 260,
+          "line": 261,
           "value": "16px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -500,35 +523,12 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 260,
+          "line": 261,
           "value": "8px 10px calc(var(--player-bar-height) + var(--player-bar-offset) + 12px)",
           "at_rules": [
             "@media (max-width: 600px)"
           ],
           "important": false
-        }
-      ]
-    },
-    {
-      "selector": "#mini-player-overlay #mp-btn-play",
-      "property": "transition",
-      "reason": "conditional-cascade-override",
-      "variants": [
-        {
-          "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2517,
-          "value": "width 220ms ease,border-radius 220ms ease",
-          "at_rules": [],
-          "important": true
-        },
-        {
-          "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2530,
-          "value": "none",
-          "at_rules": [
-            "@media (prefers-reduced-motion: reduce)"
-          ],
-          "important": true
         }
       ]
     },
@@ -539,14 +539,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 189,
+          "line": 190,
           "value": "48px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 250,
+          "line": 251,
           "value": "40px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -562,14 +562,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 189,
+          "line": 190,
           "value": "48px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 250,
+          "line": 251,
           "value": "40px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -585,14 +585,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 189,
+          "line": 190,
           "value": "48px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 250,
+          "line": 251,
           "value": "40px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -609,13 +609,13 @@
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
           "line": 188,
-          "value": "12px",
+          "value": "20px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 222,
+          "line": 223,
           "value": "8px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -624,7 +624,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 243,
+          "line": 244,
           "value": "5px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -647,7 +647,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 245,
+          "line": 246,
           "value": "44px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -670,7 +670,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 245,
+          "line": 246,
           "value": "44px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -686,14 +686,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 195,
+          "line": 196,
           "value": "6px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 249,
+          "line": 250,
           "value": "1px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -709,14 +709,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 196,
-          "value": "72px",
+          "line": 197,
+          "value": "84px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 221,
+          "line": 222,
           "value": "52px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -725,7 +725,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 251,
+          "line": 252,
           "value": "44px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -748,7 +748,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 262,
+          "line": 263,
           "value": "70px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -765,14 +765,14 @@
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
           "line": 183,
-          "value": "18px",
+          "value": "8px 18px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 220,
-          "value": "10px",
+          "line": 221,
+          "value": "6px 10px",
           "at_rules": [
             "@media (max-width: 1350px)"
           ],
@@ -794,7 +794,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 220,
+          "line": 221,
           "value": "minmax(0,1fr) var(--pb-center-width) minmax(0,1fr)",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -803,7 +803,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 240,
+          "line": 241,
           "value": "minmax(0,1fr) 215px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -826,7 +826,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 240,
+          "line": 241,
           "value": "108px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -849,7 +849,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 262,
+          "line": 263,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -866,13 +866,13 @@
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
           "line": 183,
-          "value": "0 18px",
+          "value": "0 18px 6px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 240,
+          "line": 241,
           "value": "12px 14px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -895,7 +895,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 262,
+          "line": 263,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -918,7 +918,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "11px",
           "at_rules": [
             "@media(max-width:760px)"
@@ -941,7 +941,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "11px",
           "at_rules": [
             "@media(max-width:760px)"
@@ -964,7 +964,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "7px 10px",
           "at_rules": [
             "@media(max-width:760px)"
@@ -987,7 +987,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1891,
+          "line": 1947,
           "value": "color-mix(in srgb, var(--bg-surface) 90%, transparent)",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1010,7 +1010,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1888,
+          "line": 1944,
           "value": "0",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1033,7 +1033,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1893,
+          "line": 1949,
           "value": "0 -4px 20px rgba(0,0,0,0.5)",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1056,7 +1056,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1887,
+          "line": 1943,
           "value": "row",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1079,7 +1079,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1826,
+          "line": 1882,
           "value": "12px 0 calc(var(--player-bar-height, 84px) + var(--player-bar-offset, 20px) + 24px) 12px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -1088,7 +1088,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1886,
+          "line": 1942,
           "value": "0",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1111,7 +1111,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1824,
+          "line": 1880,
           "value": "70px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -1134,7 +1134,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1825,
+          "line": 1881,
           "value": "30px 0 20px 0",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -1143,7 +1143,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1889,
+          "line": 1945,
           "value": "0",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1166,7 +1166,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1823,
+          "line": 1879,
           "value": "70px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -1175,7 +1175,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1884,
+          "line": 1940,
           "value": "100%",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1198,7 +1198,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1890,
+          "line": 1946,
           "value": "100",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1221,7 +1221,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 229,
+          "line": 230,
           "value": "center",
           "at_rules": [
             "@media (max-width: 1050px) and (min-width: 601px)"
@@ -1244,7 +1244,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 229,
+          "line": 230,
           "value": "0",
           "at_rules": [
             "@media (max-width: 1050px) and (min-width: 601px)"
@@ -1267,7 +1267,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 229,
+          "line": 230,
           "value": "46px",
           "at_rules": [
             "@media (max-width: 1050px) and (min-width: 601px)"
@@ -1290,7 +1290,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 259,
+          "line": 260,
           "value": "none",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1313,7 +1313,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 231,
+          "line": 232,
           "value": "0",
           "at_rules": [
             "@media (max-width: 1050px) and (min-width: 601px)"
@@ -1336,7 +1336,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 231,
+          "line": 232,
           "value": "100%",
           "at_rules": [
             "@media (max-width: 1050px) and (min-width: 601px)"
@@ -1359,7 +1359,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 232,
+          "line": 233,
           "value": "22px",
           "at_rules": [
             "@media (max-width: 1050px) and (min-width: 601px)"
@@ -1368,7 +1368,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 261,
+          "line": 262,
           "value": "18px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1391,7 +1391,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 284,
+          "line": 285,
           "value": "1",
           "at_rules": [
             "@media (hover: none)"
@@ -1414,7 +1414,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 284,
+          "line": 285,
           "value": "none",
           "at_rules": [
             "@media (hover: none)"
@@ -1437,7 +1437,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 236,
+          "line": 237,
           "value": "18px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -1460,7 +1460,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 153,
+          "line": 159,
           "value": "flex-start",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -1483,7 +1483,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 153,
+          "line": 159,
           "value": "16px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -1506,7 +1506,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 177,
+          "line": 183,
           "value": "38px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -1529,7 +1529,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 177,
+          "line": 183,
           "value": "38px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -1552,7 +1552,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 164,
+          "line": 170,
           "value": "12px 10px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -1575,7 +1575,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 175,
+          "line": 181,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -1598,7 +1598,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 149,
+          "line": 155,
           "value": "18px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -1607,7 +1607,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 182,
+          "line": 188,
           "value": "14px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -1623,14 +1623,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 94,
+          "line": 97,
           "value": "none",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 185,
+          "line": 191,
           "value": "block",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -1653,7 +1653,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 166,
+          "line": 172,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -1676,7 +1676,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 162,
+          "line": 168,
           "value": "16px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -1685,7 +1685,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 196,
+          "line": 202,
           "value": "12px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1708,7 +1708,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 97,
+          "line": 102,
           "value": "20px",
           "at_rules": [
             "@media(max-width:1000px)"
@@ -1717,7 +1717,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "16px 12px 22px",
           "at_rules": [
             "@media(max-width:760px)"
@@ -1740,7 +1740,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "90px",
           "at_rules": [
             "@media(max-width:760px)"
@@ -1763,7 +1763,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "90px",
           "at_rules": [
             "@media(max-width:760px)"
@@ -1786,7 +1786,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "15px",
           "at_rules": [
             "@media(max-width:760px)"
@@ -1809,7 +1809,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 96,
+          "line": 101,
           "value": "9px",
           "at_rules": [
             "@media(max-width:1350px)"
@@ -1832,7 +1832,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 97,
+          "line": 102,
           "value": "70px",
           "at_rules": [
             "@media(max-width:1000px)"
@@ -1855,7 +1855,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "10px",
           "at_rules": [
             "@media(max-width:760px)"
@@ -1878,7 +1878,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "8px",
           "at_rules": [
             "@media(max-width:760px)"
@@ -1901,7 +1901,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 97,
+          "line": 102,
           "value": "repeat(2,minmax(0,1fr))",
           "at_rules": [
             "@media(max-width:1000px)"
@@ -1924,7 +1924,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 84,
+          "line": 86,
           "value": "56px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1947,7 +1947,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 85,
+          "line": 87,
           "value": "12px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1970,7 +1970,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 85,
+          "line": 87,
           "value": "0 8px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -1993,7 +1993,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 87,
+          "line": 89,
           "value": "18px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2016,7 +2016,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 87,
+          "line": 89,
           "value": "18px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2039,7 +2039,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 68,
+          "line": 70,
           "value": "8px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -2048,7 +2048,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 88,
+          "line": 90,
           "value": "6px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2071,7 +2071,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 68,
+          "line": 70,
           "value": "22px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -2087,7 +2087,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 69,
+          "line": 71,
           "value": "11px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -2096,7 +2096,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 89,
+          "line": 91,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2119,7 +2119,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 89,
+          "line": 91,
           "value": "6px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2142,7 +2142,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 89,
+          "line": 91,
           "value": "36px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2165,7 +2165,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 69,
+          "line": 71,
           "value": "9px 13px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -2174,7 +2174,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 89,
+          "line": 91,
           "value": "8px 10px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2190,14 +2190,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 21,
+          "line": 22,
           "value": "16px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 90,
+          "line": 92,
           "value": "14px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2213,17 +2213,63 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 21,
+          "line": 22,
           "value": "16px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 90,
+          "line": 92,
           "value": "14px",
           "at_rules": [
             "@media (max-width: 600px)"
+          ],
+          "important": false
+        }
+      ]
+    },
+    {
+      "selector": "#view-search.search-active #search-results",
+      "property": "opacity",
+      "reason": "conditional-cascade-override",
+      "variants": [
+        {
+          "file": "ui/web_new_v2/css/components/search-refresh.css",
+          "line": 50,
+          "value": "1",
+          "at_rules": [],
+          "important": false
+        },
+        {
+          "file": "ui/web_new_v2/css/components/search-refresh.css",
+          "line": 51,
+          "value": "0",
+          "at_rules": [
+            "@starting-style"
+          ],
+          "important": false
+        }
+      ]
+    },
+    {
+      "selector": "#view-search.search-active #search-results",
+      "property": "transform",
+      "reason": "conditional-cascade-override",
+      "variants": [
+        {
+          "file": "ui/web_new_v2/css/components/search-refresh.css",
+          "line": 50,
+          "value": "none",
+          "at_rules": [],
+          "important": false
+        },
+        {
+          "file": "ui/web_new_v2/css/components/search-refresh.css",
+          "line": 51,
+          "value": "translateY(8px)",
+          "at_rules": [
+            "@starting-style"
           ],
           "important": false
         }
@@ -2243,7 +2289,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 66,
+          "line": 68,
           "value": "20px 24px 28px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -2252,7 +2298,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 77,
+          "line": 79,
           "value": "16px 18px 28px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2268,14 +2314,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 49,
+          "line": 56,
           "value": "14px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 106,
+          "line": 113,
           "value": "10px",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2291,14 +2337,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 56,
+          "line": 63,
           "value": "repeat(4,minmax(0,1fr))",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 89,
+          "line": 96,
           "value": "repeat(2,minmax(0,1fr))",
           "at_rules": [
             "@media (max-width:1350px)"
@@ -2314,14 +2360,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 7,
+          "line": 14,
           "value": "22px 22px 14px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 90,
+          "line": 97,
           "value": "18px 16px 12px",
           "at_rules": [
             "@media (max-width:1100px)"
@@ -2330,7 +2376,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 93,
+          "line": 100,
           "value": "14px 12px 10px",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2346,14 +2392,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 6,
+          "line": 10,
           "value": "var(--bg-main)",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 85,
+          "line": 92,
           "value": "transparent",
           "at_rules": [
             "@supports (backdrop-filter: blur(1px))"
@@ -2369,14 +2415,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 6,
+          "line": 10,
           "value": "grid",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 92,
+          "line": 99,
           "value": "flex",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2392,14 +2438,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 6,
+          "line": 10,
           "value": "210px minmax(0,1fr)",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 89,
+          "line": 96,
           "value": "180px minmax(0,1fr)",
           "at_rules": [
             "@media (max-width:1350px)"
@@ -2408,7 +2454,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 90,
+          "line": 97,
           "value": "155px minmax(0,1fr)",
           "at_rules": [
             "@media (max-width:1100px)"
@@ -2424,14 +2470,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 16,
+          "line": 23,
           "value": "22px 12px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 90,
+          "line": 97,
           "value": "18px 8px",
           "at_rules": [
             "@media (max-width:1100px)"
@@ -2440,7 +2486,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 94,
+          "line": 101,
           "value": "4px 10px",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2456,14 +2502,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 16,
+          "line": 23,
           "value": "auto",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 94,
+          "line": 101,
           "value": "100%",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2479,14 +2525,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 21,
+          "line": 28,
           "value": "10px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 90,
+          "line": 97,
           "value": "7px",
           "at_rules": [
             "@media (max-width:1100px)"
@@ -2502,14 +2548,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 21,
+          "line": 28,
           "value": "38px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 96,
+          "line": 103,
           "value": "32px",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2525,14 +2571,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 21,
+          "line": 28,
           "value": "10px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 96,
+          "line": 103,
           "value": "6px 10px",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2548,14 +2594,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 22,
+          "line": 29,
           "value": "18px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 97,
+          "line": 104,
           "value": "15px",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2571,14 +2617,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 22,
+          "line": 29,
           "value": "18px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 97,
+          "line": 104,
           "value": "15px",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2594,14 +2640,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 25,
+          "line": 32,
           "value": "0 22px 22px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 90,
+          "line": 97,
           "value": "0 16px 16px",
           "at_rules": [
             "@media (max-width:1100px)"
@@ -2610,7 +2656,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 98,
+          "line": 105,
           "value": "0 12px 16px",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2626,14 +2672,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 11,
+          "line": 18,
           "value": "130px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 99,
+          "line": 106,
           "value": "0",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2649,14 +2695,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 11,
+          "line": 18,
           "value": "min(280px,40%)",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 99,
+          "line": 106,
           "value": "50%",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2672,14 +2718,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 35,
+          "line": 42,
           "value": "115px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 90,
+          "line": 97,
           "value": "0",
           "at_rules": [
             "@media (max-width:1100px)"
@@ -2695,14 +2741,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 35,
+          "line": 42,
           "value": "8px 15px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 90,
+          "line": 97,
           "value": "8px 12px",
           "at_rules": [
             "@media (max-width:1100px)"
@@ -2718,14 +2764,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 34,
+          "line": 41,
           "value": "7px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 105,
+          "line": 112,
           "value": "6px",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2741,14 +2787,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 34,
+          "line": 41,
           "value": "16px 0",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 105,
+          "line": 112,
           "value": "10px 0",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2764,14 +2810,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 38,
+          "line": 45,
           "value": "9px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 100,
+          "line": 107,
           "value": "7px",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2787,14 +2833,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 38,
+          "line": 45,
           "value": "repeat(5,minmax(0,1fr))",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 89,
+          "line": 96,
           "value": "repeat(4,minmax(0,1fr))",
           "at_rules": [
             "@media (max-width:1350px)"
@@ -2803,7 +2849,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 90,
+          "line": 97,
           "value": "repeat(3,minmax(0,1fr))",
           "at_rules": [
             "@media (max-width:1100px)"
@@ -2812,7 +2858,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 100,
+          "line": 107,
           "value": "repeat(4,minmax(0,1fr))",
           "at_rules": [
             "@media (max-width:760px)"
@@ -2828,7 +2874,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2800,
+          "line": 2890,
           "value": "none",
           "at_rules": [],
           "important": false
@@ -2842,7 +2888,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 84,
+          "line": 91,
           "value": "blur(var(--glass-blur))",
           "at_rules": [
             "@supports (backdrop-filter: blur(1px))"
@@ -2858,7 +2904,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2799,
+          "line": 2889,
           "value": "var(--bg-main)",
           "at_rules": [],
           "important": false
@@ -2872,7 +2918,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 84,
+          "line": 91,
           "value": "color-mix(in srgb,var(--home-panel) 90%,transparent)",
           "at_rules": [
             "@supports (backdrop-filter: blur(1px))"
@@ -2888,16 +2934,85 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2842,
+          "line": 2935,
           "value": "scale(1) translateY(0)",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/settings-refresh.css",
-          "line": 4,
+          "line": 9,
           "value": "none",
           "at_rules": [],
+          "important": false
+        }
+      ]
+    },
+    {
+      "selector": ".context-menu",
+      "property": "transition",
+      "reason": "conditional-cascade-override",
+      "variants": [
+        {
+          "file": "ui/web_new_v2/css/components/base.css",
+          "line": 1382,
+          "value": "opacity 150ms ease, transform 150ms cubic-bezier(0.2, 0.75, 0.2, 1), display 150ms allow-discrete",
+          "at_rules": [],
+          "important": false
+        },
+        {
+          "file": "ui/web_new_v2/css/components/base.css",
+          "line": 1395,
+          "value": "none",
+          "at_rules": [
+            "@media (prefers-reduced-motion: reduce)"
+          ],
+          "important": false
+        }
+      ]
+    },
+    {
+      "selector": ".context-menu.visible",
+      "property": "opacity",
+      "reason": "conditional-cascade-override",
+      "variants": [
+        {
+          "file": "ui/web_new_v2/css/components/base.css",
+          "line": 1387,
+          "value": "1",
+          "at_rules": [],
+          "important": false
+        },
+        {
+          "file": "ui/web_new_v2/css/components/base.css",
+          "line": 1392,
+          "value": "0",
+          "at_rules": [
+            "@starting-style"
+          ],
+          "important": false
+        }
+      ]
+    },
+    {
+      "selector": ".context-menu.visible",
+      "property": "transform",
+      "reason": "conditional-cascade-override",
+      "variants": [
+        {
+          "file": "ui/web_new_v2/css/components/base.css",
+          "line": 1388,
+          "value": "none",
+          "at_rules": [],
+          "important": false
+        },
+        {
+          "file": "ui/web_new_v2/css/components/base.css",
+          "line": 1392,
+          "value": "translateY(-6px) scale(0.97)",
+          "at_rules": [
+            "@starting-style"
+          ],
           "important": false
         }
       ]
@@ -2909,7 +3024,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 239,
+          "line": 240,
           "value": "8px 12px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -2918,7 +3033,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 275,
+          "line": 276,
           "value": "0",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2934,7 +3049,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1867,
+          "line": 1923,
           "value": "repeat(auto-fill, minmax(130px, 1fr))",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -2943,7 +3058,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1909,
+          "line": 1965,
           "value": "repeat(auto-fill, minmax(110px, 1fr))",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -2966,7 +3081,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 237,
+          "line": 238,
           "value": "12px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -2989,7 +3104,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 237,
+          "line": 238,
           "value": "12px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3012,7 +3127,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 273,
+          "line": 274,
           "value": "44px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3035,7 +3150,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 273,
+          "line": 274,
           "value": "44px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3051,14 +3166,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 197,
+          "line": 198,
           "value": "24px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 278,
+          "line": 279,
           "value": "18px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3081,7 +3196,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 214,
+          "line": 215,
           "value": "16px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3104,7 +3219,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 214,
+          "line": 215,
           "value": "22px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3127,7 +3242,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 265,
+          "line": 266,
           "value": "40px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3150,7 +3265,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 265,
+          "line": 266,
           "value": "40px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3173,7 +3288,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 276,
+          "line": 277,
           "value": "8px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3196,7 +3311,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 263,
+          "line": 264,
           "value": "8px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3219,7 +3334,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 216,
+          "line": 217,
           "value": "100%",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3242,7 +3357,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 215,
+          "line": 216,
           "value": "1 1 100%",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3258,14 +3373,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 217,
+          "line": 223,
           "value": "0",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 219,
+          "line": 225,
           "value": "1",
           "at_rules": [
             "@media (hover: none)"
@@ -3281,14 +3396,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 71,
+          "line": 73,
           "value": "12px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 201,
+          "line": 207,
           "value": "11px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3304,14 +3419,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 63,
+          "line": 65,
           "value": "repeat(auto-fill,minmax(160px,1fr))",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 156,
+          "line": 162,
           "value": "repeat(2,minmax(0,1fr))",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3334,7 +3449,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 154,
+          "line": 160,
           "value": "6px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3350,14 +3465,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 54,
+          "line": 56,
           "value": "40px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 193,
+          "line": 199,
           "value": "34px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3373,7 +3488,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 155,
+          "line": 161,
           "value": "8px 12px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3382,7 +3497,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 193,
+          "line": 199,
           "value": "8px 10px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3405,7 +3520,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 152,
+          "line": 158,
           "value": "124px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3414,7 +3529,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 171,
+          "line": 177,
           "value": "100px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3423,7 +3538,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 189,
+          "line": 195,
           "value": "82px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3446,7 +3561,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 152,
+          "line": 158,
           "value": "124px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3455,7 +3570,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 171,
+          "line": 177,
           "value": "100px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3464,7 +3579,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 189,
+          "line": 195,
           "value": "82px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3487,7 +3602,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 191,
+          "line": 197,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3510,7 +3625,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 186,
+          "line": 192,
           "value": "16px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3526,7 +3641,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 158,
+          "line": 164,
           "value": "28px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3535,7 +3650,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 188,
+          "line": 194,
           "value": "24px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3558,7 +3673,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 157,
+          "line": 163,
           "value": "104px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3567,7 +3682,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 187,
+          "line": 193,
           "value": "78px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3590,7 +3705,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 157,
+          "line": 163,
           "value": "104px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3599,7 +3714,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 187,
+          "line": 193,
           "value": "78px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3622,7 +3737,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 192,
+          "line": 198,
           "value": "34px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3645,7 +3760,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 192,
+          "line": 198,
           "value": "8px 12px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3661,14 +3776,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 62,
+          "line": 64,
           "value": "10px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 172,
+          "line": 178,
           "value": "9px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3684,14 +3799,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 62,
+          "line": 64,
           "value": "7px 12px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 172,
+          "line": 178,
           "value": "6px 10px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3714,7 +3829,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 169,
+          "line": 175,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3730,7 +3845,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 167,
+          "line": 173,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3739,7 +3854,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 198,
+          "line": 204,
           "value": "9px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3755,7 +3870,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 167,
+          "line": 173,
           "value": "38px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3764,7 +3879,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 198,
+          "line": 204,
           "value": "32px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3780,7 +3895,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 167,
+          "line": 173,
           "value": "38px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3789,7 +3904,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 198,
+          "line": 204,
           "value": "32px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3812,7 +3927,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 165,
+          "line": 171,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3835,7 +3950,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 165,
+          "line": 171,
           "value": "12px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3851,14 +3966,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 83,
+          "line": 86,
           "value": "20px 32px minmax(110px,2fr) minmax(90px,1fr) minmax(70px,.8fr) 80px var(--lib-action-width,76px) 64px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 150,
+          "line": 156,
           "value": "18px 32px minmax(80px,2fr) minmax(80px,1fr) var(--lib-action-width,76px) 64px",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -3867,7 +3982,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 183,
+          "line": 189,
           "value": "18px 32px minmax(80px,1fr) var(--lib-action-width,76px) 64px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -3890,7 +4005,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 170,
+          "line": 176,
           "value": "none",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3913,7 +4028,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1901,
+          "line": 1957,
           "value": "0",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3936,7 +4051,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1860,
+          "line": 1916,
           "value": "44px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3945,7 +4060,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1902,
+          "line": 1958,
           "value": "100%",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -3968,7 +4083,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1857,
+          "line": 1913,
           "value": "center",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3984,7 +4099,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1861,
+          "line": 1917,
           "value": "0 auto 8px auto",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -3993,7 +4108,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1900,
+          "line": 1956,
           "value": "0",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4016,7 +4131,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1858,
+          "line": 1914,
           "value": "0",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4039,7 +4154,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1859,
+          "line": 1915,
           "value": "44px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4055,14 +4170,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 3170,
+          "line": 3263,
           "value": "repeat(5, 1fr)",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 3175,
+          "line": 3268,
           "value": "repeat(3, 1fr)",
           "at_rules": [
             "@media (max-width: 768px)"
@@ -4078,14 +4193,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 23,
+          "line": 24,
           "value": "minmax(0,.88fr) minmax(0,1.12fr)",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 96,
+          "line": 101,
           "value": "minmax(0,1fr)",
           "at_rules": [
             "@media(max-width:1350px)"
@@ -4101,14 +4216,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 56,
+          "line": 59,
           "value": "0",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 99,
+          "line": 104,
           "value": "1",
           "at_rules": [
             "@media(hover:none)"
@@ -4124,14 +4239,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 25,
+          "line": 26,
           "value": "15px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "12px",
           "at_rules": [
             "@media(max-width:760px)"
@@ -4147,14 +4262,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 62,
+          "line": 65,
           "value": "repeat(5,minmax(0,1fr))",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "repeat(5,110px)",
           "at_rules": [
             "@media(max-width:760px)"
@@ -4170,14 +4285,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 52,
+          "line": 53,
           "value": "12px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "10px",
           "at_rules": [
             "@media(max-width:760px)"
@@ -4193,14 +4308,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 52,
+          "line": 53,
           "value": "repeat(5,minmax(0,1fr))",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 96,
+          "line": 101,
           "value": "repeat(5,minmax(0,1fr))",
           "at_rules": [
             "@media(max-width:1350px)"
@@ -4209,7 +4324,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 98,
+          "line": 103,
           "value": "repeat(5,110px)",
           "at_rules": [
             "@media(max-width:760px)"
@@ -4225,14 +4340,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 18,
+          "line": 19,
           "value": "47px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 96,
+          "line": 101,
           "value": "40px",
           "at_rules": [
             "@media(max-width:1350px)"
@@ -4248,14 +4363,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 18,
+          "line": 19,
           "value": "47px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/profile-refresh.css",
-          "line": 96,
+          "line": 101,
           "value": "34px",
           "at_rules": [
             "@media(max-width:1350px)"
@@ -4278,7 +4393,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 67,
+          "line": 69,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4301,7 +4416,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 67,
+          "line": 69,
           "value": "24px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4310,7 +4425,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 79,
+          "line": 81,
           "value": "18px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4333,7 +4448,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 67,
+          "line": 69,
           "value": "16px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4342,7 +4457,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 79,
+          "line": 81,
           "value": "12px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4358,7 +4473,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 72,
+          "line": 74,
           "value": "18px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4367,7 +4482,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 98,
+          "line": 100,
           "value": "16px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4383,14 +4498,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 27,
+          "line": 28,
           "value": "8px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 99,
+          "line": 101,
           "value": "5px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4406,14 +4521,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 45,
+          "line": 46,
           "value": "repeat(2,minmax(0,1fr))",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 100,
+          "line": 102,
           "value": "1fr",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4436,7 +4551,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 81,
+          "line": 83,
           "value": "20px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4452,7 +4567,7 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 70,
+          "line": 72,
           "value": "31px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4461,7 +4576,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 82,
+          "line": 84,
           "value": "29px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4484,7 +4599,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 71,
+          "line": 73,
           "value": "12px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4507,7 +4622,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 83,
+          "line": 85,
           "value": "0 auto",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4523,14 +4638,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 36,
+          "line": 37,
           "value": "30px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 96,
+          "line": 98,
           "value": "24px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4546,14 +4661,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 36,
+          "line": 37,
           "value": "30px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 96,
+          "line": 98,
           "value": "24px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4569,14 +4684,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 31,
+          "line": 32,
           "value": "14px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 92,
+          "line": 94,
           "value": "12px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4592,14 +4707,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 31,
+          "line": 32,
           "value": "12px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 73,
+          "line": 75,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4608,7 +4723,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 92,
+          "line": 94,
           "value": "9px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4624,14 +4739,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 31,
+          "line": 32,
           "value": "10px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 92,
+          "line": 94,
           "value": "9px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4647,14 +4762,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 32,
+          "line": 33,
           "value": "9px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 93,
+          "line": 95,
           "value": "7px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4670,14 +4785,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 35,
+          "line": 36,
           "value": "11px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 95,
+          "line": 97,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4693,14 +4808,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 34,
+          "line": 35,
           "value": "13px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 94,
+          "line": 96,
           "value": "11px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4716,14 +4831,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 30,
+          "line": 31,
           "value": "14px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 91,
+          "line": 93,
           "value": "10px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4739,14 +4854,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 30,
+          "line": 31,
           "value": "repeat(4,minmax(0,1fr))",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 62,
+          "line": 64,
           "value": "repeat(2,minmax(0,1fr))",
           "at_rules": [
             "@media (max-width: 1350px)"
@@ -4769,7 +4884,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 86,
+          "line": 88,
           "value": "34px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4792,7 +4907,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 86,
+          "line": 88,
           "value": "4px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4815,7 +4930,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/search-refresh.css",
-          "line": 86,
+          "line": 88,
           "value": "34px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -4838,7 +4953,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1851,
+          "line": 1907,
           "value": "center",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4861,7 +4976,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1854,
+          "line": 1910,
           "value": "20px",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4884,7 +4999,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1852,
+          "line": 1908,
           "value": "0",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4907,7 +5022,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1853,
+          "line": 1909,
           "value": "100%",
           "at_rules": [
             "@media (max-width: 900px)"
@@ -4923,14 +5038,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 4669,
+          "line": 4769,
           "value": "transform .16s cubic-bezier(.2,.8,.2,1), background-color .16s",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 4673,
+          "line": 4773,
           "value": "none",
           "at_rules": [
             "@media (prefers-reduced-motion: reduce)"
@@ -4947,14 +5062,14 @@
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
           "line": 9,
-          "value": "92px",
+          "value": "96px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
           "line": 58,
-          "value": "80px",
+          "value": "88px",
           "at_rules": [
             "@media (max-width: 900px) and (min-width: 761px)"
           ],
@@ -4962,7 +5077,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 241,
+          "line": 242,
           "value": "108px",
           "at_rules": [
             "@media (max-width: 760px)"
@@ -4994,7 +5109,7 @@
         },
         {
           "file": "ui/web_new_v2/css/components/home-refresh.css",
-          "line": 255,
+          "line": 256,
           "value": "70px",
           "at_rules": [
             "@media (max-width: 600px)"
@@ -5010,14 +5125,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 233,
+          "line": 239,
           "value": "grid",
           "at_rules": [],
           "important": true
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 283,
+          "line": 289,
           "value": "flex",
           "at_rules": [
             "@media(max-width:760px)"
@@ -5033,14 +5148,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 234,
+          "line": 240,
           "value": "20px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 275,
+          "line": 281,
           "value": "14px",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5056,14 +5171,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 233,
+          "line": 239,
           "value": "minmax(280px,35%) minmax(0,1fr)",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 275,
+          "line": 281,
           "value": "minmax(240px,32%) minmax(0,1fr)",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5079,14 +5194,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 234,
+          "line": 240,
           "value": "100%",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 283,
+          "line": 289,
           "value": "auto",
           "at_rules": [
             "@media(max-width:760px)"
@@ -5102,14 +5217,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 239,
+          "line": 245,
           "value": "28px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 276,
+          "line": 282,
           "value": "18px",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5125,14 +5240,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 243,
+          "line": 249,
           "value": "380px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 285,
+          "line": 291,
           "value": "260px",
           "at_rules": [
             "@media(max-width:760px)"
@@ -5148,14 +5263,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 251,
+          "line": 257,
           "value": "22px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 277,
+          "line": 283,
           "value": "16px",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5171,14 +5286,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 260,
+          "line": 266,
           "value": "14px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 278,
+          "line": 284,
           "value": "8px",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5194,14 +5309,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 259,
+          "line": 265,
           "value": "26px 52px minmax(0,1fr) 84px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 278,
+          "line": 284,
           "value": "20px 42px minmax(0,1fr) 70px",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5210,14 +5325,14 @@
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 296,
+          "line": 302,
           "value": "34px 52px minmax(0,1fr) 104px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 302,
+          "line": 308,
           "value": "28px 42px minmax(0,1fr) 92px",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5233,14 +5348,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 268,
+          "line": 274,
           "value": "52px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 279,
+          "line": 285,
           "value": "42px",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5256,14 +5371,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 268,
+          "line": 274,
           "value": "52px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 279,
+          "line": 285,
           "value": "42px",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5279,21 +5394,21 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 272,
+          "line": 278,
           "value": "90px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 300,
+          "line": 306,
           "value": "116px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 304,
+          "line": 310,
           "value": "104px",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5309,21 +5424,21 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 269,
+          "line": 275,
           "value": "14px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 297,
+          "line": 303,
           "value": "12px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 303,
+          "line": 309,
           "value": "8px",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5339,14 +5454,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 297,
+          "line": 303,
           "value": "96px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 303,
+          "line": 309,
           "value": "84px",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5362,21 +5477,21 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 269,
+          "line": 275,
           "value": "auto",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 297,
+          "line": 303,
           "value": "96px",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/library-refresh.css",
-          "line": 303,
+          "line": 309,
           "value": "84px",
           "at_rules": [
             "@media(max-width:1050px)"
@@ -5392,14 +5507,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2299,
+          "line": 2355,
           "value": "nativeDialogIn .2s cubic-bezier(.22,1,.36,1)",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 2303,
+          "line": 2359,
           "value": "none",
           "at_rules": [
             "@media (prefers-reduced-motion: reduce)"
@@ -5415,14 +5530,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1757,
+          "line": 1813,
           "value": "#1a1a1a",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1762,
+          "line": 1818,
           "value": "var(--bg-main)",
           "at_rules": [
             "@supports (background-color: var(--bg-main))"
@@ -5438,14 +5553,14 @@
       "variants": [
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1758,
+          "line": 1814,
           "value": "var(--color-text-main, #ffffff)",
           "at_rules": [],
           "important": false
         },
         {
           "file": "ui/web_new_v2/css/components/base.css",
-          "line": 1763,
+          "line": 1819,
           "value": "var(--text-main)",
           "at_rules": [
             "@supports (background-color: var(--bg-main))"

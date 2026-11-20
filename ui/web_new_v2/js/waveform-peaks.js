@@ -28,24 +28,75 @@ function readCache(key) {
 
 // Equal time intervals cover the entire recording, including its final sample.
 // Taking the maximum across channels avoids cancelling opposite-phase stereo.
+function bucketPeak(channels, length, index, bucketCount) {
+    const start = Math.floor(index * length / bucketCount);
+    const end = Math.min(length, Math.max(start + 1, Math.floor((index + 1) * length / bucketCount)));
+    let peak = 0;
+    for (const samples of channels) {
+        for (let j = start; j < end; j++) {
+            const value = Math.abs(samples[j]);
+            if (Number.isFinite(value) && value > peak) peak = value;
+        }
+    }
+    return peak;
+}
+
 export function audioBufferToPeaks(audio, bucketCount = BUCKETS) {
     if (!audio?.length || !audio.numberOfChannels || !Number.isInteger(bucketCount) || bucketCount < 1) return null;
     const channels = Array.from({ length: audio.numberOfChannels }, (_, i) => audio.getChannelData(i));
     const peaks = new Array(bucketCount).fill(0);
     let norm = 0;
     for (let i = 0; i < bucketCount; i++) {
-        const start = Math.floor(i * audio.length / bucketCount);
-        const end = Math.min(audio.length, Math.max(start + 1, Math.floor((i + 1) * audio.length / bucketCount)));
-        let peak = 0;
-        for (const samples of channels) {
-            for (let j = start; j < end; j++) {
-                const value = Math.abs(samples[j]);
-                if (Number.isFinite(value) && value > peak) peak = value;
-            }
-        }
+        const peak = bucketPeak(channels, audio.length, i, bucketCount);
         peaks[i] = peak;
         if (peak > norm) norm = peak;
     }
+    return norm ? peaks.map(peak => peak / norm) : peaks;
+}
+
+function yieldToMain() {
+    const scheduler = typeof window !== 'undefined' ? window.scheduler : undefined;
+    if (typeof scheduler?.yield === 'function') return scheduler.yield().catch(() => {});
+    // A macrotask, not setTimeout: nested timers are clamped to >=4 ms, which
+    // would stretch a 50-slice scan into a visible delay.
+    return new Promise(resolve => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => {
+            channel.port1.close();
+            resolve();
+        };
+        channel.port2.postMessage(0);
+    });
+}
+
+// One slice is scanned between yields. ~1M samples is a few milliseconds of
+// Math.abs/compare - short enough to stay inside a frame, long enough that a
+// 10-minute stereo track needs only a few dozen yields.
+const SLICE_SAMPLES = 1000000;
+
+// The same envelope, split into slices that hand the frame back to the UI
+// thread. A 10-minute stereo track is ~53M samples; doing that in one loop
+// froze the window for hundreds of milliseconds after decodeAudioData().
+export async function audioBufferToPeaksAsync(audio, bucketCount = BUCKETS, { signal, sliceSamples = SLICE_SAMPLES } = {}) {
+    if (!audio?.length || !audio.numberOfChannels || !Number.isInteger(bucketCount) || bucketCount < 1) return null;
+    const channels = Array.from({ length: audio.numberOfChannels }, (_, i) => audio.getChannelData(i));
+    const peaks = new Array(bucketCount).fill(0);
+    const samplesPerBucket = Math.max(1, audio.length / bucketCount);
+    const bucketsPerSlice = Math.max(1, Math.floor(sliceSamples / samplesPerBucket));
+    // Envelopes that fit in a single slice keep the synchronous, deterministic
+    // path (no timers at all) - that also keeps the JS harness fast.
+    const shouldYield = bucketsPerSlice < bucketCount;
+    let norm = 0;
+    for (let i = 0; i < bucketCount; i++) {
+        const peak = bucketPeak(channels, audio.length, i, bucketCount);
+        peaks[i] = peak;
+        if (peak > norm) norm = peak;
+        if (shouldYield && (i + 1) % bucketsPerSlice === 0) {
+            if (signal?.aborted) return null;
+            await yieldToMain();
+        }
+    }
+    if (signal?.aborted) return null;
     return norm ? peaks.map(peak => peak / norm) : peaks;
 }
 
@@ -109,7 +160,7 @@ async function computePeaks(job) {
         ctx = OfflineCtx ? new OfflineCtx(1, 1, 44100) : new LiveCtx();
         const audio = await ctx.decodeAudioData(bytes);
         if (signal.aborted || audio.duration * 1000 > MAX_DURATION_MS) return null;
-        return audioBufferToPeaks(audio);
+        return await audioBufferToPeaksAsync(audio, BUCKETS, { signal });
     } catch (_) {
         return null;
     } finally {

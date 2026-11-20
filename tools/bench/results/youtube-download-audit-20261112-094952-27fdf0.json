@@ -1,0 +1,21 @@
+{
+  "vpnModified": false,
+  "profileIsolated": true,
+  "cookiesUsed": false,
+  "sourceId": "dQw4w9WgXcQ",
+  "path": "AppApi.download_track -> DownloadManager -> YouTubeService",
+  "frozenRuntime": true,
+  "apiModuleLoader": "PyiFrozenLoader",
+  "setupLeaseEnabled": true,
+  "restrictedPath": false,
+  "preparation": null,
+  "accepted": true,
+  "terminalEventReceived": true,
+  "completeEvents": 0,
+  "failedEvents": 1,
+  "ok": false,
+  "errorCodes": [
+    "unexpected"
+  ],
+  "seconds": 76.28
+}

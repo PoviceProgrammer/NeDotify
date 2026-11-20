@@ -1,0 +1,19 @@
+{
+  "source": "soundcloud",
+  "source_id": "2393146779",
+  "anonymous": true,
+  "youtube_fallback_enabled": false,
+  "status": "failed",
+  "valid": false,
+  "phase": "validation",
+  "resolve_ms": 4423,
+  "expected_duration": 92,
+  "ydl_cached_client_id_valid": false,
+  "range_status": 200,
+  "range_bytes": 9355,
+  "range_ms": 684,
+  "protocol": "hls",
+  "transfer_ms": 2161,
+  "bytes": 1867615,
+  "error_type": "ValueError"
+}

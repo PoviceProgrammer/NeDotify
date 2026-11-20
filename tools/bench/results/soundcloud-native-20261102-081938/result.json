@@ -1,0 +1,9 @@
+{
+  "scenario": "startup",
+  "mode": "soundcloud-native",
+  "started_at": 1793596778.8366797,
+  "ok": false,
+  "error": "Traceback (most recent call last):\n  File \"C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\tools\\bench\\bench_child.py\", line 263, in driver\n    result[\"data\"] = scenarios.scenario_startup(ctx)\n                     ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\tools\\bench\\check_soundcloud_native.py\", line 17, in scenario\n    result = ctx.js_async(r'''async style => {\n        const api = window.pywebview.api;\n    ...<22 lines>...\n        throw Error('Actual SoundCloud playback did not reach an advancing unbuffered clock');\n    }''', json.dumps(style), timeout=75)\n  File \"C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\tools\\bench\\bench_child.py\", line 75, in js_async\n    return self.sess.js(call, timeout=timeout, await_promise=True)\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\tools\\bench\\cdp.py\", line 312, in js\n    return self.ws.evaluate(expression, timeout=timeout, await_promise=await_promise)\n           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\tools\\bench\\cdp.py\", line 203, in evaluate\n    raise CDPError(f\"JS exception: {json.dumps(details)[:400]}\")\ntools.bench.cdp.CDPError: JS exception: {\"columnNumber\": 19, \"exception\": {\"className\": \"Error\", \"description\": \"Error: Actual SoundCloud playback did not reach an advancing unbuffered clock\\n    at <anonymous>:25:19\", \"objectId\": \"-8324845749520719337.3.1\", \"subtype\": \"error\", \"type\": \"object\"}, \"exceptionId\": 2, \"lineNumber\": 25, \"scriptId\": \"364\", \"stackTrace\": {\"callFrames\": [{\"columnNumber\": 18, \"functionName\": \"\", \"lineNumber\": 24\n",
+  "data": {},
+  "finished_at": 1793596849.733209
+}

@@ -1,0 +1,303 @@
+{
+  "scenario": "startup",
+  "mode": "playback-latency",
+  "started_at": 1793600072.521863,
+  "ok": true,
+  "error": null,
+  "data": {
+    "actual_bridge": true,
+    "api_stubs": false,
+    "results": [
+      {
+        "bridge_ms": 12,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2215597907",
+        "time_to_audio_ms": 5165,
+        "within_3s": false,
+        "within_5s": false,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "_get_client_id",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1753.3898089,
+            "ms": 1556.2
+          },
+          {
+            "stage": "_api_get",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1754.9459831,
+            "status": 200,
+            "ms": 575.0
+          },
+          {
+            "stage": "connect",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1755.5392333,
+            "ms": 377.4
+          },
+          {
+            "stage": "_public_json",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1755.5210736,
+            "ms": 568.4
+          },
+          {
+            "stage": "connect",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1756.1623198,
+            "ms": 384.8
+          },
+          {
+            "stage": "_media_url_is_servable",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1756.0894658,
+            "result": true,
+            "ms": 721.2
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-233 (process_request_thread)",
+            "started": 1757.687802,
+            "ms": 381.4
+          }
+        ]
+      },
+      {
+        "bridge_ms": 10,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2104544877",
+        "time_to_audio_ms": 1739,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "_get_client_id",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1758.8619433,
+            "ms": 0.0
+          },
+          {
+            "stage": "_api_get",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1758.861978,
+            "status": 200,
+            "ms": 184.9
+          },
+          {
+            "stage": "_public_json",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1759.0469614,
+            "ms": 167.4
+          },
+          {
+            "stage": "_media_url_is_servable",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1759.2143957,
+            "result": true,
+            "ms": 250.6
+          }
+        ]
+      },
+      {
+        "bridge_ms": 16,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2331544133",
+        "time_to_audio_ms": 1879,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "_get_client_id",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1760.9259647,
+            "ms": 0.0
+          },
+          {
+            "stage": "_api_get",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1760.9260052,
+            "status": 200,
+            "ms": 176.1
+          },
+          {
+            "stage": "_public_json",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1761.1021249,
+            "ms": 174.0
+          },
+          {
+            "stage": "_media_url_is_servable",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1761.2761352,
+            "result": true,
+            "ms": 254.5
+          }
+        ]
+      },
+      {
+        "bridge_ms": 13,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2289890927",
+        "time_to_audio_ms": 2272,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "_get_client_id",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1763.1328595,
+            "ms": 0.0
+          },
+          {
+            "stage": "_api_get",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1763.1328891,
+            "status": 200,
+            "ms": 178.5
+          },
+          {
+            "stage": "_public_json",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1763.311514,
+            "ms": 166.7
+          },
+          {
+            "stage": "_media_url_is_servable",
+            "thread": "SoundCloudPlayback_0",
+            "started": 1763.4781842,
+            "result": true,
+            "ms": 266.4
+          }
+        ]
+      },
+      {
+        "bridge_ms": 6,
+        "playing": true,
+        "source": "youtube",
+        "source_id": "dQw4w9WgXcQ",
+        "time_to_audio_ms": 3951,
+        "within_3s": false,
+        "within_5s": true,
+        "style": "current",
+        "stages": [
+          {
+            "stage": "extract_info",
+            "thread": "YouTubePlayback_0",
+            "started": 1765.8827447,
+            "ms": 3055.7
+          },
+          {
+            "stage": "connect",
+            "thread": "Thread-294 (process_request_thread)",
+            "started": 1769.0377003,
+            "ms": 342.9
+          }
+        ]
+      },
+      {
+        "bridge_ms": 25,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2215597907",
+        "time_to_audio_ms": 1351,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": []
+      },
+      {
+        "bridge_ms": 12,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2104544877",
+        "time_to_audio_ms": 1326,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": []
+      },
+      {
+        "bridge_ms": 12,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2331544133",
+        "time_to_audio_ms": 1226,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": []
+      },
+      {
+        "bridge_ms": 6,
+        "playing": true,
+        "source": "soundcloud",
+        "source_id": "2289890927",
+        "time_to_audio_ms": 1211,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": []
+      },
+      {
+        "bridge_ms": 21,
+        "playing": true,
+        "source": "youtube",
+        "source_id": "dQw4w9WgXcQ",
+        "time_to_audio_ms": 396,
+        "within_3s": true,
+        "within_5s": true,
+        "style": "macos",
+        "stages": []
+      }
+    ],
+    "all_within_5s": false,
+    "note": "First advancing decoded media clock, physical speaker output not assessed"
+  },
+  "perf": {
+    "Timestamp": 1777.234916,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 2823,
+    "LayoutObjects": 3746,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 15133,
+    "Resources": 86,
+    "ContextLifecycleStateObservers": 47,
+    "V8PerContextDatas": 1,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 2,
+    "LayoutCount": 401,
+    "RecalcStyleCount": 760,
+    "LayoutDuration": 0.252201,
+    "RecalcStyleDuration": 0.896618,
+    "DevToolsCommandDuration": 0.103759,
+    "ScriptDuration": 0.159633,
+    "V8CompileDuration": 0.000178,
+    "TaskDuration": 2.488497,
+    "TaskOtherDuration": 1.076108,
+    "ThreadTime": 2.450289,
+    "ProcessTime": 4.541025,
+    "JSHeapUsedSize": 5649444,
+    "JSHeapTotalSize": 7340032,
+    "FirstMeaningfulPaint": 1752.959439,
+    "DomContentLoaded": 1752.973001,
+    "NavigationStart": 1752.785879
+  },
+  "finished_at": 1793600098.3934345
+}

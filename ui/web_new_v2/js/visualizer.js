@@ -27,6 +27,14 @@ let lastFrameTime = 0;
 let targetFps = 24;
 let frameInterval = 1000 / targetFps;
 let hasDrawnIdle = false;
+// Idle pose ("не играет") bookkeeping. `hasDrawnIdle` now means "the bars have
+// reached the idle pose and it is on screen", not "one paused frame was drawn".
+let idleSettled = true;
+let idleSteps = 0;
+const IDLE_SMOOTHING = 0.06;
+const IDLE_DAMPING = 0.75;
+const IDLE_EPSILON = 0.008;
+const MAX_IDLE_STEPS = 40;
 
 export function setVisualizerFps(fps) {
     targetFps = Math.max(5, Math.min(60, parseInt(fps) || 24));
@@ -128,7 +136,15 @@ export function initVisualizer() {
         });
     }
 
+    let resizeFrame = 0;
     const resizeCanvas = () => {
+        if (resizeFrame) return;
+        resizeFrame = requestAnimationFrame(() => {
+            resizeFrame = 0;
+            sizeCanvases();
+        });
+    };
+    const sizeCanvases = () => {
         targets.forEach(t => {
             if (t.canvas && t.canvas.parentElement) {
                 const sized = sizeCanvasForDpr(
@@ -143,7 +159,7 @@ export function initVisualizer() {
         });
         startDrawLoop();
     };
-    resizeCanvas();
+    sizeCanvases();
     resizeHandler = resizeCanvas;
     window.addEventListener('resize', resizeCanvas);
     // Dragging the window between a 100% and a 150% monitor changes
@@ -289,10 +305,17 @@ function updateSimulation(playing, now, volScale, track) {
         }
 
         const diff = bar.target - bar.current;
-        bar.velocity += diff * (playing ? SMOOTHING : 0.04);
-        bar.velocity *= 0.78;
+        bar.velocity += diff * (playing ? SMOOTHING : IDLE_SMOOTHING);
+        bar.velocity *= playing ? 0.78 : IDLE_DAMPING;
         bar.current += bar.velocity;
         bar.current = Math.max(0, Math.min(1, bar.current));
+    }
+
+    if (!playing) {
+        // The paused loop keeps painting until this is true (see draw()).
+        idleSteps++;
+        idleSettled = idleSteps >= MAX_IDLE_STEPS || bars.every(bar =>
+            Math.abs(bar.target - bar.current) <= IDLE_EPSILON && Math.abs(bar.velocity) <= 0.004);
     }
 
     if (isBeat && beatPhase < 0.02) {
@@ -323,17 +346,24 @@ function draw(timestamp) {
         return;
     }
 
-    if (!playing) {
-        if (hasDrawnIdle) { animFrameId = null; return; }
-        hasDrawnIdle = true;
-        animFrameId = null;
-    } else {
+    if (playing) {
         hasDrawnIdle = false;
+        idleSettled = false;
+        idleSteps = 0;
         animFrameId = requestAnimationFrame(draw);
+    } else if (hasDrawnIdle && idleSettled) {
+        // Idle pose already painted and stable - nothing left to animate.
+        animFrameId = null;
+        return;
     }
 
     const elapsed = timestamp - lastFrameTime;
-    if (elapsed < frameInterval) return;
+    if (elapsed < frameInterval) {
+        // Throttled. The settle walk still owes a frame, so keep it alive;
+        // while playing the rAF above already queued the next one.
+        if (!playing && !animFrameId) animFrameId = requestAnimationFrame(draw);
+        return;
+    }
     lastFrameTime = timestamp - (elapsed % frameInterval);
 
     const now = performance.now() / 1000;
@@ -372,6 +402,12 @@ function draw(timestamp) {
             drawBars(ctx, w, h, drawData, playing, target.primary, rgb);
         }
     });
+
+    if (!playing) {
+        // Keep walking the idle pose until it settles, then stop for good.
+        hasDrawnIdle = idleSettled;
+        animFrameId = idleSettled ? null : requestAnimationFrame(draw);
+    }
 }
 
 function makeGradient(ctx, x1, y1, x2, y2, playing, primary, rgb) {

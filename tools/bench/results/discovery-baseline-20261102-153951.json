@@ -1,0 +1,217 @@
+{
+  "signals": {
+    "known": 66,
+    "artists": 20
+  },
+  "seeds": [
+    {
+      "source": "youtube",
+      "source_id": "MsH08whXHls",
+      "artist": "BG Muz",
+      "title": "PHARAON - BLACK SIEMENS (remix by NID)"
+    },
+    {
+      "source": "soundcloud",
+      "source_id": "2426517300",
+      "artist": "Cube Rubik",
+      "title": "Я навайбкодил ВПН"
+    },
+    {
+      "source": "soundcloud",
+      "source_id": "2393146779",
+      "artist": "@svrreal",
+      "title": "ЗАНЫ ПРЕПАРАТЫ / ZANY (HARDTEKK)"
+    },
+    {
+      "source": "soundcloud",
+      "source_id": "2331544133",
+      "artist": "HELLBLADE",
+      "title": "ZELENUYU (ultra slowed)"
+    },
+    {
+      "source": "soundcloud",
+      "source_id": "715124080",
+      "artist": "The Weeknd",
+      "title": "Blinding Lights"
+    }
+  ],
+  "artists": [
+    "BG Muz",
+    "PHARAOH",
+    "The Weeknd"
+  ],
+  "providers": [
+    {
+      "name": "soundcloud_related",
+      "ms": 2408,
+      "count": 20,
+      "new": 20,
+      "examples": [
+        {
+          "source": "soundcloud",
+          "source_id": "2425486485",
+          "artist": "#голодный",
+          "title": "blossom (speed up)"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2425804626",
+          "artist": "evrsa1nt",
+          "title": "helicopterz"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2426957139",
+          "artist": "crocodiller",
+          "title": "crocodiller (feat. crocodiller)"
+        }
+      ]
+    },
+    {
+      "name": "youtube_radio",
+      "ms": 1461,
+      "count": 20,
+      "new": 20,
+      "examples": [
+        {
+          "source": "youtube",
+          "source_id": "TByoaC9dkko",
+          "artist": "Soys, Отметок \"Нравится\": 16 тыс.",
+          "title": "Pharaoh x Пошлая Молли - BLACK СТОП (Tik tok,Тик ток) mashup by.dmitrsolo / 2017 Aesthetic,тренды"
+        },
+        {
+          "source": "youtube",
+          "source_id": "mghF9mOddTc",
+          "artist": "Falxce, Отметок \"Нравится\": 335",
+          "title": "Chill Phonk (Slowed + Reverb)"
+        },
+        {
+          "source": "youtube",
+          "source_id": "5souw4K5UQc",
+          "artist": "Bones, Отметок \"Нравится\": 831 тыс.",
+          "title": "HDMI"
+        }
+      ]
+    },
+    {
+      "name": "deezer_radio:BG Muz",
+      "ms": 395,
+      "count": 30,
+      "new": 30,
+      "examples": [
+        {
+          "source": "deezer",
+          "source_id": "2015521127",
+          "artist": "Big Kuza",
+          "title": "Blessing"
+        },
+        {
+          "source": "deezer",
+          "source_id": "521609582",
+          "artist": "Yk Osiris",
+          "title": "Timing"
+        },
+        {
+          "source": "deezer",
+          "source_id": "1677832857",
+          "artist": "Big Kuza",
+          "title": "Hear This Shit"
+        }
+      ]
+    },
+    {
+      "name": "deezer_related_artists",
+      "artist": "BG Muz",
+      "count": 6,
+      "ms": 1197
+    },
+    {
+      "name": "deezer_radio:PHARAOH",
+      "ms": 430,
+      "count": 30,
+      "new": 30,
+      "examples": [
+        {
+          "source": "deezer",
+          "source_id": "1988992507",
+          "artist": "Pharaøh",
+          "title": "House of Memories"
+        },
+        {
+          "source": "deezer",
+          "source_id": "1931866377",
+          "artist": "The FifthGuys",
+          "title": "Radioactive"
+        },
+        {
+          "source": "deezer",
+          "source_id": "2876328552",
+          "artist": "EQRIC",
+          "title": "New Rules"
+        }
+      ]
+    },
+    {
+      "name": "deezer_related_artists",
+      "artist": "PHARAOH",
+      "count": 6,
+      "ms": 815
+    }
+  ],
+  "mixes_completed": true,
+  "mixes": [
+    {
+      "title": "Любимые и знакомые",
+      "count": 12,
+      "new": 0,
+      "sources": {
+        "soundcloud": 9,
+        "youtube": 2,
+        "spotify": 1
+      }
+    },
+    {
+      "title": "Открытия для вас",
+      "count": 12,
+      "new": 12,
+      "sources": {
+        "soundcloud": 5,
+        "youtube": 7
+      }
+    },
+    {
+      "title": "Ежедневный микс 1",
+      "count": 2,
+      "new": 0,
+      "sources": {
+        "soundcloud": 1,
+        "youtube": 1
+      }
+    },
+    {
+      "title": "Ежедневный микс 2",
+      "count": 6,
+      "new": 1,
+      "sources": {
+        "soundcloud": 5,
+        "youtube": 1
+      }
+    },
+    {
+      "title": "Ежедневный микс 3",
+      "count": 3,
+      "new": 0,
+      "sources": {
+        "soundcloud": 3
+      }
+    },
+    {
+      "title": "Ежедневный микс 4",
+      "count": 4,
+      "new": 0,
+      "sources": {
+        "soundcloud": 4
+      }
+    }
+  ]
+}

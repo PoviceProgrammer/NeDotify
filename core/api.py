@@ -78,6 +78,7 @@ BRIDGE_SYNC_BUDGET = 6.0
 # unscaled). Without the multiplication the card shrinks on 125%/150% DPI.
 MAIN_WINDOW_SIZE = (1100, 800)
 MINI_WINDOW_SIZE = (340, 64)
+MINI_WINDOW_EXPANDED_SIZE = (460, 244)
 MAIN_WINDOW_MIN_SIZE = (600, 640)
 
 # Cover image formats the tag editor and the /api/cover proxy both accept.
@@ -194,14 +195,15 @@ class AppApi:
         self._core = core
         self._core.api = self
         from core.playlist_availability import PlaylistAvailability
+        from core.album_availability import AlbumAvailability
         self._playlist_availability = PlaylistAvailability(core, lambda *args: self._emit(*args))
+        self._album_availability = AlbumAvailability(core, lambda *args: self._emit(*args))
         self._window = None
         self._main_window = None
         self._mini_window = None
         self._is_mini_active = False
         self._is_maximized = False
         self._is_fullscreen = False
-        self._saved_mini_pos = "bottom-right"
         self._window_op_lock = threading.RLock()
         self._listening_sessions = {}
         self._active_listening_token = None
@@ -333,6 +335,9 @@ class AppApi:
         availability = getattr(self, '_playlist_availability', None)
         if availability:
             availability.close()
+        album_availability = getattr(self, '_album_availability', None)
+        if album_availability:
+            album_availability.close()
         self._window = None
         self.shutdown()
         ready = getattr(self, '_ui_ready_event', None)
@@ -560,79 +565,6 @@ class AppApi:
                 pass
         return 1.0
 
-    def _logical_workarea(self):
-        """(x, y, w, h) of the work area (taskbar excluded) under the window,
-        in LOGICAL pixels - matching what Window.move() expects."""
-        try:
-            import ctypes
-            from ctypes import wintypes
-
-            user32 = ctypes.windll.user32
-
-            class RECT(ctypes.Structure):
-                _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
-                            ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
-
-            hwnd = self._get_hwnd()
-            rect = RECT()
-            got = False
-            if hwnd:
-                mon_rc = RECT()
-
-                class MONITORINFO(ctypes.Structure):
-                    _fields_ = [("cbSize", wintypes.DWORD),
-                                ("rcMonitor", RECT),
-                                ("rcWork", RECT),
-                                ("dwFlags", wintypes.DWORD)]
-
-                hmon = user32.MonitorFromWindow(ctypes.c_void_p(hwnd), 2)  # MONITOR_DEFAULTTONEAREST
-                if hmon:
-                    mi = MONITORINFO()
-                    mi.cbSize = ctypes.sizeof(MONITORINFO)
-                    if user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
-                        mon_rc = mi.rcWork
-                        got = True
-            if not got:
-                # Primary monitor work area fallback
-                if not user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):
-                    return None
-                mon_rc = rect
-
-            s = self._get_scale_factor()
-            x = int(mon_rc.left / s)
-            y = int(mon_rc.top / s)
-            w = int((mon_rc.right - mon_rc.left) / s)
-            h = int((mon_rc.bottom - mon_rc.top) / s)
-            return x, y, w, h
-        except Exception as e:
-            logger.debug(f"_logical_workarea failed: {type(e).__name__}")
-            return None
-
-    def _saved_pos_coords(self, pos: str, w: int, h: int):
-        """Compute screen coordinates (logical px) for a mini-player position."""
-        area = self._logical_workarea()
-        if not area:
-            return None
-        ax, ay, aw, ah = area
-        scale = self._get_scale_factor()
-        w, h = round(w / scale), round(h / scale)
-        margin = 20
-        if pos == 'top-left':
-            return ax + margin, ay + margin
-        if pos == 'top-center':
-            return ax + (aw - w) // 2, ay + margin
-        if pos == 'top-right':
-            return ax + aw - w - margin, ay + margin
-        if pos == 'bottom-left':
-            return ax + margin, ay + ah - h - margin
-        if pos == 'bottom-center':
-            return ax + (aw - w) // 2, ay + ah - h - margin
-        if pos == 'bottom-right':
-            return ax + aw - w - margin, ay + ah - h - margin
-        if pos == 'center':
-            return ax + (aw - w) // 2, ay + (ah - h) // 2
-        return ax + aw - w - margin, ay + margin
-
     def _deferred_window_op(self, delay: float, fn):
         """Run a native window operation on a background thread after a short delay.
 
@@ -710,24 +642,28 @@ class AppApi:
                         self._saved_main_geometry = self._native_window_geometry(window) or (*MAIN_WINDOW_SIZE, None, None)
                     if native is not None:
                         from System.Drawing import Size
-                        from System.Windows.Forms import FormWindowState
+                        from System.Windows.Forms import FormWindowState, Screen
+                        screen = Screen.FromHandle(native.Handle).Bounds
                         self._saved_main_maximized = native.WindowState == FormWindowState.Maximized if not previous else getattr(self, '_saved_main_maximized', False)
                         native.WindowState = FormWindowState.Normal
                         native.MinimumSize = Size(1, 1)
                     window.on_top = True
-                    self._set_native_window_corners(True)
+                    self._set_mini_window_frame(window, True)
                     scale = self._get_scale_factor()
                     # resize() takes PHYSICAL pixels; MINI_WINDOW_SIZE is logical
                     mini_w = int(MINI_WINDOW_SIZE[0] * scale)
                     mini_h = int(MINI_WINDOW_SIZE[1] * scale)
-                    window.resize(mini_w, mini_h)
-                    # _saved_pos_coords expects PHYSICAL dims (it normalizes to
-                    # logical itself before comparing against the work area)
-                    self._apply_window_pos(window, self._saved_mini_pos, mini_w, mini_h)
+                    if native is not None:
+                        native.SetBounds(*self._top_center_mini_bounds(screen, mini_w, mini_h))
+                        self._shape_mini_window(native, mini_w, mini_h, scale)
+                    else:
+                        window.resize(mini_w, mini_h)
                 else:
                     width, height, x, y = getattr(self, '_saved_main_geometry', (*MAIN_WINDOW_SIZE, None, None))
                     window.on_top = False
-                    self._set_native_window_corners(False)
+                    self._set_mini_window_frame(window, False)
+                    if native is not None:
+                        self._clear_mini_window_shape(native)
                     window.resize(int(width), int(height))
                     if native is not None:
                         from System.Drawing import Size
@@ -753,6 +689,98 @@ class AppApi:
             return {'success': False, 'is_mini': getattr(self, '_is_mini_active', False), 'request_id': rid}
         return {'success': True, 'pending': True, 'is_mini': enable, 'request_id': rid}
 
+    @staticmethod
+    def _clear_mini_window_shape(native):
+        previous = native.Region
+        native.Region = None
+        if previous is not None:
+            previous.Dispose()
+
+    @staticmethod
+    def _shape_mini_window(native, width, height, scale):
+        """Round the lower corners of the opaque native mini-player surface."""
+        from System.Drawing import Region
+        from System.Drawing.Drawing2D import GraphicsPath
+
+        corner = round(24 * scale)
+        path = GraphicsPath()
+        try:
+            path.AddLine(0, 0, width, 0)
+            path.AddLine(width, 0, width, height - corner)
+            path.AddArc(width - 2 * corner, height - 2 * corner, 2 * corner, 2 * corner, 0, 90)
+            path.AddLine(corner, height, width - corner, height)
+            path.AddArc(0, height - 2 * corner, 2 * corner, 2 * corner, 90, 90)
+            path.AddLine(0, height - corner, 0, 0)
+            path.CloseFigure()
+            previous = native.Region
+            native.Region = Region(path)
+            if previous is not None:
+                previous.Dispose()
+        finally:
+            path.Dispose()
+
+    @staticmethod
+    def _top_center_mini_bounds(screen, width, height):
+        return (screen.X + (screen.Width - width) // 2,
+                screen.Y, width, height)
+
+    def set_mini_player_expanded(self, expanded: bool, animate: bool = True):
+        """Resize the mini window around the midpoint of the upper monitor edge."""
+        window = self._mini_window or self._window
+        if not isinstance(expanded, bool) or not window or not self._is_mini_active:
+            return False
+        generation = self._mini_generation
+
+        def apply():
+            if generation != self._mini_generation or not self._is_mini_active:
+                return
+            native = getattr(window, 'native', None)
+            if native is None:
+                return
+            from System.Windows.Forms import Screen, Timer
+
+            start = native.Bounds
+            scale = self._get_scale_factor()
+            width, height = (round(size * scale) for size in
+                             (MINI_WINDOW_EXPANDED_SIZE if expanded else MINI_WINDOW_SIZE))
+            screen = Screen.FromHandle(native.Handle).Bounds
+            target = self._top_center_mini_bounds(screen, width, height)
+
+            # All timers and Form bounds are owned by the WinForms UI thread.
+            revision = getattr(self, '_mini_resize_revision', 0) + 1
+            self._mini_resize_revision = revision
+            if not animate:
+                native.SetBounds(*target)
+                self._shape_mini_window(native, width, height, scale)
+                return
+
+            started = time.monotonic()
+            timer = Timer()
+            timer.Interval = 15
+
+            def tick(_sender, _args):
+                if (generation != self._mini_generation or revision != self._mini_resize_revision
+                        or getattr(self, '_closed', False)):
+                    timer.Stop()
+                    timer.Dispose()
+                    return
+                progress = min(1, (time.monotonic() - started) / 0.26)
+                eased = 1 - (1 - progress) ** 3
+                frame_width = round(start.Width + (width - start.Width) * eased)
+                frame_height = round(start.Height + (height - start.Height) * eased)
+                bounds = self._top_center_mini_bounds(screen, frame_width, frame_height)
+                native.SetBounds(*bounds)
+                self._shape_mini_window(native, bounds[2], bounds[3], scale)
+                if progress == 1:
+                    timer.Stop()
+                    timer.Dispose()
+
+            timer.Tick += tick
+            timer.Start()
+
+        self._on_window_ui_thread(window, apply)
+        return True
+
     def _enter_mini_mode(self):
         """Internal compatibility hook; use the same correlated native transition."""
         return self.toggle_mini_player(True)
@@ -761,60 +789,50 @@ class AppApi:
         """Internal compatibility hook; use the same correlated native transition."""
         return self.toggle_mini_player(False)
 
-    def _set_native_window_corners(self, rounded: bool):
-        """Ask Windows 11 to clip the frameless mini window to rounded corners."""
-        if sys.platform != "win32":
+    def _set_mini_window_frame(self, window, enabled: bool):
+        """Use the mini-player color across the WinForms and WebView2 surfaces."""
+        native = getattr(window, 'native', None)
+        if native is None:
+            return
+        if enabled:
+            from System.Drawing import Color
+
+            if getattr(self, '_mini_surface_colors', None) is None:
+                browser = getattr(native, 'webview', None)
+                browser_color = getattr(browser, 'DefaultBackgroundColor', None)
+                self._mini_surface_colors = (native.BackColor, browser, browser_color)
+            color = Color.FromArgb(9, 9, 9)
+            native.BackColor = color
+            _, browser, browser_color = self._mini_surface_colors
+            if browser_color is not None:
+                browser.DefaultBackgroundColor = color
+        elif getattr(self, '_mini_surface_colors', None) is not None:
+            native.BackColor, browser, browser_color = self._mini_surface_colors
+            if browser_color is not None:
+                browser.DefaultBackgroundColor = browser_color
+            self._mini_surface_colors = None
+
+        if sys.platform != 'win32':
             return
         hwnd = self._get_hwnd()
         if not hwnd:
             return
         try:
             import ctypes
-            preference = ctypes.c_int(2 if rounded else 0)  # DWMWCP_ROUND / DEFAULT
-            result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                hwnd, 33, ctypes.byref(preference), ctypes.sizeof(preference)
-            )
-            if result != 0:
-                logger.debug("DWM corner preference was not applied (HRESULT 0x%08X)", result)
+
+            # pywebview extends the glass frame one pixel into the client area
+            # when shadows are enabled. Disable it while our Region owns the clip.
+            dwm = ctypes.windll.dwmapi
+            shadow = getattr(window, 'shadow', True)
+            margin = int(shadow and not enabled)
+            margins = (ctypes.c_int * 4)(margin, margin, margin, margin)
+            dwm.DwmExtendFrameIntoClientArea(hwnd, ctypes.byref(margins))
+            for attribute, value in ((33, 1 if enabled else 0),       # Corner preference
+                                     (34, -2 if enabled else -1)):  # Border color
+                setting = ctypes.c_int(value)
+                dwm.DwmSetWindowAttribute(hwnd, attribute, ctypes.byref(setting), ctypes.sizeof(setting))
         except Exception:
-            logger.debug("DWM corner preference is unavailable", exc_info=True)
-
-    def set_mini_player_position(self, pos: str):
-        """Move mini player window to a screen position (top-left, top-right, bottom-left, bottom-right, center).
-
-        The position is remembered even while the mini player is inactive so it
-        applies on the next entry; the native move only happens in mini mode.
-        """
-        if pos:
-            self._saved_mini_pos = pos
-
-        # CRITICAL GUARD: Only move native window if mini-player mode is active!
-        if not self._is_mini_active and not self._mini_window:
-            return
-
-        target_win = self._mini_window or self._window
-        if not target_win:
-            return
-        scale = self._get_scale_factor()
-        mini_w = int(MINI_WINDOW_SIZE[0] * scale)
-        mini_h = int(MINI_WINDOW_SIZE[1] * scale)
-        self._deferred_window_op(0.1, lambda: self._apply_window_pos(target_win, pos, mini_w, mini_h))
-
-    def _apply_window_pos(self, target_win, pos: str, w: int, h: int):
-        """Compute target screen position for size (w x h) and move the window.
-
-        w and h are PHYSICAL pixels: _saved_pos_coords normalizes them to
-        logical before comparing against the logical work area.
-        """
-        try:
-            coords = self._saved_pos_coords(pos, w, h)
-            if not coords:
-                logger.debug("No work area available for position %r", pos)
-                return
-            x, y = coords
-            self._native_move_window(target_win, x, y)
-        except Exception as e:
-            logger.debug(f"Failed to move window to position {pos}: {type(e).__name__}")
+            logger.debug('DWM mini-player frame settings are unavailable', exc_info=True)
 
     def _native_move_window(self, target_win, x, y):
         """Move the window via Win32 with real integer arguments.
@@ -904,7 +922,9 @@ class AppApi:
         self.minimize()
 
     def begin_window_drag(self):
-        """Start a native caption drag for frameless-window drag handles."""
+        """Start a native caption drag for the main window."""
+        if getattr(self, "_is_mini_active", False):
+            return {"success": False}
         if sys.platform != "win32":
             return {"success": False, "error": "Native dragging is only available on Windows"}
         hwnd = self._get_hwnd()
@@ -922,13 +942,21 @@ class AppApi:
             cursor = POINT()
             if not user32.GetCursorPos(ctypes.byref(cursor)):
                 raise OSError("GetCursorPos failed")
-            user32.ReleaseCapture()
-            # WM_NCLBUTTONDOWN + HTCAPTION lets Windows own the drag loop,
-            # keeping it smooth across monitors and DPI settings.
             packed = ((cursor.y & 0xFFFF) << 16) | (cursor.x & 0xFFFF)
             lparam = ctypes.c_ssize_t(ctypes.c_int32(packed).value)
             send = self._native_message_function()
-            self._on_window_ui_thread(self._window, lambda: send(hwnd, 0x00A1, 2, lparam))
+
+            def start_drag():
+                try:
+                    # WebView2's child holds the mouse capture on the UI thread.
+                    # Release it there before the caption drag, or the modal
+                    # move loop never sees a pointer move and the window sits.
+                    user32.ReleaseCapture()
+                    send(hwnd, 0x00A1, 2, lparam)
+                except Exception:
+                    logger.warning('Native drag loop failed', exc_info=True)
+
+            self._on_window_ui_thread(self._window, start_drag)
             return {"success": True}
         except Exception as exc:
             logger.warning("Native window drag failed: %s", type(exc).__name__, exc_info=True)
@@ -2398,8 +2426,12 @@ class AppApi:
             if not current():
                 return
             result = self._catalog_service().album_details(album_data if isinstance(album_data, dict) else {}, self._core.db.get_album_tracks, current)
-            if current():
-                self._emit('album_details_ready', dict(result, request_id=rid))
+            if not current():
+                return
+            tracks = result.get('tracks') if isinstance(result, dict) else None
+            if result.get('status') == 'found' and tracks:
+                self._album_availability.start(tracks, request_id=rid)
+            self._emit('album_details_ready', dict(result, request_id=rid))
         self._search_executor.submit(run)
         return {'status': 'loading', 'request_id': rid}
 
@@ -3637,32 +3669,96 @@ class AppApi:
         return {'success': True}
 
     def get_lyrics_display_settings(self):
-        """Get user typography preferences for lyrics display."""
+        """Get user typography preferences for lyrics display.
+
+        Returns only the keys that are actually stored. The UI merges this over
+        its localStorage copy, so an empty `lyrics_display` category must not
+        hand back defaults and wipe a choice made before saves were fixed.
+        """
         try:
             stored = self._core.db.get_settings_by_category('lyrics_display') or {}
-            return {
-                'fontSize': int(stored.get('fontSize') or 24),
-                'fontWeight': int(stored.get('fontWeight') or 700),
-                'lineHeight': float(stored.get('lineHeight') or 1.45),
-                'textAlign': str(stored.get('textAlign') or 'center'),
-            }
         except Exception:
-            return {'fontSize': 24, 'fontWeight': 700, 'lineHeight': 1.45, 'textAlign': 'center'}
+            return {}
+        settings = {}
+        try:
+            def value(name):
+                # Settings are stored as `category.key` (the convention every
+                # other writer uses); accept the legacy bare key too.
+                for key in (f'lyrics_display.{name}', name):
+                    if stored.get(key) is not None:
+                        return stored[key]
+                return None
 
-    def save_lyrics_display_settings(self, settings: dict):
-        """Persist typography preferences for lyrics display."""
+            size = value('fontSize')
+            weight = value('fontWeight')
+            line_height = value('lineHeight')
+            align = value('textAlign')
+            if size is not None:
+                settings['fontSize'] = int(size)
+            if weight is not None:
+                settings['fontWeight'] = int(weight)
+            if line_height is not None:
+                settings['lineHeight'] = float(line_height)
+            if align:
+                settings['textAlign'] = str(align)
+        except (TypeError, ValueError):
+            return {}
+        return settings
+
+    def save_lyrics_display_settings(self, settings=None, *legacy):
+        """Persist typography preferences for lyrics display.
+
+        The UI has shipped three call shapes over time: a camelCase dict (what
+        `get_lyrics_display_settings` returns), four positional numbers, and a
+        JSON string. All three are accepted here — the positional one used to
+        fail `isinstance(settings, dict)` and silently drop every save.
+        Keys may also be snake_case.
+        """
+        if isinstance(settings, str):
+            try:
+                settings = json.loads(settings)
+            except (TypeError, ValueError):
+                return False
         if not isinstance(settings, dict):
-            return False
+            values = (settings,) + legacy
+            if not any(value is not None for value in values):
+                return False
+            settings = dict(zip(('fontSize', 'fontWeight', 'lineHeight', 'textAlign'), values))
+
+        aliases = {
+            'fontSize': ('fontSize', 'font_size'),
+            'fontWeight': ('fontWeight', 'font_weight'),
+            'lineHeight': ('lineHeight', 'line_height'),
+            'textAlign': ('textAlign', 'text_align'),
+        }
+
+        def pick(canonical):
+            for key in aliases[canonical]:
+                if settings.get(key) is not None:
+                    return settings[key]
+            return None
+
+        def add(items, key, raw, convert, low, high):
+            if raw is None:
+                return
+            try:
+                number = float(raw)
+            except (TypeError, ValueError):
+                return
+            items.append((f'lyrics_display.{key}', convert(min(high, max(low, number))), 'lyrics_display'))
+
         try:
             items = []
-            if 'fontSize' in settings:
-                items.append(('fontSize', int(settings['fontSize']), 'lyrics_display'))
-            if 'fontWeight' in settings:
-                items.append(('fontWeight', int(settings['fontWeight']), 'lyrics_display'))
-            if 'lineHeight' in settings:
-                items.append(('lineHeight', float(settings['lineHeight']), 'lyrics_display'))
-            if 'textAlign' in settings:
-                items.append(('textAlign', str(settings['textAlign']), 'lyrics_display'))
+            add(items, 'fontSize', pick('fontSize'), int, 14, 36)
+            add(items, 'fontWeight', pick('fontWeight'), int, 400, 800)
+            add(items, 'lineHeight', pick('lineHeight'), float, 1.1, 2.2)
+            align = pick('textAlign')
+            if align is not None:
+                items.append((
+                    'lyrics_display.textAlign',
+                    'left' if str(align) == 'left' else 'center',
+                    'lyrics_display',
+                ))
             if items:
                 self._core.db.set_settings_batch(items)
             return True

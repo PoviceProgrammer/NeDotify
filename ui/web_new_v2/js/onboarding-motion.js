@@ -2,6 +2,7 @@
 export function mountOnboardingMotion(wizard, {signal}) {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
     const running = new Set();
+    let perNode = new WeakMap();
     const beats = ['Твоё настроение', 'Твой темп', 'Твоё звучание', 'Твоя коллекция', 'Твои открытия', 'Твой Soneth'];
     const icons = ['palette', 'sparkles', 'headphones', 'library', 'radio', 'check'];
     const steps = [...wizard.querySelectorAll('.onboarding-step')];
@@ -51,12 +52,22 @@ export function mountOnboardingMotion(wizard, {signal}) {
     function cancel() {
         for (const animation of running) animation.cancel();
         running.clear();
+        perNode = new WeakMap();
     }
     function animate(node, frames, options = {}) {
         if (!node?.animate || reduced.matches || signal.aborted) return null;
+        // A rapid second click on the same choice used to stack two scale
+        // keyframes on one node; the older one took over when the newer
+        // finished, which read as a jump. Keep one animation per node.
+        perNode.get(node)?.cancel();
         const animation = node.animate(frames, {duration: 460, easing: 'cubic-bezier(.22,1,.36,1)', ...options});
+        perNode.set(node, animation);
         running.add(animation);
-        animation.finished.then(() => { running.delete(animation);animation.cancel(); }, () => running.delete(animation));
+        animation.finished.then(() => {
+            running.delete(animation);
+            if (perNode.get(node) === animation) perNode.delete(node);
+            animation.cancel();
+        }, () => running.delete(animation));
         return animation;
     }
     signal.addEventListener('abort', cancel, {once: true});

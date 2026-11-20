@@ -1,4 +1,4 @@
-.operation-error[hidden] { display: none; }
+.operation-error[hidden] { display: none; opacity: 0; translate: 0 6px; pointer-events: none; }
 .audio-output-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .audio-output-controls select { flex: 1; min-width: min(240px, 100%); }
 .audio-output-status { color: var(--text-sec); font-size: 12px; margin-top: 10px; }
@@ -14,11 +14,17 @@
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0,0,0,.2);
     z-index: 14000;
+    opacity: 1;
+    translate: 0 0;
+    transition: opacity 160ms ease, translate 180ms cubic-bezier(.2,.75,.2,1), display 180ms allow-discrete;
 }
+@starting-style { .operation-error:not([hidden]) { opacity: 0; translate: 0 6px; } }
+@media (prefers-reduced-motion: reduce) { .operation-error { transition: none; } }
 .operation-error h2 { font-size: 15px; margin: 0 28px 8px 0; }
 .operation-error p { color: var(--text-sec); font-size: 13px; line-height: 1.5; margin-bottom: 12px; }
 .operation-error [data-error-dismiss] { position: absolute; top: 10px; right: 10px; }
-.profile-comparison { margin-top: 20px; }
+.profile-comparison { margin-top: 20px; opacity: 1; translate: 0 0; transition: opacity 180ms ease, translate 200ms cubic-bezier(.2,.75,.2,1); }
+@starting-style { .profile-comparison:not([hidden]) { opacity: 0; translate: 0 6px; } }
 .profile-comparison summary { cursor: pointer; font-size: 17px; font-weight: 650; }
 .comparison-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 18px 0; }
 .comparison-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; margin-bottom: 24px; }

@@ -1,0 +1,8 @@
+{
+  "vpnModified": false,
+  "profileIsolated": true,
+  "packagedExe": true,
+  "ok": false,
+  "errorType": "TimeoutError",
+  "error": "no CDP page target on :59020 within 40s (19 attempts, last error: URLError(TimeoutError('timed out')))"
+}

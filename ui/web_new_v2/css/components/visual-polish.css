@@ -135,7 +135,10 @@
     border-radius: 3px;
     background: rgb(var(--color-primary-rgb, var(--primary-rgb, 244, 63, 94)));
     box-shadow: 0 0 8px var(--color-primary-glow, rgba(244, 63, 94, 0.5));
+    transform-origin: center;
+    animation: accentBarIn .18s cubic-bezier(.2,.8,.2,1);
 }
+@keyframes accentBarIn { from { transform: scaleY(.25); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
 .track-item.playing {
     padding-left: 16px;
 }
@@ -209,4 +212,5 @@ button:focus-visible, input:focus-visible, .nav-item:focus-visible,
     .feed-card:hover, .quick-access-card:hover {
         transform: none !important;
     }
+    .track-item.playing::before { animation: none !important; }
 }

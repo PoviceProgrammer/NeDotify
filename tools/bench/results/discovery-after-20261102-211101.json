@@ -1,0 +1,790 @@
+{
+  "known_fingerprint": "d94f81921ea02c89065e9fa23c591fb1890859faa45933de91c190b214be7995",
+  "signals": {
+    "known": 66,
+    "artists": 20
+  },
+  "seeds": [
+    {
+      "source": "youtube",
+      "source_id": "MsH08whXHls",
+      "artist": "BG Muz",
+      "title": "PHARAON - BLACK SIEMENS (remix by NID)"
+    },
+    {
+      "source": "soundcloud",
+      "source_id": "2426517300",
+      "artist": "Cube Rubik",
+      "title": "Я навайбкодил ВПН"
+    },
+    {
+      "source": "soundcloud",
+      "source_id": "2393146779",
+      "artist": "@svrreal",
+      "title": "ЗАНЫ ПРЕПАРАТЫ / ZANY (HARDTEKK)"
+    },
+    {
+      "source": "soundcloud",
+      "source_id": "2331544133",
+      "artist": "HELLBLADE",
+      "title": "ZELENUYU (ultra slowed)"
+    },
+    {
+      "source": "soundcloud",
+      "source_id": "715124080",
+      "artist": "The Weeknd",
+      "title": "Blinding Lights"
+    }
+  ],
+  "artists": [
+    "BG Muz",
+    "PHARAOH",
+    "The Weeknd"
+  ],
+  "providers": [
+    {
+      "name": "soundcloud_related",
+      "ms": 294,
+      "count": 15,
+      "new": 15,
+      "examples": [
+        {
+          "source": "soundcloud",
+          "source_id": "2426518983",
+          "artist": "#blessmylife",
+          "title": "вайбкодеRR"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2428457136",
+          "artist": "eclipse media",
+          "title": "беги"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2428884408",
+          "artist": "poster boy",
+          "title": "не по пути"
+        }
+      ]
+    },
+    {
+      "name": "youtube_radio",
+      "ms": 855,
+      "count": 20,
+      "new": 20,
+      "examples": [
+        {
+          "source": "youtube",
+          "source_id": "TByoaC9dkko",
+          "artist": "Soys",
+          "title": "Pharaoh x Пошлая Молли - BLACK СТОП (Tik tok,Тик ток) mashup by.dmitrsolo / 2017 Aesthetic,тренды"
+        },
+        {
+          "source": "youtube",
+          "source_id": "BdjNDUMpby8",
+          "artist": "GOLDSHEVIK",
+          "title": "GOLDSHEVIK - POLOZHENIE"
+        },
+        {
+          "source": "youtube",
+          "source_id": "yPIOPrRLLJ4",
+          "artist": "The Unknown Lil",
+          "title": "XXXTENTACION - Ghost (Music Video) (rkm Remix)"
+        }
+      ]
+    },
+    {
+      "name": "deezer_radio:BG Muz",
+      "ms": 186,
+      "count": 30,
+      "new": 30,
+      "examples": [
+        {
+          "source": "deezer",
+          "source_id": "1833579827",
+          "artist": "Big Kuza",
+          "title": "Different With You"
+        },
+        {
+          "source": "deezer",
+          "source_id": "467633232",
+          "artist": "Yung Bleu",
+          "title": "We All We Got"
+        },
+        {
+          "source": "deezer",
+          "source_id": "1419481612",
+          "artist": "Big Kuza",
+          "title": "Toxic"
+        }
+      ]
+    },
+    {
+      "name": "deezer_related_artists",
+      "artist": "BG Muz",
+      "count": 6,
+      "ms": 772
+    },
+    {
+      "name": "deezer_radio:PHARAOH",
+      "ms": 223,
+      "count": 30,
+      "new": 30,
+      "examples": [
+        {
+          "source": "deezer",
+          "source_id": "1988992507",
+          "artist": "Pharaøh",
+          "title": "House of Memories"
+        },
+        {
+          "source": "deezer",
+          "source_id": "2969041321",
+          "artist": "Meyo",
+          "title": "Hangover"
+        },
+        {
+          "source": "deezer",
+          "source_id": "3981053051",
+          "artist": "PXSEIDON",
+          "title": "LEGENDARY LOVERS (Agartha Hardstyle Slowed)"
+        }
+      ]
+    },
+    {
+      "name": "deezer_related_artists",
+      "artist": "PHARAOH",
+      "count": 6,
+      "ms": 550
+    },
+    {
+      "name": "verified_deezer_discovery",
+      "ms": 1647,
+      "count": 30,
+      "new": 30,
+      "examples": [
+        {
+          "source": "deezer",
+          "source_id": "1278960402",
+          "artist": "The Weeknd",
+          "title": "House Of Balloons / Glass Table Girls"
+        },
+        {
+          "source": "deezer",
+          "source_id": "613138092",
+          "artist": "Sam Smith",
+          "title": "Dancing With A Stranger"
+        },
+        {
+          "source": "deezer",
+          "source_id": "2988053201",
+          "artist": "The Weeknd",
+          "title": "Dancing In The Flames"
+        }
+      ]
+    },
+    {
+      "name": "verified_deezer_public_positive_control",
+      "ms": 1242,
+      "count": 30,
+      "new": 30,
+      "examples": [
+        {
+          "source": "deezer",
+          "source_id": "3138819",
+          "artist": "Daft Punk",
+          "title": "Around the World (Radio Edit)"
+        },
+        {
+          "source": "deezer",
+          "source_id": "23273691",
+          "artist": "Jamiroquai",
+          "title": "White Knuckle Ride"
+        },
+        {
+          "source": "deezer",
+          "source_id": "3155975",
+          "artist": "Daft Punk",
+          "title": "Human After All"
+        }
+      ]
+    }
+  ],
+  "mixes_completed": true,
+  "mix_wall_ms": 4015,
+  "mix_cpu_ms": 594,
+  "mixes": [
+    {
+      "title": "Любимые и знакомые",
+      "count": 12,
+      "unique": 12,
+      "new": 0,
+      "sources": {
+        "soundcloud": 9,
+        "youtube": 2,
+        "spotify": 1
+      },
+      "recording_ids": [
+        [
+          "soundcloud",
+          "715124080"
+        ],
+        [
+          "youtube",
+          "MsH08whXHls"
+        ],
+        [
+          "soundcloud",
+          "284042881"
+        ],
+        [
+          "soundcloud",
+          "2393146779"
+        ],
+        [
+          "youtube",
+          "F9XwPkc2TfE"
+        ],
+        [
+          "soundcloud",
+          "1801990393"
+        ],
+        [
+          "soundcloud",
+          "2331544133"
+        ],
+        [
+          "soundcloud",
+          "160249520"
+        ],
+        [
+          "soundcloud",
+          "2331544139"
+        ],
+        [
+          "soundcloud",
+          "156697047"
+        ],
+        [
+          "spotify",
+          "ytsearch1: PHARAOH - В зоне"
+        ],
+        [
+          "soundcloud",
+          "88365313"
+        ]
+      ],
+      "evidence": {
+        "": 12
+      },
+      "new_examples": []
+    },
+    {
+      "title": "Открытия для вас",
+      "count": 12,
+      "unique": 12,
+      "new": 12,
+      "sources": {
+        "youtube": 3,
+        "soundcloud": 6,
+        "deezer": 3
+      },
+      "recording_ids": [
+        [
+          "youtube",
+          "TByoaC9dkko"
+        ],
+        [
+          "soundcloud",
+          "2426518983"
+        ],
+        [
+          "soundcloud",
+          "2392412850"
+        ],
+        [
+          "soundcloud",
+          "2360933402"
+        ],
+        [
+          "deezer",
+          "106506514"
+        ],
+        [
+          "youtube",
+          "BhVOl7JSWrQ"
+        ],
+        [
+          "deezer",
+          "3210598381"
+        ],
+        [
+          "soundcloud",
+          "2350027253"
+        ],
+        [
+          "deezer",
+          "908604532"
+        ],
+        [
+          "soundcloud",
+          "2331544130"
+        ],
+        [
+          "youtube",
+          "6mLp2lsRWM8"
+        ],
+        [
+          "soundcloud",
+          "2428875249"
+        ]
+      ],
+      "evidence": {
+        "youtube_radio": 2,
+        "soundcloud_related": 6,
+        "deezer_radio": 3,
+        "artist_search": 1
+      },
+      "new_examples": [
+        {
+          "source": "youtube",
+          "source_id": "TByoaC9dkko",
+          "title": "Pharaoh x Пошлая Молли - BLACK СТОП (Tik tok,Тик ток) mashup by.dmitrsolo / 2017 Aesthetic,тренды",
+          "artist": "Soys"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2426518983",
+          "title": "вайбкодеRR",
+          "artist": "#blessmylife"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2392412850",
+          "title": "ЗАНЫ ПРЕПАРАТЫ (Super Slowed - Hardtekk)",
+          "artist": "qqexereqq"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2360933402",
+          "title": "𝐙𝐄𝐋𝐄𝐍𝐔𝐘𝐔 (𝐓𝐢𝐤𝐓𝐨𝐤 𝐕𝐞𝐫𝐬𝐢𝐨𝐧 + 𝐔𝐥𝐭𝐫𝐚 𝐒𝐥𝐨𝐰𝐞𝐝)",
+          "artist": "Restricted Josh"
+        }
+      ]
+    },
+    {
+      "title": "Ежедневный микс 1",
+      "count": 7,
+      "unique": 7,
+      "new": 5,
+      "sources": {
+        "youtube": 4,
+        "soundcloud": 3
+      },
+      "recording_ids": [
+        [
+          "youtube",
+          "TByoaC9dkko"
+        ],
+        [
+          "soundcloud",
+          "2392412850"
+        ],
+        [
+          "youtube",
+          "BhVOl7JSWrQ"
+        ],
+        [
+          "youtube",
+          "BdjNDUMpby8"
+        ],
+        [
+          "soundcloud",
+          "2392118142"
+        ],
+        [
+          "youtube",
+          "MsH08whXHls"
+        ],
+        [
+          "soundcloud",
+          "2393146779"
+        ]
+      ],
+      "evidence": {
+        "youtube_radio": 3,
+        "soundcloud_related": 2,
+        "": 2
+      },
+      "new_examples": [
+        {
+          "source": "youtube",
+          "source_id": "TByoaC9dkko",
+          "title": "Pharaoh x Пошлая Молли - BLACK СТОП (Tik tok,Тик ток) mashup by.dmitrsolo / 2017 Aesthetic,тренды",
+          "artist": "Soys"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2392412850",
+          "title": "ЗАНЫ ПРЕПАРАТЫ (Super Slowed - Hardtekk)",
+          "artist": "qqexereqq"
+        },
+        {
+          "source": "youtube",
+          "source_id": "BhVOl7JSWrQ",
+          "title": "WRXXTCH - Complicated For Me",
+          "artist": "BG Muz"
+        },
+        {
+          "source": "youtube",
+          "source_id": "BdjNDUMpby8",
+          "title": "GOLDSHEVIK - POLOZHENIE",
+          "artist": "GOLDSHEVIK"
+        }
+      ]
+    },
+    {
+      "title": "Ежедневный микс 2",
+      "count": 9,
+      "unique": 9,
+      "new": 4,
+      "sources": {
+        "soundcloud": 8,
+        "youtube": 1
+      },
+      "recording_ids": [
+        [
+          "soundcloud",
+          "2360933402"
+        ],
+        [
+          "soundcloud",
+          "2430593085"
+        ],
+        [
+          "soundcloud",
+          "2350027253"
+        ],
+        [
+          "soundcloud",
+          "2331544130"
+        ],
+        [
+          "youtube",
+          "F9XwPkc2TfE"
+        ],
+        [
+          "soundcloud",
+          "2331544133"
+        ],
+        [
+          "soundcloud",
+          "160249520"
+        ],
+        [
+          "soundcloud",
+          "2331544139"
+        ],
+        [
+          "soundcloud",
+          "303974832"
+        ]
+      ],
+      "evidence": {
+        "soundcloud_related": 4,
+        "": 5
+      },
+      "new_examples": [
+        {
+          "source": "soundcloud",
+          "source_id": "2360933402",
+          "title": "𝐙𝐄𝐋𝐄𝐍𝐔𝐘𝐔 (𝐓𝐢𝐤𝐓𝐨𝐤 𝐕𝐞𝐫𝐬𝐢𝐨𝐧 + 𝐔𝐥𝐭𝐫𝐚 𝐒𝐥𝐨𝐰𝐞𝐝)",
+          "artist": "Restricted Josh"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2430593085",
+          "title": "iHATEAllWhoHurtMy<3LykeI’mNotHuman...RevengeWillLeaveYouHallowLikeTheWorthlessSoulYouAre",
+          "artist": "𓆩⚝𓆪𝕬𝖓𝖌𝖊𝖑𝕸𝖆𝖞𝕮𝖗𝖞𓆩⚝𓆪"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2350027253",
+          "title": "SANYA TEKK (slowed)",
+          "artist": "HELLBLADE"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2331544130",
+          "title": "ZELENUYU",
+          "artist": "HELLBLADE"
+        }
+      ]
+    },
+    {
+      "title": "Ежедневный микс 3",
+      "count": 6,
+      "unique": 6,
+      "new": 3,
+      "sources": {
+        "soundcloud": 6
+      },
+      "recording_ids": [
+        [
+          "soundcloud",
+          "2426518983"
+        ],
+        [
+          "soundcloud",
+          "2428457136"
+        ],
+        [
+          "soundcloud",
+          "2428875249"
+        ],
+        [
+          "soundcloud",
+          "1801990393"
+        ],
+        [
+          "soundcloud",
+          "1423851532"
+        ],
+        [
+          "soundcloud",
+          "2426517300"
+        ]
+      ],
+      "evidence": {
+        "soundcloud_related": 3,
+        "": 3
+      },
+      "new_examples": [
+        {
+          "source": "soundcloud",
+          "source_id": "2426518983",
+          "title": "вайбкодеRR",
+          "artist": "#blessmylife"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2428457136",
+          "title": "беги",
+          "artist": "eclipse media"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2428875249",
+          "title": "VILLIAN, madk1d - 8 миля",
+          "artist": "VILLIAN"
+        }
+      ]
+    },
+    {
+      "title": "Ежедневный микс 4",
+      "count": 12,
+      "unique": 12,
+      "new": 12,
+      "sources": {
+        "deezer": 11,
+        "soundcloud": 1
+      },
+      "recording_ids": [
+        [
+          "deezer",
+          "67232347"
+        ],
+        [
+          "deezer",
+          "533609402"
+        ],
+        [
+          "deezer",
+          "106506514"
+        ],
+        [
+          "soundcloud",
+          "2428875249"
+        ],
+        [
+          "deezer",
+          "3210598381"
+        ],
+        [
+          "deezer",
+          "4247257"
+        ],
+        [
+          "deezer",
+          "908604532"
+        ],
+        [
+          "deezer",
+          "12270014"
+        ],
+        [
+          "deezer",
+          "68352597"
+        ],
+        [
+          "deezer",
+          "706719772"
+        ],
+        [
+          "deezer",
+          "629899842"
+        ],
+        [
+          "deezer",
+          "2444401025"
+        ]
+      ],
+      "evidence": {
+        "deezer_radio": 11,
+        "soundcloud_related": 1
+      },
+      "new_examples": [
+        {
+          "source": "deezer",
+          "source_id": "67232347",
+          "title": "La La La",
+          "artist": "Naughty Boy"
+        },
+        {
+          "source": "deezer",
+          "source_id": "533609402",
+          "title": "Don’t Matter To Me",
+          "artist": "Drake"
+        },
+        {
+          "source": "deezer",
+          "source_id": "106506514",
+          "title": "Acquainted",
+          "artist": "The Weeknd"
+        },
+        {
+          "source": "soundcloud",
+          "source_id": "2428875249",
+          "title": "VILLIAN, madk1d - 8 миля",
+          "artist": "VILLIAN"
+        }
+      ]
+    }
+  ],
+  "soundcloud_graph_seeds": [
+    "2393146779",
+    "2426517300",
+    "2331544133",
+    "718846078"
+  ],
+  "soundcloud_seed_checks": [
+    {
+      "source_id": "2393146779",
+      "title": "ЗАНЫ ПРЕПАРАТЫ / ZANY (HARDTEKK)",
+      "artist": "@svrreal",
+      "duration": 92.408
+    },
+    {
+      "source_id": "2426517300",
+      "title": "Я навайбкодил ВПН",
+      "artist": "Cube Rubik",
+      "duration": 52.773
+    },
+    {
+      "source_id": "2331544133",
+      "title": "ZELENUYU (ultra slowed)",
+      "artist": "HELLBLADE",
+      "duration": 170.589
+    },
+    {
+      "source_id": "715124080",
+      "title": "FELLOWSHIP WITH THE HOLY SPIRIT/POWERFUL TESTIMONY",
+      "artist": "QUEEN BELEMZY MINISTRIES - SCHOOL OF POWER",
+      "duration": 6896.118
+    },
+    {
+      "source_id": "718846078",
+      "title": "Blinding Lights",
+      "artist": "The Weeknd",
+      "duration": 30.0
+    }
+  ],
+  "shared_overlap": [
+    {
+      "a": 0,
+      "b": 1,
+      "shared": 0
+    },
+    {
+      "a": 0,
+      "b": 2,
+      "shared": 2
+    },
+    {
+      "a": 0,
+      "b": 3,
+      "shared": 4
+    },
+    {
+      "a": 0,
+      "b": 4,
+      "shared": 1
+    },
+    {
+      "a": 0,
+      "b": 5,
+      "shared": 0
+    },
+    {
+      "a": 1,
+      "b": 2,
+      "shared": 3
+    },
+    {
+      "a": 1,
+      "b": 3,
+      "shared": 3
+    },
+    {
+      "a": 1,
+      "b": 4,
+      "shared": 2
+    },
+    {
+      "a": 1,
+      "b": 5,
+      "shared": 4
+    },
+    {
+      "a": 2,
+      "b": 3,
+      "shared": 0
+    },
+    {
+      "a": 2,
+      "b": 4,
+      "shared": 0
+    },
+    {
+      "a": 2,
+      "b": 5,
+      "shared": 0
+    },
+    {
+      "a": 3,
+      "b": 4,
+      "shared": 0
+    },
+    {
+      "a": 3,
+      "b": 5,
+      "shared": 0
+    },
+    {
+      "a": 4,
+      "b": 5,
+      "shared": 1
+    }
+  ]
+}

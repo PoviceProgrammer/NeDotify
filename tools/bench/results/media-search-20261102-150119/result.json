@@ -1,0 +1,95 @@
+{
+  "scenario": "startup",
+  "mode": "media-search",
+  "started_at": 1793620879.6689837,
+  "ok": true,
+  "error": null,
+  "data": {
+    "window_pid": 19924,
+    "window_hwnd": 4653826,
+    "skin": "macos",
+    "navigation": [
+      {
+        "key": 176,
+        "expected": "3135556",
+        "selected": "3135556",
+        "passed": true
+      },
+      {
+        "key": 177,
+        "expected": "dQw4w9WgXcQ",
+        "selected": "dQw4w9WgXcQ",
+        "passed": true
+      }
+    ],
+    "media": [
+      {
+        "minimized": false,
+        "expected_paused": true,
+        "paused": true,
+        "session_state": "paused"
+      },
+      {
+        "minimized": false,
+        "expected_paused": false,
+        "paused": false,
+        "session_state": "playing"
+      },
+      {
+        "minimized": true,
+        "expected_paused": true,
+        "paused": true,
+        "session_state": "paused"
+      },
+      {
+        "minimized": true,
+        "expected_paused": false,
+        "paused": false,
+        "session_state": "playing"
+      }
+    ],
+    "all_media_passed": true,
+    "screenshots": [
+      "C:\\Users\\Артур\\NeDotify\\NeDotify_Windows\\tools\\bench\\results\\media-search-20261102-150119\\search-macos.png"
+    ]
+  },
+  "perf": {
+    "Timestamp": 22579.381451,
+    "AudioHandlers": 16,
+    "AudioWorkletProcessors": 0,
+    "Documents": 2,
+    "Frames": 2,
+    "JSEventListeners": 3727,
+    "LayoutObjects": 3582,
+    "MediaKeySessions": 0,
+    "MediaKeys": 0,
+    "Nodes": 16020,
+    "Resources": 72,
+    "ContextLifecycleStateObservers": 47,
+    "V8PerContextDatas": 1,
+    "WorkerGlobalScopes": 0,
+    "UACSSResources": 0,
+    "RTCPeerConnections": 0,
+    "ResourceFetchers": 2,
+    "AdSubframes": 0,
+    "DetachedScriptStates": 0,
+    "ArrayBufferContents": 2,
+    "LayoutCount": 270,
+    "RecalcStyleCount": 801,
+    "LayoutDuration": 0.225987,
+    "RecalcStyleDuration": 0.719382,
+    "DevToolsCommandDuration": 0.058567,
+    "ScriptDuration": 0.234068,
+    "V8CompileDuration": 0.00018,
+    "TaskDuration": 2.153868,
+    "TaskOtherDuration": 0.915684,
+    "ThreadTime": 2.107849,
+    "ProcessTime": 3.911969,
+    "JSHeapUsedSize": 4727156,
+    "JSHeapTotalSize": 8912896,
+    "FirstMeaningfulPaint": 22560.16257,
+    "DomContentLoaded": 22560.172313,
+    "NavigationStart": 22560.010776
+  },
+  "finished_at": 1793620900.5415618
+}

@@ -1,0 +1,135 @@
+{
+  "youtube_songs": {
+    "seconds": 2.008,
+    "results": []
+  },
+  "deezer_artists": {
+    "seconds": 0.548,
+    "results": {
+      "data": [
+        {
+          "id": 50971482,
+          "name": "Pharaøh",
+          "link": "https://www.deezer.com/artist/50971482",
+          "picture": "https://api.deezer.com/artist/50971482/image",
+          "picture_small": "https://cdn-images.dzcdn.net/images/artist/add756f9e471ee83cfe60e5c97f47184/56x56-000000-80-0-0.jpg",
+          "picture_medium": "https://cdn-images.dzcdn.net/images/artist/add756f9e471ee83cfe60e5c97f47184/250x250-000000-80-0-0.jpg",
+          "picture_big": "https://cdn-images.dzcdn.net/images/artist/add756f9e471ee83cfe60e5c97f47184/500x500-000000-80-0-0.jpg",
+          "picture_xl": "https://cdn-images.dzcdn.net/images/artist/add756f9e471ee83cfe60e5c97f47184/1000x1000-000000-80-0-0.jpg",
+          "nb_album": 73,
+          "nb_fan": 1045,
+          "radio": true,
+          "tracklist": "https://api.deezer.com/artist/50971482/top?limit=50",
+          "type": "artist"
+        },
+        {
+          "id": 379005,
+          "name": "Pharaoh",
+          "link": "https://www.deezer.com/artist/379005",
+          "picture": "https://api.deezer.com/artist/379005/image",
+          "picture_small": "https://cdn-images.dzcdn.net/images/artist/136d1c20214103a29e8725dcfb2d84b7/56x56-000000-80-0-0.jpg",
+          "picture_medium": "https://cdn-images.dzcdn.net/images/artist/136d1c20214103a29e8725dcfb2d84b7/250x250-000000-80-0-0.jpg",
+          "picture_big": "https://cdn-images.dzcdn.net/images/artist/136d1c20214103a29e8725dcfb2d84b7/500x500-000000-80-0-0.jpg",
+          "picture_xl": "https://cdn-images.dzcdn.net/images/artist/136d1c20214103a29e8725dcfb2d84b7/1000x1000-000000-80-0-0.jpg",
+          "nb_album": 5,
+          "nb_fan": 17385,
+          "radio": true,
+          "tracklist": "https://api.deezer.com/artist/379005/top?limit=50",
+          "type": "artist"
+        },
+        {
+          "id": 10216612,
+          "name": "Pharaoh",
+          "link": "https://www.deezer.com/artist/10216612",
+          "picture": "https://api.deezer.com/artist/10216612/image",
+          "picture_small": "https://cdn-images.dzcdn.net/images/artist/3212498cc7cd91f282d934043746a64d/56x56-000000-80-0-0.jpg",
+          "picture_medium": "https://cdn-images.dzcdn.net/images/artist/3212498cc7cd91f282d934043746a64d/250x250-000000-80-0-0.jpg",
+          "picture_big": "https://cdn-images.dzcdn.net/images/artist/3212498cc7cd91f282d934043746a64d/500x500-000000-80-0-0.jpg",
+          "picture_xl": "https://cdn-images.dzcdn.net/images/artist/3212498cc7cd91f282d934043746a64d/1000x1000-000000-80-0-0.jpg",
+          "nb_album": 41,
+          "nb_fan": 89767,
+          "radio": true,
+          "tracklist": "https://api.deezer.com/artist/10216612/top?limit=50",
+          "type": "artist"
+        },
+        {
+          "id": 14619927,
+          "name": "Pharaoh",
+          "link": "https://www.deezer.com/artist/14619927",
+          "picture": "https://api.deezer.com/artist/14619927/image",
+          "picture_small": "https://cdn-images.dzcdn.net/images/artist/d41d8cd98f00b204e9800998ecf8427e/56x56-000000-80-0-0.jpg",
+          "picture_medium": "https://cdn-images.dzcdn.net/images/artist/d41d8cd98f00b204e9800998ecf8427e/250x250-000000-80-0-0.jpg",
+          "picture_big": "https://cdn-images.dzcdn.net/images/artist/d41d8cd98f00b204e9800998ecf8427e/500x500-000000-80-0-0.jpg",
+          "picture_xl": "https://cdn-images.dzcdn.net/images/artist/d41d8cd98f00b204e9800998ecf8427e/1000x1000-000000-80-0-0.jpg",
+          "nb_album": 82,
+          "nb_fan": 16,
+          "radio": true,
+          "tracklist": "https://api.deezer.com/artist/14619927/top?limit=50",
+          "type": "artist"
+        },
+        {
+          "id": 66982102,
+          "name": "Pharaoh",
+          "link": "https://www.deezer.com/artist/66982102",
+          "picture": "https://api.deezer.com/artist/66982102/image",
+          "picture_small": "https://cdn-images.dzcdn.net/images/artist/11076bcc8d412eb85a0f7cb216f876fd/56x56-000000-80-0-0.jpg",
+          "picture_medium": "https://cdn-images.dzcdn.net/images/artist/11076bcc8d412eb85a0f7cb216f876fd/250x250-000000-80-0-0.jpg",
+          "picture_big": "https://cdn-images.dzcdn.net/images/artist/11076bcc8d412eb85a0f7cb216f876fd/500x500-000000-80-0-0.jpg",
+          "picture_xl": "https://cdn-images.dzcdn.net/images/artist/11076bcc8d412eb85a0f7cb216f876fd/1000x1000-000000-80-0-0.jpg",
+          "nb_album": 2,
+          "nb_fan": 16,
+          "radio": true,
+          "tracklist": "https://api.deezer.com/artist/66982102/top?limit=50",
+          "type": "artist"
+        },
+        {
+          "id": 66981722,
+          "name": "Pharaoh",
+          "link": "https://www.deezer.com/artist/66981722",
+          "picture": "https://api.deezer.com/artist/66981722/image",
+          "picture_small": "https://cdn-images.dzcdn.net/images/artist/15e0f32ffab6a81e1c0e332a8fbba6d4/56x56-000000-80-0-0.jpg",
+          "picture_medium": "https://cdn-images.dzcdn.net/images/artist/15e0f32ffab6a81e1c0e332a8fbba6d4/250x250-000000-80-0-0.jpg",
+          "picture_big": "https://cdn-images.dzcdn.net/images/artist/15e0f32ffab6a81e1c0e332a8fbba6d4/500x500-000000-80-0-0.jpg",
+          "picture_xl": "https://cdn-images.dzcdn.net/images/artist/15e0f32ffab6a81e1c0e332a8fbba6d4/1000x1000-000000-80-0-0.jpg",
+          "nb_album": 23,
+          "nb_fan": 25,
+          "radio": true,
+          "tracklist": "https://api.deezer.com/artist/66981722/top?limit=50",
+          "type": "artist"
+        },
+        {
+          "id": 129600152,
+          "name": "Pharaoh",
+          "link": "https://www.deezer.com/artist/129600152",
+          "picture": "https://api.deezer.com/artist/129600152/image",
+          "picture_small": "https://cdn-images.dzcdn.net/images/artist/89b57657a42e5acac01adbcf12abc796/56x56-000000-80-0-0.jpg",
+          "picture_medium": "https://cdn-images.dzcdn.net/images/artist/89b57657a42e5acac01adbcf12abc796/250x250-000000-80-0-0.jpg",
+          "picture_big": "https://cdn-images.dzcdn.net/images/artist/89b57657a42e5acac01adbcf12abc796/500x500-000000-80-0-0.jpg",
+          "picture_xl": "https://cdn-images.dzcdn.net/images/artist/89b57657a42e5acac01adbcf12abc796/1000x1000-000000-80-0-0.jpg",
+          "nb_album": 3,
+          "nb_fan": 39,
+          "radio": true,
+          "tracklist": "https://api.deezer.com/artist/129600152/top?limit=50",
+          "type": "artist"
+        },
+        {
+          "id": 420588182,
+          "name": "Pharaoh",
+          "link": "https://www.deezer.com/artist/420588182",
+          "picture": "https://api.deezer.com/artist/420588182/image",
+          "picture_small": "https://cdn-images.dzcdn.net/images/artist/beaf0ed54d8f219b21d7df1a575f4ed2/56x56-000000-80-0-0.jpg",
+          "picture_medium": "https://cdn-images.dzcdn.net/images/artist/beaf0ed54d8f219b21d7df1a575f4ed2/250x250-000000-80-0-0.jpg",
+          "picture_big": "https://cdn-images.dzcdn.net/images/artist/beaf0ed54d8f219b21d7df1a575f4ed2/500x500-000000-80-0-0.jpg",
+          "picture_xl": "https://cdn-images.dzcdn.net/images/artist/beaf0ed54d8f219b21d7df1a575f4ed2/1000x1000-000000-80-0-0.jpg",
+          "nb_album": 2,
+          "nb_fan": 0,
+          "radio": true,
+          "tracklist": "https://api.deezer.com/artist/420588182/top?limit=50",
+          "type": "artist"
+        }
+      ],
+      "total": 100,
+      "next": "https://api.deezer.com/search/artist?q=PHARAOH&limit=8&index=8"
+    }
+  }
+}

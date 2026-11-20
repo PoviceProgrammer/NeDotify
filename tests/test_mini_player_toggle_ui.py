@@ -40,14 +40,14 @@ def test_mini_player_pending_success_commits_only_after_completion_event():
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 const listeners=new Map(),timers=new Map(),calls=[];let n=0;
-const classes=new Set();const body={classList:{contains:k=>classes.has(k),toggle(k,on=!classes.has(k)){on?classes.add(k):classes.delete(k)}}};
-const window={addEventListener:(name,fn)=>listeners.set(name,fn),dispatchEvent(){},pywebview:{api:{toggle_mini_player:async(...args)=>{calls.push(args);return {pending:true}}}}};
+const classes=new Set();const body={animate(){assert.fail("Native mini surface must stay opaque")},classList:{contains:k=>classes.has(k),toggle(k,on=!classes.has(k)){on?classes.add(k):classes.delete(k)}}};
+const window={addEventListener:(name,fn)=>listeners.set(name,fn),dispatchEvent(){},pywebview:{api:{set_mini_player_expanded(){},toggle_mini_player:async(...args)=>{calls.push(args);return {pending:true}}}}};
 const context=vm.createContext({window,document:{body},Date,Boolean,CustomEvent:class {constructor(type,options){this.detail=options.detail}},setTimeout:(fn,ms)=>{const id=++n;timers.set(id,{fn,ms});return id},clearTimeout:id=>timers.delete(id)});
 const code=SOURCE.match(/let miniPlayerRequestCounter = 0;[\s\S]*?window\.toggleMiniPlayerMode = toggleMiniPlayerMode;/)[0];
 vm.runInContext(code.replace(/export async function/,'async function')+'\nglobalThis.toggle=toggleMiniPlayerMode;',context);
 const pending=context.toggle(true);await Promise.resolve();
 listeners.get('nedotify:mini_player_toggled')({detail:{request_id:calls[0][1],success:true,is_mini:true}});
-assert.equal(await pending,true);assert.equal(body.classList.contains('mini-player-active'),true);assert.equal(timers.size,0);
+assert.equal(await pending,true);assert.equal(body.classList.contains('mini-player-active'),true);assert.equal(body.classList.contains('mini-player-native'),true);assert.equal(timers.size,0);
 """.replace("SOURCE", source("main.js")))
 
 

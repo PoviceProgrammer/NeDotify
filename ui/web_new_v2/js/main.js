@@ -138,15 +138,20 @@ window.NeDotify = {
 };
 
 let miniPlayerRequestCounter = 0;
+let miniPlayerLayoutAnimation;
 function applyMiniPlayerLayout(enabled) {
     const changed = document.body.classList.contains('mini-player-active') !== Boolean(enabled);
+    const native = Boolean(enabled && window.pywebview?.api?.set_mini_player_expanded);
+    document.body.classList.toggle('mini-player-native', native);
     document.body.classList.toggle('mini-player-active', Boolean(enabled));
-    if (changed) document.body.animate?.([
+    if (!changed) return;
+    miniPlayerLayoutAnimation?.cancel();
+    if (native) window.NeDotifyMotion?.reveal(document.querySelector('#mini-player-overlay .mp-compact-row'), 0);
+    else miniPlayerLayoutAnimation = document.body.animate?.([
         { opacity: .35, transform: enabled ? 'scale(.94)' : 'scale(1.035)' },
         { opacity: 1, transform: 'scale(1)' }
     ], { duration: 320, easing: 'cubic-bezier(.22,1,.36,1)' });
 }
-
 
 let latestMiniPlayerRequestId = null;
 const pendingMiniPlayerToggles = new Map();

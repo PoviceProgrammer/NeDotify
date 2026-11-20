@@ -1,0 +1,95 @@
+{
+  "scroll": {
+    "transport": "native WebView2 CDP",
+    "profile_mode": "fresh",
+    "cookie_mode": "pinned",
+    "tracks": 2000,
+    "repetitions": 1,
+    "code_fingerprint": "7827954ff0d7dcc9",
+    "ok": true,
+    "error": null,
+    "data": [
+      {
+        "label": "library_2000",
+        "selector": "#lib-active-tracks",
+        "rounds": 1,
+        "medianFrameMs": 16.8,
+        "medianDerivedFps": 38.6,
+        "p95FrameMs_worst": 49.9,
+        "worstFrameMs_worst": 50.2,
+        "longFramesOver50ms_total": 5,
+        "mountedRows": 11,
+        "collectionLabel": "2000 треков",
+        "scrollHeight": 112338,
+        "runs": [
+          {
+            "clientHeight": 464,
+            "derivedFps": 38.6,
+            "frames": 240,
+            "longFramesOver50ms": 5,
+            "meanFrameMs": 25.9,
+            "medianFrameMs": 16.8,
+            "p95FrameMs": 49.9,
+            "scrollHeight": 112338,
+            "worstFrameMs": 50.2
+          }
+        ]
+      },
+      {
+        "label": "search_results",
+        "selector": "#search-results",
+        "rounds": 1,
+        "medianFrameMs": 16.7,
+        "medianDerivedFps": 60,
+        "p95FrameMs_worst": 16.9,
+        "worstFrameMs_worst": 17,
+        "longFramesOver50ms_total": 0,
+        "mountedRows": 50,
+        "collectionLabel": "2000 треков",
+        "scrollHeight": 4055,
+        "runs": [
+          {
+            "clientHeight": 621,
+            "derivedFps": 60,
+            "frames": 240,
+            "longFramesOver50ms": 0,
+            "meanFrameMs": 16.67,
+            "medianFrameMs": 16.7,
+            "p95FrameMs": 16.9,
+            "scrollHeight": 4055,
+            "worstFrameMs": 17
+          }
+        ]
+      }
+    ],
+    "window_loaded_ms": 1755.7
+  },
+  "audio": {
+    "transport": "native WebView2 CDP",
+    "profile_mode": "fresh",
+    "cookie_mode": "pinned",
+    "tracks": 40,
+    "repetitions": 1,
+    "code_fingerprint": "b2611c4649f44c73",
+    "ok": true,
+    "error": null,
+    "data": {
+      "checks": [
+        {
+          "persisted": true,
+          "sleep": true,
+          "style": "current",
+          "tabs": 5
+        },
+        {
+          "persisted": true,
+          "sleep": true,
+          "style": "macos",
+          "tabs": 5
+        }
+      ],
+      "fixture": "real WebView2, native bridge, seeded silent WAV; physical output not assessed"
+    },
+    "window_loaded_ms": 1582.0
+  }
+}

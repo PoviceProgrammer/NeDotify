@@ -1,0 +1,283 @@
+{
+  "status": "found",
+  "artist_ref": {
+    "source": "deezer",
+    "source_id": "10216612",
+    "name": "Pharaoh"
+  },
+  "pages": [
+    {
+      "next_offset": 3,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 43
+    },
+    {
+      "next_offset": 6,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 43
+    },
+    {
+      "next_offset": 9,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 35
+    },
+    {
+      "next_offset": 12,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 23
+    },
+    {
+      "next_offset": 15,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 3
+    },
+    {
+      "next_offset": 18,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 3
+    },
+    {
+      "next_offset": 21,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 0
+    },
+    {
+      "next_offset": 24,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 2
+    },
+    {
+      "next_offset": 27,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 3
+    },
+    {
+      "next_offset": 30,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 2
+    },
+    {
+      "next_offset": 33,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 2
+    },
+    {
+      "next_offset": 36,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 3
+    },
+    {
+      "next_offset": 39,
+      "has_more": true,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 3
+    },
+    {
+      "next_offset": 41,
+      "has_more": false,
+      "retryable": false,
+      "catalog_partial": false,
+      "tracks": 2
+    }
+  ],
+  "has_more": false,
+  "album_count": 41,
+  "album_checks": [
+    {
+      "id": "215868132",
+      "credited_rows": 15
+    },
+    {
+      "id": "136531612",
+      "credited_rows": 13
+    },
+    {
+      "id": "71112872",
+      "credited_rows": 15
+    },
+    {
+      "id": "44301501",
+      "credited_rows": 15
+    },
+    {
+      "id": "13606421",
+      "credited_rows": 19
+    },
+    {
+      "id": "13480259",
+      "credited_rows": 9
+    },
+    {
+      "id": "13480365",
+      "credited_rows": 7
+    },
+    {
+      "id": "13422077",
+      "credited_rows": 15
+    },
+    {
+      "id": "13326425",
+      "credited_rows": 13
+    },
+    {
+      "id": "13326465",
+      "credited_rows": 11
+    },
+    {
+      "id": "235020352",
+      "credited_rows": 6
+    },
+    {
+      "id": "13488315",
+      "credited_rows": 6
+    },
+    {
+      "id": "764653591",
+      "credited_rows": 1
+    },
+    {
+      "id": "629728421",
+      "credited_rows": 1
+    },
+    {
+      "id": "281033571",
+      "credited_rows": 1
+    },
+    {
+      "id": "214129172",
+      "credited_rows": 1
+    },
+    {
+      "id": "212385442",
+      "credited_rows": 1
+    },
+    {
+      "id": "212369152",
+      "credited_rows": 1
+    },
+    {
+      "id": "368170397",
+      "credited_rows": 0
+    },
+    {
+      "id": "368170087",
+      "credited_rows": 0
+    },
+    {
+      "id": "235655032",
+      "credited_rows": 0
+    },
+    {
+      "id": "234362742",
+      "credited_rows": 0
+    },
+    {
+      "id": "75271642",
+      "credited_rows": 1
+    },
+    {
+      "id": "70531272",
+      "credited_rows": 1
+    },
+    {
+      "id": "65033422",
+      "credited_rows": 1
+    },
+    {
+      "id": "59634742",
+      "credited_rows": 1
+    },
+    {
+      "id": "58940792",
+      "credited_rows": 1
+    },
+    {
+      "id": "52842932",
+      "credited_rows": 1
+    },
+    {
+      "id": "52284072",
+      "credited_rows": 1
+    },
+    {
+      "id": "48989482",
+      "credited_rows": 0
+    },
+    {
+      "id": "46273892",
+      "credited_rows": 1
+    },
+    {
+      "id": "45976072",
+      "credited_rows": 1
+    },
+    {
+      "id": "43254011",
+      "credited_rows": 0
+    },
+    {
+      "id": "42362681",
+      "credited_rows": 1
+    },
+    {
+      "id": "15475404",
+      "credited_rows": 1
+    },
+    {
+      "id": "13480209",
+      "credited_rows": 1
+    },
+    {
+      "id": "13480199",
+      "credited_rows": 1
+    },
+    {
+      "id": "13480233",
+      "credited_rows": 1
+    },
+    {
+      "id": "13480247",
+      "credited_rows": 1
+    },
+    {
+      "id": "936806431",
+      "credited_rows": 1
+    },
+    {
+      "id": "13480235",
+      "credited_rows": 1
+    }
+  ],
+  "returned_rows": 167,
+  "unique_catalogue_ids": 167,
+  "duplicate_rows": 0,
+  "independent_credited_ids": 167,
+  "missing_ids": [],
+  "unexpected_ids": [],
+  "seconds": 14.637
+}

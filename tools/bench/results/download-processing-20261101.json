@@ -1,0 +1,42 @@
+{
+  "serial_artwork": {
+    "repetitions": 5,
+    "median_ms": 511.99,
+    "samples_ms": [
+      524.2106000005151,
+      508.0646999995224,
+      512.9343999979028,
+      508.42069999998785,
+      511.98980000117444
+    ],
+    "bitrates": [
+      320000,
+      320000,
+      320000,
+      320000,
+      320000
+    ]
+  },
+  "overlapped_artwork": {
+    "repetitions": 5,
+    "median_ms": 303.662,
+    "samples_ms": [
+      307.72409999917727,
+      303.662099999201,
+      303.52770000172313,
+      308.65520000224933,
+      303.1103000030271
+    ],
+    "bitrates": [
+      320000,
+      320000,
+      320000,
+      320000,
+      320000
+    ]
+  },
+  "workload": "30s real WAV to 320kbps MP3; 300ms optional artwork latency",
+  "identical_encoded_audio": true,
+  "cover_embedded": true,
+  "tags_verified": true
+}

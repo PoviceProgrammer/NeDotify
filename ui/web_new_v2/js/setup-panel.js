@@ -99,7 +99,9 @@ export async function openSetupPanel({firstRun=false}={}) {
     function draw(snapshot) {
         if(closed||!snapshot)return;
         state=snapshot;
-        const list=$('setup-dependencies');list.replaceChildren();
+        const list=$('setup-dependencies');
+        const previous = list.textContent;
+        list.replaceChildren();
         for(const [key,label] of [['yt_dlp','yt-dlp · получение аудио'],['ffmpeg','FFmpeg · форматы и метаданные'],['ffprobe','FFprobe · проверка файлов']]) {
             const item=document.createElement('li'),dependency=snapshot.dependencies?.[key];
             const strong=document.createElement('strong');strong.textContent=label;
@@ -108,6 +110,7 @@ export async function openSetupPanel({firstRun=false}={}) {
             status.textContent=dependency?.available?(version==='bundled'?'В составе приложения':version):(dependency?.error||'Нужна установка');
             item.dataset.ready=String(!!dependency?.available);item.append(strong,status);list.append(item);
         }
+        if (previous !== list.textContent) window.NeDotifyMotion?.reveal(list, 0);
         const packageIssues=(snapshot.issues||[]).filter(issue=>issue.code==='missing_python_component');
         if(packageIssues.length)error(packageIssues.map(issue=>issue.message).join(' '));
         drawOperation(snapshot.operation);
@@ -126,10 +129,13 @@ export async function openSetupPanel({firstRun=false}={}) {
         if(snapshot.updating)timer=setTimeout(()=>refresh(),750);
     }
     function drawSources(sources) {
-        const list=$('setup-source-status');list.replaceChildren();
+        const list=$('setup-source-status');
+        const previous = list.textContent;
+        list.replaceChildren();
         for(const [key,result] of Object.entries(sources)) {
             const item=document.createElement('li');item.textContent=`${key}: ${result.available?'доступен':result.message||'недоступен'}`;list.append(item);
         }
+        if (previous !== list.textContent) window.NeDotifyMotion?.reveal(list, 0);
     }
     async function refresh(deep=false,checkSources=false) {
         if(closed||refreshPending)return;
@@ -143,7 +149,9 @@ export async function openSetupPanel({firstRun=false}={}) {
         panel.querySelectorAll('[data-setup-page]').forEach(page=>page.hidden=Number(page.dataset.setupPage)!==step);
         panel.querySelectorAll('[data-setup-step]').forEach(button=>button.setAttribute('aria-current',Number(button.dataset.setupStep)===step?'step':'false'));
         $('setup-next').textContent=step===3?(firstRun?'Продолжить настройку':'Готово'):'Далее';
-        panel.querySelector(`[data-setup-page="${step}"] h2`).focus({preventScroll:true});
+        const page = panel.querySelector(`[data-setup-page="${step}"]`);
+        page.querySelector('h2').focus({preventScroll:true});
+        window.NeDotifyMotion?.reveal(page);
     }
     async function save() {
         error('');$('setup-save').disabled=true;

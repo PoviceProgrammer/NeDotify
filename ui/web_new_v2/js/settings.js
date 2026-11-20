@@ -494,7 +494,6 @@ export function applySettingsFromBackend(settings) {
         if (settings.player.mp_progress) applyMpProgress(settings.player.mp_progress);
         if (settings.player.mp_cover_shape) applyMpCoverShape(settings.player.mp_cover_shape);
         if (settings.player.mp_shape) applyMpShape(settings.player.mp_shape);
-        if (settings.player.mp_pos) applyMpPos(settings.player.mp_pos);
         // Now that window.settings holds the backend values, repaint the Player
         // tab's cards and toggles. The earlier setupPlayerSettingsPanel() pass
         // ran before the bridge answered and could only guess from localStorage.
@@ -1704,7 +1703,8 @@ document.addEventListener('nedotify:state_changed', (e) => {
 document.addEventListener('nedotify:efficiency_state', syncAuraOrbsState);
 
 function normalizeProgressStyle(type) {
-    if (type === 'solid' || type === 'thin' || type === 'ios') return 'solid';
+    if (['line', 'thin-line', 'smooth', 'solid'].includes(type)) return type;
+    if (type === 'thin' || type === 'ios') return 'solid';
     return 'panel';
 }
 
@@ -1715,9 +1715,12 @@ function normalizeProgressColor(color) {
 export function applySliderType(type) {
     const root = document.documentElement;
     const style = normalizeProgressStyle(type);
-    root.classList.remove('slider-type-default', 'slider-type-thin', 'slider-type-ios', 'slider-type-wave', 'slider-type-bars', 'slider-type-solid', 'slider-type-hidden', 'slider-type-panel');
-    root.classList.add(`slider-type-${style}`);
     root.dataset.progressStyle = style;
+    document.querySelectorAll('#opt-slider-type [data-val]').forEach(button => {
+        const selected = button.dataset.val === style;
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-pressed', String(selected));
+    });
     document.dispatchEvent(new CustomEvent('nedotify:slider_type_changed', { detail: { type: style } }));
 }
 
@@ -1796,17 +1799,6 @@ export function applyMpShape(shape) {
     root.classList.add(`mp-shape-${shape}`);
 }
 
-export function applyMpPos(pos) {
-    const root = document.documentElement;
-    root.classList.remove('mp-pos-top-left', 'mp-pos-top-center', 'mp-pos-top-right', 'mp-pos-bottom-left', 'mp-pos-bottom-center', 'mp-pos-bottom-right', 'mp-pos-center');
-    root.classList.add(`mp-pos-${pos}`);
-    if (window.pywebview?.api?.set_mini_player_position) {
-        try {
-            window.pywebview.api.set_mini_player_position(pos);
-        } catch(e) {}
-    }
-}
-
 // Repaint the Player tab's cards and toggles from the saved values.
 //
 // This runs twice on a cold start: once from setupPlayerSettingsPanel() (before
@@ -1838,14 +1830,6 @@ function syncPlayerSettingsUI() {
     syncActiveCard('opt-mp-progress', savedSetting('player', 'mp_progress', 'line'));
     syncActiveCard('opt-mp-cover-shape', savedSetting('player', 'mp_cover_shape', 'default'));
     syncActiveCard('opt-mp-shape', savedSetting('player', 'mp_shape', 'default'));
-    document.querySelectorAll('#mp-pos-btn-group .opt-card-btn, #opt-mp-pos .opt-card-btn').forEach(button => {
-        const active = button.dataset.pos === savedSetting('player','mp_pos','bottom-right');
-        button.classList.toggle('active', active);
-        button.style.background = active ? 'var(--primary)' : 'var(--bg-card)';
-        button.style.color = active ? 'var(--primary-fg)' : 'var(--text-main)';
-        button.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
-    });
-
     syncToggleVisual('toggle-show-queue', savedSetting('player', 'show_queue', true));
     syncToggleVisual('toggle-compact-queue-btn', savedSetting('player', 'compact_queue_btn', true));
     syncToggleVisual('toggle-next-track-preview', savedSetting('player', 'next_track_preview', true));
