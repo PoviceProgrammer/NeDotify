@@ -44,9 +44,84 @@ async function boot(page, style) {
   await page.waitForTimeout(250);
 }
 
+async function checkChosenLyrics(page) {
+  await page.evaluate(async () => {
+    const player = await import('/js/player.js');
+    const lyrics = await import('/js/lyrics.js');
+    const first = {source: 'youtube', source_id: 'first', title: 'Original title', artist: 'Original artist', duration: 120};
+    const second = {...first, source_id: 'second', title: 'Next track'};
+    window.searchCalls = [];
+    window.appliedTracks = [];
+    window.automatic = [];
+    Object.assign(window.pywebview.api, {
+      get_lyrics: (...args) => new Promise(resolve => window.automatic.push({id: args[5], resolve})),
+      search_lyrics: async (...args) => {
+        window.searchCalls.push(args);
+        return {success: true, candidates: [{source: 'LRCLIB', trackName: 'Edited title'}]};
+      },
+      apply_lyrics_candidate: (candidate, track) => {
+        window.appliedTracks.push(track.source_id);
+        return new Promise(resolve => { window.resolveSelection = resolve; });
+      },
+    });
+    window.setLyricTrack = track => {
+      const next = track === 'first' ? first : second;
+      player.onTrackChanged(next);
+      document.dispatchEvent(new CustomEvent('nedotify:track_changed', {detail: next}));
+    };
+    document.getElementById('view-player').classList.add('active');
+    lyrics.initLyrics();
+    window.setLyricTrack('first');
+    document.getElementById('btn-lyrics-settings-page').click();
+    document.getElementById('btn-lsp-action-pick-version').click();
+  });
+  const modal = page.locator('#modal-lyrics-search');
+  const field = modal.locator('#input-lyrics-search-query');
+  await field.waitFor();
+  assert.equal(await field.inputValue(), 'Original artist - Original title');
+  await field.fill('Edited title');
+  await field.press('Enter');
+  await page.waitForFunction(() => searchCalls.length === 2);
+  assert.deepEqual(await page.evaluate(() => searchCalls[1]), ['Edited title', '', '', 0]);
+
+  const result = modal.locator('.lyrics-search-item');
+  await result.click();
+  await page.evaluate(() => resolveSelection({success: false, error: 'Test provider failure'}));
+  assert.equal(await modal.isVisible(), true);
+  await page.waitForFunction(() => !document.getElementById('lyrics-search-results-list').hasAttribute('aria-busy'));
+
+  await result.click();
+  await page.evaluate(() => resolveSelection({success: true, lyrics: {status: 'found', plainLyrics: 'Chosen fixture lyrics'}}));
+  await modal.waitFor({state: 'hidden'});
+  const playerText = page.locator('#lyrics-content');
+  const overlayText = page.locator('#lyrics-overlay .lyrics-track');
+  assert.match(await playerText.textContent(), /Chosen fixture lyrics/);
+  assert.match(await overlayText.textContent(), /Chosen fixture lyrics/);
+
+  await page.evaluate(() => {
+    const request = automatic[0];
+    const late = {status: 'found', plainLyrics: 'Old automatic text', request_id: request.id, revision: 1};
+    request.resolve(late);
+    document.dispatchEvent(new CustomEvent('nedotify:lyrics_ready', {detail: late}));
+    window.NeDotify.openLyricsSearchModal();
+  });
+  assert.match(await playerText.textContent(), /Chosen fixture lyrics/);
+
+  await result.click();
+  await page.evaluate(() => {
+    window.setLyricTrack('second');
+    automatic.at(-1).resolve({status: 'found', plainLyrics: 'Second track lyrics'});
+    resolveSelection({success: true, lyrics: {status: 'found', plainLyrics: 'A second choice for the first track'}});
+  });
+  await page.waitForFunction(() => document.getElementById('lyrics-content').textContent.includes('Second track lyrics'));
+  assert.deepEqual(await page.evaluate(() => appliedTracks), ['first', 'first', 'first']);
+  assert.match(await playerText.textContent(), /Second track lyrics/);
+  console.log('Lyrics selection: edited query, retry, instant rendering, stale results and track changes passed');
+}
+
 (async () => {
   await new Promise(done => server.listen(0, '127.0.0.1', done));
-  const browser = await chromium.launch({headless: true});
+  const browser = await chromium.launch({headless: true, executablePath: process.env.CHROME_PATH});
   try {
     for (const style of ['current', 'macos']) for (const width of [1280, 1600]) {
       const page = await browser.newPage({viewport: {width, height: 900}});
@@ -99,6 +174,14 @@ async function boot(page, style) {
         assert.equal(report.size, '30px', `${style}/${width}/${layout}: slider applies`);
         assert.deepEqual(report.saves.at(-1), {fontSize: 30, fontWeight: 700, lineHeight: 1.45, textAlign: 'center'}, `${style}/${width}/${layout}: save payload is a dict`);
         console.log(`PASS ${style}/${width}/${layout}`);
+      }
+      if (style === 'current' && width === 1280) {
+        await page.route('**/js/main.js*', route => route.fulfill({
+          contentType: 'text/javascript',
+          body: '',
+        }));
+        await boot(page, style);
+        await checkChosenLyrics(page);
       }
       await page.close();
     }

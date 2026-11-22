@@ -133,6 +133,57 @@ def test_superseded_requests_do_not_publish(lyrics, monkeypatch):
     assert not observed
 
 
+def test_chosen_lyrics_bypass_warm_automatic_cache_and_survive_reopen(
+    api, core_ns, tmp_path, monkeypatch, emitted,
+):
+    from core.bridge import BridgeApi
+    from core.database import DatabaseManager
+
+    service = core_ns.lyrics = LyricsService(db=core_ns.db)
+    for name in ('netease', 'qqmusic', 'genius', 'megalobiz'):
+        monkeypatch.setattr(service._lookup, name, lambda *a: None)
+    monkeypatch.setattr(service._lookup, 'lrclib', lambda context, *args: candidate(service._lookup, context))
+    track = {'title': 'A Song', 'artist': 'Artist'}
+
+    def lookup():
+        return service.get_lyrics(track['title'], track['artist'], 120000)
+
+    assert lookup()['plainLyrics'] == 'Hello'
+    assert service._cache
+
+    bridge = BridgeApi(api)
+    chosen = {'rawPayload': {'source': 'LRCLIB', 'syncedLyrics': '[00:01] Chosen line'}}
+    applied = bridge.apply_lyrics_candidate(chosen, track)
+    assert applied['success']
+    assert applied['lyrics']['plainLyrics'] == 'Chosen line'
+    assert applied['lyrics']['syncType'] == 'line'
+    assert lookup()['plainLyrics'] == 'Chosen line'
+    assert not emitted, 'the apply reply belongs to the original track, not a global event'
+
+    reopened = DatabaseManager(str(tmp_path / 'test.db'))
+    try:
+        restored_service = LyricsService(db=reopened)
+        for name in ('lrclib', 'netease', 'qqmusic', 'genius', 'megalobiz'):
+            monkeypatch.setattr(restored_service._lookup, name, lambda *a: None)
+        restored = restored_service.get_lyrics(track['title'], track['artist'], 120000)
+        assert restored['plainLyrics'] == 'Chosen line'
+        assert restored['isOverride']
+    finally:
+        reopened.close()
+
+    assert bridge.delete_custom_lyrics(track)['success']
+    assert lookup()['plainLyrics'] == 'Hello'
+    legacy_key = 'meta:a song (official video)\0artist\0'
+    assert core_ns.db.set_track_lyrics_override(legacy_key, 'chosen_version', 'LRCLIB', 'Legacy choice')
+    assert service.get_lyrics('A Song (Official Video)', 'Artist', 120000)['plainLyrics'] == 'Legacy choice'
+
+    empty = {'rawPayload': {'source': 'LRCLIB', 'instrumental': True}}
+    assert not bridge.apply_lyrics_candidate(empty, track)['success']
+    monkeypatch.setattr(core_ns.db, 'set_track_lyrics_override', lambda **kwargs: False)
+    assert not bridge.apply_lyrics_candidate(chosen, track)['success']
+    assert lookup()['plainLyrics'] == 'Hello'
+
+
 def test_lyrics_ready_keeps_request_id_and_progress_revisions(api, core_ns, emitted):
     finished = threading.Event()
     def get_lyrics(*args, on_update, **kwargs):

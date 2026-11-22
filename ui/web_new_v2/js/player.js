@@ -183,13 +183,59 @@ function trackMomentKey(track) {
     return id ? JSON.stringify(['id', String(id)]) : '';
 }
 
+// The same recording reaches the player under several identities: a provider
+// key in one view, a library row id in another, a plain name for local files.
+// Sending them together keeps the marker reachable from every one of them.
+function trackMomentAliases(track) {
+    const primary = trackMomentKey(track);
+    const aliases = [];
+    const id = track?.id ?? track?.track_id;
+    if (id !== undefined && id !== null && String(id)) aliases.push(JSON.stringify(['id', String(id)]));
+    const artist = String(track?.artist || '').trim().toLowerCase();
+    const title = String(track?.title || '').trim().toLowerCase();
+    if (artist && title) aliases.push(`${artist} - ${title}`);
+    return aliases.filter(alias => alias && alias !== primary).slice(0, 12);
+}
+
 function momentFitsTimeline(positionMs) {
     return positionMs !== null && playbackState.durationMs > 0 && positionMs <= playbackState.durationMs;
 }
 
+function renderPlayerMomentActions() {
+    const button = document.getElementById('pp-btn-moment');
+    const remove = document.getElementById('pp-btn-moment-remove');
+    if (!button || !remove) return;
+
+    const { key, positionMs, loading } = trackMoment;
+    const busy = loading || momentWrites.has(key);
+    const marked = positionMs !== null;
+    const label = marked ? 'К лучшему моменту · ' + formatTime(positionMs / 1000)
+        : 'Отметить лучший момент';
+    const text = button.querySelector('span');
+    if (text.textContent !== label) text.textContent = label;
+    button.disabled = !key || busy || (marked ? !momentFitsTimeline(positionMs) : !canMarkTrackMoment());
+    remove.hidden = !marked;
+    remove.disabled = busy;
+}
+
+const MOMENT_ICON_GLYPHS = {
+    bookmark: 'bookmark',
+    heart: 'heart',
+    star: 'star',
+    fire: 'flame',
+    honey: 'hexagon',
+};
+
+function trackMomentIcon() {
+    const preferred = window.settings?.ui?.moment_icon;
+    return MOMENT_ICON_GLYPHS[preferred] ? preferred : 'bookmark';
+}
+
 function renderTrackMoment() {
+    renderPlayerMomentActions();
     const { positionMs } = trackMoment;
     const visible = momentFitsTimeline(positionMs);
+    const icon = trackMomentIcon();
     for (const prefix of progressPrefixes) {
         const pin = document.getElementById(`${prefix}-moment-pin`);
         if (!pin) continue;
@@ -199,6 +245,10 @@ function renderTrackMoment() {
             const time = formatTime(positionMs / 1000);
             pin.style.setProperty('--track-moment-position', `${100 * positionMs / playbackState.durationMs}%`);
             pin.title = `Лучший момент · ${time}`;
+            if (pin.dataset.momentIcon !== icon) {
+                pin.dataset.momentIcon = icon;
+                pin.dataset.momentGlyph = MOMENT_ICON_GLYPHS[icon];
+            }
             slider.setAttribute('aria-keyshortcuts', 'Enter');
             slider.setAttribute('aria-description', `${pin.title}. Нажмите Enter, чтобы перейти.`);
         } else {
@@ -227,12 +277,15 @@ async function syncTrackMoment(track) {
     renderTrackMoment();
 }
 
-async function writeTrackMoment(key, positionMs) {
+async function writeTrackMoment(key, positionMs, track) {
     if (!key || trackMoment.key !== key || trackMoment.loading || momentWrites.has(key)) return;
-    const pending = api('set_track_moment', key, positionMs);
+    const aliases = track ? trackMomentAliases(track) : [];
+    const pending = api('set_track_moment', key, positionMs, aliases);
     momentWrites.set(key, pending);
+    renderPlayerMomentActions();
     const saved = await pending;
     momentWrites.delete(key);
+    renderPlayerMomentActions();
     if (saved !== true) {
         showToast('Не удалось сохранить изменение', 'error');
         return;
@@ -248,24 +301,37 @@ function jumpToTrackMoment(key) {
     if (key === trackMoment.key && momentFitsTimeline(trackMoment.positionMs)) seekTo(trackMoment.positionMs);
 }
 
+function canMarkTrackMoment() {
+    return Boolean(activeAudio.src) && activeAudio.readyState >= 1 && playbackState.durationMs > 0;
+}
+
 export function getTrackMomentActions(track) {
     const { key, positionMs, loading } = trackMoment;
     if (!key || key !== trackMomentKey(track) || loading || momentWrites.has(key)) return [];
     if (positionMs !== null) {
-        const remove = { icon: 'trash-2', label: 'Удалить лучший момент', run: () => writeTrackMoment(key, null) };
+        const remove = { icon: 'trash-2', label: 'Удалить лучший момент', run: () => writeTrackMoment(key, null, track) };
         return momentFitsTimeline(positionMs) ? [
             { icon: 'bookmark', label: `К лучшему моменту · ${formatTime(positionMs / 1000)}`, run: () => jumpToTrackMoment(key) },
             remove,
         ] : [remove];
     }
-    if (!activeAudio.src || activeAudio.readyState < 1 || playbackState.durationMs <= 0) return [];
+    if (!canMarkTrackMoment()) return [];
     // Capture the playhead when the user opens the menu, while audio can keep playing.
     const captured = Math.round(activeAudio.currentTime * 1000);
     if (!Number.isSafeInteger(captured) || captured < 0 || !momentFitsTimeline(captured)) return [];
-    return [{ icon: 'bookmark', label: `Отметить лучший момент · ${formatTime(captured / 1000)}`, run: () => writeTrackMoment(key, captured) }];
+    return [{ icon: 'bookmark', label: `Отметить лучший момент · ${formatTime(captured / 1000)}`, run: () => writeTrackMoment(key, captured, track) }];
 }
 
 function bindTrackMomentPins() {
+    document.getElementById('pp-btn-moment')?.addEventListener('click', () => {
+        const [action] = getTrackMomentActions(playbackState.track);
+        if (action && (trackMoment.positionMs === null || momentFitsTimeline(trackMoment.positionMs))) {
+            action.run();
+        }
+    });
+    document.getElementById('pp-btn-moment-remove')?.addEventListener('click', () => {
+        if (trackMoment.positionMs !== null) writeTrackMoment(trackMoment.key, null, playbackState.track);
+    });
     for (const prefix of progressPrefixes) {
         const pin = document.getElementById(`${prefix}-moment-pin`);
         if (!pin) continue;
@@ -276,7 +342,7 @@ function bindTrackMomentPins() {
         pin.addEventListener('contextmenu', event => {
             event.preventDefault();
             event.stopPropagation();
-            writeTrackMoment(trackMoment.key, null);
+            writeTrackMoment(trackMoment.key, null, playbackState.track);
         });
         pin.parentElement.addEventListener('keydown', event => {
             if (event.key !== 'Enter' || pin.hidden) return;
@@ -725,7 +791,9 @@ function disarmStallFallback(audio) {
 function setupAudioEvents(audio) {
     for (const name of ['play', 'pause', 'seeking', 'seeked', 'waiting', 'stalled', 'playing', 'ratechange', 'emptied']) {
         audio.addEventListener(name, () => {
-            if (audio === activeAudio) document.dispatchEvent(new CustomEvent('nedotify:lyrics_clock_changed', {detail: {}}));
+            if (audio !== activeAudio) return;
+            if (name === 'emptied') renderPlayerMomentActions();
+            document.dispatchEvent(new CustomEvent('nedotify:lyrics_clock_changed', {detail: {}}));
         });
     }
     audio.addEventListener('loadstart', () => armStallFallback(audio));
@@ -750,7 +818,13 @@ function setupAudioEvents(audio) {
     });
     audio.addEventListener('canplay', () => disarmStallFallback(audio));
     audio.addEventListener('loadedmetadata', () => {
-        if (audio === activeAudio) applyPendingResume(audio);
+        if (audio !== activeAudio) return;
+        applyPendingResume(audio);
+        if (playbackState.durationMs <= 0 && Number.isFinite(audio.duration) && audio.duration > 0) {
+            playbackState.durationMs = Math.round(audio.duration * 1000);
+            paintPlaybackProgress();
+        }
+        renderTrackMoment();
     });
     audio.addEventListener('progress', () => {
         if (audio.readyState >= 3) disarmStallFallback(audio);
@@ -1167,7 +1241,8 @@ export function togglePlayPause() {
 }
 
 async function syncMiniDislike() {
-    if (document.getElementById('mini-player-overlay')?.dataset?.expanded !== 'true') return;
+    const card = document.getElementById('mini-player-overlay');
+    if (!card || (!card.dataset.dock && card.dataset.expanded !== 'true')) return;
     const button = document.getElementById('mp-btn-dislike');
     const track = playbackState.track;
     button.setAttribute('aria-pressed', 'false');
@@ -1185,38 +1260,60 @@ function setupMiniPlayerExpansion(restoreMainWindow) {
     let hovered = false;
     let pinned = false;
     let collapseTimer;
+    let dragOrigin;
+    let dragging = false;
+    let waitForExit = false;
     let resizeRequest = Promise.resolve();
+    const useMotion = () => !matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function renderLayout(expanded) {
+        card.dataset.expanded = String(expanded);
+        compact.setAttribute('aria-expanded', String(expanded));
+        details.inert = !expanded && !card.dataset.dock;
+    }
+
+    function setDock(edge) {
+        if (edge === 'left' || edge === 'right') card.dataset.dock = edge;
+        else delete card.dataset.dock;
+        renderLayout(false);
+        if (card.dataset.dock) syncMiniDislike();
+    }
 
     function setExpanded(expanded) {
         if (expanded === (card.dataset.expanded === 'true')) return;
-        card.dataset.expanded = String(expanded);
-        compact.setAttribute('aria-expanded', String(expanded));
-        details.inert = !expanded;
+        renderLayout(expanded);
         if (expanded) {
             paintPlaybackProgress();
             syncMiniDislike();
         }
+        // Hovering in and out quickly must not queue a native animation per
+        // pointer event: only the newest intent is applied, and the native
+        // window keeps animating from wherever it currently is.
         resizeRequest = resizeRequest.then(() => {
             if (!document.body.classList.contains('mini-player-active') ||
-                expanded !== (card.dataset.expanded === 'true')) return;
-            return api('set_mini_player_expanded', expanded, !matchMedia('(prefers-reduced-motion: reduce)').matches);
+                document.body.classList.contains('main-player-restoring') ||
+                dragging || expanded !== (card.dataset.expanded === 'true')) return;
+            return api('set_mini_player_expanded', expanded, useMotion());
         });
     }
 
     function collapse() {
         clearTimeout(collapseTimer);
         collapseTimer = setTimeout(() => {
-            if (!hovered && !pinned && !isDraggingProgress && !isDraggingVolume) setExpanded(false);
-        }, 90);
+            if (!hovered && !pinned && !dragging && !isDraggingProgress && !isDraggingVolume) setExpanded(false);
+        }, card.dataset.dock ? 300 : 140);
     }
 
+    // 140 ms covers the pointer travelling between the compact row and the
+    // revealed details panel without letting the card collapse mid-move.
     card.addEventListener('pointerenter', event => {
-        if (event.pointerType === 'touch') return;
+        if (event.pointerType === 'touch' || dragging || waitForExit) return;
         hovered = true;
         clearTimeout(collapseTimer);
         setExpanded(true);
     });
     card.addEventListener('pointerleave', () => {
+        waitForExit = false;
         hovered = false;
         collapse();
     });
@@ -1226,6 +1323,34 @@ function setupMiniPlayerExpansion(restoreMainWindow) {
     document.addEventListener('pointercancel', () => {
         if (card.dataset.expanded === 'true' && !hovered) collapse();
     });
+    // Only the cover/title area starts a window drag. Sliders and buttons
+    // retain their own pointer events and never move the window.
+    compact.addEventListener('pointerdown', event => {
+        if (event.button !== 0 || event.pointerType !== 'mouse' ||
+            !document.body.classList.contains('mini-player-native')) return;
+        dragOrigin = { x: event.screenX, y: event.screenY };
+    });
+    document.addEventListener('pointermove', async event => {
+        if (!dragOrigin || dragging || !(event.buttons & 1)) return;
+        if (Math.hypot(event.screenX - dragOrigin.x, event.screenY - dragOrigin.y) < 5) return;
+        dragOrigin = null;
+        dragging = true;
+        clearTimeout(collapseTimer);
+        const result = await api('begin_window_drag', true, useMotion());
+        if (!result?.success) {
+            dragging = false;
+            if (!card.matches(':hover')) collapse();
+        }
+    });
+    for (const type of ['pointerup', 'pointercancel']) {
+        document.addEventListener(type, () => { dragOrigin = null; });
+    }
+    window.addEventListener('nedotify:mini_player_placement', event => {
+        dragging = hovered = pinned = false;
+        waitForExit = card.matches(':hover');
+        setDock(event.detail?.edge);
+    });
+
     compact.addEventListener('click', event => {
         if (event.pointerType !== 'touch' && event.detail !== 0) return;
         pinned = !pinned;
@@ -1248,15 +1373,18 @@ function setupMiniPlayerExpansion(restoreMainWindow) {
         setExpanded(false);
         api('minimize_window');
     });
-    window.addEventListener('nedotify:mini_player_toggled', () => {
+    window.addEventListener('nedotify:mini_player_toggled', event => {
         // The main layout is applied by a separate listener for the same event.
         queueMicrotask(() => {
+            if (event.detail?.success === false) return;
             if (document.body.classList.contains('mini-player-active')) {
+                setDock(event.detail?.edge);
                 if (card.matches(':hover')) setExpanded(hovered = true);
             } else {
-                hovered = pinned = false;
+                hovered = pinned = dragging = waitForExit = false;
+                dragOrigin = null;
                 clearTimeout(collapseTimer);
-                setExpanded(false);
+                setDock(null);
             }
         });
     });
@@ -2426,7 +2554,9 @@ function paintPlaybackProgress(position = playbackState.positionMs) {
         setElText(`${prefix}-time-total`, prefix === 'pp' ? remaining : total);
     }
     const mini = document.getElementById('mini-player-overlay');
-    if (mini) mini.style.setProperty('--mp-progress', `${fraction * 100}%`);
+    // A transform is composited; the old percentage variable repainted the
+    // compact row's gradient on every tick.
+    if (mini) mini.style.setProperty('--mp-progress-scale', String(fraction));
     const panel = document.getElementById('pb-panel-fill');
     if (panel) panel.style.clipPath = `inset(0 ${100 - fraction * 100}% 0 0)`;
     renderWaveforms(fraction);

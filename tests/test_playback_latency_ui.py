@@ -23,8 +23,9 @@ const context = vm.createContext({console, Date: MockDate, Map, JSON,
  refreshKineticState() {return {}}, ensureMeasured() {return false},
 });
 const code = SOURCE;
-vm.runInContext(code.slice(code.indexOf('let parsedLyrics'), code.indexOf('export function toggleTranslation(')) +
- code.slice(code.indexOf('export function loadCurrentTrackLyrics('), code.indexOf('export function parseLrc(')).replaceAll('export ', '') +
+const state = code.slice(code.indexOf('let parsedLyrics'), code.indexOf('export function toggleTranslation('));
+const loader = code.slice(code.indexOf('export function loadCurrentTrackLyrics('), code.indexOf('export function parseLrc('));
+vm.runInContext((state + loader).replace(/^export /gm, '') +
  '\nglobalThis.subject = {loadCurrentTrackLyrics, renderLyrics, cache: lyricsMemoryCache};', context);
 const subject = context.subject;
 function publish(index, text, phase = 'final', revision = 1) {

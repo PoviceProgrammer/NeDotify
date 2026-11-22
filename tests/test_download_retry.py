@@ -15,6 +15,8 @@ burns the same request again.
 
 import pytest
 
+import types
+
 
 def test_transient_marks_are_retried(downloader):
     assert downloader._is_retryable_error("The page needs to be reloaded.") is True
@@ -127,6 +129,27 @@ def test_a_provider_returning_no_file_is_permanent(downloader, monkeypatch):
 def test_unsupported_source_keeps_its_message(downloader):
     with pytest.raises(Exception, match="No download provider for source 'vk'"):
         downloader._fetch_from_provider("vk", "x", "/tmp", 1)
+
+
+def test_hitmos_is_a_supported_download_source(downloader, monkeypatch, tmp_path):
+    """Hitmos resolves to a plain MP3, so its download goes through its provider."""
+    calls = []
+    target = tmp_path / "song.mp3"
+    target.write_bytes(b'\xff\xfb\xe0\x44' + bytes(8192))
+
+    def download(source_id, download_dir, download_context=None):
+        calls.append((source_id, download_dir, download_context))
+        return str(target)
+
+    monkeypatch.setattr(downloader._core, 'hitmos', types.SimpleNamespace(download_audio_sync=download),
+                        raising=False)
+    assert downloader._fetch_from_provider('hitmos', '12682699', str(tmp_path), 1) == str(target)
+    assert calls and calls[0][0] == '12682699'
+
+
+def test_lmusic_and_hitmos_share_one_download_branch(downloader, monkeypatch):
+    from core import downloader as module
+    assert {'hitmos', 'lmusic'} <= module._SUPPORTED_SOURCES
 
 
 def test_unsupported_source_is_permanent(downloader):

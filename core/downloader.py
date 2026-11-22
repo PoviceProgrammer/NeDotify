@@ -31,7 +31,8 @@ _MAX_WORKERS = 4
 # Sources ``_download_worker`` knows how to fetch. Anything else (e.g. 'vk',
 # which has no download provider yet) fails with a source-specific error
 # instead of the generic "returned None or file missing" one.
-_SUPPORTED_SOURCES = frozenset({'youtube', 'soundcloud', 'yandex', 'spotify', 'spotify_album', 'deezer', 'lmusic'})
+_SUPPORTED_SOURCES = frozenset({'youtube', 'soundcloud', 'yandex', 'spotify', 'spotify_album', 'deezer',
+                                'hitmos', 'lmusic'})
 
 # A downloaded file that is not one of these, is below the floor, or is a
 # leftover .part is not audio. Providers can hand back such a path, and
@@ -839,7 +840,7 @@ class DownloadManager:
             if sc_url.startswith('http') and not is_safe_media_url(sc_url):
                 raise Exception('Unsafe media URL rejected')
             file_path = self._call_provider(self._core.soundcloud, sc_url, download_dir)
-        elif source == 'lmusic':
+        elif source in ('hitmos', 'lmusic'):
             file_path = self._call_provider(getattr(self._core, source), source_id, download_dir)
         elif source == 'yandex':
             file_path = self._call_provider(self._core.yandex, source_id, download_dir)

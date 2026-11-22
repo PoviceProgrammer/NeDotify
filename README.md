@@ -83,10 +83,10 @@
 
 Требуются **Windows 10/11 x64** и интернет для онлайн-источников и подготовки недостающих компонентов.
 
-[Репозиторий](https://github.com/PoviceProgrammer/NeDotify) → **Releases** → **v2.5.6** → **Assets** → **`NeDotify_Setup.exe`**.
+[Репозиторий](https://github.com/PoviceProgrammer/NeDotify) → **Releases** → **v2.6.5** → **Assets** → **`Soneth_v2.6.5.exe`**.
 
 1. Откройте [релиз v2.5.6](https://github.com/PoviceProgrammer/NeDotify/releases/tag/v2.5.6).
-2. В разделе **Assets** скачайте [NeDotify_Setup.exe](https://github.com/PoviceProgrammer/NeDotify/releases/download/v2.5.6/NeDotify_Setup.exe).
+2. В разделе **Assets** скачайте [Soneth_v2.6.5.exe](https://github.com/PoviceProgrammer/NeDotify/releases/download/v2.6.5/Soneth_v2.6.5.exe).
 3. Запустите установщик и пройдите шаги мастера. Он устанавливает приложение в профиль пользователя и создаёт выбранные ярлыки.
 4. Откройте Soneth, завершите первоначальную настройку, выберите артистов и запустите трек через поиск или «Мою волну».
 
@@ -102,7 +102,7 @@
 iscc installer.iss
 ```
 
-На выходе — `dist\Soneth_Setup.exe`.
+На выходе — `dist\Soneth_v2.6.5.exe`.
 
 ---
 

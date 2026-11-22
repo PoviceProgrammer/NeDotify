@@ -1600,8 +1600,8 @@ export function applyIconPack(packId) {
         iconSlot.innerHTML = `<i data-lucide="${map.logo}" style="width:24px;height:24px;filter:drop-shadow(0 0 10px ${pack.color});"></i>`;
     }
 
+    // The player renders Play/Pause and its loading indicator from playback state.
     // Player bar transport controls
-    setIcon('#pb-btn-play', map.play);
     setIcon('#pb-btn-next', map.next);
     setIcon('#pb-btn-prev', map.prev);
     setIcon('#pb-btn-shuffle', map.shuffle);
@@ -1610,7 +1610,6 @@ export function applyIconPack(packId) {
     setIcon('#pb-volume-btn', map.volume);
 
     // Full player page (popup player / big player)
-    setIcon('#pp-btn-play', map.play);
     setIcon('#pp-btn-next', map.next);
     setIcon('#pp-btn-prev', map.prev);
     setIcon('#pp-btn-shuffle', map.shuffle);
@@ -1619,7 +1618,6 @@ export function applyIconPack(packId) {
     setIcon('#fs-volume-btn', map.volume);
 
     // Mini-player transport controls
-    setIcon('#mp-btn-play', map.play);
     setIcon('#mp-btn-next', map.next);
     setIcon('#mp-btn-prev', map.prev);
     setIcon('#btn-mini-play', map.play);

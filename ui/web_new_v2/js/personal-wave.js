@@ -34,8 +34,11 @@ export async function mountPersonalWave() {
     }
     addPythonEventHandler(async(name,data)=>{
         if(name==='queue_updated') {
-            const previous=snapshot?.current_track;snapshot=data;
-            if(active() && (previous?.entry_id!==data.current_track?.entry_id || data.tracks.length-data.current_index<25))schedule(true);
+            snapshot=data;
+            // Only refill near the end of the queue. Reacting to every entry_id
+            // change re-ranked the tail on each selection, and the response
+            // rebuilt the visible shelf under the pointer.
+            if(active() && data.tracks.length-data.current_index<25)schedule(true);
             return;
         }
         if(name==='favorites_updated'||name==='recommendation_feedback_updated') {schedule(!!active());return;}

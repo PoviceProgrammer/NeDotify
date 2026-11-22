@@ -284,3 +284,68 @@ scrollTo(40);scrollTo(0);
 assert.deepEqual(rows(),originals,'scrolling must retain the ready rows and covers');
 list.destroy();
 """)
+
+
+def test_refresh_appends_without_moving_the_reader_or_rebuilding_rows():
+    run_library(r"""
+const list = mount();
+scrollTo(500, 17);
+const original = rowAt(500), before = scroller.scrollTop;
+tracks.push({ id: 20001, source: 'test', source_id: 'track-20000', title: 'Track 20000', artist: 'Artist', duration: 60 });
+list.refresh();
+flush();
+assert.equal(scroller.scrollTop, before, 'appending must not scroll the viewport');
+assert.equal(rowAt(500), original, 'mounted rows keep their DOM nodes');
+assert.equal(container.scrollHeight, tracks.length * 56 - 4);
+scrollTo(tracks.length - 1);
+assert.ok(rowAt(tracks.length - 1), 'the appended row mounts on demand');
+assert.equal(list.getScrollport(), scroller);
+scrollTo(500);
+list.refresh({ rebuild: true });
+flush();
+assert.ok(rowAt(500), 'a rebuild remounts the visible window');
+list.destroy();
+""")
+
+
+def test_open_playlist_refresh_patches_rows_in_place_and_keeps_scroll():
+    run_library_module(r"""
+for (const id of ['lib-playlist-description','lib-hero-kind','lib-hero-cover','lib-hero-updated','lib-btn-play-all','lib-btn-shuffle','lib-edit-cover','lib-btn-playlist-options','lib-mobile-playlists']) element(id);
+window.pywebview.api.get_playlist_tracks = async () => ({ success: true, tracks: tracks.slice(0, 30) });
+await context.selectSection('playlist', { id: 7, name: 'Mix' });
+assert.equal(vm.runInContext('currentActiveTracks.length', context), 30);
+scrollTo(20, 6);
+const before = scroller.scrollTop, original = rowAt(20);
+const added = { id: 20001, source: 'test', source_id: 'track-20000', title: 'Track 20000', artist: 'Artist', duration: 60 };
+window.pywebview.api.get_playlist_tracks = async () => ({ success: true, tracks: [...tracks.slice(0, 30), added] });
+assert.equal(context.refreshOpenPlaylist(7), true);
+for (let i = 0; i < 6; i++) await Promise.resolve();
+assert.equal(scroller.scrollTop, before, 'adding a track must not jump to the top');
+assert.equal(rowAt(20), original);
+const active = vm.runInContext('currentActiveTracks', context);
+assert.equal(active.length, 31);
+assert.equal(active.at(-1), added);
+assert.equal(document.getElementById('lib-active-sub').textContent, '31 треков');
+assert.equal(container.querySelector('.empty-state'), null, 'the spinner must not replace the list');
+assert.equal(context.refreshOpenPlaylist(99), false, 'a different playlist is not patched');
+assert.equal(context.refreshOpenPlaylist(), true, 'no id patches the open playlist');
+""")
+
+
+def test_offline_collection_refresh_patches_rows_in_place_and_keeps_scroll():
+    run_library_module(r"""
+for (const id of ['lib-offline-count','lib-playlist-description','lib-hero-kind','lib-hero-cover','lib-hero-updated','lib-btn-play-all','lib-btn-shuffle','lib-edit-cover','lib-btn-playlist-options','lib-mobile-playlists']) element(id);
+window.pywebview.api.get_downloaded_tracks = async () => tracks.slice(0, 40);
+await context.selectSection('offline');
+assert.equal(document.getElementById('lib-active-sub').textContent, '40 треков');
+scrollTo(15, 9);
+const before = scroller.scrollTop, original = rowAt(15);
+const extra = { id: 20002, source: 'test', source_id: 'track-20001', title: 'Downloaded', artist: 'Artist', duration: 60, file_path: 'C:/a.mp3', is_downloaded: true };
+window.pywebview.api.get_downloaded_tracks = async () => tracks.slice(0, 40).concat([extra]);
+assert.equal(context.refreshActiveCollection(), true, 'offline refetches its own list');
+for (let i = 0; i < 6; i++) await Promise.resolve();
+assert.equal(scroller.scrollTop, before, 'a finished download must not scroll the view');
+assert.equal(rowAt(15), original, 'visible rows keep their DOM node');
+assert.equal(document.getElementById('lib-active-sub').textContent, '41 треков');
+assert.equal(container.querySelector('.empty-state'), null);
+""")

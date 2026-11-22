@@ -146,7 +146,10 @@ def test_installer_output_name_matches_readme():
     if not os.path.exists(ISS):
         pytest.skip("installer.iss not present")
     text = open(ISS, encoding="utf-8").read()
-    assert "OutputBaseFilename=Soneth_Setup" in text
+    version = next(line.split("=", 1)[1] for line in text.splitlines() if line.startswith("AppVersion="))
+    filename = f"Soneth_v{version}"
+    assert f"OutputBaseFilename={filename}" in text
+    assert f"{filename}.exe" in _read(README)
 
 
 def test_installer_zapret_bundle_is_conditionally_gated():
@@ -218,14 +221,6 @@ def test_no_doc_points_at_a_deleted_installer_script(doc):
 # --- README must describe the build that actually exists --------------------
 
 README = os.path.join(PROJECT_ROOT, "README.md")
-
-
-def test_readme_advertises_the_canonical_setup_exe():
-    text = _read(README)
-    assert "NeDotify_Setup.exe" in text, (
-        "README must name the file the release actually contains; "
-        "installer.iss OutputBaseFilename=Soneth_Setup"
-    )
 
 
 @pytest.mark.parametrize("stale", ["NeDotify_v2.exe", "beta5_Setup.exe", "Beta5_Setup.exe"])

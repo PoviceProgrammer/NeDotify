@@ -48,7 +48,7 @@ require a later GUI run, which was explicitly out of scope for this pass.
 | `scan_complete` | `{count}` |
 | `clear_listening_history(confirmed=False/True)` | `{success, confirmation_required?}` |
 | `listening_history_cleared` | Event after successful clear |
-| `toggle_mini_player(target, request_id)` | Immediate `{success, pending: true, is_mini, request_id}` followed by `mini_player_toggled {request_id, success, is_mini}` |
+| `toggle_mini_player(target, request_id)` | Immediate `{success, pending: true, is_mini, request_id}` followed by `mini_player_restoring {request_id}` when the native window starts growing back, then `mini_player_toggled {request_id, success, is_mini}` when it reaches the main bounds |
 
 ## Verification
 

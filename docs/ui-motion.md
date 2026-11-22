@@ -46,11 +46,13 @@
 | Аудиоинструменты | Фон и цвет выбранного таймера сна меняются за 150 мс. | Локальная перерисовка кнопки. | [Apple HIG Motion](https://developer.apple.com/design/human-interface-guidelines/motion) |
 | Очередь | Видимые строки после редактирования занимают новые позиции за 190 мс. Статус радио мягко появляется и исчезает. Строки не пересоздаются: `renderQueue` переиспользует узел по `entry_id`, поэтому смена трека и перестановка двигают живые элементы. | До 16 соседних элементов на снимок геометрии. Смещение выполняется на слое отрисовки. | [Spotify о редактировании очереди](https://newsroom.spotify.com/2021-03-25/introducing-a-new-spotify-experience-across-desktop-app-and-web-player/), [Motion.dev Layout](https://motion.dev/docs/layout-animations) |
 | Плеер | При смене трека, play/pause или формы шкалы коротко проявляется изменившийся элемент. Новая обложка приходит через `NeDotifyMotion.cover` (220 мс, `opacity` .35 → 1 и `scale(1.015)` → 1). Сердце «нравится» перерисовывается только при реальной смене состояния, поэтому переход между треками больше не перезапускает пульс. | Небольшие области композитинга; анимация обложки — один слой на каждый из трёх размеров, только на смене трека. | [Apple HIG Motion](https://developer.apple.com/design/human-interface-guidelines/motion), [Apple Music MiniPlayer](https://support.apple.com/en-jo/guide/music/mus71d7dcfce/mac) |
+| Матовые кнопки Windows | CSS затемняет поверхность и распространяет мягкую волну из точки нажатия. Pointer Events обновляют scale и translate только при удержании. После отпускания WAAPI возвращает форму за 220 мс. При уменьшении движения остаётся затемнение, в экономном режиме также отключается blur. | Статический blur ограничен площадью кнопок. Волна перерисовывает только нажатую кнопку, в покое анимаций нет. | [OriginOS 7 Spring Animation](https://www.vivo.com/en/originos), [Apple Music MiniPlayer](https://support.apple.com/en-jo/guide/music/mus71d7dcfce/mac), [WebView2 Performance](https://learn.microsoft.com/microsoft-edge/webview2/concepts/performance) |
 | Настройки | Результаты фильтрации, выпадающее меню, предупреждение и плашка импорта папки получают локальные переходы. Переключение групп идёт через `NeDotifyMotion.swap` (scoped View Transition): уходящая панель уходит вверх, новая приходит снизу, повторный клик отменяет устаревший переход. Плитки стиля интерфейса и режимы рекомендаций отвечают подъёмом и свечением выбранного. | Один снимок области панелей на переключение; эффекты выбора — локальные переходы цвета и тени. | [Chrome UI Motion](https://developer.chrome.com/docs/modern-web-guidance/guides/ui-behaviors/motion), [Chrome о same-document transitions](https://developer.chrome.com/docs/modern-web-guidance/guides/ui-behaviors/same-document-transitions) |
 | Мастер готовности | Активный шаг и изменившиеся результаты проверки компонентов проявляются за 160 мс. На каждый узел держится одна WAAPI-анимация (`perNode`), поэтому быстрые повторные клики не наслаивают keyframes. | При одинаковых результатах фоновых проверок эффект пропускается. | [Apple HIG Motion](https://developer.apple.com/design/human-interface-guidelines/motion) |
 | Загрузки | Новые строки, кнопки и ошибки проявляются. После удаления сдвигаются соседние строки, ход загрузки сглаживается через scaleX за 180 мс. Список раскрывается как `grid-template-rows: 0fr → 1fr` за 260 мс вместе с `opacity` и discrete `visibility`; строка подсвечивается при наведении, счётчик очереди проявляется при смене текста. | Композитинг небольшой полосы только при изменении значения; раскрытие анимирует один контейнер, а не каждую строку. | [WebView2 Performance](https://learn.microsoft.com/microsoft-edge/webview2/concepts/performance), [Chrome о дискретных переходах](https://developer.chrome.com/docs/modern-web-guidance/guides/ui-behaviors/motion) |
 | Импорт плейлиста и сеть | Плашки появляются и скрываются за 160 мс. Импорт дополнительно проявляет новый этап, когда меняется статус. | По одному короткому переходу на элемент. | [Chrome UI Motion](https://developer.chrome.com/docs/modern-web-guidance/guides/ui-behaviors/motion) |
-| Мини-плеер | Окно закреплено по центру верхнего края монитора в обоих размерах и на промежуточных кадрах. Карточка показывает управление при наведении. При входе в режим проявляется содержимое на непрозрачной поверхности. | Конечная анимация размеров WinForms и прозрачности элементов интерфейса. | [Apple Music MiniPlayer](https://support.apple.com/guide/music/use-music-miniplayer-mus71d7dcfce/mac), [Spotify Desktop Miniplayer](https://newsroom.spotify.com/2024-04-11/spotify-premium-tips-tricks/) |
+| Мини-плеер | Окно закреплено по центру верхнего края монитора в обоих размерах и на промежуточных кадрах. Карточка показывает управление при наведении. При входе в режим проявляется содержимое на непрозрачной поверхности. Прогресс компактной строки рисуется слоем `scaleX` вместо перерисовки градиента. | Конечная анимация размеров WinForms и прозрачности элементов интерфейса; тик прогресса меняет только transform. | [Apple Music MiniPlayer](https://support.apple.com/guide/music/use-music-miniplayer-mus71d7dcfce/mac), [Spotify Desktop Miniplayer](https://newsroom.spotify.com/2024-04-11/spotify-premium-tips-tricks/) |
+| Возврат из мини-плеера | WinForms растит то же окно до сохранённых границ за 340 мс (`ease-out-cubic`, таймер 16 мс). Как только начинается рост, приходит `mini_player_restoring`: документ сразу переключается на основную раскладку, а `#app-container` проявляется через `mainPlayerRestore` (340 мс, только `opacity`, чтобы текст не пересэмплировался на каждом кадре роста). Класс `main-player-restoring` не снимается по таймеру: иначе возвращается `mainPlayerEnter` и окно мигает на 60 % сразу после раскрытия. Его снимает следующая смена раскладки. Событие `mini_player_toggled` приходит только после последнего кадра. | Одна нативная анимация границ и одна анимация прозрачности контейнера на переход; обе завершаются сами. | [Apple Music MiniPlayer](https://support.apple.com/en-jo/guide/music/mus71d7dcfce/mac), [WebView2 Performance](https://learn.microsoft.com/microsoft-edge/webview2/concepts/performance) |
 
 Оценки нагрузки качественные. Новые переходы идут по событиям и завершаются сами. При системном уменьшении движения смены состояния отображаются сразу. Смещения строк выполняются через transform или translate. [Рекомендации по производительности WebView2](https://learn.microsoft.com/microsoft-edge/webview2/concepts/performance)
 
@@ -90,3 +92,33 @@
 | Главная | Секции пропускаются по сигнатуре; догрузка обложек правит `src` у живых карточек. |
 | Загрузки | Строки keyed по `track_id`, прогресс идёт через `transform: scaleX()`. |
 | Настройки текста | Типографика — четыре переменные на `:root`; перезамер листа кинетики один раз на кадр, а не на каждое движение слайдера. Значения уходят в SQLite (`lyrics_display`) одним dict и восстанавливаются при старте; `localStorage` — только быстрый кэш для первого кадра. |
+
+- Slim Rail переиспользует управление и обложку мини-плеера. После перетаскивания WinForms
+  меняет границы окна за 320 мс при раскрытии и за 280 мс при сворачивании.
+  После ухода курсора с закреплённой панели действует задержка 300 мс. CSS сглаживает
+  высоту рядов и отступы Slim Rail, а в верхнем плеере проявляет блок управления. Нативный таймер работает только во время изменения границ окна, а при
+  reduced motion смена размеров происходит сразу. Ориентиры: [Apple Music MiniPlayer](https://support.apple.com/en-jo/guide/music/mus71d7dcfce/mac)
+  и [Apple HIG Motion](https://developer.apple.com/design/human-interface-guidelines/motion).
+
+### Обновление коллекции без «прыжка» наверх
+
+`library_updated`, `playlist_changed`, `playlists_updated` и
+`playlist_availability_updated` больше не пересобирают открытый раздел.
+Раньше каждое из них вызывало `refreshActiveLibraryView()`, а тот повторно
+входил в `selectSection`: очищал `#lib-active-tracks`, показывал спиннер и
+перерисовывал список с нуля — пользователь оказывался в самом верху плейлиста
+после добавления трека или завершения загрузки.
+
+Теперь `events.js` сначала пробует `refreshOpenPlaylist(playlistId)` /
+`refreshActiveCollection()`:
+
+| Шаг | Что происходит |
+| --- | --- |
+| Запрос | Тихо перезапрашивается только этот плейлист (или «Скачанное»), без спиннера и без смены раздела. |
+| Совпадение | Уже отрисованные объекты треков обновляются на месте (`Object.assign`), поэтому живые строки видят новые поля. |
+| Дополнение | Новые треки дописываются в тот же массив; виртуальный список монтирует их по мере прокрутки (`libraryRenderer.refresh()`), существующие узлы и `scrollTop` не меняются. |
+| Удаление или перестановка | Единственный случай, требующий перерисовки: список строится заново, но `scrollTop` восстанавливается, а спиннер не показывается. |
+| Другой раздел | Только тогда вызывается прежний полный `refreshActiveLibraryView()`. |
+
+Поэтому поток из одного трека или одной загрузки не трогает DOM, кроме
+затронутой строки, и прокрутка остаётся там, где её оставил пользователь.

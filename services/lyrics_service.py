@@ -178,4 +178,5 @@ class LyricsService:
         upload_id = str(source_id or '')
         upload_source = source if video_id or source == 'soundcloud' and upload_id.isdigit() else ''
         return self._lookup.get(track_name, artist_name, duration_ms, file_path, album_name, on_update, is_current,
-                                video_id=video_id, upload_source=upload_source, upload_id=upload_id)
+                                video_id=video_id, upload_source=upload_source, upload_id=upload_id,
+                                override_source=source)

@@ -184,6 +184,23 @@ export function createLibraryVirtualList(container, tracks, { createRow, renderI
     return {
         // Track arrays grow only when the explicit "show more" request returns.
         renderNext: () => { update(); return tracks.length; },
+        // Expose the live scroll container so callers can preserve the viewport
+        // when data is replaced underneath a visible list.
+        getScrollport: () => scrollport,
+        // Re-read the same array after the owner mutated it in place. `rebuild`
+        // discards mounted rows for a reorder; without it appended tracks are
+        // mounted lazily and every existing row keeps its DOM node and scroll.
+        refresh({ rebuild = false } = {}) {
+            if (disposed) return;
+            if (rebuild) {
+                for (const row of mounted.values()) row.remove();
+                mounted.clear();
+                signature = '';
+                needsMeasurement = true;
+                container.querySelectorAll('.lib-virtual-spacer').forEach(spacer => spacer.remove());
+            }
+            update();
+        },
         destroy() {
             disposed = true;
             if (frame) cancelAnimationFrame(frame);

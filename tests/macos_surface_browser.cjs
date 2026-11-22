@@ -21,6 +21,23 @@ const server=http.createServer((req,res)=>{
             await page.evaluate(mode=>{window.settings={interface:{ui_style:'macos',macos_mode:mode,macos_glass:true,macos_blur:0},theme:{transparency_enabled:true,transparency_level:10},optimization:{resource_blur:false,blur_quality:'off',performance_preset:'balanced'}};document.getElementById('app-splash')?.remove();},mode);
             await page.addScriptTag({url:'/js/ui-style.js'});
             await page.evaluate(()=>window.NeDotifyAppearance.restore(window.settings));
+            await page.addScriptTag({url:'/js/lucide.min.js'});
+            await page.evaluate(() => {
+                window.lucide.createIcons();
+                document.getElementById('sidebar').classList.add('is-collapsed');
+            });
+            await page.evaluate(() => Promise.all(document.getElementById('sidebar').getAnimations({subtree:true}).filter(animation => Number.isFinite(animation.effect.getComputedTiming().endTime)).map(animation => animation.finished.catch(() => {}))).catch(() => {}));
+            const offsets = await page.locator('#sidebar').evaluate(sidebar => {
+                const center = element => {
+                    const bounds = element.getBoundingClientRect();
+                    return bounds.x + bounds.width / 2;
+                };
+                return [...sidebar.querySelectorAll('.nav-item > svg, .sidebar-logo-initial')]
+                    .filter(element => element.getBoundingClientRect().width > 0)
+                    .map(element => Math.abs(center(element) - center(sidebar)));
+            });
+            assert.ok(offsets.length >= 5 && offsets.every(offset => offset <= 1),
+                `Collapsed sidebar icons must be centered: ${offsets.join(', ')}`);
             for(const selector of ['#sidebar','#player-bar']){
                 const style=await page.locator(selector).evaluate(el=>{const computed=getComputedStyle(el),canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d');ctx.fillStyle=computed.backgroundColor;ctx.fillRect(0,0,1,1);return {background:computed.backgroundColor,blur:computed.backdropFilter,alpha:ctx.getImageData(0,0,1,1).data[3]/255};});
                 const alpha=style.alpha;

@@ -4,6 +4,10 @@ import urllib.parse
 import urllib.request
 
 
+def is_profile_likes_path(path: str) -> bool:
+    return re.fullmatch(r"/(?!(?:you|discover|stream)/)[^/]+/likes/?", path) is not None
+
+
 def resolve_playlist_share_url(target: str) -> str:
     parsed = urllib.parse.urlsplit(target)
     if parsed.hostname != 'on.soundcloud.com':
@@ -21,6 +25,7 @@ def resolve_playlist_share_url(target: str) -> str:
     final = urllib.parse.urlsplit(resolved)
     if (final.scheme not in ('http', 'https') or final.username or final.password
             or final.hostname not in ('soundcloud.com', 'www.soundcloud.com')
-            or not re.fullmatch(r'/[^/]+/sets/[^/]+/?', final.path)):
+            or not (re.fullmatch(r'/[^/]+/sets/[^/]+/?', final.path)
+                    or is_profile_likes_path(final.path))):
         raise ValueError('Короткая ссылка ведёт не на плейлист SoundCloud')
     return resolved

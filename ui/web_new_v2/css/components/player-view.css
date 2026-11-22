@@ -232,6 +232,27 @@ html.player-view-expanded #app-container { background: #101114; }
     margin-bottom: var(--space-xs);
 }
 
+.player-moment-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 32px;
+}
+
+.player-moment-actions #pp-btn-moment {
+    min-height: 30px;
+    font-size: 12px;
+}
+
+.player-moment-actions #pp-btn-moment-remove {
+    width: 30px;
+    height: 30px;
+}
+
+.player-moment-actions #pp-btn-moment-remove[hidden] { display: none; }
+.player-moment-actions svg { width: 14px; height: 14px; flex: none; }
+
 .player-card-controls {
     display: flex;
     flex-direction: column;

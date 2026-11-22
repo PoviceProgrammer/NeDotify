@@ -26,14 +26,21 @@ await listener('personal_wave_ready',{request_id:calls[0][1],tracks:rows});
 const list=nodes.get('.personal-wave-tracks');assert.equal(list.children.length,80);
 const chosen=list.children[17];assert.equal(chosen.index,17);assert.equal(chosen.tracks.length,80);
 assert.equal(chosen.track._personal_wave_session,chosen.tracks[0]._personal_wave_session);
+// Selecting a track mid-wave leaves a long tail: the shelf must not re-rank,
+// because the response would rebuild the list the user is reading.
 const snapshot={tracks:chosen.tracks,current_index:17,current_track:{...chosen.track,entry_id:'playing'},queue_revision:7};
 await listener('queue_updated',snapshot);
+assert.equal([...timers.values()].filter(t=>t.ms===500).length,0,'selection with a long tail must not refetch');
+assert.equal(calls.filter(c=>c[0]==='request').length,1);
+// Near the end of the queue the tail is refilled from the played prefix.
+const nearEnd={tracks:chosen.tracks,current_index:62,current_track:{...chosen.tracks[62],entry_id:'tail'},queue_revision:8};
+await listener('queue_updated',nearEnd);
 const scheduled=[...timers.values()].find(t=>t.ms===500);scheduled.fn();await Promise.resolve();
 const pending=calls.filter(c=>c[0]==='request').at(-1);
-assert.equal(pending[2].length,18,'exclude played prefix, allow future reranking');
+assert.equal(pending[2].length,63,'exclude played prefix, allow future reranking');
 await listener('personal_wave_ready',{request_id:pending[1],tracks:rows.map(t=>({...t,title:'Fresh '+t.title}))});
 const update=calls.find(c=>c[0]==='replace');assert.equal(update[1].length,80);
-assert.equal(update[3],'playing');assert.equal(update[4],7);
+assert.equal(update[3],'tail');assert.equal(update[4],8);
 await listener('personal_wave_ready',{request_id:'stale',tracks:[]});
 assert.equal(list.children.length,80);
 '''.replace('SOURCE',code))

@@ -2542,7 +2542,7 @@ html:has(body.mini-player-active), body.mini-player-active {
     border-radius: 0 0 24px 24px;
     overflow: hidden;
     user-select: none;
-    transition: width 260ms cubic-bezier(.22,.75,.25,1), height 260ms cubic-bezier(.22,.75,.25,1);
+    transition: width 300ms cubic-bezier(.22,1,.36,1), height 300ms cubic-bezier(.22,1,.36,1);
 }
 body.mini-player-active #mini-player-overlay { display: block; }
 #mini-player-overlay[data-expanded="true"] { width: min(460px, 100%); height: min(244px, 100%); }
@@ -2556,7 +2556,7 @@ body.mini-player-active #toast-container { bottom: 4px; max-width: 100%; }
     gap: 12px;
     height: 64px;
     padding: 0 29px;
-    cursor: pointer;
+    cursor: grab;
 }
 #mini-player-overlay .mp-cover-wrap {
     position: relative;
@@ -2581,7 +2581,7 @@ body.mini-player-active #toast-container { bottom: 4px; max-width: 100%; }
     opacity: 0;
     transform: translateY(-8px);
     visibility: hidden;
-    transition: opacity 160ms ease, transform 200ms ease, visibility 200ms allow-discrete;
+    transition: opacity 180ms ease, transform 240ms cubic-bezier(.22,1,.36,1), visibility 240ms allow-discrete;
 }
 #mini-player-overlay[data-expanded="true"] .mp-details {
     opacity: 1;
@@ -4793,17 +4793,28 @@ html[data-ui-style="macos"] .btn-back-artist {
 }
 body.mini-player-active:not(.mini-player-native) #mini-player-overlay { animation: miniPlayerEnter .22s ease-out; }
 body:not(.mini-player-active) #app-container { animation: mainPlayerEnter .22s ease-out; }
+body.main-player-restoring #app-container {
+    /* The native window is still small for the first frames of the grow, so
+       the main layout is held back until it has a usable size. Opacity only:
+       scaling the whole container would resample every glyph mid-resize. */
+    animation: mainPlayerRestore 340ms cubic-bezier(.22,1,.36,1);
+}
 @keyframes miniPlayerEnter { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes mainPlayerEnter { from { opacity: .6; } to { opacity: 1; } }
-@media(prefers-reduced-motion:reduce) { #sidebar, #sidebar .nav-item, #sidebar .nav-label { transition: none !important; } body.mini-player-active:not(.mini-player-native) #mini-player-overlay, body:not(.mini-player-active) #app-container { animation: none; } }
+@keyframes mainPlayerRestore {
+    0% { opacity: 0; }
+    45% { opacity: .25; }
+    100% { opacity: 1; }
+}
+@media(prefers-reduced-motion:reduce) { #sidebar, #sidebar .nav-item, #sidebar .nav-label { transition: none !important; } body.mini-player-active:not(.mini-player-native) #mini-player-overlay, body:not(.mini-player-active) #app-container, body.main-player-restoring #app-container { animation: none; } }
 
 :root.resource-bg-disabled :is(#custom-bg-layer, #custom-bg-dim-layer, #macos-backdrop) { display: none !important; }
 
 /* Center each clickable target within the collapsed rail, including its footer. */
+/* The initial already fills its logo slot; it needs no horizontal offset. */
 #sidebar.is-collapsed { align-items:center; padding-left:8px; padding-right:8px; }
 #sidebar.is-collapsed .nav-item { margin-left:auto; margin-right:auto; flex-shrink:0; }
 #sidebar.is-collapsed :is(.sidebar-brand-row,.sidebar-footer) { width:100%; justify-content:center; }
-#sidebar.is-collapsed .sidebar-logo-initial { left:50%; transform:translateX(-50%); }
 
 .personal-wave-tracks { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr)); gap:4px 18px; max-height:440px; overflow-y:auto; overscroll-behavior:contain; }
 .personal-wave-status { color:var(--text-sec); font-size:12px; margin:0 0 16px; }
@@ -4817,4 +4828,201 @@ body.mini-player-native #mini-player-overlay {
     height: 100%;
     border-radius: 0;
     transition: none;
+}
+
+#mini-player-overlay .mp-cover-wrap img { -webkit-user-drag: none; }
+
+/* Slim Rail reflows the existing mini-player controls. Its whole window,
+   including the spaces between the cards, is one hover target. */
+body.mini-player-native #mini-player-overlay[data-dock] {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    align-content: start;
+    padding: 8px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    background: #090909;
+    --rail-panel: #151b22;
+    --rail-outline: inset 0 0 0 1px #ffffff15;
+}
+
+#mini-player-overlay[data-dock] :is(.mp-details, .mp-controls-row, .mp-footer) {
+    display: contents;
+    visibility: visible;
+}
+
+#mini-player-overlay[data-dock] :is(.mp-compact-row, .mp-progress-row) {
+    grid-column: 1 / -1;
+    min-width: 0;
+}
+
+#mini-player-overlay[data-dock] .mp-compact-row {
+    grid-row: 1;
+    height: auto;
+    padding: 10px 6px 6px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+}
+
+#mini-player-overlay[data-dock] .mp-cover-wrap {
+    flex: none;
+    align-self: center;
+    width: min(100%, 76px);
+    height: auto;
+    aspect-ratio: 1;
+    border-radius: 13px;
+}
+
+#mini-player-overlay[data-dock] .mp-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+    max-height: 2.5em;
+}
+
+#mini-player-overlay[data-dock] .mp-info { flex: none; }
+#mini-player-overlay[data-dock] .mp-artist {
+    margin-top: 4px;
+    line-height: 16px;
+}
+#mini-player-overlay[data-dock] .mp-marquee-span {
+    display: inline;
+    animation: none;
+    transform: none;
+}
+
+#mini-player-overlay[data-dock] .mp-ctrl-btn {
+    justify-self: center;
+    align-self: center;
+    background: #ffffff12;
+}
+
+#mini-player-overlay[data-dock] .mp-ctrl-btn:hover { background: #ffffff23; }
+
+#mini-player-overlay[data-dock] #mp-btn-play {
+    width: 50px;
+    height: 50px;
+    color: #fff;
+    --matte-surface: #075b74;
+    background: var(--matte-surface);
+}
+
+#mini-player-overlay[data-dock] #mp-btn-play:hover { --matte-surface: #087391; }
+
+#mini-player-overlay[data-dock] :is(#mp-btn-restore, #mp-btn-close) { display: none; }
+
+#mini-player-overlay[data-dock][data-expanded="false"] {
+    grid-template-rows: 158px 48px 58px 48px 48px;
+}
+
+#mini-player-overlay[data-dock][data-expanded="false"] :is(.mp-progress-row, #mp-volume-btn, #mp-volume-track) {
+    display: none;
+}
+
+#mini-player-overlay[data-dock][data-expanded="false"] :is(#mp-btn-prev, #mp-btn-play, #mp-btn-next) {
+    grid-column: 1 / -1;
+}
+
+#mini-player-overlay[data-dock][data-expanded="false"] #mp-btn-prev { grid-row: 2; }
+#mini-player-overlay[data-dock][data-expanded="false"] #mp-btn-play { grid-row: 3; }
+#mini-player-overlay[data-dock][data-expanded="false"] #mp-btn-next { grid-row: 4; }
+#mini-player-overlay[data-dock][data-expanded="false"] #mp-btn-like { grid-row: 5; grid-column: 1 / 7; }
+#mini-player-overlay[data-dock][data-expanded="false"] #mp-btn-dislike { grid-row: 5; grid-column: 7 / -1; }
+
+#mini-player-overlay[data-dock][data-expanded="true"] {
+    grid-template-rows: 230px 44px 88px 58px 55px;
+}
+
+#mini-player-overlay[data-dock][data-expanded="true"] .mp-compact-row {
+    padding: 18px 18px 0;
+}
+
+#mini-player-overlay[data-dock][data-expanded="true"] .mp-cover-wrap {
+    width: clamp(0px, calc(100vw - 62px), 134px);
+    border-radius: 16px;
+}
+
+#mini-player-overlay[data-dock][data-expanded="true"] .mp-title { font-size: 17px; }
+#mini-player-overlay[data-dock][data-expanded="true"] .mp-progress-row { grid-row: 2; padding: 0 16px 8px; }
+#mini-player-overlay[data-dock][data-expanded="true"] #mp-progress-track { --primary: #37dac9; }
+
+#mini-player-overlay[data-dock][data-expanded="true"] :is(#mp-btn-prev, #mp-btn-play, #mp-btn-next) {
+    grid-row: 3;
+}
+
+#mini-player-overlay[data-dock][data-expanded="true"] #mp-btn-prev { grid-column: 1 / 5; }
+#mini-player-overlay[data-dock][data-expanded="true"] #mp-btn-play { grid-column: 5 / 9; width: 56px; height: 56px; }
+#mini-player-overlay[data-dock][data-expanded="true"] #mp-btn-next { grid-column: 9 / -1; }
+#mini-player-overlay[data-dock][data-expanded="true"] #mp-btn-like { grid-row: 4; grid-column: 2 / 7; align-self: end; }
+#mini-player-overlay[data-dock][data-expanded="true"] #mp-btn-dislike { grid-row: 4; grid-column: 7 / 12; align-self: end; }
+#mini-player-overlay[data-dock][data-expanded="true"] #mp-volume-btn { grid-row: 5; grid-column: 1 / 4; }
+#mini-player-overlay[data-dock][data-expanded="true"] #mp-volume-track {
+    grid-row: 5;
+    grid-column: 4 / 12;
+    align-self: center;
+    max-width: none;
+}
+#mini-player-overlay[data-dock][data-expanded="true"] #mp-volume-fill { background: #37dac9; }
+
+#mini-player-overlay[data-dock][data-expanded="true"] :is(.mp-compact-row, .mp-progress-row) {
+    background: var(--rail-panel);
+}
+
+#mini-player-overlay[data-dock][data-expanded="true"] .mp-compact-row { border-radius: 16px 16px 0 0; }
+#mini-player-overlay[data-dock][data-expanded="true"] .mp-progress-row { border-radius: 0 0 16px 16px; }
+
+#mini-player-overlay[data-dock][data-expanded="true"]::before,
+#mini-player-overlay[data-dock][data-expanded="true"]::after {
+    content: '';
+    grid-column: 1 / -1;
+    background: var(--rail-panel);
+    border-radius: 16px;
+    box-shadow: var(--rail-outline), 0 3px 10px #0005;
+    pointer-events: none;
+}
+
+#mini-player-overlay[data-dock][data-expanded="true"]::before { grid-row: 3; margin-block: 6px; }
+#mini-player-overlay[data-dock][data-expanded="true"]::after { grid-row: 4 / 6; }
+
+#mini-player-overlay[data-dock][data-expanded="true"] :is(.mp-ctrl-btn, #mp-volume-track) {
+    position: relative;
+    z-index: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    #mini-player-overlay[data-dock][data-expanded="true"] :is(.mp-progress-row, #mp-volume-btn, #mp-volume-track) {
+        animation: slim-rail-controls-in 250ms ease-out both;
+    }
+    @keyframes slim-rail-controls-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    body.mini-player-native #mini-player-overlay[data-dock] {
+        transition: grid-template-rows 280ms cubic-bezier(.22,1,.36,1);
+    }
+
+    body.mini-player-native #mini-player-overlay[data-dock][data-expanded="true"] {
+        transition-duration: 320ms;
+    }
+
+    #mini-player-overlay[data-dock] .mp-compact-row {
+        transition: padding 280ms cubic-bezier(.22,1,.36,1), background-color 280ms cubic-bezier(.22,1,.36,1);
+    }
+
+    body.mini-player-native #mini-player-overlay:not([data-dock]) .mp-details {
+        transition: opacity 250ms ease, transform 280ms cubic-bezier(.22,1,.36,1),
+            visibility 280ms allow-discrete;
+    }
+
+    body.mini-player-native #mini-player-overlay:not([data-dock])[data-expanded="true"] .mp-details {
+        transition-duration: 280ms, 320ms, 320ms;
+    }
 }

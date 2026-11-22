@@ -132,7 +132,7 @@ function normalizeDurationMs(dur) {
     return d > 50000 ? Math.round(d) : Math.round(d * 1000);
 }
 
-function lyricsTrackKey(track) {
+export function lyricsTrackKey(track) {
     // Stream URLs expire and can arrive after track_changed. Only local paths
     // affect embedded lyrics; resolving a CDN URL must keep the same lookup.
     const path = track?.file_path || '';
@@ -360,7 +360,24 @@ export function reloadCurrentTrackLyrics(forceNetwork = true) {
         lyricsMemoryCache.delete(lastLoadedTrackKey);
     }
     lastLyricsData = null;
+    pendingLyricsRequest = null;
     loadCurrentTrackLyrics(0, forceNetwork);
+}
+
+export function applySelectedLyrics(track, data) {
+    const key = lyricsTrackKey(track);
+    lyricsMemoryCache.delete(key);
+    if (key !== lyricsTrackKey(getCurrentTrack())) return;
+
+    // RPC replies and lyric events from the prior automatic request may still arrive.
+    lyricsLoadGeneration++;
+    activeLyricsRequestId = null;
+    pendingLyricsRequest = null;
+    deferredLyricsRequest = null;
+    lastLyricsRevision = 0;
+    lastLoadedTrackKey = key;
+    requestedLyricsDurationMs ||= normalizeDurationMs(track.duration);
+    renderLyrics(data);
 }
 
 export function getCurrentLyricsData() {
@@ -1096,7 +1113,8 @@ export function loadCurrentTrackLyrics(durationOverrideMs = 0, forceNetwork = fa
         pendingLyricsRequest = {trackKey, durationMs: durMs, id: activeLyricsRequestId, startedAt: Date.now()};
         let p;
         try {
-            p = window.pywebview.api.get_lyrics(track.title, track.artist, durMs, track.file_path, track.album || '', activeLyricsRequestId, track.source || '', track.source_id || '');
+            const sourceId = track.source_id || (track.source === 'soundcloud' ? track.id : '') || '';
+            p = window.pywebview.api.get_lyrics(track.title, track.artist, durMs, track.file_path, track.album || '', activeLyricsRequestId, track.source || '', sourceId);
         } catch (err) {
             pendingLyricsRequest = null;
             console.error("get_lyrics error:", err);

@@ -2,7 +2,7 @@
 import { onTrackChanged, onStateChanged, applySettings, applyMuteState, getCurrentTrack, stopPlaybackForQueueEnd } from './player.js';
 import { onSearchResults } from './search.js';
 import { renderPopular, renderRecommendations, renderReleases, renderMixes, renderArtists, loadHome, clearFeedTimeout, renderAuthenticHome, isCurrentHomeEvent, renderHomeRetry } from './home.js';
-import { loadLibrary, loadDownloaded, loadPlaylists } from './library.js';
+import { loadLibrary, loadPlaylists, loadLibrarySummary } from './library.js';
 import { applySettingsFromBackend, onStorageInfo } from './settings.js';
 import { showToast, renderIcons, escapeHtml } from './utils.js';
 
@@ -225,17 +225,32 @@ export function initEvents() {
                     const nextTrackChange = isNextTrackChange;
                     isNextTrackChange = false;
                     if (isPageVisible('library')) {
+                        // Summary counts, the playlist sidebar and the
+                        // overview grid all need the new numbers.
                         loadLibrary();
-                        loadPlaylists();
-                        if (window.refreshActiveLibraryView) window.refreshActiveLibraryView();
+                        // An open playlist or the offline collection is patched
+                        // in place. Rebuilding it reset the scroll position to
+                        // the top on every download and on every added track.
+                        const playlistId = data && typeof data === 'object' ? data.playlist_id : null;
+                        const patched = window.refreshOpenPlaylist?.(playlistId)
+                            || (playlistId == null && window.refreshActiveCollection?.());
+                        if (!patched && window.refreshActiveLibraryView) {
+                            window.refreshActiveLibraryView();
+                        }
                     }
                     // O-5: only re-render the section the user can actually see
                     if (isPageVisible('home')) loadHome(nextTrackChange);
                 }, 300);
                 break;
 
+            case 'mini_player_placement':
+                window.dispatchEvent(new CustomEvent('nedotify:mini_player_placement', { detail: data }));
+                break;
             case 'mini_player_toggled':
                 window.dispatchEvent(new CustomEvent('nedotify:mini_player_toggled', { detail: data }));
+                break;
+            case 'mini_player_restoring':
+                window.dispatchEvent(new CustomEvent('nedotify:mini_player_restoring', { detail: data }));
                 break;
 
             case 'scan_progress':

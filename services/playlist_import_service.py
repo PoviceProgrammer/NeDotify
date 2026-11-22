@@ -177,6 +177,14 @@ class PlaylistImportService:
         return {"name": name, "source": "youtube", "tracks": tracks}
 
     def _resolve_soundcloud(self, url: str, on_progress=None) -> Dict[str, Any]:
+        from utils.soundcloud_urls import is_profile_likes_path
+
+        path = urllib.parse.urlsplit(url).path
+        if path.rstrip("/") == "/you/likes":
+            raise PlaylistImportError(
+                "Укажите публичную ссылку вида soundcloud.com/имя-профиля/likes"
+            )
+        is_likes = is_profile_likes_path(path)
         opts = {
             "extract_flat": "in_playlist",
             "lazy_playlist": True,
@@ -195,8 +203,13 @@ class PlaylistImportService:
                 entries = info.get("entries") or []
 
                 tracks = []
-                for entry in itertools.islice(entries, self.MAX_TRACKS + 1):
+                for index, entry in enumerate(itertools.islice(entries, self.MAX_TRACKS + 1)):
+                    if is_likes and index == self.MAX_TRACKS:
+                        raise PlaylistImportError(f'Список лайков превышает лимит {self.MAX_TRACKS} записей')
                     if not isinstance(entry, dict) or not entry.get("id"):
+                        continue
+                    if is_likes and entry.get("ie_key") != "Soundcloud":
+                        # The profile feed also includes liked playlists.
                         continue
                     source_id = str(entry["id"])
                     title = entry.get("title") or "Unknown Title"

@@ -139,8 +139,37 @@ window.NeDotify = {
 
 let miniPlayerRequestCounter = 0;
 let miniPlayerLayoutAnimation;
+
+function clearMainPlayerRestore() {
+    document.body.classList.toggle('main-player-restoring', false);
+}
+
+function beginMainPlayerRestore() {
+    miniPlayerLayoutAnimation?.cancel();
+    miniPlayerLayoutAnimation = null;
+    // The native window already owns the size animation. Switch the document
+    // to the main layout immediately so the growing frame shows content, and
+    // fade it in instead of letting the compact card stretch across it.
+    document.body.classList.toggle('mini-player-active', false);
+    document.body.classList.toggle('mini-player-native', false);
+    // Restart the fade when the class is already held from a previous restore:
+    // re-adding a present class would not replay the keyframes. The layout swap
+    // above relayouts anyway, so the single read costs nothing extra.
+    document.body.classList.toggle('main-player-restoring', false);
+    void document.body.offsetWidth;
+    document.body.classList.toggle('main-player-restoring', true);
+    // The class is deliberately left in place once the grow ends: removing it
+    // would hand #app-container back to `mainPlayerEnter`, whose 60%-opacity
+    // start reads as a flash right after the window finished expanding. The
+    // next layout change clears it.
+}
+
 function applyMiniPlayerLayout(enabled) {
     const changed = document.body.classList.contains('mini-player-active') !== Boolean(enabled);
+    // Entering the mini layout, or leaving the freshly restored main layout,
+    // ends the restore hold. Staying in the main layout right after the grow
+    // keeps it so the entrance fade does not replay.
+    if (changed || enabled) clearMainPlayerRestore();
     const native = Boolean(enabled && window.pywebview?.api?.set_mini_player_expanded);
     document.body.classList.toggle('mini-player-native', native);
     document.body.classList.toggle('mini-player-active', Boolean(enabled));
@@ -152,6 +181,12 @@ function applyMiniPlayerLayout(enabled) {
         { opacity: 1, transform: 'scale(1)' }
     ], { duration: 320, easing: 'cubic-bezier(.22,1,.36,1)' });
 }
+
+window.addEventListener('nedotify:mini_player_restoring', event => {
+    if (event.detail?.is_mini !== false) return;
+    if (!document.body.classList.contains('mini-player-active')) return;
+    beginMainPlayerRestore();
+});
 
 let latestMiniPlayerRequestId = null;
 const pendingMiniPlayerToggles = new Map();

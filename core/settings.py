@@ -269,6 +269,7 @@ DEFAULT_SETTINGS = {
         "particles_size": 2.0,
         "particles_shape": "circle",
         "cover_visualizer": False,
+        "moment_icon": "bookmark",
     },
     "equalizer": {
         "mode": "flat",

@@ -101,7 +101,7 @@ def test_logo_has_icon_slot_and_both_title_variants() -> None:
         "cannot clobber the title text variants"
     )
     assert "sidebar-logo-full" in sidebar, 'expanded title "NeDotify" is missing'
-    assert "sidebar-logo-initial" in sidebar, 'collapsed title "N" is missing'
+    assert 'sidebar-logo-initial">S</span>' in sidebar, 'collapsed title "S" is missing'
 
 
 def test_logo_title_is_the_toggle() -> None:

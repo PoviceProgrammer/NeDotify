@@ -51,6 +51,34 @@ assert.equal(await pending,true);assert.equal(body.classList.contains('mini-play
 """.replace("SOURCE", source("main.js")))
 
 
+def test_mini_player_restore_switches_layout_early_and_keeps_the_fade_held():
+    run_node(r"""
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+const listeners=new Map(),timers=new Map(),calls=[];let n=0;
+const classes=new Set(['mini-player-active','mini-player-native']);
+const body={classList:{contains:k=>classes.has(k),toggle(k,on=!classes.has(k)){on?classes.add(k):classes.delete(k)}},animate(){assert.fail('native restore owns the motion')}};
+const window={addEventListener:(name,fn)=>listeners.set(name,fn),dispatchEvent(){},pywebview:{api:{set_mini_player_expanded(){},toggle_mini_player:async(...args)=>{calls.push(args);return {pending:true}}}}};
+const context=vm.createContext({window,document:{body},Date,Boolean,CustomEvent:class {constructor(type,options){this.detail=options.detail}},setTimeout:(fn,ms)=>{const id=++n;timers.set(id,{fn,ms});return id},clearTimeout:id=>timers.delete(id)});
+const code=SOURCE.match(/let miniPlayerRequestCounter = 0;[\s\S]*?window\.toggleMiniPlayerMode = toggleMiniPlayerMode;/)[0];
+vm.runInContext(code.replace(/export async function/,'async function')+'\nglobalThis.toggle=toggleMiniPlayerMode;',context);
+// The native window starts growing: the document swaps to the main layout now.
+listeners.get('nedotify:mini_player_restoring')({detail:{is_mini:false}});
+assert.equal(classes.has('mini-player-active'),false);
+assert.equal(classes.has('mini-player-native'),false);
+assert.equal(classes.has('main-player-restoring'),true);
+// Completion of the grow must not release the hold: removing the class would
+// replay `mainPlayerEnter` and flash the freshly restored window.
+listeners.get('nedotify:mini_player_toggled')({detail:{request_id:'done',success:true,is_mini:false}});
+assert.equal(classes.has('main-player-restoring'),true);
+assert.equal(timers.size,0,'the hold is cleared by the next layout change, not a timer');
+// Entering the mini layout again ends the hold.
+context.toggle(true);await Promise.resolve();
+listeners.get('nedotify:mini_player_toggled')({detail:{request_id:calls[0][1],success:true,is_mini:true}});
+assert.equal(classes.has('main-player-restoring'),false);
+""".replace("SOURCE", source("main.js")))
+
+
 def test_superseded_mini_player_request_cannot_roll_back_the_latest_state():
     run_node(r"""
 import assert from 'node:assert/strict';import vm from 'node:vm';

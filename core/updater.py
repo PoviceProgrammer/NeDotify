@@ -17,7 +17,7 @@ from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-APP_VERSION = "2.6.1"
+APP_VERSION = "2.6.5"
 GITHUB_REPO = "PoviceProgrammer/NeDotify"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_REPO}/releases"

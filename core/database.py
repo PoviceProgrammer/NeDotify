@@ -1434,6 +1434,20 @@ class DatabaseManager:
                 position_ms INTEGER NOT NULL CHECK(position_ms >= 0)
             )
         ''')
+        # Alternate identities of one track resolve to the same moment. A track
+        # reaches the UI as `["youtube","<id>"]` in one view and `["id","<row>"]`
+        # in another, and the same recording can be surfaced by two providers;
+        # without the alias hop the marker looks lost between those views.
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS track_moment_aliases (
+                alias_key TEXT NOT NULL PRIMARY KEY,
+                track_key TEXT NOT NULL
+            )
+        ''')
+        cursor.execute(
+            'CREATE INDEX IF NOT EXISTS idx_track_moment_aliases_track'
+            ' ON track_moment_aliases(track_key)'
+        )
 
         self._init_availability_tracking(cursor)
 
@@ -5538,21 +5552,63 @@ class DatabaseManager:
                 )
                 return True
 
+    # A moment row is keyed by whichever identity the UI had at hand, so the
+    # aliases of one track stay bounded rather than growing with every view.
+    MOMENT_ALIAS_LIMIT = 12
+
     def get_track_moment(self, track_key: str) -> Optional[int]:
         row = self.conn.execute(
             'SELECT position_ms FROM track_moments WHERE track_key = ?', (track_key,),
         ).fetchone()
+        if row:
+            return row[0]
+        row = self.conn.execute('''
+            SELECT m.position_ms FROM track_moment_aliases a
+            JOIN track_moments m ON m.track_key = a.track_key
+            WHERE a.alias_key = ?
+        ''', (track_key,)).fetchone()
         return row[0] if row else None
 
-    def set_track_moment(self, track_key: str, position_ms: Optional[int]) -> None:
+    def set_track_moment(
+        self,
+        track_key: str,
+        position_ms: Optional[int],
+        aliases: Optional[list] = None,
+    ) -> None:
+        alias_keys = []
+        for alias in aliases or ():
+            if not isinstance(alias, str) or not alias or alias == track_key:
+                continue
+            if alias not in alias_keys:
+                alias_keys.append(alias)
+        alias_keys = alias_keys[:self.MOMENT_ALIAS_LIMIT]
+
         with self._write_lock, self.conn:
             if position_ms is None:
-                self.conn.execute('DELETE FROM track_moments WHERE track_key = ?', (track_key,))
-            else:
-                self.conn.execute('''
-                    INSERT INTO track_moments (track_key, position_ms) VALUES (?, ?)
-                    ON CONFLICT(track_key) DO UPDATE SET position_ms = excluded.position_ms
-                ''', (track_key, position_ms))
+                # Removing a marker clears every identity that led to it,
+                # otherwise the alias hop keeps resurrecting it.
+                self.conn.execute(
+                    'DELETE FROM track_moments WHERE track_key = ?', (track_key,),
+                )
+                self.conn.execute(
+                    'DELETE FROM track_moment_aliases WHERE track_key = ?', (track_key,),
+                )
+                return
+            self.conn.execute('''
+                INSERT INTO track_moments (track_key, position_ms) VALUES (?, ?)
+                ON CONFLICT(track_key) DO UPDATE SET position_ms = excluded.position_ms
+            ''', (track_key, position_ms))
+            if not alias_keys:
+                return
+            # An alias now owned by this key stops pointing anywhere else.
+            self.conn.executemany(
+                'DELETE FROM track_moment_aliases WHERE alias_key = ?',
+                [(alias,) for alias in alias_keys],
+            )
+            self.conn.executemany('''
+                INSERT INTO track_moment_aliases (alias_key, track_key) VALUES (?, ?)
+                ON CONFLICT(alias_key) DO UPDATE SET track_key = excluded.track_key
+            ''', [(alias, track_key) for alias in alias_keys])
 
     def get_track_lyrics_override(
         self,

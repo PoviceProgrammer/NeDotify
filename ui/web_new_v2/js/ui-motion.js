@@ -133,5 +133,84 @@
         }
     }
 
+    let press = null;
+    const releases = new WeakMap();
+    const canDeformButton = () => enabled() &&
+        !document.documentElement.classList.contains('perf-low');
+
+    function finishPress() {
+        if (!press) return;
+        const {button, scale, translate} = press;
+        press = null;
+        button.removeAttribute('data-matte-pressed');
+        button.style.removeProperty('scale');
+        button.style.removeProperty('translate');
+        if (!canDeformButton() || !button.isConnected || button.disabled) return;
+        releases.set(button, button.animate([
+            {scale, translate, '--matte-depth': '.23'},
+            {scale: '1.008', translate: '0px 0px', '--matte-depth': '.025', offset: .75},
+            {scale: '1', translate: '0px 0px', '--matte-depth': '0'},
+        ], {duration: 220, easing: 'cubic-bezier(.2,.75,.3,1)'}));
+    }
+
+    function beginPress(event, pointer) {
+        if (press || !(event.target instanceof Element)) return;
+        const button = event.target.closest('button');
+        if (!button || button.matches(':disabled, [aria-disabled="true"]') ||
+            getComputedStyle(button).getPropertyValue('--matte-button').trim() !== '1') return;
+        releases.get(button)?.cancel();
+        const bounds = button.getBoundingClientRect();
+        if (!bounds.width || !bounds.height) return;
+        const x = pointer ? event.clientX : bounds.left + bounds.width / 2;
+        const y = pointer ? event.clientY : bounds.top + bounds.height / 2;
+        button.style.setProperty('--matte-x', `${(x - bounds.left) / bounds.width * 100}%`);
+        button.style.setProperty('--matte-y', `${(y - bounds.top) / bounds.height * 100}%`);
+        press = {button, x, y, input: pointer ? event.pointerId : event.key,
+            scale: '1', translate: '0px 0px'};
+        button.setAttribute('data-matte-pressed', '');
+        if (canDeformButton()) {
+            press.scale = '.98';
+            button.style.scale = press.scale;
+        }
+    }
+
+    const capture = {capture: true, passive: true};
+    window.addEventListener('pointerdown', event => {
+        if (event.isPrimary && event.button === 0) beginPress(event, true);
+    }, capture);
+    window.addEventListener('pointermove', event => {
+        if (press?.input !== event.pointerId) return;
+        if (event.pointerType === 'mouse' && !(event.buttons & 1)) {
+            finishPress();
+            return;
+        }
+        if (!canDeformButton()) return;
+        const limit = delta => Math.max(-1, Math.min(1, delta / 28));
+        const x = limit(event.clientX - press.x);
+        const y = limit(event.clientY - press.y);
+        press.scale = `${.98 + Math.abs(x) * .055} ${.98 + Math.abs(y) * .055}`;
+        press.translate = `${x * 3}px ${y * 3}px`;
+        press.button.style.scale = press.scale;
+        press.button.style.translate = press.translate;
+    }, capture);
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+        window.addEventListener(type, event => {
+            if (press?.input === event.pointerId) finishPress();
+        }, capture);
+    }
+    window.addEventListener('keydown', event => {
+        if (!event.repeat && (event.key === ' ' || event.key === 'Enter')) beginPress(event, false);
+    }, capture);
+    window.addEventListener('keyup', event => {
+        if (press?.input === event.key) finishPress();
+    }, capture);
+    window.addEventListener('focusout', event => {
+        if (typeof press?.input === 'string' && press.button === event.target) finishPress();
+    }, capture);
+    window.addEventListener('blur', finishPress);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) finishPress();
+    });
+
     window.NeDotifyMotion = {swap, remove, reveal, cover, listPositions, settleList};
 })();

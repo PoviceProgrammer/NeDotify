@@ -9,16 +9,16 @@
 [Setup]
 AppId={{8F56F2A1-90E1-4A0A-AB89-24A326E6D371}
 AppName=Soneth
-AppVersion=2.6.1
-VersionInfoVersion=2.6.1
-VersionInfoProductVersion=2.6.1
+AppVersion=2.6.5
+VersionInfoVersion=2.6.5
+VersionInfoProductVersion=2.6.5
 AppPublisher=The pAura Team
 AppCopyright=Copyright (C) 2024 The pAura Team
 DefaultDirName={localappdata}\Programs\NeDotify
 DefaultGroupName=Soneth
 AllowNoIcons=yes
 OutputDir=dist
-OutputBaseFilename=Soneth_Setup
+OutputBaseFilename=Soneth_v2.6.5
 Compression=lzma2/ultra64
 SolidCompression=yes
 PrivilegesRequired=lowest
@@ -30,7 +30,7 @@ WizardStyle=modern
 WizardSizePercent=120
 DisableWelcomePage=no
 DisableReadyPage=no
-UninstallDisplayName=Soneth 2.6.1
+UninstallDisplayName=Soneth 2.6.5
 #ifdef NEDOTIFY_BETA_NOTICE
 InfoBeforeFile={#NEDOTIFY_BETA_NOTICE}
 #endif
@@ -117,8 +117,8 @@ russian.AutostartTask=Запускать Soneth при запуске Windows
 english.AutostartTask=Start Soneth when Windows starts
 russian.AutostartGroup=Автозапуск:
 english.AutostartGroup=Startup:
-russian.WelcomeBody=Добро пожаловать в установщик Soneth 2.6.1.%n%nSoneth — современный музыкальный плеер с поддержкой онлайн-сервисов, тем и горячих клавиш.%n%nНажмите «Далее», чтобы продолжить, или «Отмена», чтобы выйти.
-english.WelcomeBody=Welcome to the Soneth 2.6.1 setup.%n%nSoneth is a modern music player with online services, themes, and keyboard shortcuts.%n%nClick Next to continue, or Cancel to exit.
+russian.WelcomeBody=Добро пожаловать в установщик Soneth 2.6.5.%n%nSoneth — современный музыкальный плеер с поддержкой онлайн-сервисов, тем и горячих клавиш.%n%nНажмите «Далее», чтобы продолжить, или «Отмена», чтобы выйти.
+english.WelcomeBody=Welcome to the Soneth 2.6.5 setup.%n%nSoneth is a modern music player with online services, themes, and keyboard shortcuts.%n%nClick Next to continue, or Cancel to exit.
 
 [Code]
 const

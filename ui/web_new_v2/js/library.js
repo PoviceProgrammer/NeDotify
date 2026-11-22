@@ -158,6 +158,9 @@ export function initLibrary() {
     }
 
     window.addEventListener('nedotify:playlist_availability_updated', ({detail}) => {
+        // Availability is patched onto the live rows; a full section rebuild
+        // threw the reader back to the top of the playlist.
+        if (refreshOpenPlaylist(detail?.playlist_id)) return;
         if (currentActiveSection === 'playlist' && String(currentSelectedPlaylistData?.id) === String(detail?.playlist_id)) {
             refreshActiveLibraryView();
         }
@@ -411,7 +414,148 @@ export function refreshActiveLibraryView() {
 }
 window.refreshActiveLibraryView = refreshActiveLibraryView;
 
+const AVAILABILITY_LABEL = {
+    pending: 'Проверяется', available: 'Доступен',
+    unavailable: 'Недоступен', unknown: 'Не удалось проверить',
+};
+
+// A row that survived a silent refresh keeps its DOM node, so the availability
+// caption has to be repainted on the live element.
+function syncRowAvailability(row) {
+    const track = row?._trackData;
+    if (!track) return;
+    const label = AVAILABILITY_LABEL[track.availability];
+    const status = row.querySelector('.playlist-track-status');
+    if (!label) { status?.remove(); return; }
+    if (status) {
+        status.dataset.availability = track.availability;
+        status.textContent = `· ${label}`;
+        return;
+    }
+    const artist = row.querySelector('.track-artist');
+    if (!artist) return;
+    const span = document.createElement('span');
+    span.className = 'playlist-track-status';
+    span.dataset.availability = track.availability;
+    span.textContent = `· ${label}`;
+    artist.appendChild(span);
+}
+
+function rebuildPlaylistPreservingScroll(container, tracks) {
+    const port = libraryRenderer?.getScrollport?.() || null;
+    const top = port?.scrollTop || 0;
+    renderLibraryList(container, tracks);
+    if (port && top) port.scrollTop = top;
+}
+
+// Sections whose whole track list can be re-fetched and diffed against the
+// visible one. `favorites` is excluded on purpose: its counter also includes
+// local-only ids, so a plain length would under-report it.
+function activeCollectionRequest(section, playlist) {
+    if (section === 'offline') return () => window.pywebview.api.get_downloaded_tracks();
+    if (section === 'playlist' && playlist?.id != null) return () => window.pywebview.api.get_playlist_tracks(playlist.id);
+    return null;
+}
+
+const ACTIVE_EMPTY_MESSAGE = {
+    offline: 'Музыка для прослушивания без сети',
+    playlist: 'В этом плейлисте пока нет треков',
+};
+
+async function patchActiveCollection(viewGen) {
+    const section = currentActiveSection;
+    const playlist = currentSelectedPlaylistData;
+    const request = activeCollectionRequest(section, playlist);
+    const container = document.getElementById('lib-active-tracks');
+    if (!request || !container) return;
+    try {
+        const result = await request();
+        if (viewGen !== libraryGeneration || currentActiveSection !== section) return;
+        if (section === 'playlist' && String(currentSelectedPlaylistData?.id) !== String(playlist.id)) return;
+        if (result?.success === false) return;
+        const rows = Array.isArray(result) ? result : result?.tracks;
+        if (!Array.isArray(rows)) return;
+        const known = new Map(currentActiveTracks.map(track => [libraryTrackKey(track), track]));
+        const next = [];
+        const seen = new Set();
+        for (const row of rows) {
+            if (!row || typeof row !== 'object') continue;
+            const key = libraryTrackKey(row);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const existing = known.get(key);
+            if (existing) {
+                // Patch the live object: the renderer holds this array and the
+                // mounted rows read it on their next interaction.
+                Object.assign(existing, row);
+                next.push(existing);
+            } else {
+                next.push(row);
+            }
+        }
+        // Removal or reordering cannot be expressed by appending, so fall back
+        // to a fresh render — still without the spinner and without jumping.
+        // Only the shared prefix is compared: rows past the old length are the
+        // appended ones and would otherwise read as a reorder.
+        const orderChanged = next.length < currentActiveTracks.length ||
+            next.some((track, index) => index < currentActiveTracks.length && track !== currentActiveTracks[index]);
+        if (orderChanged) {
+            currentActiveTracks = next;
+            document.getElementById('lib-active-sub').textContent = `${next.length} треков`;
+            updateLibraryHero(section, playlist, next);
+            showPlaylistRecommendations(section, playlist, next);
+            if (!next.length) {
+                renderLibraryEmpty(container, ACTIVE_EMPTY_MESSAGE[section]);
+                return;
+            }
+            rebuildPlaylistPreservingScroll(container, next);
+            return;
+        }
+        const appended = next.length - currentActiveTracks.length;
+        if (appended > 0) currentActiveTracks.push(...next.slice(currentActiveTracks.length));
+        if (!appended) {
+            // Same list, same order: only live captions can differ. Repainting
+            // the hero or the recommendations here would be a no-op repaint on
+            // every unrelated library event.
+            container.querySelectorAll('.lib-table-row').forEach(syncRowAvailability);
+            return;
+        }
+        document.getElementById('lib-active-sub').textContent = `${next.length} треков`;
+        updateLibraryHero(section, playlist, currentActiveTracks);
+        container.querySelectorAll('.lib-table-row').forEach(syncRowAvailability);
+        if (libraryRenderer) libraryRenderer.refresh();
+        else rebuildPlaylistPreservingScroll(container, currentActiveTracks);
+    } catch {
+        // Keep the visible list; the next library event retries this patch.
+    }
+}
+
+/**
+ * Refresh the playlist the user has open without rebuilding it.
+ *
+ * Returns true synchronously when this call owns the refresh, so the caller
+ * can skip the full `refreshActiveLibraryView()` path. Rows that already exist
+ * keep their DOM node, appended tracks mount lazily and the scroll position is
+ * never reset.
+ */
+export function refreshOpenPlaylist(playlistId) {
+    if (currentActiveSection !== 'playlist' || !currentSelectedPlaylistData) return false;
+    if (playlistId != null && String(currentSelectedPlaylistData.id) !== String(playlistId)) return false;
+    void patchActiveCollection(libraryGeneration);
+    return true;
+}
+window.refreshOpenPlaylist = refreshOpenPlaylist;
+
+/** Same in-place refresh for any section that can re-fetch its track list. */
+export function refreshActiveCollection() {
+    if (!activeCollectionRequest(currentActiveSection, currentSelectedPlaylistData)) return false;
+    void patchActiveCollection(libraryGeneration);
+    return true;
+}
+window.refreshActiveCollection = refreshActiveCollection;
+
 let libraryScrollCleanup = null;
+let libraryRenderer = null;
 
 function renderLibraryList(tracksContainer, tracks) {
     window.NeDotifyMotion?.reveal(tracksContainer);
@@ -420,7 +564,8 @@ function renderLibraryList(tracksContainer, tracks) {
         createRow: (track, index, all) => decorateLibraryRow(createTrackElement(track, index, all, getCurrentTrack()), track, index),
         renderIcons,
     });
-    libraryScrollCleanup = () => renderer.destroy();
+    libraryRenderer = renderer;
+    libraryScrollCleanup = () => { renderer.destroy(); if (libraryRenderer === renderer) libraryRenderer = null; };
     return renderer;
 }
 

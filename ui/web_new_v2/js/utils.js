@@ -785,7 +785,9 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
         lmusic: 'LMusic', hitmos: 'Hitmos', deezer: 'Deezer', local: 'На компьютере'})[track.source] || '';
     const availabilityLabel = ({pending: 'Проверяется', available: 'Доступен', unavailable: 'Недоступен',
         unknown: 'Не удалось проверить'})[track.availability];
-    const webOnly = track.external_only || (track.source === 'hitmos' && track.availability !== 'available');
+    // Only a track the backend could not turn into audio is a web link. A
+    // source name alone says nothing: Hitmos and LMusic both resolve to MP3s.
+    const webOnly = Boolean(track.external_only);
     const searchMeta = track.duration ? [formatTime(track.duration), providerLabel] : [providerLabel];
 
     item.innerHTML = `
@@ -839,8 +841,8 @@ export function createTrackElement(track, index, tracksArray, currentTrack) {
             return;
         }
         if (window.pywebview?.api?.play_track) {
-            const queue = tracksArray.some(candidate => candidate.external_only || candidate.source === 'hitmos')
-                ? tracksArray.filter(candidate => !candidate.external_only && candidate.source !== 'hitmos')
+            const queue = tracksArray.some(candidate => candidate.external_only)
+                ? tracksArray.filter(candidate => !candidate.external_only)
                 : tracksArray;
             const position = queue.indexOf(track);
             window.pywebview.api.play_track(track, position >= 0 ? queue : [track], Math.max(0, position));

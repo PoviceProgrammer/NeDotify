@@ -1,9 +1,16 @@
 // NeDotify - Lyrics Search & Selection Modal (Screenshot #2)
 import { renderIcons, showToast, escapeHtml, formatTime } from './utils.js';
 import { getCurrentTrack } from './player.js';
+import { applySelectedLyrics, lyricsTrackKey } from './lyrics.js';
 
 let modalInitialized = false;
 let searchGeneration = 0;
+let searchTrack = null;
+let applying = false;
+
+function defaultQuery(track) {
+    return track?.artist && track.title ? track.artist + ' - ' + track.title : track?.title || '';
+}
 
 export function openLyricsSearchModal(initialQuery = null) {
     const modal = document.getElementById('modal-lyrics-search');
@@ -13,23 +20,16 @@ export function openLyricsSearchModal(initialQuery = null) {
     renderIcons(modal);
 
     const input = document.getElementById('input-lyrics-search-query');
-    const track = getCurrentTrack();
-
-    let query = initialQuery;
-    if (!query && track) {
-        if (track.artist && track.title) {
-            query = `${track.artist} - ${track.title}`;
-        } else {
-            query = track.title || '';
-        }
-    }
+    searchTrack = getCurrentTrack();
+    const query = initialQuery || defaultQuery(searchTrack);
 
     if (input) {
         input.value = query || '';
-        setTimeout(() => {
+        requestAnimationFrame(() => {
+            if (modal.classList.contains('hidden')) return;
             input.focus();
             input.select();
-        }, 80);
+        });
     }
 
     if (query && query.trim()) {
@@ -48,6 +48,7 @@ export function openLyricsSearchModal(initialQuery = null) {
 
 export function closeLyricsSearchModal() {
     searchGeneration++;
+    searchTrack = null;
     const modal = document.getElementById('modal-lyrics-search');
     if (modal) {
         modal.classList.add('hidden');
@@ -71,10 +72,12 @@ export function executeLyricsSearch(queryText) {
         </div>
     `;
 
-    const track = getCurrentTrack();
-    const durationSec = Number(track?.duration) || 0;
-    const artist = track?.artist || '';
-    const title = track?.title || '';
+    const track = searchTrack;
+    const useTrackHints = query === defaultQuery(track).trim();
+    const artist = useTrackHints ? track?.artist || '' : '';
+    const title = useTrackHints ? track?.title || '' : '';
+    const duration = useTrackHints ? Number(track?.duration) || 0 : 0;
+    const durationSec = duration > 50000 ? duration / 1000 : duration;
 
     if (!window.pywebview?.api?.search_lyrics) {
         resultsList.innerHTML = `
@@ -116,10 +119,11 @@ export function executeLyricsSearch(queryText) {
 function renderSearchResults(results, container) {
     container.innerHTML = '';
 
-    const track = getCurrentTrack();
+    const track = searchTrack;
 
     results.forEach((item, idx) => {
-        const itemEl = document.createElement('div');
+        const itemEl = document.createElement('button');
+        itemEl.type = 'button';
         itemEl.className = 'lyrics-search-item';
         itemEl.dataset.index = String(idx);
 
@@ -150,7 +154,7 @@ function renderSearchResults(results, container) {
         `;
 
         itemEl.addEventListener('click', () => {
-            selectCandidate(item, title, source);
+            selectCandidate(item, title, source, track);
         });
 
         container.appendChild(itemEl);
@@ -159,37 +163,36 @@ function renderSearchResults(results, container) {
     renderIcons(container);
 }
 
-function selectCandidate(candidate, title, source) {
-    const track = getCurrentTrack();
-    if (!track) {
-        showToast('Трек не выбран', 'warning');
+async function selectCandidate(candidate, title, source, track) {
+    if (applying) return;
+    if (!track || lyricsTrackKey(track) !== lyricsTrackKey(getCurrentTrack())) {
+        showToast('Трек уже сменился. Откройте поиск снова.', 'warning');
         return;
     }
-
     if (!window.pywebview?.api?.apply_lyrics_candidate) {
         showToast('API применения текста недоступно', 'error');
         return;
     }
 
-    // Indicate selection
-    showToast(`Применяем выбранный текст: ${title}...`, 'info');
-    closeLyricsSearchModal();
-
-    window.pywebview.api.apply_lyrics_candidate(candidate, track)
-        .then(res => {
-            if (res && res.success) {
-                showToast(`Выбран текст: ${title} (${source})`, 'success');
-                if (window.NeDotify?.reloadCurrentTrackLyrics) {
-                    window.NeDotify.reloadCurrentTrackLyrics(true);
-                }
-            } else {
-                showToast(res?.error || 'Не удалось применить текст', 'error');
-            }
-        })
-        .catch(err => {
-            console.error('Failed to apply lyrics candidate:', err);
-            showToast(`Ошибка сохранения текста: ${err.message || err}`, 'error');
-        });
+    const generation = searchGeneration;
+    const results = document.getElementById('lyrics-search-results-list');
+    applying = true;
+    results?.setAttribute('aria-busy', 'true');
+    showToast('Загружаем текст: ' + title + '…', 'info');
+    try {
+        const response = await window.pywebview.api.apply_lyrics_candidate(candidate, track);
+        if (!response?.success || !response.lyrics) {
+            throw new Error(response?.error || 'Не удалось применить текст');
+        }
+        applySelectedLyrics(track, response.lyrics);
+        if (searchGeneration === generation) closeLyricsSearchModal();
+        showToast('Выбран текст: ' + title + ' (' + source + ')', 'success');
+    } catch (error) {
+        showToast(error.message || 'Не удалось сохранить выбранный текст', 'error');
+    } finally {
+        applying = false;
+        results?.removeAttribute('aria-busy');
+    }
 }
 
 export function initLyricsSearchModal() {
@@ -202,6 +205,12 @@ export function initLyricsSearchModal() {
     const closeBtn = document.getElementById('btn-close-lyrics-search');
     const input = document.getElementById('input-lyrics-search-query');
     const submitBtn = document.getElementById('btn-lyrics-search-submit');
+
+    document.addEventListener('nedotify:track_changed', () => {
+        if (searchTrack && lyricsTrackKey(searchTrack) !== lyricsTrackKey(getCurrentTrack())) {
+            closeLyricsSearchModal();
+        }
+    });
 
     if (closeBtn) {
         closeBtn.addEventListener('click', () => closeLyricsSearchModal());

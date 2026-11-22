@@ -18,7 +18,7 @@
          default skin for macOS-style users. -->
     <script src="js/appearance-assets.js?v=20261021_webp" defer></script>
     <script src="js/notifications.js" defer></script>
-    <script src="js/ui-motion.js?v=20261120_motion" defer></script>
+    <script src="js/ui-motion.js?v=20261121_matte" defer></script>
     <link rel="stylesheet" href="css/components/ui-motion.css?v=20261120_motion">
     <script src="js/ui-style.js?v=20261017_appearance"></script>
     <!-- Fonts: Sora (Headings) + DM Sans (Body). Self-hosted WOFF2 cuts live in
@@ -30,13 +30,13 @@
          renderIcons() call in main.js's init chain runs only after the bridge
          resolves), so window.lucide exists at every call site exactly as
          before, while the parser no longer blocks first paint on it. -->
-    <script src="js/lucide.min.js" defer></script>
+    <script src="js/lucide.min.js?v=20261121_bookmark" defer></script>
     <link rel="icon" type="image/png" href="logo.png">
     <link rel="stylesheet" href="css/tokens.css?v=20260827_blur">
-    <link rel="stylesheet" href="css/components/base.css?v=20261120_motion">
-    <link rel="stylesheet" href="css/components/player-bar.css?v=20261117_slider_bg">
-    <link rel="stylesheet" href="css/components/player-view.css?v=20261120_motion">
-    <link rel="stylesheet" href="css/components/lyrics.css?v=20260827_blur">
+    <link rel="stylesheet" href="css/components/base.css?v=20261122_restore">
+    <link rel="stylesheet" href="css/components/player-bar.css?v=20261122_progress_layer">
+    <link rel="stylesheet" href="css/components/player-view.css?v=20261121_moment">
+    <link rel="stylesheet" href="css/components/lyrics.css?v=20261121_selection">
     <link rel="stylesheet" href="css/components/home-view.css?v=20260827_blur">
     <link rel="stylesheet" href="css/components/track-table.css?v=20260827_blur">
     <link rel="stylesheet" href="css/themes.css?v=20260827_blur">
@@ -67,6 +67,7 @@
 <link rel="stylesheet" href="css/components/recommendation-controls.css?v=20261120_motion">
 <link rel="stylesheet" href="css/components/playlist-recommendations.css">
 <link rel="stylesheet" href="css/components/track-wave.css">
+<link rel="stylesheet" href="css/components/matte-buttons.css?v=20261121_matte">
 </head>
 <body>
 
@@ -187,7 +188,7 @@
             <div class="sidebar-logo" id="sidebar-logo" role="button" tabindex="0" title="Свернуть панель разделов">
                 <span class="sidebar-logo-icon"><i data-lucide="music-2"></i></span>
                 <span class="sidebar-logo-text sidebar-logo-full">Soneth</span>
-                <span class="sidebar-logo-text sidebar-logo-initial">N</span>
+                <span class="sidebar-logo-text sidebar-logo-initial">S</span>
             </div>
             <button id="sidebar-collapse" class="home-icon-button" aria-label="Свернуть панель разделов"><i data-lucide="chevrons-left"></i></button>
         </div>
@@ -501,6 +502,15 @@
                             <span class="track-moment-pin" id="pp-moment-pin" aria-hidden="true" hidden></span>
                         </div>
                         <span class="pb-time" id="pp-time-total">0:00</span>
+                    </div>
+
+                    <div class="player-moment-actions">
+                        <button type="button" class="home-pill" id="pp-btn-moment" disabled>
+                            <i data-lucide="bookmark"></i><span>Отметить лучший момент</span>
+                        </button>
+                        <button type="button" class="home-icon-button" id="pp-btn-moment-remove" title="Удалить лучший момент" aria-label="Удалить лучший момент" hidden>
+                            <i data-lucide="trash-2"></i>
+                        </button>
                     </div>
 
                     <!-- Transport row: prev / play / next centred, queue pinned to
@@ -2069,7 +2079,7 @@
         </div>
         <div class="glass-modal-body" style="display:flex; flex-direction:column; gap:12px;">
             <div>
-                <label class="glass-modal-label" for="modal-ip-url" style="display:block; margin-bottom:6px; font-size:12px; color:var(--text-sec);">Ссылка или путь (YouTube, SoundCloud, Deezer, M3U, JSON, TXT)</label>
+                <label class="glass-modal-label" for="modal-ip-url" style="display:block; margin-bottom:6px; font-size:12px; color:var(--text-sec);">Ссылка или путь (YouTube, SoundCloud, Deezer, M3U, JSON, TXT). Для лайков SoundCloud: soundcloud.com/имя-профиля/likes</label>
                 <input type="text" id="modal-ip-url" class="glass-modal-input" placeholder="https://..." autocomplete="off">
             </div>
             <div>
@@ -2266,7 +2276,7 @@
 
 <script src="js/tooltip.js?v=20261023_tips"></script>
 <script src="js/boot.js?v=20261005_rail"></script>
-<script type="module" src="js/main.js?v=20261120_motion"></script>
+<script type="module" src="js/main.js?v=20261122_restore"></script>
     <!-- ─── LYRICS DISPLAY SETTINGS POPOVER (Screenshot #1) ─── -->
     <div id="lyrics-display-settings-popover" class="lyrics-settings-popover hidden" role="region" aria-label="Настройки отображения текста" inert>
         <div class="lsp-header">
@@ -2312,7 +2322,7 @@
                     <i data-lucide="refresh-cw" style="width:14px;height:14px;"></i> Искать заново
                 </button>
                 <button id="btn-lsp-action-pick-version" class="lsp-action-btn" type="button">
-                    <i data-lucide="list-music" style="width:14px;height:14px;"></i> Выбрать другую версию
+                    <i data-lucide="search" style="width:14px;height:14px;"></i> Найти текст по названию
                 </button>
                 <button id="btn-lsp-action-custom" class="lsp-action-btn" type="button">
                     <i data-lucide="pencil" style="width:14px;height:14px;"></i> Добавить свой текст

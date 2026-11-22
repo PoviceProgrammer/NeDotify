@@ -174,7 +174,9 @@ class LyricsSearchService:
             sim_title = similarity(normalize(title), normalize(c_title))
             score = max(score, sim_title)
         elif query and c_title:
-            sim_q = similarity(normalize(query), normalize(f"{c_artist} {c_title}"))
+            normalized_query = normalize(query)
+            query_fields = (c_title, c_artist, f"{c_artist} {c_title}")
+            sim_q = max(similarity(normalized_query, normalize(field)) for field in query_fields)
             score = max(score, sim_q * 0.9)
 
         if artist and c_artist:

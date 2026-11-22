@@ -361,11 +361,18 @@ export function initLyricsSettingsPopover() {
     // Action: «Искать заново»
     const btnResearch = document.getElementById('btn-lsp-action-research');
     if (btnResearch) {
-        btnResearch.addEventListener('click', () => {
+        btnResearch.addEventListener('click', async () => {
             closeLyricsSettingsPopover();
             const track = getCurrentTrack();
             if (track && window.pywebview?.api?.delete_custom_lyrics) {
-                window.pywebview.api.delete_custom_lyrics(track).catch(() => {});
+                try {
+                    const response = await window.pywebview.api.delete_custom_lyrics(track);
+                    if (!response?.success) throw new Error();
+                } catch {
+                    showToast('Не удалось сбросить выбранный текст', 'error');
+                    return;
+                }
+                if (getCurrentTrack() !== track) return;
             }
             showToast('Повторный поиск текста...', 'info');
             if (window.NeDotify?.reloadCurrentTrackLyrics) {
@@ -374,7 +381,7 @@ export function initLyricsSettingsPopover() {
         });
     }
 
-    // Action: «Выбрать другую версию»
+    // Action: «Найти текст по названию»
     const btnPickVersion = document.getElementById('btn-lsp-action-pick-version');
     if (btnPickVersion) {
         btnPickVersion.addEventListener('click', () => {

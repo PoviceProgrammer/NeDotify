@@ -22,6 +22,10 @@ import webbrowser
 import webview
 from utils.stream_urls import stream_url_expired
 from utils.cache_manager import stream_cache_stem
+from core.mini_player_geometry import (
+    FLOATING_SIZE as MINI_WINDOW_SIZE, mini_player_bounds, placement_after_drag,
+    restore_bounds,
+)
 from core.offline import available_track, offline_library
 from core.updater import AppUpdater
 from core.user_errors import describe_error
@@ -71,14 +75,9 @@ PROVIDER_SEARCH_TIMEOUT = 6.0
 # instead of each stage getting its own timeout.
 BRIDGE_SYNC_BUDGET = 6.0
 
-# Window geometry: main window and compact mini player.
-# MINI_WINDOW_SIZE is in LOGICAL (CSS) pixels: toggle_mini_player multiplies it
-# by the display scale factor before calling window.resize(), which takes
-# PHYSICAL pixels (pywebview's WinForms backend passes the size to SetWindowPos
-# unscaled). Without the multiplication the card shrinks on 125%/150% DPI.
+# Main window geometry. Mini-player sizes are defined in CSS pixels and
+# converted to native pixels at the window boundary.
 MAIN_WINDOW_SIZE = (1100, 800)
-MINI_WINDOW_SIZE = (340, 64)
-MINI_WINDOW_EXPANDED_SIZE = (460, 244)
 MAIN_WINDOW_MIN_SIZE = (600, 640)
 
 # Cover image formats the tag editor and the /api/cover proxy both accept.
@@ -165,6 +164,37 @@ def _is_empty_secret_write(category: str, key: str, value) -> bool:
     return key in _SECRET_SETTING_KEYS.get(category, ()) and value == ""
 
 
+_MOMENT_ALIAS_LIMIT = 12
+
+# Mirrors riff's selectable "top moment" markers; the set is closed so a bad
+# value cannot reach the UI as a pin with no icon.
+MOMENT_ICONS = frozenset({'bookmark', 'heart', 'star', 'fire', 'honey'})
+
+
+def _valid_moment_key(track_key) -> bool:
+    return isinstance(track_key, str) and 0 < len(track_key) <= 2048
+
+
+def _moment_aliases(aliases):
+    """Normalise the alternate track identities a marker is reachable through.
+
+    Returns a list (possibly empty) on success and ``None`` when the payload is
+    not a list of strings — the caller turns that into a refused write rather
+    than silently storing a marker nobody can find again.
+    """
+    if aliases is None:
+        return []
+    if not isinstance(aliases, (list, tuple)):
+        return None
+    keys = []
+    for alias in aliases:
+        if not isinstance(alias, str) or not 0 < len(alias) <= 2048:
+            return None
+        if alias not in keys:
+            keys.append(alias)
+    return keys[:_MOMENT_ALIAS_LIMIT]
+
+
 def _normalize_cache_quota(quota_gb=None, cache_size_mb=None, cache_quota_gb=None):
     gb = _as_float(cache_quota_gb if cache_quota_gb is not None else quota_gb)
     mb = _as_float(cache_size_mb)
@@ -202,6 +232,7 @@ class AppApi:
         self._main_window = None
         self._mini_window = None
         self._is_mini_active = False
+        self._mini_restoring = False
         self._is_maximized = False
         self._is_fullscreen = False
         self._window_op_lock = threading.RLock()
@@ -638,39 +669,46 @@ class AppApi:
             try:
                 native = getattr(window, 'native', None)
                 if enable:
+                    self._mini_restoring = False
                     if not previous:
                         self._saved_main_geometry = self._native_window_geometry(window) or (*MAIN_WINDOW_SIZE, None, None)
                     if native is not None:
                         from System.Drawing import Size
-                        from System.Windows.Forms import FormWindowState, Screen
-                        screen = Screen.FromHandle(native.Handle).Bounds
+                        from System.Windows.Forms import FormWindowState
                         self._saved_main_maximized = native.WindowState == FormWindowState.Maximized if not previous else getattr(self, '_saved_main_maximized', False)
                         native.WindowState = FormWindowState.Normal
                         native.MinimumSize = Size(1, 1)
                     window.on_top = True
                     self._set_mini_window_frame(window, True)
-                    scale = self._get_scale_factor()
-                    # resize() takes PHYSICAL pixels; MINI_WINDOW_SIZE is logical
-                    mini_w = int(MINI_WINDOW_SIZE[0] * scale)
-                    mini_h = int(MINI_WINDOW_SIZE[1] * scale)
                     if native is not None:
-                        native.SetBounds(*self._top_center_mini_bounds(screen, mini_w, mini_h))
-                        self._shape_mini_window(native, mini_w, mini_h, scale)
+                        self._mini_placement = self._core.settings.get('interface', 'mini_player_placement')
+                        self._resize_mini_window(native, expanded=False, animate=False)
                     else:
-                        window.resize(mini_w, mini_h)
+                        scale = self._get_scale_factor()
+                        window.resize(*(round(size * scale) for size in MINI_WINDOW_SIZE))
                 else:
                     width, height, x, y = getattr(self, '_saved_main_geometry', (*MAIN_WINDOW_SIZE, None, None))
                     window.on_top = False
                     self._set_mini_window_frame(window, False)
                     if native is not None:
                         self._clear_mini_window_shape(native)
+                        # Keep the mini surface visible while the native window
+                        # grows; the frontend swaps to the main layout on the
+                        # companion event and fades the content in at the end.
+                        self._mini_restoring = True
+                        self._emit('mini_player_restoring', {
+                            'success': True, 'is_mini': False, 'request_id': rid,
+                        })
+                        scale = (native.DeviceDpi or 96) / 96
+                        target = restore_bounds(
+                            self._screen_rect(native.Bounds), (width, height, x, y), scale)
+                        self._animate_window_restore(
+                            native, target, generation,
+                            lambda: self._finish_mini_restore(
+                                window, native, width, height, x, y, rid, generation),
+                        )
+                        return
                     window.resize(int(width), int(height))
-                    if native is not None:
-                        from System.Drawing import Size
-                        from System.Windows.Forms import FormWindowState
-                        native.MinimumSize = Size(*MAIN_WINDOW_MIN_SIZE)
-                        if getattr(self, '_saved_main_maximized', False):
-                            native.WindowState = FormWindowState.Maximized
                     if x is not None and y is not None:
                         # Positioning must never fail the exit: the resize above
                         # already restored the main size, so the UI state has to
@@ -678,9 +716,13 @@ class AppApi:
                         self._native_move_window(window, int(x), int(y))
                 self._is_mini_active = enable
                 self._native_mini_applied = enable
-                self._emit('mini_player_toggled', {'success': True, 'is_mini': enable, 'request_id': rid})
+                self._emit('mini_player_toggled', {
+                    'success': True, 'is_mini': enable, 'request_id': rid,
+                    'edge': self._mini_edge() if enable else None,
+                })
             except Exception:
                 self._is_mini_active = previous
+                self._mini_restoring = False
                 logger.warning('Mini-player native operation failed', exc_info=True)
                 self._emit('mini_player_toggled', {'success': False, 'is_mini': previous, 'request_id': rid})
         try:
@@ -688,6 +730,67 @@ class AppApi:
         except Exception:
             return {'success': False, 'is_mini': getattr(self, '_is_mini_active', False), 'request_id': rid}
         return {'success': True, 'pending': True, 'is_mini': enable, 'request_id': rid}
+
+    def _animate_window_restore(self, native, target, generation, done):
+        """Grow the shared window back to the main bounds on the UI thread."""
+        from System.Windows.Forms import Timer
+
+        start = self._screen_rect(native.Bounds)
+        revision = getattr(self, '_mini_resize_revision', 0) + 1
+        self._mini_resize_revision = revision
+        if start == target:
+            done()
+            return
+
+        started = time.monotonic()
+        duration = 0.34
+        timer = Timer()
+        timer.Interval = 16
+
+        def tick(_sender, _args):
+            if (generation != self._mini_generation or revision != self._mini_resize_revision
+                    or getattr(self, '_closed', False)):
+                # A newer request owns the window now; it sets its own flags.
+                timer.Stop()
+                timer.Dispose()
+                return
+            progress = min(1.0, (time.monotonic() - started) / duration)
+            eased = 1 - (1 - progress) ** 3
+            bounds = tuple(round(a + (b - a) * eased) for a, b in zip(start, target))
+            if bounds != self._screen_rect(native.Bounds):
+                native.SetBounds(*bounds)
+            if progress >= 1:
+                timer.Stop()
+                timer.Dispose()
+                done()
+
+        timer.Tick += tick
+        timer.Start()
+
+    def _finish_mini_restore(self, window, native, width, height, x, y, rid, generation):
+        """Commit the main layout once the native restore animation ends."""
+        if getattr(self, '_closed', False) or generation != self._mini_generation:
+            return
+        try:
+            from System.Drawing import Size
+            from System.Windows.Forms import FormWindowState
+            if (native.Width, native.Height) != (int(width), int(height)):
+                native.SetBounds(native.Left, native.Top, int(width), int(height))
+            native.MinimumSize = Size(*MAIN_WINDOW_MIN_SIZE)
+            if getattr(self, '_saved_main_maximized', False):
+                native.WindowState = FormWindowState.Maximized
+            if x is not None and y is not None:
+                self._native_move_window(window, int(x), int(y))
+        except Exception:
+            # The window is already at the main size; a failed placement is
+            # cosmetic and must not drag the UI back into the mini layout.
+            logger.warning('Mini-player restore placement failed', exc_info=True)
+        self._is_mini_active = False
+        self._native_mini_applied = False
+        self._mini_restoring = False
+        self._emit('mini_player_toggled', {
+            'success': True, 'is_mini': False, 'request_id': rid, 'edge': None,
+        })
 
     @staticmethod
     def _clear_mini_window_shape(native):
@@ -697,20 +800,26 @@ class AppApi:
             previous.Dispose()
 
     @staticmethod
-    def _shape_mini_window(native, width, height, scale):
-        """Round the lower corners of the opaque native mini-player surface."""
+    def _shape_mini_window(native, width, height, scale, docked=False):
+        """Round the rail on all sides and retain the floating top edge."""
         from System.Drawing import Region
         from System.Drawing.Drawing2D import GraphicsPath
 
-        corner = round(24 * scale)
+        corner = min(width // 2, height // 2, round((20 if docked else 24) * scale))
+        if corner < 1:
+            return
         path = GraphicsPath()
         try:
-            path.AddLine(0, 0, width, 0)
-            path.AddLine(width, 0, width, height - corner)
+            if docked:
+                path.AddArc(0, 0, 2 * corner, 2 * corner, 180, 90)
+                path.AddArc(width - 2 * corner, 0, 2 * corner, 2 * corner, 270, 90)
+            else:
+                path.AddLine(0, 0, width, 0)
+            path.AddLine(width, corner if docked else 0, width, height - corner)
             path.AddArc(width - 2 * corner, height - 2 * corner, 2 * corner, 2 * corner, 0, 90)
             path.AddLine(corner, height, width - corner, height)
             path.AddArc(0, height - 2 * corner, 2 * corner, 2 * corner, 90, 90)
-            path.AddLine(0, height - corner, 0, 0)
+            path.AddLine(0, height - corner, 0, corner if docked else 0)
             path.CloseFigure()
             previous = native.Region
             native.Region = Region(path)
@@ -719,64 +828,102 @@ class AppApi:
         finally:
             path.Dispose()
 
+    def _mini_edge(self):
+        placement = getattr(self, '_mini_placement', None)
+        edge = placement.get('edge') if isinstance(placement, dict) else None
+        return edge if edge in ('left', 'right') else None
+
     @staticmethod
-    def _top_center_mini_bounds(screen, width, height):
-        return (screen.X + (screen.Width - width) // 2,
-                screen.Y, width, height)
+    def _screen_rect(rect):
+        return rect.X, rect.Y, rect.Width, rect.Height
+
+    def _resize_mini_window(self, native, expanded, animate, screen=None):
+        """Apply mini-player geometry on the WinForms thread."""
+        from System.Windows.Forms import Screen, Timer
+
+        placement = getattr(self, '_mini_placement', None)
+        if screen is None:
+            screen = Screen.FromHandle(native.Handle)
+            if isinstance(placement, dict):
+                screen = next((item for item in Screen.AllScreens
+                               if item.DeviceName == placement.get('monitor')), screen)
+
+        work = self._screen_rect(screen.WorkingArea)
+        start = self._screen_rect(native.Bounds)
+        # Move to the saved monitor before reading its DPI.
+        if not animate and Screen.FromHandle(native.Handle).DeviceName != screen.DeviceName:
+            native.SetBounds(*mini_player_bounds(work, 1, placement, expanded))
+        scale = (native.DeviceDpi or 96) / 96
+        target = mini_player_bounds(work, scale, placement, expanded)
+        docked = self._mini_edge() is not None
+        generation = self._mini_generation
+        revision = getattr(self, '_mini_resize_revision', 0) + 1
+        self._mini_resize_revision = revision
+
+        def apply(bounds, shape=True):
+            if bounds != self._screen_rect(native.Bounds):
+                native.SetBounds(*bounds)
+            if shape:
+                self._shape_mini_window(native, bounds[2], bounds[3], scale, docked)
+
+        self._mini_restoring = False
+        if not animate or start == target:
+            apply(target)
+            return
+
+        started = time.monotonic()
+        duration = 0.32 if expanded else 0.28
+        last_bounds = None
+        last_shape = None
+        timer = Timer()
+        timer.Interval = 16
+
+        def tick(_sender, _args):
+            nonlocal last_bounds, last_shape
+            if (generation != self._mini_generation or revision != self._mini_resize_revision
+                    or getattr(self, '_closed', False)):
+                timer.Stop()
+                timer.Dispose()
+                return
+            progress = min(1.0, (time.monotonic() - started) / duration)
+            eased = 1 - (1 - progress) ** 3
+            width, height = (round(a + (b - a) * eased) for a, b in zip(start[2:], target[2:]))
+            x, y = (round(a + (b - a) * eased) for a, b in zip(start[:2], target[:2]))
+            work_x, work_y, work_width, work_height = work
+            width, height = min(width, work_width), min(height, work_height)
+            x = max(work_x, min(work_x + work_width - width, x))
+            y = max(work_y, min(work_y + work_height - height, y))
+            bounds = (x, y, width, height)
+            if bounds != last_bounds:
+                # Bounds drive the visible motion; rebuilding the WinForms
+                # Region every frame is the expensive part of the old loop.
+                apply(bounds, shape=False)
+                last_bounds = bounds
+                if (progress >= 1 or last_shape is None
+                        or abs(width - last_shape[0]) >= 2 or abs(height - last_shape[1]) >= 2):
+                    self._shape_mini_window(native, width, height, scale, docked)
+                    last_shape = (width, height)
+            if progress >= 1:
+                timer.Stop()
+                timer.Dispose()
+                if bounds != target:
+                    apply(target)
+
+        timer.Tick += tick
+        timer.Start()
 
     def set_mini_player_expanded(self, expanded: bool, animate: bool = True):
-        """Resize the mini window around the midpoint of the upper monitor edge."""
         window = self._mini_window or self._window
         if not isinstance(expanded, bool) or not window or not self._is_mini_active:
             return False
         generation = self._mini_generation
 
         def apply():
-            if generation != self._mini_generation or not self._is_mini_active:
-                return
-            native = getattr(window, 'native', None)
-            if native is None:
-                return
-            from System.Windows.Forms import Screen, Timer
-
-            start = native.Bounds
-            scale = self._get_scale_factor()
-            width, height = (round(size * scale) for size in
-                             (MINI_WINDOW_EXPANDED_SIZE if expanded else MINI_WINDOW_SIZE))
-            screen = Screen.FromHandle(native.Handle).Bounds
-            target = self._top_center_mini_bounds(screen, width, height)
-
-            # All timers and Form bounds are owned by the WinForms UI thread.
-            revision = getattr(self, '_mini_resize_revision', 0) + 1
-            self._mini_resize_revision = revision
-            if not animate:
-                native.SetBounds(*target)
-                self._shape_mini_window(native, width, height, scale)
-                return
-
-            started = time.monotonic()
-            timer = Timer()
-            timer.Interval = 15
-
-            def tick(_sender, _args):
-                if (generation != self._mini_generation or revision != self._mini_resize_revision
-                        or getattr(self, '_closed', False)):
-                    timer.Stop()
-                    timer.Dispose()
-                    return
-                progress = min(1, (time.monotonic() - started) / 0.26)
-                eased = 1 - (1 - progress) ** 3
-                frame_width = round(start.Width + (width - start.Width) * eased)
-                frame_height = round(start.Height + (height - start.Height) * eased)
-                bounds = self._top_center_mini_bounds(screen, frame_width, frame_height)
-                native.SetBounds(*bounds)
-                self._shape_mini_window(native, bounds[2], bounds[3], scale)
-                if progress == 1:
-                    timer.Stop()
-                    timer.Dispose()
-
-            timer.Tick += tick
-            timer.Start()
+            if (generation == self._mini_generation and self._is_mini_active
+                    and not getattr(self, '_mini_dragging', False)
+                    and not getattr(self, '_mini_restoring', False)
+                    and getattr(window, 'native', None) is not None):
+                self._resize_mini_window(window.native, expanded, animate is True)
 
         self._on_window_ui_thread(window, apply)
         return True
@@ -921,9 +1068,70 @@ class AppApi:
         """Minimize application window."""
         self.minimize()
 
-    def begin_window_drag(self):
-        """Start a native caption drag for the main window."""
-        if getattr(self, "_is_mini_active", False):
+    def _start_mini_drag(self, window, generation, animate):
+        """Move a mini window without letting Windows tile or maximize it."""
+        import ctypes
+        from System.Windows.Forms import Cursor, Screen, Timer
+
+        native = getattr(window, 'native', None)
+        if (not native or not self._is_mini_active
+                or getattr(self, '_mini_restoring', False) or generation != self._mini_generation):
+            return
+        if getattr(self, '_mini_dragging', False):
+            return
+
+        user32 = ctypes.windll.user32
+        primary_button = 2 if user32.GetSystemMetrics(23) else 1  # SM_SWAPBUTTON
+        start = Cursor.Position
+        start_bounds = native.Bounds
+        last_size = (start_bounds.Width, start_bounds.Height)
+        docked = self._mini_edge() is not None
+        self._mini_dragging = True
+        self._mini_resize_revision = getattr(self, '_mini_resize_revision', 0) + 1
+        timer = Timer()
+        timer.Interval = 15
+
+        def tick(_sender, _args):
+            nonlocal last_size
+            active = (generation == self._mini_generation and self._is_mini_active
+                      and not getattr(self, '_closed', False))
+            try:
+                if active:
+                    cursor = Cursor.Position
+                    x = start_bounds.X + cursor.X - start.X
+                    y = start_bounds.Y + cursor.Y - start.Y
+                    if (x, y) != (native.Left, native.Top):
+                        native.SetBounds(x, y, native.Width, native.Height)
+                    size = native.Width, native.Height
+                    if size != last_size:
+                        self._shape_mini_window(native, *size, (native.DeviceDpi or 96) / 96, docked)
+                        last_size = size
+                    if user32.GetAsyncKeyState(primary_button) & 0x8000:
+                        return
+                    screen = Screen.FromPoint(cursor)
+                    placement = placement_after_drag(
+                        self._screen_rect(screen.WorkingArea), self._screen_rect(native.Bounds),
+                        (native.DeviceDpi or 96) / 96, screen.DeviceName, cursor.X,
+                    )
+                    self._mini_placement = placement
+                    self._core.settings.set('interface', 'mini_player_placement', placement)
+                    self._resize_mini_window(native, expanded=False, animate=animate, screen=screen)
+            except Exception:
+                logger.warning('Mini-player drag failed', exc_info=True)
+            timer.Stop()
+            timer.Dispose()
+            self._mini_dragging = False
+            if active:
+                self._emit('mini_player_placement', {'edge': self._mini_edge()})
+
+        timer.Tick += tick
+        timer.Start()
+
+    def begin_window_drag(self, mini=False, animate=True):
+        """Start dragging the active window from a designated drag surface."""
+        if not isinstance(mini, bool) or mini != getattr(self, '_is_mini_active', False):
+            return {"success": False}
+        if mini and getattr(self, '_mini_restoring', False):
             return {"success": False}
         if sys.platform != "win32":
             return {"success": False, "error": "Native dragging is only available on Windows"}
@@ -935,11 +1143,16 @@ class AppApi:
             import ctypes
             from ctypes import wintypes
 
-            class POINT(ctypes.Structure):
-                _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+            if mini:
+                window = self._mini_window or self._window
+                generation = self._mini_generation
+                self._on_window_ui_thread(
+                    window, lambda: self._start_mini_drag(window, generation, animate is True)
+                )
+                return {"success": True}
 
             user32 = ctypes.windll.user32
-            cursor = POINT()
+            cursor = wintypes.POINT()
             if not user32.GetCursorPos(ctypes.byref(cursor)):
                 raise OSError("GetCursorPos failed")
             packed = ((cursor.y & 0xFFFF) << 16) | (cursor.x & 0xFFFF)
@@ -948,9 +1161,7 @@ class AppApi:
 
             def start_drag():
                 try:
-                    # WebView2's child holds the mouse capture on the UI thread.
-                    # Release it there before the caption drag, or the modal
-                    # move loop never sees a pointer move and the window sits.
+                    # The child window holds capture on the UI thread.
                     user32.ReleaseCapture()
                     send(hwnd, 0x00A1, 2, lparam)
                 except Exception:
@@ -3206,6 +3417,8 @@ class AppApi:
             return False
         if category == 'personalization' and key == 'recommendation_mode' and value not in ('familiar', 'balanced', 'discovery'):
             return False
+        if key == 'moment_icon' and category == 'ui' and value not in MOMENT_ICONS:
+            return False
         if key == 'border_radius' and category in ('theme', 'interface'):
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 24:
                 return False
@@ -3541,26 +3754,22 @@ class AppApi:
             logger.warning("search_lyrics failed: %s", ex, exc_info=True)
             return {'success': False, 'candidates': [], 'error': str(ex), 'request_id': request_id}
 
-    def _resolve_identity_key(self, track: dict) -> str:
-        if not isinstance(track, dict):
-            return ""
-        video_id = str(track.get("source_id") or "") if track.get("source") == "youtube" else ""
-        if video_id:
-            return f"youtube:{video_id}"
-        upload_source = str(track.get("source") or "")
-        upload_id = str(track.get("source_id") or track.get("id") or "")
-        if upload_source == "soundcloud" and upload_id:
-            return f"soundcloud:{upload_id}"
-        file_path = str(track.get("file_path") or "")
-        if file_path and not file_path.lower().startswith(('http://', 'https://')):
-            return f"local:{os.path.normcase(os.path.abspath(file_path))}"
-        title = str(track.get("title") or "").strip().lower()
-        artist = str(track.get("artist") or "").strip().lower()
-        return f"meta:{title}\0{artist}\0"
+    def _lyrics_override_keys(self, track: dict):
+        from services.lyrics_metadata import lyrics_override_keys
+        source = track.get('source')
+        source_id = track.get('source_id') or (track.get('id') if source == 'soundcloud' else None)
+        return lyrics_override_keys(
+            track.get('title'), track.get('artist'), track.get('file_path'),
+            source, source_id, self._core.settings,
+        )
 
     def apply_lyrics_candidate(self, candidate_payload: dict, track_identity: dict):
         """Apply a chosen search candidate to the track and persist it in the database."""
+        from services.lyrics_lookup import LyricsLookup
         from services.lyrics_search_service import LyricsSearchService
+
+        if not isinstance(candidate_payload, dict) or not isinstance(track_identity, dict) or not track_identity:
+            return {'success': False, 'error': 'Трек или вариант текста не выбран'}
         svc = getattr(self, '_lyrics_search_service', None)
         if svc is None:
             svc = self._lyrics_search_service = LyricsSearchService(
@@ -3572,39 +3781,33 @@ class AppApi:
         if not resolved:
             return {'success': False, 'error': 'Не удалось получить текст для выбранного варианта'}
 
-        identity_key = self._resolve_identity_key(track_identity)
-        track_id = int(track_identity.get('id') or 0) if str(track_identity.get('id') or '').isdigit() else None
-        synced = resolved.get('syncedLyrics')
-        plain = resolved.get('plainLyrics') or ''
-        source = resolved.get('source') or candidate_payload.get('source', 'Online')
-        sync_type = resolved.get('syncType', 'line' if synced else 'plain')
+        track_id = int(track_identity['id']) if str(track_identity.get('id', '')).isdigit() else None
+        override = {
+            'override_type': 'chosen_version',
+            'source_name': resolved.get('source') or candidate_payload.get('source', 'Online'),
+            'synced_lyrics': resolved.get('syncedLyrics'),
+            'plain_lyrics': resolved.get('plainLyrics') or '',
+        }
+        payload = LyricsLookup.override_payload(override)
+        if not payload:
+            return {'success': False, 'error': 'Для выбранного варианта нет текста песни'}
 
-        if identity_key and hasattr(self._core.db, 'set_track_lyrics_override'):
-            self._core.db.set_track_lyrics_override(
-                identity_key=identity_key,
-                override_type='chosen_version',
-                source_name=source,
-                plain_lyrics=plain,
-                synced_lyrics=synced,
-                sync_type=sync_type,
+        try:
+            saved = self._core.db.set_track_lyrics_override(
+                identity_key=self._lyrics_override_keys(track_identity)[0],
+                override_type=override['override_type'],
+                source_name=override['source_name'],
+                plain_lyrics=payload['plainLyrics'],
+                synced_lyrics=payload['syncedLyrics'],
+                sync_type=payload['syncType'],
                 source_id=str(raw_payload.get('id') or raw_payload.get('songmid') or ''),
                 track_id=track_id,
             )
-
-        payload = {
-            'status': 'found',
-            'source': source,
-            'match_type': 'exact',
-            'confidence': 1.0,
-            'syncedLyrics': synced,
-            'plainLyrics': plain,
-            'syncType': sync_type,
-            'isOverride': True,
-            'overrideType': 'chosen_version',
-            'revision': 1,
-            'phase': 'final',
-        }
-        self._emit('lyrics_ready', payload)
+        except Exception:
+            logger.warning('Could not save chosen lyrics', exc_info=True)
+            saved = False
+        if not saved:
+            return {'success': False, 'error': 'Не удалось сохранить выбранный текст'}
         return {'success': True, 'lyrics': payload}
 
     def save_custom_lyrics(self, track_identity: dict, text: str, is_synced: bool = False, offset_ms: int = 0):
@@ -3628,7 +3831,7 @@ class AppApi:
             except Exception as ex:
                 return {'success': False, 'error': f'Ошибка формата LRC: {ex}'}
 
-        identity_key = self._resolve_identity_key(track_identity)
+        identity_key = self._lyrics_override_keys(track_identity)[0] if track_identity else ""
         track_id = int(track_identity.get('id') or 0) if str(track_identity.get('id') or '').isdigit() else None
 
         if identity_key and hasattr(self._core.db, 'set_track_lyrics_override'):
@@ -3661,11 +3864,13 @@ class AppApi:
 
     def delete_custom_lyrics(self, track_identity: dict):
         """Delete custom or pinned lyric override and restore automatic lookup."""
-        identity_key = self._resolve_identity_key(track_identity)
-        track_id = int(track_identity.get('id') or 0) if str(track_identity.get('id') or '').isdigit() else None
-        if identity_key and hasattr(self._core.db, 'delete_track_lyrics_override'):
-            self._core.db.delete_track_lyrics_override(identity_key=identity_key, track_id=track_id)
-        # Clear memory cache for track to trigger clean cascade
+        if track_identity:
+            key, *legacy_keys = self._lyrics_override_keys(track_identity)
+            track_id = int(track_identity['id']) if str(track_identity.get('id', '')).isdigit() else None
+            self._core.db.delete_track_lyrics_override(identity_key=key, track_id=track_id)
+            if key.startswith('meta:'):
+                for legacy_key in legacy_keys:
+                    self._core.db.delete_track_lyrics_override(identity_key=legacy_key)
         return {'success': True}
 
     def get_lyrics_display_settings(self):
@@ -4163,16 +4368,19 @@ class AppApi:
         return []
 
     def get_track_moment(self, track_key: str):
-        if not isinstance(track_key, str) or not 0 < len(track_key) <= 2048:
+        if not _valid_moment_key(track_key):
             return None
         return self._core.db.get_track_moment(track_key)
 
-    def set_track_moment(self, track_key: str, position_ms: int | None):
-        if not isinstance(track_key, str) or not 0 < len(track_key) <= 2048:
+    def set_track_moment(self, track_key: str, position_ms: int | None, aliases: list | None = None):
+        if not _valid_moment_key(track_key):
             return False
         if position_ms is not None and (type(position_ms) is not int or not 0 <= position_ms <= 2**53 - 1):
             return False
-        self._core.db.set_track_moment(track_key, position_ms)
+        alias_keys = _moment_aliases(aliases)
+        if alias_keys is None:
+            return False
+        self._core.db.set_track_moment(track_key, position_ms, alias_keys)
         return True
 
     def get_waveform(self, track_data):

@@ -1,0 +1,111 @@
+/* Scoped to actionable desktop controls. The gradient darkens the surface
+   without dimming its icon, label, or focus outline. */
+@property --matte-depth {
+    syntax: "<number>";
+    initial-value: 0;
+    inherits: false;
+}
+
+@property --matte-radius {
+    syntax: "<percentage>";
+    initial-value: 0%;
+    inherits: false;
+}
+
+html body :is(
+    #sidebar .nav-item, #sidebar-collapse,
+    #player-bar :is(.btn-ctrl, .btn-play-main),
+    #view-player :is(.btn-ctrl, .btn-play-large, #pp-btn-expand, .lyrics-btn-pill, .lyrics-offset-btn),
+    #pp-btn-moment, #pp-btn-moment-remove,
+    #mini-player-overlay .mp-ctrl-btn,
+    .context-menu-item, .rich-menu-item, .track-more-btn, .lib-collection-menu,
+    .track-item .like-btn,
+    #view-settings :is(.settings-nav-btn, #settings-close),
+    .lsp-action-btn, #btn-lyrics-settings-overlay, #btn-lyrics-search-submit,
+    #lib-btn-play-all, #lib-btn-shuffle, #lib-btn-playlist-options
+):where(button) {
+    --matte-button: 1;
+    --matte-surface: color-mix(in srgb, var(--text-main, #fff) 8%, transparent);
+    background-color: var(--matte-surface) !important;
+    background-image:
+        radial-gradient(ellipse farthest-corner at var(--matte-x, 50%) var(--matte-y, 50%),
+            rgb(0 0 0 / calc(var(--matte-depth) * .75)), transparent var(--matte-radius)),
+        linear-gradient(rgb(0 0 0 / var(--matte-depth)), rgb(0 0 0 / var(--matte-depth))) !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none;
+    backdrop-filter: var(--matte-blur, blur(5px));
+
+    &:hover:not(:disabled) {
+        --matte-surface: color-mix(in srgb, var(--text-main, #fff) 13%, transparent);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--primary, currentColor);
+        outline-offset: 2px;
+    }
+}
+
+html body :is(
+    #sidebar .nav-item, #player-bar :is(.btn-ctrl, .btn-play-main),
+    #view-player :is(.btn-ctrl, .btn-play-large),
+    #mini-player-overlay .mp-ctrl-btn
+) {
+    touch-action: none;
+}
+
+html body :is(
+    #sidebar .nav-item, #player-bar .btn-ctrl, #view-player .btn-ctrl,
+    #mini-player-overlay .mp-ctrl-btn, #view-settings .settings-nav-btn,
+    .track-item .like-btn, #view-player #pp-btn-expand
+):is(.active, .liked, [aria-pressed="true"], [aria-expanded="true"]) {
+    --matte-surface: color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+html body :is(#pb-btn-play, #view-player #pp-btn-play, #mini-player-overlay #mp-btn-play) {
+    --matte-surface: color-mix(in srgb, var(--primary) 30%, transparent);
+    color: var(--text-main) !important;
+}
+
+html body :is(#pb-btn-play, #view-player #pp-btn-play, #mini-player-overlay #mp-btn-play):hover {
+    --matte-surface: color-mix(in srgb, var(--primary) 38%, transparent);
+}
+
+html body :is(
+    #pb-btn-play, #pp-btn-play, #mp-btn-play,
+    #player-bar .btn-ctrl, #view-player .btn-ctrl:not(#pp-btn-queue)
+):is(:hover, :active) {
+    transform: none !important;
+}
+
+html body button[data-matte-pressed] {
+    --matte-depth: .23;
+    --matte-radius: 110%;
+    animation: matte-button-press 175ms ease-out;
+}
+
+@keyframes matte-button-press {
+    from { --matte-depth: .12; --matte-radius: 8%; }
+    to { --matte-depth: .23; --matte-radius: 110%; }
+}
+
+html:is(.perf-low, .battery-saver-active) {
+    --matte-blur: none;
+}
+
+html:is(.perf-low, .battery-saver-active) body button[data-matte-pressed],
+body.unfocused-animations-disabled button[data-matte-pressed] {
+    --matte-radius: 0%;
+    animation: none;
+    scale: none !important;
+    translate: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html body button[data-matte-pressed] {
+        --matte-radius: 0%;
+        animation: none;
+        scale: none !important;
+        translate: none !important;
+    }
+}
